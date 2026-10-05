@@ -33,10 +33,14 @@ const INPUT_HASH_ALGORITHM: &str = "blake3-composite-v1";
 const HOST_TIMING_BOUNDARY: &str = "Node process spawn through exit; workspace preparation, cache seeding, and install-tree cleanup are excluded";
 const WASM_TIMING_BOUNDARY: &str = "run export invocation through result; component instantiation, workspace preparation, cache seeding, install-tree cleanup, and linear-memory observation are excluded";
 const MEMORY_INTERPRETATION: &str = "per-sample Wasm linear-memory values are monotone instance high-water observations read after the timed invocation";
+const MODE_NORMALIZATION: &str = "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible";
+const RELEASE_ITERATIONS: usize = 5;
 const PACKAGES: &[(&str, &str)] = &[
     ("lodash", "@types/lodash"),
     ("lodash-es", "@types/lodash-es"),
 ];
+// Keep an independent identity pin so an edited fixture cannot silently redefine
+// the workload that retained release reports claim to measure.
 const MEDIUM_PACKAGES: &[(&str, &str)] = &[
     ("ajv", "8.17.1"),
     ("chalk", "5.4.1"),
@@ -330,16 +334,13 @@ async fn main() -> anyhow::Result<()> {
         "iterations must be 1..=20"
     );
     if std::env::var_os("NPM_METADATA_RELEASE_BASELINE").is_some() {
-        let minimum_iterations = if std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some() {
-            1
-        } else {
-            5
-        };
+        let smoke = std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some();
+        let minimum_iterations = if smoke { 1 } else { RELEASE_ITERATIONS };
         ensure!(
             iterations >= minimum_iterations,
             "release baseline requires at least {minimum_iterations} iterations"
         );
-        return run_release_baseline(iterations).await;
+        return run_release_baseline(iterations, smoke).await;
     }
     run_legacy_baseline(iterations).await
 }
@@ -1046,6 +1047,34 @@ struct InstalledTreeEvidence {
     symlinks: u64,
     bytes: u64,
     hasher: blake3::Hasher,
+    mode_hasher: blake3::Hasher,
+    executable_files: BTreeSet<String>,
+}
+
+fn installed_mode(metadata: &fs::Metadata) -> u32 {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt as _;
+        metadata.permissions().mode() & 0o7777
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = metadata;
+        0
+    }
+}
+
+fn record_installed_mode(
+    evidence: &mut InstalledTreeEvidence,
+    kind: &[u8],
+    relative: &Utf8Path,
+    metadata: &fs::Metadata,
+) -> u32 {
+    let mode = installed_mode(metadata);
+    hash_part(&mut evidence.mode_hasher, kind);
+    hash_part(&mut evidence.mode_hasher, relative.as_str().as_bytes());
+    hash_part(&mut evidence.mode_hasher, &mode.to_le_bytes());
+    mode
 }
 
 fn collect_installed_tree(
@@ -1063,12 +1092,19 @@ fn collect_installed_tree(
         let metadata = fs::symlink_metadata(&path)?;
         if metadata.is_dir() {
             evidence.directories += 1;
+            record_installed_mode(evidence, b"directory", relative, &metadata);
             hash_part(&mut evidence.hasher, b"directory");
             hash_part(&mut evidence.hasher, relative.as_str().as_bytes());
             collect_installed_tree(root, &path, registry, evidence)?;
         } else if metadata.is_file() {
             evidence.files += 1;
             evidence.bytes += metadata.len();
+            let mode = record_installed_mode(evidence, b"file", relative, &metadata);
+            if mode & 0o111 != 0 {
+                evidence
+                    .executable_files
+                    .insert(relative.as_str().to_string());
+            }
             let bytes = fs::read(&path)?;
             let normalized = if relative == Utf8Path::new(".package-lock.json") {
                 String::from_utf8(bytes)?
@@ -1082,6 +1118,7 @@ fn collect_installed_tree(
             hash_part(&mut evidence.hasher, &normalized);
         } else if metadata.file_type().is_symlink() {
             evidence.symlinks += 1;
+            record_installed_mode(evidence, b"symlink", relative, &metadata);
             let target = fs::read_link(&path);
             let target = target
                 .as_ref()
@@ -1252,6 +1289,22 @@ fn installed_state(
 
     let mut tree = InstalledTreeEvidence::default();
     collect_installed_tree(&node_modules, &node_modules, &registry.base, &mut tree)?;
+    let executable_bin_targets = fixture
+        .packages
+        .iter()
+        .flat_map(|package| {
+            package
+                .bins
+                .iter()
+                .filter(|(_, target)| {
+                    tree.executable_files
+                        .contains(&format!("{}/{target}", package.name))
+                })
+                .map(|(bin, _)| bin.clone())
+        })
+        .collect::<Vec<_>>();
+    let tree_blake3 = tree.hasher.finalize().to_hex().to_string();
+    let mode_blake3 = tree.mode_hasher.finalize().to_hex().to_string();
     Ok(json!({
         "complete": complete,
         "identityMismatches": identity_mismatches,
@@ -1262,12 +1315,19 @@ fn installed_state(
         "packageFiles": package_files,
         "packageBytes": package_bytes,
         "bins": actual_bins.len(),
+        "modeEvidence": {
+            "includedInTreeBlake3": false,
+            "normalization": MODE_NORMALIZATION,
+            "blake3": mode_blake3,
+            "executableFiles": tree.executable_files.len(),
+            "executableBinTargets": executable_bin_targets,
+        },
         "tree": {
             "directories": tree.directories,
             "files": tree.files,
             "symlinks": tree.symlinks,
             "bytes": tree.bytes,
-            "blake3": tree.hasher.finalize().to_hex().to_string(),
+            "blake3": tree_blake3,
         },
     }))
 }
@@ -1705,17 +1765,24 @@ impl ReleaseSeries {
     }
 }
 
-fn release_fixture_value(
-    fixture: &ReleaseFixture,
-    registry: &ReleaseRegistry,
-    include_metadata: bool,
-) -> anyhow::Result<Value> {
+fn release_series_arguments(include_metadata: bool) -> Value {
+    if include_metadata {
+        json!({
+            "metadata": metadata_args("<local>"),
+            "ciSeed": seed_ci_args("<local>"),
+            "ciTimed": warm_ci_args("<local>"),
+        })
+    } else {
+        json!({
+            "ciSeed": seed_ci_args("<local>"),
+            "ciTimed": warm_ci_args("<local>"),
+        })
+    }
+}
+
+fn release_fixture_identity_value(fixture: &ReleaseFixture) -> anyhow::Result<Value> {
     let mut packages = BTreeMap::new();
-    let mut tarballs = BTreeMap::new();
     let mut bins = BTreeMap::new();
-    let mut tarball_bytes = 0_u64;
-    let mut archive_files = 0_u64;
-    let mut unpacked_bytes = 0_u64;
     for package in &fixture.packages {
         packages.insert(
             package.name.clone(),
@@ -1738,6 +1805,29 @@ fn release_fixture_value(
                 fixture.name
             );
         }
+    }
+    Ok(json!({
+        "name": fixture.name,
+        "directDependencies": fixture.direct_dependencies,
+        "directDependencyCount": fixture.direct_dependencies.len(),
+        "packageCount": fixture.packages.len(),
+        "dependencyEdgeCount": fixture.dependency_edges,
+        "binCount": bins.len(),
+        "bins": bins,
+        "packages": packages,
+    }))
+}
+
+fn release_fixture_value(
+    fixture: &ReleaseFixture,
+    registry: &ReleaseRegistry,
+    include_metadata: bool,
+) -> anyhow::Result<Value> {
+    let mut tarballs = BTreeMap::new();
+    let mut tarball_bytes = 0_u64;
+    let mut archive_files = 0_u64;
+    let mut unpacked_bytes = 0_u64;
+    for package in &fixture.packages {
         let tarball = registry
             .tarballs
             .get(&package.name)
@@ -1749,38 +1839,30 @@ fn release_fixture_value(
             .context("tarball unpacked bytes")?;
         tarballs.insert(package.name.clone(), tarball.clone());
     }
-    let series_arguments = if include_metadata {
-        json!({
-            "metadata": metadata_args("<local>"),
-            "ciSeed": seed_ci_args("<local>"),
-            "ciTimed": warm_ci_args("<local>"),
-        })
-    } else {
-        json!({
-            "ciSeed": seed_ci_args("<local>"),
-            "ciTimed": warm_ci_args("<local>"),
-        })
-    };
-    Ok(json!({
-        "name": fixture.name,
-        "packageJsonBlake3": hash_file(fixture.directory.join("package.json"))?,
-        "packageLockBlake3": hash_file(fixture.directory.join("package-lock.json"))?,
-        "directDependencies": fixture.direct_dependencies,
-        "directDependencyCount": fixture.direct_dependencies.len(),
-        "packageCount": fixture.packages.len(),
-        "dependencyEdgeCount": fixture.dependency_edges,
-        "binCount": bins.len(),
-        "bins": bins,
-        "packages": packages,
-        "tarballs": tarballs,
-        "tarballBytes": tarball_bytes,
-        "archiveFiles": archive_files,
-        "unpackedBytes": unpacked_bytes,
-        "seriesArguments": series_arguments,
-    }))
+    let mut value = release_fixture_identity_value(fixture)?;
+    let object = value
+        .as_object_mut()
+        .expect("release fixture identity is an object");
+    object.insert(
+        "packageJsonBlake3".to_string(),
+        json!(hash_file(fixture.directory.join("package.json"))?),
+    );
+    object.insert(
+        "packageLockBlake3".to_string(),
+        json!(hash_file(fixture.directory.join("package-lock.json"))?),
+    );
+    object.insert("tarballs".to_string(), json!(tarballs));
+    object.insert("tarballBytes".to_string(), json!(tarball_bytes));
+    object.insert("archiveFiles".to_string(), json!(archive_files));
+    object.insert("unpackedBytes".to_string(), json!(unpacked_bytes));
+    object.insert(
+        "seriesArguments".to_string(),
+        release_series_arguments(include_metadata),
+    );
+    Ok(value)
 }
 
-async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
+async fn run_release_baseline(iterations: usize, smoke: bool) -> anyhow::Result<()> {
     let small = load_release_fixture("small-local-registry", "tests/npm_metadata/real")?;
     let medium = load_release_fixture("medium-local-registry", "tests/npm_metadata/medium")?;
     let host = resolve_host_npm()?;
@@ -1834,7 +1916,7 @@ async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
     }
     registry.server.abort();
 
-    let environment = release_environment(iterations, feature_combination.label())
+    let environment = release_environment(iterations, feature_combination.label(), smoke)
         .context("capture npm release environment")?;
     let input_hashes = npm_input_hashes().context("hash npm release inputs")?;
     let npm_tool =
@@ -1890,8 +1972,9 @@ async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
             "the medium fixture measures installation only and never executes package bins",
         ],
     });
-    validate_release_report(&report).context("validate generated npm release report")?;
-    validate_release_regression_guards(&report)
+    validate_release_report_with_mode(&report, smoke)
+        .context("validate generated npm release report")?;
+    validate_release_regression_guards(&report, smoke)
         .context("validate npm release report corruption guards")?;
     let formatted = serde_json::to_string_pretty(&report)?;
     if let Ok(path) = std::env::var("NPM_METADATA_REPORT") {
@@ -1961,6 +2044,8 @@ struct CurrentReleaseInputs {
     small_package_lock: String,
     medium_package_json: String,
     medium_package_lock: String,
+    small_fixture_identity: Value,
+    medium_fixture_identity: Value,
 }
 
 fn npm_source_root() -> anyhow::Result<Utf8PathBuf> {
@@ -2024,14 +2109,18 @@ fn npm_input_hashes() -> anyhow::Result<NpmInputHashes> {
 
 fn current_release_inputs() -> anyhow::Result<CurrentReleaseInputs> {
     let source_root = npm_source_root()?;
+    let small_directory = source_root.join(SUITE_DIR).join("real");
+    let medium_directory = source_root.join(SUITE_DIR).join("medium");
+    let small = load_release_fixture("small-local-registry", small_directory.as_str())?;
+    let medium = load_release_fixture("medium-local-registry", medium_directory.as_str())?;
     Ok(CurrentReleaseInputs {
         hashes: npm_input_hashes()?,
-        small_package_json: hash_file(source_root.join(SUITE_DIR).join("real/package.json"))?,
-        small_package_lock: hash_file(source_root.join(SUITE_DIR).join("real/package-lock.json"))?,
-        medium_package_json: hash_file(source_root.join(SUITE_DIR).join("medium/package.json"))?,
-        medium_package_lock: hash_file(
-            source_root.join(SUITE_DIR).join("medium/package-lock.json"),
-        )?,
+        small_package_json: hash_file(small_directory.join("package.json"))?,
+        small_package_lock: hash_file(small_directory.join("package-lock.json"))?,
+        medium_package_json: hash_file(medium_directory.join("package.json"))?,
+        medium_package_lock: hash_file(medium_directory.join("package-lock.json"))?,
+        small_fixture_identity: release_fixture_identity_value(&small)?,
+        medium_fixture_identity: release_fixture_identity_value(&medium)?,
     })
 }
 
@@ -2136,7 +2225,11 @@ fn directory_hash_evidence(root: &Utf8Path) -> anyhow::Result<Value> {
     }))
 }
 
-fn release_environment(iterations: usize, component_features: &str) -> anyhow::Result<Value> {
+fn release_environment(
+    iterations: usize,
+    component_features: &str,
+    smoke: bool,
+) -> anyhow::Result<Value> {
     let source_root = npm_source_root()?;
     let host_lock_blake3 = std::env::var("WASM_RQUICKJS_TEST_HOST_LOCKFILE")
         .ok()
@@ -2171,6 +2264,7 @@ fn release_environment(iterations: usize, component_features: &str) -> anyhow::R
             "lockBlake3": host_lock_blake3,
         },
         "iterations": iterations,
+        "smoke": smoke,
         "artifactCache": std::env::var("WASM_RQUICKJS_TEST_ARTIFACT_CACHE").ok(),
         "wasmtimeCache": std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").ok(),
         "preparedComponentCache": std::env::var("WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE").ok(),
@@ -2195,18 +2289,7 @@ fn validate_release_fixture(fixture: &Value, key: &str) -> anyhow::Result<()> {
     };
     let expected_name = format!("{key}-local-registry");
     let include_metadata = key == "small";
-    let expected_arguments = if include_metadata {
-        json!({
-            "metadata": metadata_args("<local>"),
-            "ciSeed": seed_ci_args("<local>"),
-            "ciTimed": warm_ci_args("<local>"),
-        })
-    } else {
-        json!({
-            "ciSeed": seed_ci_args("<local>"),
-            "ciTimed": warm_ci_args("<local>"),
-        })
-    };
+    let expected_arguments = release_series_arguments(include_metadata);
     let packages = fixture["packages"]
         .as_object()
         .with_context(|| format!("{key} fixture has no package identities"))?;
@@ -2289,19 +2372,22 @@ fn validate_release_fixture(fixture: &Value, key: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn validate_release_report(report: &Value) -> anyhow::Result<()> {
+fn validate_release_report_with_mode(report: &Value, allow_smoke: bool) -> anyhow::Result<()> {
     ensure!(
         report["schema"] == "npm-metadata-v3",
         "unsupported npm release schema"
     );
-    let minimum_iterations = if std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some() {
-        1
-    } else {
-        5
-    };
+    let smoke = report["environment"]["smoke"]
+        .as_bool()
+        .context("npm release report has no smoke-mode identity")?;
+    ensure!(
+        allow_smoke || !smoke,
+        "checked npm release reports cannot use smoke mode"
+    );
+    let minimum_iterations = if smoke { 1 } else { RELEASE_ITERATIONS };
     let iterations = report["environment"]["iterations"]
         .as_u64()
-        .filter(|value| *value >= minimum_iterations)
+        .filter(|value| *value >= minimum_iterations as u64)
         .with_context(|| {
             format!("npm release report needs at least {minimum_iterations} iterations")
         })? as usize;
@@ -2377,6 +2463,14 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                 format!("missing {side} {fixture_key}/{group}/{series_name} samples")
             })?;
             let summary = summarize_release(samples);
+            let sequences = samples
+                .iter()
+                .map(|sample| sample["sequence"].as_u64())
+                .collect::<Option<BTreeSet<_>>>()
+                .with_context(|| {
+                    format!("invalid {side} {fixture_key}/{group}/{series_name} sequence")
+                })?;
+            let expected_sequences = (0..iterations as u64).collect::<BTreeSet<_>>();
             let summary_fields_match = ["medianMs", "p95Ms", "throughputPerSecond"]
                 .into_iter()
                 .all(|field| {
@@ -2391,6 +2485,7 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                 });
             ensure!(
                 samples.len() == iterations
+                    && sequences == expected_sequences
                     && series.as_object().is_some_and(|series| series.len() == 5)
                     && series["iterations"] == summary["iterations"]
                     && summary_fields_match,
@@ -2436,6 +2531,15 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                 } else {
                     let fixture = &report["fixtures"][fixture_key];
                     let installed = &sample["installed"];
+                    let executable_bin_targets = installed["modeEvidence"]["executableBinTargets"]
+                        .as_array()
+                        .context("npm install has no executable-bin mode evidence")?;
+                    let expected_bin_targets = fixture["bins"]
+                        .as_object()
+                        .expect("validated fixture bin map")
+                        .keys()
+                        .map(|name| json!(name))
+                        .collect::<Vec<_>>();
                     ensure!(
                         installed["complete"] == true
                             && installed["packageNamesMatch"] == true
@@ -2446,6 +2550,18 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                             && installed["packageFiles"] == fixture["archiveFiles"]
                             && installed["packageBytes"] == fixture["unpackedBytes"]
                             && installed["bins"] == fixture["binCount"]
+                            && installed["modeEvidence"]["includedInTreeBlake3"] == false
+                            && installed["modeEvidence"]["normalization"] == MODE_NORMALIZATION
+                            && is_blake3_value(&installed["modeEvidence"]["blake3"])
+                            && installed["modeEvidence"]["executableFiles"]
+                                .as_u64()
+                                .is_some()
+                            && executable_bin_targets
+                                .iter()
+                                .all(|bin| expected_bin_targets.contains(bin))
+                            && (side != "host"
+                                || executable_bin_targets.as_slice()
+                                    == expected_bin_targets.as_slice())
                             && installed["tree"]["directories"]
                                 .as_u64()
                                 .is_some_and(|value| value > 0)
@@ -2460,13 +2576,18 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                             && is_blake3_value(&sample["lockfileBlake3"]),
                         "npm ci sample did not install the pinned {fixture_key} fixture"
                     );
+                    let mut comparable = installed.clone();
+                    comparable
+                        .as_object_mut()
+                        .expect("validated installed evidence is an object")
+                        .remove("modeEvidence");
                     if let Some(expected) = installed_by_fixture.get(fixture_key) {
                         ensure!(
-                            expected == installed,
-                            "{fixture_key} installed trees differ across samples"
+                            expected == &comparable,
+                            "{fixture_key} normalized installed trees differ across samples"
                         );
                     } else {
-                        installed_by_fixture.insert(fixture_key, installed.clone());
+                        installed_by_fixture.insert(fixture_key, comparable);
                     }
                 }
                 if side == "wasm" {
@@ -2514,54 +2635,58 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn validate_release_regression_guards(report: &Value) -> anyhow::Result<()> {
+fn validate_release_report(report: &Value) -> anyhow::Result<()> {
+    validate_release_report_with_mode(report, false)
+}
+
+fn validate_release_regression_guards(report: &Value, allow_smoke: bool) -> anyhow::Result<()> {
     let mut false_arguments = report.clone();
     false_arguments["fixtures"]["medium"]["seriesArguments"]["ciTimed"][1] = json!("--online");
     ensure!(
-        validate_release_report(&false_arguments).is_err(),
+        validate_release_report_with_mode(&false_arguments, allow_smoke).is_err(),
         "npm release validator accepted incorrect command arguments"
     );
     let mut false_fixture = report.clone();
     false_fixture["fixtures"]["medium"]["packageCount"] = json!(15);
     ensure!(
-        validate_release_report(&false_fixture).is_err(),
+        validate_release_report_with_mode(&false_fixture, allow_smoke).is_err(),
         "npm release validator accepted an incorrect medium package count"
     );
     let mut false_integrity = report.clone();
     false_integrity["fixtures"]["medium"]["tarballs"]["ajv"]["integrity"] = json!("sha512-wrong");
     ensure!(
-        validate_release_report(&false_integrity).is_err(),
+        validate_release_report_with_mode(&false_integrity, allow_smoke).is_err(),
         "npm release validator accepted incorrect tarball integrity"
     );
     let mut false_timing = report.clone();
     false_timing["timingBoundary"]["wasm"] = json!("component build through result");
     ensure!(
-        validate_release_report(&false_timing).is_err(),
+        validate_release_report_with_mode(&false_timing, allow_smoke).is_err(),
         "npm release validator accepted an incorrect timing boundary"
     );
     let mut false_algorithm = report.clone();
     false_algorithm["inputs"]["algorithm"] = json!("unversioned");
     ensure!(
-        validate_release_report(&false_algorithm).is_err(),
+        validate_release_report_with_mode(&false_algorithm, allow_smoke).is_err(),
         "npm release validator accepted an incorrect input hash algorithm"
     );
     let mut false_summary = report.clone();
     false_summary["host"]["small"]["metadata"]["cold"]["throughputPerSecond"] = json!(1.0);
     ensure!(
-        validate_release_report(&false_summary).is_err(),
+        validate_release_report_with_mode(&false_summary, allow_smoke).is_err(),
         "npm release validator accepted an incorrect throughput summary"
     );
     let mut failed = report.clone();
     failed["host"]["small"]["metadata"]["cold"]["samples"][0]["success"] = json!(false);
     ensure!(
-        validate_release_report(&failed).is_err(),
+        validate_release_report_with_mode(&failed, allow_smoke).is_err(),
         "npm release validator accepted a failed sample"
     );
     let mut false_http = report.clone();
     false_http["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]["tarballs"] =
         json!(1);
     ensure!(
-        validate_release_report(&false_http).is_err(),
+        validate_release_report_with_mode(&false_http, allow_smoke).is_err(),
         "npm release validator accepted unexpected warm-cache HTTP"
     );
     let mut unclassified_http = report.clone();
@@ -2570,50 +2695,69 @@ fn validate_release_regression_guards(report: &Value) -> anyhow::Result<()> {
     unclassified_http["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]
         ["unexpected"] = json!(1);
     ensure!(
-        validate_release_report(&unclassified_http).is_err(),
+        validate_release_report_with_mode(&unclassified_http, allow_smoke).is_err(),
         "npm release validator accepted an unclassified registry request"
     );
     let mut missing_install = report.clone();
     missing_install["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["complete"] =
         json!(false);
     ensure!(
-        validate_release_report(&missing_install).is_err(),
+        validate_release_report_with_mode(&missing_install, allow_smoke).is_err(),
         "npm release validator accepted an incomplete install"
     );
     let mut mismatched_identity = report.clone();
     mismatched_identity["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["identityMismatches"] =
         json!(["ajv"]);
     ensure!(
-        validate_release_report(&mismatched_identity).is_err(),
+        validate_release_report_with_mode(&mismatched_identity, allow_smoke).is_err(),
         "npm release validator accepted a package identity mismatch"
     );
     let mut mismatched_files = report.clone();
     mismatched_files["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["fileMismatches"] =
         json!(["ajv: missing dist/ajv.js"]);
     ensure!(
-        validate_release_report(&mismatched_files).is_err(),
+        validate_release_report_with_mode(&mismatched_files, allow_smoke).is_err(),
         "npm release validator accepted a package file mismatch"
     );
     let mut mismatched_bins = report.clone();
     mismatched_bins["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["binsMatch"] =
         json!(false);
     ensure!(
-        validate_release_report(&mismatched_bins).is_err(),
+        validate_release_report_with_mode(&mismatched_bins, allow_smoke).is_err(),
         "npm release validator accepted a package bin mismatch"
     );
     let mut false_tree = report.clone();
     false_tree["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["tree"]["blake3"] =
         json!("0".repeat(64));
     ensure!(
-        validate_release_report(&false_tree).is_err(),
+        validate_release_report_with_mode(&false_tree, allow_smoke).is_err(),
         "npm release validator accepted a mismatched installed tree"
     );
     let mut missing_memory = report.clone();
     missing_memory["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["linearMemoryHighWaterBytes"] =
         Value::Null;
     ensure!(
-        validate_release_report(&missing_memory).is_err(),
+        validate_release_report_with_mode(&missing_memory, allow_smoke).is_err(),
         "npm release validator accepted missing memory evidence"
+    );
+    let samples = report["host"]["small"]["metadata"]["cold"]["samples"]
+        .as_array()
+        .expect("validated metadata sample series");
+    if samples.len() > 1 {
+        let mut duplicate_sequence = report.clone();
+        duplicate_sequence["host"]["small"]["metadata"]["cold"]["samples"][1]["sequence"] =
+            samples[0]["sequence"].clone();
+        ensure!(
+            validate_release_report_with_mode(&duplicate_sequence, allow_smoke).is_err(),
+            "npm release validator accepted a duplicate sample sequence"
+        );
+    }
+    let mut hidden_modes = report.clone();
+    hidden_modes["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["modeEvidence"]
+        ["normalization"] = json!("modes omitted");
+    ensure!(
+        validate_release_report_with_mode(&hidden_modes, allow_smoke).is_err(),
+        "npm release validator accepted undisclosed file-mode normalization"
     );
     Ok(())
 }
@@ -2645,6 +2789,7 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
     ensure!(
         report["environment"]["node"] == "22.14.0"
             && report["environment"]["npm"] == "10.9.2"
+            && report["environment"]["smoke"] == false
             && report["environment"]["dirty"] == false
             && report["environment"]["artifactCache"].is_null()
             && report["environment"]["wasmtimeCache"].is_null()
@@ -2703,13 +2848,33 @@ fn validate_release_currentness(
     report: &Value,
     current: &CurrentReleaseInputs,
 ) -> anyhow::Result<()> {
+    let reported_fixture_identity = |fixture: &Value| {
+        let mut identity = serde_json::Map::new();
+        for field in [
+            "name",
+            "directDependencies",
+            "directDependencyCount",
+            "packageCount",
+            "dependencyEdgeCount",
+            "binCount",
+            "bins",
+            "packages",
+        ] {
+            identity.insert(field.to_string(), fixture[field].clone());
+        }
+        Value::Object(identity)
+    };
     ensure!(
         report["inputs"]["buildHash"] == current.hashes.build
             && report["inputs"]["benchmarkHash"] == current.hashes.benchmark
             && report["fixtures"]["small"]["packageJsonBlake3"] == current.small_package_json
             && report["fixtures"]["small"]["packageLockBlake3"] == current.small_package_lock
             && report["fixtures"]["medium"]["packageJsonBlake3"] == current.medium_package_json
-            && report["fixtures"]["medium"]["packageLockBlake3"] == current.medium_package_lock,
+            && report["fixtures"]["medium"]["packageLockBlake3"] == current.medium_package_lock
+            && reported_fixture_identity(&report["fixtures"]["small"])
+                == current.small_fixture_identity
+            && reported_fixture_identity(&report["fixtures"]["medium"])
+                == current.medium_fixture_identity,
         "npm release report does not match the current source inputs"
     );
     Ok(())
@@ -2734,6 +2899,19 @@ fn validate_release_currentness_regression_guards(
             "npm currentness validator accepted an incorrect fixture digest: {pointer}"
         );
     }
+    let mut mismatched_graph = report.clone();
+    for pointer in [
+        "/fixtures/medium/packages/ajv/integrity",
+        "/fixtures/medium/tarballs/ajv/integrity",
+    ] {
+        *mismatched_graph
+            .pointer_mut(pointer)
+            .expect("validated report has ajv integrity evidence") = json!("sha512-wrong");
+    }
+    ensure!(
+        validate_release_currentness(&mismatched_graph, current).is_err(),
+        "npm currentness validator accepted fixture graph evidence that differs from the lockfile"
+    );
     Ok(())
 }
 
@@ -2751,6 +2929,7 @@ fn validate_release_pair(
         "/environment/rustc",
         "/environment/cargo",
         "/environment/iterations",
+        "/environment/smoke",
         "/inputs/algorithm",
         "/inputs/buildHash",
         "/inputs/benchmarkHash",
@@ -2866,7 +3045,7 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
         );
         validate_release_metadata(&path, &report)?;
         validate_release_report(&report)?;
-        validate_release_regression_guards(&report)?;
+        validate_release_regression_guards(&report, false)?;
         if current_manifest_reports.remove(&path) {
             let identity = current_manifest_identity
                 .as_ref()
