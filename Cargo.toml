@@ -186,7 +186,7 @@ tokio-util = "0.7.16"
 toml_edit = "0.22.27"
 wac-graph = "0.10.0"
 wasmtime = "=46.0.1"
-wasmtime-wasi = "=46.0.1"
+wasmtime-wasi = { version = "=46.0.1", default-features = false, features = ["p2"] }
 wasmtime-wasi-http = "=46.0.1"
 wasmtime-wizer = "=46.0.1"
 wit-bindgen-core = "0.57.1"
