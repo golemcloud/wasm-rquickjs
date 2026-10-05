@@ -70,6 +70,11 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
+    pub fn utf8_byte_length(string: String) -> usize {
+        string.len()
+    }
+
+    #[rquickjs::function]
     pub fn encode(string: String, ctx: Ctx<'_>) -> TypedArray<'_, u8> {
         TypedArray::new_copy(ctx, string.as_bytes())
             .expect("failed to create UInt8Array from string")

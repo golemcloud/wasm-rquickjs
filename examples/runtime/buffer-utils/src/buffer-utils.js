@@ -1,5 +1,30 @@
 import { Buffer, isAscii, isUtf8 } from 'node:buffer';
 
+export function testUtf8Encoding() {
+  for (const [unit, expected] of [
+    ['abc', '616263'], ['é日', 'c3a9e697a5'],
+    ['\ud800a', 'efbfbd61'], ['\udc00', 'efbfbd'],
+    ['😀', 'f09f9880'], ['\ud800a\udc00', 'efbfbd61efbfbd'],
+  ]) {
+    for (const count of [1, 9000]) {
+      const text = unit.repeat(count);
+      for (const encoding of [undefined, '', 'utf8', 'utf-8', 'UTF8', 'UTF-8']) {
+        const actual = Buffer.from(text, encoding);
+        if (actual.toString('hex') !== expected.repeat(count)) throw new Error(`encoding mismatch: ${JSON.stringify(unit)} x ${count}, ${encoding}: ${actual.toString('hex').slice(0, 60)}`);
+        if (Buffer.byteLength(text, encoding) !== actual.length) throw new Error('length mismatch');
+        if (!Buffer.isBuffer(actual)) throw new Error('not a Buffer');
+        const independent = Buffer.from(text, encoding);
+        actual[0] ^= 0xff;
+        if (actual[0] === independent[0]) throw new Error('aliased allocation');
+      }
+    }
+  }
+  if (Buffer.from('').length !== 0 || Buffer.byteLength('') !== 0) return false;
+  if (Buffer.byteLength('é', 'unknown') !== 2) return false;
+  if (Buffer.byteLength('é', 'unknown', true) !== -1) return false;
+  return true;
+}
+
 export function testIsAscii() {
   // Pure ASCII
   if (!isAscii(Buffer.from('hello'))) return false;

@@ -12,6 +12,15 @@ import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builti
 import { inspect as utilInspect } from "__wasm_rquickjs_builtin/internal/util/inspect"
 import { ALL_PROPERTIES, ONLY_ENUMERABLE, getOwnNonIndexProperties } from "__wasm_rquickjs_builtin/internal/binding/util"
 import { utf8_decode as nativeUtf8Decode } from '__wasm_rquickjs_builtin/string_decoder_native'
+import { encode as nativeUtf8Encode, utf8_byte_length as nativeUtf8ByteLength } from '__wasm_rquickjs_builtin/encoding_native'
+
+// Rust strings cannot represent lone UTF-16 surrogates. Keep the existing
+// encoder for all surrogate-containing input, including valid pairs.
+const hasSurrogate = /[\uD800-\uDFFF]/
+
+function utf8ByteLength (string) {
+    return hasSurrogate.test(string) ? utf8ToBytes(string).length : nativeUtf8ByteLength(string)
+}
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom')
 
@@ -418,6 +427,14 @@ function fromString (string, encoding) {
         throw new ERR_UNKNOWN_ENCODING(encoding)
     }
 
+    // Small strings retain the existing pooled allocation behavior.
+    if ((encoding === 'utf8' || encoding === 'utf-8') &&
+        string.length >= Buffer.poolSize && !hasSurrogate.test(string)) {
+        const bytes = nativeUtf8Encode(string)
+        checked(bytes.byteLength)
+        return fromArrayBuffer(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+    }
+
     const length = byteLength(string, encoding) | 0
     let buf = length <= (Buffer.poolSize >>> 1)
         ? allocFromPool(length)
@@ -659,7 +676,7 @@ function byteLength (string, encoding) {
                 return len
             case 'utf8':
             case 'utf-8':
-                return utf8ToBytes(string).length
+                return utf8ByteLength(string)
             case 'ucs2':
             case 'ucs-2':
             case 'utf16le':
@@ -673,7 +690,7 @@ function byteLength (string, encoding) {
                 return base64ToBytes(base64UrlToBase64(string)).length
             default:
                 if (loweredCase) {
-                    return mustMatch ? -1 : utf8ToBytes(string).length // assume utf8
+                    return mustMatch ? -1 : utf8ByteLength(string) // assume utf8
                 }
                 encoding = ('' + encoding).toLowerCase()
                 loweredCase = true
