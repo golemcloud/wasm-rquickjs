@@ -3012,7 +3012,8 @@ function markRequireEsmSourceOverride(resolvedFilename, source) {
     }
     const keys = [resolvedFilename, nodeUrl.pathToFileURL(resolvedFilename).href];
     const previous = [];
-    for (const key of keys) {
+    for (let i = 0; i < keys.length; i++) {
+        const key = keys[i];
         previous.push({
             key,
             present: Object.hasOwn(registry, key),
@@ -3027,7 +3028,8 @@ function unmarkRequireEsmSourceOverride(previous) {
     if (!previous) return;
     const registry = globalThis.__wasm_rquickjs_require_esm_source_override;
     if (!registry || typeof registry !== 'object') return;
-    for (const entry of previous) {
+    for (let i = 0; i < previous.length; i++) {
+        const entry = previous[i];
         if (entry.present) {
             registry[entry.key] = entry.value;
         } else {
