@@ -1006,15 +1006,18 @@ pub mod native_module {
     // ===== One-shot functions =====
 
     #[rquickjs::function]
-    pub fn zlib_compress_sync(
-        data: TypedArray<'_, u8>,
+    pub fn zlib_compress_sync<'js>(
+        ctx: Ctx<'js>,
+        data: TypedArray<'js, u8>,
         level: i32,
         window_bits: i32,
-    ) -> Option<Vec<u8>> {
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to zlibCompressSync is detached");
         super::zlib_compress_sync_impl(input, level, window_bits)
+            .map(|bytes| TypedArray::new(ctx, bytes))
+            .transpose()
     }
 
     #[rquickjs::function]
@@ -1022,7 +1025,7 @@ pub mod native_module {
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
         window_bits: i32,
-    ) -> rquickjs::Result<Option<Vec<u8>>> {
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to zlibDecompressSync is detached");
@@ -1034,7 +1037,7 @@ pub mod native_module {
             error_obj.set("code", "Z_DATA_ERROR")?;
             Err(ctx.throw(error_obj.into_value()))
         } else {
-            Ok(result)
+            result.map(|bytes| TypedArray::new(ctx, bytes)).transpose()
         }
     }
 
@@ -1076,11 +1079,18 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn zlib_stream_push(id: u32, data: TypedArray<'_, u8>, flush: i32) -> Option<Vec<u8>> {
+    pub fn zlib_stream_push<'js>(
+        ctx: Ctx<'js>,
+        id: u32,
+        data: TypedArray<'js, u8>,
+        flush: i32,
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to zlibStreamPush is detached");
         super::zlib_stream_push_impl(id, input, flush)
+            .map(|bytes| TypedArray::new(ctx, bytes))
+            .transpose()
     }
 
     #[rquickjs::function]
