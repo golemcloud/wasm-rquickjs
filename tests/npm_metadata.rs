@@ -37,6 +37,27 @@ const PACKAGES: &[(&str, &str)] = &[
     ("lodash", "@types/lodash"),
     ("lodash-es", "@types/lodash-es"),
 ];
+const MEDIUM_PACKAGES: &[(&str, &str)] = &[
+    ("ajv", "8.17.1"),
+    ("chalk", "5.4.1"),
+    ("date-fns", "4.1.0"),
+    ("debug", "4.4.1"),
+    ("dotenv", "16.4.7"),
+    ("fast-deep-equal", "3.1.3"),
+    ("fast-uri", "3.1.4"),
+    ("json-schema-traverse", "1.0.0"),
+    ("lodash", "4.17.21"),
+    ("ms", "2.1.3"),
+    ("require-from-string", "2.0.2"),
+    ("rxjs", "7.8.2"),
+    ("semver", "7.7.2"),
+    ("tslib", "2.8.1"),
+    ("uuid", "11.1.0"),
+    ("zod", "3.25.76"),
+];
+const MEDIUM_DIRECT_DEPENDENCIES: &[&str] = &[
+    "ajv", "chalk", "date-fns", "debug", "dotenv", "lodash", "ms", "rxjs", "semver", "uuid", "zod",
+];
 
 fn target_name() -> &'static str {
     match test_target() {
@@ -284,6 +305,7 @@ async fn measure(
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
+    validate_release_fixture_contract()?;
     if std::env::var_os("NPM_METADATA_VALIDATE_REPORTS").is_some() {
         return validate_checked_release_reports(Utf8Path::new(SUITE_DIR).join("results"));
     }
@@ -308,9 +330,14 @@ async fn main() -> anyhow::Result<()> {
         "iterations must be 1..=20"
     );
     if std::env::var_os("NPM_METADATA_RELEASE_BASELINE").is_some() {
+        let minimum_iterations = if std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some() {
+            1
+        } else {
+            5
+        };
         ensure!(
-            iterations >= 5,
-            "release baseline requires at least five iterations"
+            iterations >= minimum_iterations,
+            "release baseline requires at least {minimum_iterations} iterations"
         );
         return run_release_baseline(iterations).await;
     }
@@ -416,36 +443,428 @@ struct ReleaseRegistry {
     server: tokio::task::JoinHandle<()>,
     counters: Arc<RegistryCounters>,
     tarballs: BTreeMap<String, Value>,
+    package_files: BTreeMap<String, BTreeMap<String, u64>>,
 }
 
-async fn release_registry(root: &Utf8Path) -> anyhow::Result<ReleaseRegistry> {
+#[derive(Clone, Debug)]
+struct ReleasePackage {
+    lock_path: String,
+    name: String,
+    version: String,
+    resolved_path: String,
+    integrity: String,
+    dependencies: BTreeMap<String, String>,
+    bins: BTreeMap<String, String>,
+}
+
+#[derive(Clone, Debug)]
+struct ReleaseFixture {
+    name: &'static str,
+    directory: Utf8PathBuf,
+    direct_dependencies: Vec<String>,
+    dependency_edges: usize,
+    packages: Vec<ReleasePackage>,
+}
+
+fn load_release_fixture(name: &'static str, directory: &str) -> anyhow::Result<ReleaseFixture> {
+    let directory = Utf8PathBuf::from(directory);
+    let package_json: Value = serde_json::from_slice(&fs::read(directory.join("package.json"))?)?;
+    let lock: Value = serde_json::from_slice(&fs::read(directory.join("package-lock.json"))?)?;
+    ensure!(
+        package_json["name"] == lock["name"]
+            && package_json["version"] == lock["version"]
+            && package_json["private"] == true
+            && lock["lockfileVersion"] == 3,
+        "invalid {name} npm fixture identity"
+    );
+    let direct = package_json["dependencies"]
+        .as_object()
+        .with_context(|| format!("{name} fixture has no dependencies"))?;
+    ensure!(
+        lock["packages"][""]["dependencies"] == package_json["dependencies"],
+        "{name} manifest and lockfile dependencies differ"
+    );
+    let mut direct_dependencies = direct.keys().cloned().collect::<Vec<_>>();
+    direct_dependencies.sort();
+    let lock_packages = lock["packages"]
+        .as_object()
+        .with_context(|| format!("{name} fixture lock has no packages"))?;
+    let mut packages = Vec::new();
+    for (lock_path, package) in lock_packages {
+        if lock_path.is_empty() {
+            continue;
+        }
+        let package_name = lock_path
+            .strip_prefix("node_modules/")
+            .filter(|package_name| !package_name.contains("/node_modules/"))
+            .with_context(|| format!("{name} fixture is not a flat npm graph: {lock_path}"))?;
+        let version = package["version"]
+            .as_str()
+            .with_context(|| format!("{name} package {package_name} has no version"))?;
+        let resolved = package["resolved"]
+            .as_str()
+            .with_context(|| format!("{name} package {package_name} has no tarball"))?;
+        let resolved_path = resolved
+            .strip_prefix("https://registry.npmjs.org")
+            .filter(|path| path.starts_with('/') && path.ends_with(".tgz"))
+            .with_context(|| {
+                format!("{name} package {package_name} has an unsupported tarball URL")
+            })?;
+        let integrity = package["integrity"]
+            .as_str()
+            .filter(|integrity| integrity.starts_with("sha512-"))
+            .with_context(|| format!("{name} package {package_name} has no SHA-512 integrity"))?;
+        ensure!(
+            package["hasInstallScript"] != true
+                && package["link"] != true
+                && package["optional"] != true
+                && package["dev"] != true,
+            "{name} package {package_name} is not an ordinary pure-JavaScript dependency"
+        );
+        let dependencies = package["dependencies"]
+            .as_object()
+            .map(|dependencies| {
+                dependencies
+                    .iter()
+                    .map(|(dependency, requirement)| {
+                        Ok((
+                            dependency.clone(),
+                            requirement
+                                .as_str()
+                                .with_context(|| {
+                                    format!(
+                                        "{name} package {package_name} has a non-string dependency"
+                                    )
+                                })?
+                                .to_string(),
+                        ))
+                    })
+                    .collect::<anyhow::Result<BTreeMap<_, _>>>()
+            })
+            .transpose()?
+            .unwrap_or_default();
+        let bins = match &package["bin"] {
+            Value::Null => BTreeMap::new(),
+            Value::String(target) => {
+                let bin_name = package_name.rsplit('/').next().unwrap_or(package_name);
+                BTreeMap::from([(bin_name.to_string(), target.clone())])
+            }
+            Value::Object(bins) => bins
+                .iter()
+                .map(|(bin_name, target)| {
+                    Ok((
+                        bin_name.clone(),
+                        target
+                            .as_str()
+                            .with_context(|| {
+                                format!("{name} package {package_name} has a non-string bin")
+                            })?
+                            .to_string(),
+                    ))
+                })
+                .collect::<anyhow::Result<BTreeMap<_, _>>>()?,
+            _ => anyhow::bail!("{name} package {package_name} has an invalid bin"),
+        };
+        packages.push(ReleasePackage {
+            lock_path: lock_path.clone(),
+            name: package_name.to_string(),
+            version: version.to_string(),
+            resolved_path: resolved_path.to_string(),
+            integrity: integrity.to_string(),
+            dependencies,
+            bins,
+        });
+    }
+    packages.sort_by(|left, right| left.name.cmp(&right.name));
+    let package_names = packages
+        .iter()
+        .map(|package| package.name.as_str())
+        .collect::<BTreeSet<_>>();
+    ensure!(
+        package_names.len() == packages.len()
+            && direct_dependencies
+                .iter()
+                .all(|dependency| package_names.contains(dependency.as_str())),
+        "{name} fixture package identities do not reconcile"
+    );
+    for package in &packages {
+        ensure!(
+            package
+                .dependencies
+                .keys()
+                .all(|dependency| package_names.contains(dependency.as_str())),
+            "{name} fixture has an unresolved dependency from {}",
+            package.name
+        );
+    }
+    let dependency_edges = packages
+        .iter()
+        .map(|package| package.dependencies.len())
+        .sum();
+    Ok(ReleaseFixture {
+        name,
+        directory,
+        direct_dependencies,
+        dependency_edges,
+        packages,
+    })
+}
+
+struct PackedReleasePackage {
+    body: Vec<u8>,
+    evidence: Value,
+    files: BTreeMap<String, u64>,
+}
+
+fn packed_file_manifest(
+    package: &ReleasePackage,
+    packed: &Value,
+) -> anyhow::Result<BTreeMap<String, u64>> {
+    let packed_files = packed["files"]
+        .as_array()
+        .context("npm pack file manifest")?;
+    let archive_root = packed_files.iter().find_map(|file| {
+        let path = file["path"].as_str()?;
+        let root = path.strip_suffix('/')?;
+        (!root.is_empty()
+            && !root.contains('/')
+            && packed_files.iter().all(|candidate| {
+                candidate["path"]
+                    .as_str()
+                    .is_some_and(|candidate| candidate == path || candidate.starts_with(path))
+            }))
+        .then(|| path.to_string())
+    });
+    let mut files = BTreeMap::new();
+    for file in packed_files {
+        let archive_path = file["path"].as_str().context("npm pack file path")?;
+        if archive_path.ends_with('/') {
+            continue;
+        }
+        let path = archive_root
+            .as_deref()
+            .and_then(|root| archive_path.strip_prefix(root))
+            .unwrap_or(archive_path);
+        let relative = Utf8Path::new(path);
+        ensure!(
+            !path.is_empty()
+                && !relative.is_absolute()
+                && !relative
+                    .components()
+                    .any(|component| component.as_str() == "..")
+                && !path.ends_with(".node")
+                && path != "binding.gyp"
+                && !path.ends_with("/binding.gyp"),
+            "{}@{} contains an unsupported archive entry: {archive_path}",
+            package.name,
+            package.version
+        );
+        let size = file["size"].as_u64().context("npm pack file size")?;
+        ensure!(
+            files.insert(path.to_string(), size).is_none(),
+            "{}@{} has duplicate archive path {path}",
+            package.name,
+            package.version
+        );
+    }
+    ensure!(
+        !files.is_empty(),
+        "{}@{} has no regular archive files",
+        package.name,
+        package.version
+    );
+    for target in package.bins.values() {
+        ensure!(
+            files.contains_key(target),
+            "{}@{} bin target is absent from the archive: {target}",
+            package.name,
+            package.version
+        );
+    }
+    Ok(files)
+}
+
+fn fixture_variant_is_rejected(package_json: &Value, lock: &Value) -> anyhow::Result<bool> {
+    let root = camino_tempfile::Utf8TempDir::new()?;
+    fs::write(
+        root.path().join("package.json"),
+        serde_json::to_vec_pretty(package_json)?,
+    )?;
+    fs::write(
+        root.path().join("package-lock.json"),
+        serde_json::to_vec_pretty(lock)?,
+    )?;
+    Ok(load_release_fixture("invalid", root.path().as_str()).is_err())
+}
+
+fn validate_release_fixture_contract() -> anyhow::Result<()> {
+    let small = load_release_fixture("small-local-registry", "tests/npm_metadata/real")?;
+    let medium = load_release_fixture("medium-local-registry", "tests/npm_metadata/medium")?;
+    ensure!(
+        small.direct_dependencies.len() == 2
+            && small.packages.len() == 2
+            && small.dependency_edges == 1
+            && small.packages.iter().all(|package| package.bins.is_empty())
+            && medium.direct_dependencies.len() == 11
+            && medium.packages.len() == 16
+            && medium.dependency_edges == 6
+            && medium
+                .packages
+                .iter()
+                .map(|package| package.bins.len())
+                .sum::<usize>()
+                == 2,
+        "npm release fixture counts changed"
+    );
+    let medium_versions = medium
+        .packages
+        .iter()
+        .map(|package| (package.name.as_str(), package.version.as_str()))
+        .collect::<BTreeMap<_, _>>();
+    ensure!(
+        medium_versions == MEDIUM_PACKAGES.iter().copied().collect(),
+        "medium npm fixture identities changed"
+    );
+
+    let package_path = Utf8Path::new("tests/npm_metadata/medium/package.json");
+    let lock_path = Utf8Path::new("tests/npm_metadata/medium/package-lock.json");
+    let package_json: Value = serde_json::from_slice(&fs::read(package_path)?)?;
+    let lock: Value = serde_json::from_slice(&fs::read(lock_path)?)?;
+
+    let mut missing_package = lock.clone();
+    missing_package["packages"]
+        .as_object_mut()
+        .expect("validated fixture packages")
+        .remove("node_modules/ajv");
+    ensure!(
+        fixture_variant_is_rejected(&package_json, &missing_package)?,
+        "fixture parser accepted a missing locked package"
+    );
+    let mut bad_integrity = lock.clone();
+    bad_integrity["packages"]["node_modules/ajv"]["integrity"] = json!("sha1-wrong");
+    ensure!(
+        fixture_variant_is_rejected(&package_json, &bad_integrity)?,
+        "fixture parser accepted non-SHA-512 integrity"
+    );
+    let mut install_script = lock.clone();
+    install_script["packages"]["node_modules/ajv"]["hasInstallScript"] = json!(true);
+    ensure!(
+        fixture_variant_is_rejected(&package_json, &install_script)?,
+        "fixture parser accepted an install script"
+    );
+    let mut mismatched_manifest = package_json.clone();
+    mismatched_manifest["dependencies"]["ajv"] = json!("8.17.0");
+    ensure!(
+        fixture_variant_is_rejected(&mismatched_manifest, &lock)?,
+        "fixture parser accepted a manifest/lock mismatch"
+    );
+
+    let archive_package = medium
+        .packages
+        .iter()
+        .find(|package| package.bins.is_empty())
+        .context("medium fixture has no package for archive guards")?;
+    let valid_archive = json!({"files": [{"path": "index.js", "size": 1}]});
+    ensure!(
+        packed_file_manifest(archive_package, &valid_archive).is_ok(),
+        "archive validator rejected an ordinary JavaScript file"
+    );
+    for path in ["build/addon.node", "binding.gyp", "native/binding.gyp"] {
+        let native_archive = json!({"files": [{"path": path, "size": 1}]});
+        ensure!(
+            packed_file_manifest(archive_package, &native_archive).is_err(),
+            "archive validator accepted native entry {path}"
+        );
+    }
+    Ok(())
+}
+
+fn pack_release_package(
+    package: &ReleasePackage,
+    destination: &Utf8Path,
+) -> anyhow::Result<PackedReleasePackage> {
+    let resolved = format!("https://registry.npmjs.org{}", package.resolved_path);
+    let output = command(Command::new("npm").args([
+        "pack",
+        &resolved,
+        "--json",
+        "--ignore-scripts",
+        "--registry=https://registry.npmjs.org/",
+        "--pack-destination",
+        destination.as_str(),
+    ]))?;
+    let value: Value = serde_json::from_str(&output)?;
+    let packed = &value[0];
+    ensure!(
+        packed["name"] == package.name
+            && packed["version"] == package.version
+            && packed["integrity"] == package.integrity,
+        "npm pack did not reproduce {}@{} with its locked integrity",
+        package.name,
+        package.version
+    );
+    let filename = packed["filename"].as_str().context("npm pack filename")?;
+    let body = fs::read(destination.join(filename))?;
+    let files = packed_file_manifest(package, packed)?;
+    ensure!(
+        packed["size"].as_u64() == Some(body.len() as u64)
+            && packed["entryCount"]
+                .as_u64()
+                .is_some_and(|entries| entries >= files.len() as u64)
+            && packed["unpackedSize"].as_u64() == Some(files.values().sum()),
+        "npm pack returned incomplete evidence for {}@{}",
+        package.name,
+        package.version
+    );
+    let evidence = json!({
+        "bytes": body.len(),
+        "blake3": blake3::hash(&body).to_hex().to_string(),
+        "integrity": package.integrity,
+        "fileCount": files.len(),
+        "unpackedBytes": packed["unpackedSize"],
+    });
+    Ok(PackedReleasePackage {
+        body,
+        evidence,
+        files,
+    })
+}
+
+async fn release_registry(
+    root: &Utf8Path,
+    fixtures: &[&ReleaseFixture],
+) -> anyhow::Result<ReleaseRegistry> {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
     let base = format!("http://127.0.0.1:{}", listener.local_addr()?.port());
     let counters = Arc::new(RegistryCounters::default());
     let mut tarballs = BTreeMap::new();
+    let mut package_files = BTreeMap::new();
     let mut router = Router::new();
-    for (short, name) in PACKAGES {
-        let tarball = pack(short, root)?;
-        tarballs.insert(
-            (*name).to_string(),
-            json!({
-                "bytes": tarball.len(),
-                "blake3": blake3::hash(&tarball).to_hex().to_string(),
-            }),
+    let mut package_names = BTreeSet::new();
+    for package in fixtures.iter().flat_map(|fixture| &fixture.packages) {
+        ensure!(
+            package_names.insert(package.name.clone()),
+            "release fixtures contain duplicate package {}",
+            package.name
         );
-        let path = format!("/@types/{short}/-/{short}-{VERSION}.tgz");
-        let metadata_path = format!("/@types%2f{short}");
-        let dependencies = if *short == "lodash-es" {
-            json!({"@types/lodash": "*"})
-        } else {
-            json!({})
-        };
-        let mut metadata = json!({"name": name, "dist-tags": {"latest": VERSION}, "versions": {}});
-        metadata["versions"][VERSION] = json!({
-            "name": name,
-            "version": VERSION,
-            "dependencies": dependencies,
-            "dist": {"tarball": format!("{base}{path}")},
+        let packed = pack_release_package(package, root)?;
+        tarballs.insert(package.name.clone(), packed.evidence);
+        package_files.insert(package.name.clone(), packed.files);
+        let path = package.resolved_path.clone();
+        let metadata_path = format!("/{}", package.name.replace('/', "%2f"));
+        let mut metadata = json!({
+            "name": package.name,
+            "dist-tags": {"latest": package.version},
+            "versions": {},
+        });
+        metadata["versions"][&package.version] = json!({
+            "name": package.name,
+            "version": package.version,
+            "dependencies": package.dependencies,
+            "dist": {
+                "tarball": format!("{base}{path}"),
+                "integrity": package.integrity,
+            },
         });
         let route_counters = counters.clone();
         router = router.route(
@@ -464,7 +883,7 @@ async fn release_registry(root: &Utf8Path) -> anyhow::Result<ReleaseRegistry> {
             &path,
             get(move || {
                 let route_counters = route_counters.clone();
-                let body = tarball.clone();
+                let body = packed.body.clone();
                 async move {
                     route_counters.tarballs.fetch_add(1, Ordering::Relaxed);
                     (StatusCode::OK, Body::from(body))
@@ -492,6 +911,7 @@ async fn release_registry(root: &Utf8Path) -> anyhow::Result<ReleaseRegistry> {
         server,
         counters,
         tarballs,
+        package_files,
     })
 }
 
@@ -525,7 +945,11 @@ fn resolve_host_npm() -> anyhow::Result<HostNpm> {
     })
 }
 
-fn prepare_release_root(root: &Utf8Path, fixture: bool, registry: &str) -> anyhow::Result<()> {
+fn prepare_release_root(
+    root: &Utf8Path,
+    fixture: Option<&ReleaseFixture>,
+    registry: &str,
+) -> anyhow::Result<()> {
     for directory in [
         "workspace",
         "home/npm",
@@ -535,19 +959,20 @@ fn prepare_release_root(root: &Utf8Path, fixture: bool, registry: &str) -> anyho
     ] {
         fs::create_dir_all(root.join(directory))?;
     }
-    if fixture {
+    if let Some(fixture) = fixture {
         for file in ["package.json", "package-lock.json"] {
             fs::copy(
-                Utf8Path::new(SUITE_DIR).join("real").join(file),
+                fixture.directory.join(file),
                 root.join("workspace").join(file),
             )?;
         }
         let lock_path = root.join("workspace/package-lock.json");
         let mut lock: Value = serde_json::from_slice(&fs::read(&lock_path)?)?;
-        for (short, _) in PACKAGES {
-            lock["packages"][format!("node_modules/@types/{short}")]["resolved"] = json!(format!(
-                "{}/@types/{short}/-/{short}-{VERSION}.tgz",
-                registry.trim_end_matches('/')
+        for package in &fixture.packages {
+            lock["packages"][&package.lock_path]["resolved"] = json!(format!(
+                "{}{}",
+                registry.trim_end_matches('/'),
+                package.resolved_path
             ));
         }
         fs::write(lock_path, serde_json::to_vec_pretty(&lock)?)?;
@@ -558,7 +983,7 @@ fn prepare_release_root(root: &Utf8Path, fixture: bool, registry: &str) -> anyho
 async fn release_instance(
     prepared: &PreparedComponent,
     npm_dir: &Utf8Path,
-    fixture: bool,
+    fixture: Option<&ReleaseFixture>,
     registry: &str,
 ) -> anyhow::Result<TestInstance> {
     let instance = TestInstance::from_prepared_with_memory_tracking(prepared).await?;
@@ -607,14 +1032,6 @@ fn warm_ci_args(registry: &str) -> Vec<String> {
     ]
 }
 
-fn release_series_arguments(registry: &str) -> Value {
-    json!({
-        "metadata": metadata_args(registry),
-        "ciSeed": seed_ci_args(registry),
-        "ciTimed": warm_ci_args(registry),
-    })
-}
-
 fn release_timing_boundary() -> Value {
     json!({
         "host": HOST_TIMING_BOUNDARY,
@@ -622,38 +1039,237 @@ fn release_timing_boundary() -> Value {
     })
 }
 
-fn installed_state(root: &Utf8Path) -> Value {
-    let mut packages = BTreeMap::new();
-    let mut complete = true;
-    for (short, name) in PACKAGES {
-        let path = root
-            .join("workspace/node_modules/@types")
-            .join(short)
-            .join("package.json");
-        let identity = fs::read(&path)
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
-            .map(|package| {
-                json!({
-                    "name": package["name"],
-                    "version": package["version"],
-                })
-            });
-        complete &= identity
-            .as_ref()
-            .is_some_and(|identity| identity["name"] == *name && identity["version"] == VERSION);
-        packages.insert((*name).to_string(), identity);
+#[derive(Default)]
+struct InstalledTreeEvidence {
+    directories: u64,
+    files: u64,
+    symlinks: u64,
+    bytes: u64,
+    hasher: blake3::Hasher,
+}
+
+fn collect_installed_tree(
+    root: &Utf8Path,
+    directory: &Utf8Path,
+    registry: &str,
+    evidence: &mut InstalledTreeEvidence,
+) -> anyhow::Result<()> {
+    let mut entries = fs::read_dir(directory)?.collect::<Result<Vec<_>, _>>()?;
+    entries.sort_by_key(|entry| entry.file_name());
+    for entry in entries {
+        let path = Utf8PathBuf::from_path_buf(entry.path())
+            .map_err(|path| anyhow::anyhow!("non-UTF-8 installed path: {}", path.display()))?;
+        let relative = path.strip_prefix(root)?;
+        let metadata = fs::symlink_metadata(&path)?;
+        if metadata.is_dir() {
+            evidence.directories += 1;
+            hash_part(&mut evidence.hasher, b"directory");
+            hash_part(&mut evidence.hasher, relative.as_str().as_bytes());
+            collect_installed_tree(root, &path, registry, evidence)?;
+        } else if metadata.is_file() {
+            evidence.files += 1;
+            evidence.bytes += metadata.len();
+            let bytes = fs::read(&path)?;
+            let normalized = if relative == Utf8Path::new(".package-lock.json") {
+                String::from_utf8(bytes)?
+                    .replace(registry, "<local>")
+                    .into_bytes()
+            } else {
+                bytes
+            };
+            hash_part(&mut evidence.hasher, b"file");
+            hash_part(&mut evidence.hasher, relative.as_str().as_bytes());
+            hash_part(&mut evidence.hasher, &normalized);
+        } else if metadata.file_type().is_symlink() {
+            evidence.symlinks += 1;
+            let target = fs::read_link(&path);
+            let target = target
+                .as_ref()
+                .ok()
+                .and_then(|target| target.to_str())
+                .context("installed symlink has no UTF-8 target")?;
+            hash_part(&mut evidence.hasher, b"symlink");
+            hash_part(&mut evidence.hasher, relative.as_str().as_bytes());
+            hash_part(&mut evidence.hasher, target.as_bytes());
+        } else {
+            anyhow::bail!("unsupported installed entry type: {path}");
+        }
     }
-    let mut top_level = fs::read_dir(root.join("workspace/node_modules/@types"))
-        .ok()
-        .into_iter()
-        .flatten()
-        .filter_map(Result::ok)
-        .filter_map(|entry| entry.file_name().into_string().ok())
+    Ok(())
+}
+
+fn package_file_sizes(root: &Utf8Path) -> anyhow::Result<BTreeMap<String, u64>> {
+    let mut files = BTreeMap::new();
+    let mut pending = vec![root.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        let mut entries = fs::read_dir(&directory)?.collect::<Result<Vec<_>, _>>()?;
+        entries.sort_by_key(|entry| entry.file_name());
+        for entry in entries {
+            let path = Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 package path: {}", path.display()))?;
+            let metadata = fs::symlink_metadata(&path)?;
+            if metadata.is_dir() {
+                pending.push(path);
+            } else if metadata.is_file() {
+                files.insert(
+                    path.strip_prefix(root)?.as_str().to_string(),
+                    metadata.len(),
+                );
+            } else {
+                anyhow::bail!("package contains an unsupported installed entry: {path}");
+            }
+        }
+    }
+    Ok(files)
+}
+
+fn installed_package_names(node_modules: &Utf8Path) -> anyhow::Result<Vec<String>> {
+    let mut names = Vec::new();
+    for entry in fs::read_dir(node_modules)? {
+        let entry = entry?;
+        let name = entry.file_name().into_string().map_err(|name| {
+            anyhow::anyhow!("non-UTF-8 package name: {}", name.to_string_lossy())
+        })?;
+        if name == ".bin" || name == ".package-lock.json" {
+            continue;
+        }
+        if name.starts_with('@') {
+            let scope = Utf8PathBuf::from_path_buf(entry.path())
+                .map_err(|path| anyhow::anyhow!("non-UTF-8 package scope: {}", path.display()))?;
+            for package in fs::read_dir(scope)? {
+                let package = package?;
+                let package_name = package.file_name().into_string().map_err(|name| {
+                    anyhow::anyhow!("non-UTF-8 package name: {}", name.to_string_lossy())
+                })?;
+                names.push(format!("{name}/{package_name}"));
+            }
+        } else {
+            names.push(name);
+        }
+    }
+    names.sort();
+    Ok(names)
+}
+
+fn installed_state(
+    root: &Utf8Path,
+    fixture: &ReleaseFixture,
+    registry: &ReleaseRegistry,
+) -> anyhow::Result<Value> {
+    let node_modules = root.join("workspace/node_modules");
+    let mut complete = true;
+    let mut package_files = 0_u64;
+    let mut package_bytes = 0_u64;
+    let mut identity_mismatches = Vec::new();
+    let mut file_mismatches = Vec::new();
+    for package in &fixture.packages {
+        let package_root = node_modules.join(&package.name);
+        let identity = fs::read(package_root.join("package.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok());
+        let identity_matches = identity.as_ref().is_some_and(|identity| {
+            identity["name"] == package.name && identity["version"] == package.version
+        });
+        complete &= identity_matches;
+        if !identity_matches {
+            identity_mismatches.push(package.name.clone());
+        }
+        let actual_files = package_file_sizes(&package_root).unwrap_or_default();
+        let expected_files = registry.package_files.get(&package.name);
+        let files_match = expected_files == Some(&actual_files);
+        complete &= files_match;
+        if !files_match {
+            let empty = BTreeMap::new();
+            let expected_files = expected_files.unwrap_or(&empty);
+            let missing = expected_files
+                .keys()
+                .filter(|path| !actual_files.contains_key(*path))
+                .cloned()
+                .collect::<Vec<_>>();
+            let extra = actual_files
+                .keys()
+                .filter(|path| !expected_files.contains_key(*path))
+                .cloned()
+                .collect::<Vec<_>>();
+            let size = expected_files
+                .iter()
+                .filter_map(|(path, expected)| {
+                    actual_files
+                        .get(path)
+                        .filter(|actual| *actual != expected)
+                        .map(|actual| {
+                            json!({
+                                "path": path,
+                                "expected": expected,
+                                "actual": actual,
+                            })
+                        })
+                })
+                .collect::<Vec<_>>();
+            file_mismatches.push(json!({
+                "package": package.name,
+                "missing": missing,
+                "extra": extra,
+                "size": size,
+            }));
+        }
+        package_files += actual_files.len() as u64;
+        package_bytes += actual_files.values().sum::<u64>();
+    }
+    let expected_names = fixture
+        .packages
+        .iter()
+        .map(|package| package.name.clone())
         .collect::<Vec<_>>();
-    top_level.sort();
-    complete &= top_level == ["lodash", "lodash-es"];
-    json!({"complete": complete, "packages": packages, "topLevel": top_level})
+    let actual_names = installed_package_names(&node_modules).unwrap_or_default();
+    let package_names_match = actual_names == expected_names;
+    complete &= package_names_match;
+
+    let expected_bins = fixture
+        .packages
+        .iter()
+        .flat_map(|package| {
+            package
+                .bins
+                .iter()
+                .map(|(name, target)| (name.clone(), format!("../{}/{}", package.name, target)))
+        })
+        .collect::<BTreeMap<_, _>>();
+    let bin_directory = node_modules.join(".bin");
+    let mut actual_bins = BTreeMap::new();
+    if bin_directory.exists() {
+        for entry in fs::read_dir(&bin_directory)? {
+            let entry = entry?;
+            let name = entry.file_name().into_string().map_err(|name| {
+                anyhow::anyhow!("non-UTF-8 npm bin name: {}", name.to_string_lossy())
+            })?;
+            let target = fs::read_link(entry.path())?;
+            actual_bins.insert(name, target.to_string_lossy().into_owned());
+        }
+    }
+    let bins_match = actual_bins == expected_bins;
+    complete &= bins_match;
+
+    let mut tree = InstalledTreeEvidence::default();
+    collect_installed_tree(&node_modules, &node_modules, &registry.base, &mut tree)?;
+    Ok(json!({
+        "complete": complete,
+        "identityMismatches": identity_mismatches,
+        "fileMismatches": file_mismatches,
+        "packageNamesMatch": package_names_match,
+        "binsMatch": bins_match,
+        "packages": actual_names.len(),
+        "packageFiles": package_files,
+        "packageBytes": package_bytes,
+        "bins": actual_bins.len(),
+        "tree": {
+            "directories": tree.directories,
+            "files": tree.files,
+            "symlinks": tree.symlinks,
+            "bytes": tree.bytes,
+            "blake3": tree.hasher.finalize().to_hex().to_string(),
+        },
+    }))
 }
 
 struct ReleaseSampleContext<'a> {
@@ -665,6 +1281,7 @@ struct ReleaseSampleContext<'a> {
     requests: RegistrySnapshot,
     linear_memory_high_water_bytes: Option<usize>,
     lockfile_before: Option<String>,
+    fixture: Option<(&'a ReleaseFixture, &'a ReleaseRegistry)>,
 }
 
 fn finish_release_sample(
@@ -681,8 +1298,21 @@ fn finish_release_sample(
         requests,
         linear_memory_high_water_bytes,
         lockfile_before,
+        fixture,
     } = context;
-    let installed = (operation == "ci").then(|| installed_state(root));
+    let installed = if operation == "ci" {
+        let (fixture, registry) = fixture.context("npm ci sample has no fixture")?;
+        Some(
+            installed_state(root, fixture, registry).unwrap_or_else(|error| {
+                json!({
+                    "complete": false,
+                    "error": format!("{error:#}"),
+                })
+            }),
+        )
+    } else {
+        None
+    };
     let lockfile_after = if operation == "ci" {
         Some(hash_file(root.join("workspace/package-lock.json"))?)
     } else {
@@ -712,7 +1342,18 @@ fn finish_release_sample(
         .lines()
         .filter(|line| line.starts_with("npm http cache "))
         .count();
-    Ok(json!({
+    let stdout = result["stdout"].as_str().unwrap_or_default();
+    let compact_result = json!({
+        "exitCode": result["value"]["exitCode"],
+        "overflowed": result["overflowed"],
+        "runnerError": result.get("runnerError"),
+        "stdout": stdout,
+        "stdoutBytes": stdout.len(),
+        "stdoutBlake3": blake3::hash(stdout.as_bytes()).to_hex().to_string(),
+        "stderrBytes": stderr.len(),
+        "stderrBlake3": blake3::hash(stderr.as_bytes()).to_hex().to_string(),
+    });
+    let sample = json!({
         "sequence": sequence,
         "side": side,
         "operation": operation,
@@ -727,23 +1368,33 @@ fn finish_release_sample(
         "npmHttpFetchLogLines": npm_http_fetch_log_lines,
         "npmHttpCacheLogLines": npm_http_cache_log_lines,
         "linearMemoryHighWaterBytes": linear_memory_high_water_bytes,
-        "result": result,
-    }))
+        "result": compact_result,
+    });
+    eprintln!(
+        "npm release {side} {} {operation}/{cache}: success={} wall={}ms",
+        fixture
+            .map(|(fixture, _)| fixture.name)
+            .unwrap_or("metadata"),
+        sample["success"],
+        sample["wallMs"],
+    );
+    Ok(sample)
 }
 
 fn host_npm_sample(
     host: &HostNpm,
     root: &Utf8Path,
     args: &[String],
-    operation: &str,
-    cache: &str,
+    series: (&str, &str),
     sequence: usize,
-    counters: &RegistryCounters,
+    fixture: Option<&ReleaseFixture>,
+    registry: &ReleaseRegistry,
 ) -> anyhow::Result<Value> {
+    let (operation, cache) = series;
     let lockfile_before = (operation == "ci")
         .then(|| hash_file(root.join("workspace/package-lock.json")))
         .transpose()?;
-    let before = counters.snapshot();
+    let before = registry.counters.snapshot();
     let mut command = Command::new(&host.node);
     command
         .arg(&host.npm_cli)
@@ -776,9 +1427,10 @@ fn host_npm_sample(
             cache,
             sequence,
             root,
-            requests: counters.snapshot().difference(before),
+            requests: registry.counters.snapshot().difference(before),
             linear_memory_high_water_bytes: None,
             lockfile_before,
+            fixture: fixture.map(|fixture| (fixture, registry)),
         },
         wall_ms,
         result,
@@ -791,12 +1443,13 @@ async fn wasm_npm_sample(
     operation: &str,
     cache: &str,
     sequence: usize,
-    counters: &RegistryCounters,
+    fixture: Option<&ReleaseFixture>,
+    registry: &ReleaseRegistry,
 ) -> anyhow::Result<Value> {
     let lockfile_before = (operation == "ci")
         .then(|| hash_file(instance.temp_dir_path().join("workspace/package-lock.json")))
         .transpose()?;
-    let before = counters.snapshot();
+    let before = registry.counters.snapshot();
     instance.set_epoch_deadline(180);
     let arguments = [Val::List(
         args.iter()
@@ -817,9 +1470,10 @@ async fn wasm_npm_sample(
             cache,
             sequence,
             root: instance.temp_dir_path(),
-            requests: counters.snapshot().difference(before),
+            requests: registry.counters.snapshot().difference(before),
             linear_memory_high_water_bytes: Some(instance.linear_memory_high_water_bytes()),
             lockfile_before,
+            fixture: fixture.map(|fixture| (fixture, registry)),
         },
         wall_ms,
         result,
@@ -827,54 +1481,88 @@ async fn wasm_npm_sample(
 }
 
 struct ReleaseIteration {
-    metadata_cold: Value,
-    ci_seed: Value,
-    ci_warm: Value,
+    small_metadata_cold: Value,
+    small_ci_seed: Value,
+    small_ci_warm: Value,
+    medium_ci_seed: Value,
+    medium_ci_warm: Value,
 }
 
 fn host_release_iteration(
     host: &HostNpm,
     registry: &ReleaseRegistry,
+    small: &ReleaseFixture,
+    medium: &ReleaseFixture,
     sequence: usize,
 ) -> anyhow::Result<ReleaseIteration> {
     let metadata_root = camino_tempfile::Utf8TempDir::new()?;
-    prepare_release_root(metadata_root.path(), false, &registry.base)?;
+    prepare_release_root(metadata_root.path(), None, &registry.base)?;
     let metadata_args = metadata_args(&registry.base);
-    let metadata_cold = host_npm_sample(
+    let small_metadata_cold = host_npm_sample(
         host,
         metadata_root.path(),
         &metadata_args,
-        "view",
-        "cold",
+        ("view", "cold"),
         sequence,
-        &registry.counters,
+        None,
+        registry,
     )?;
-    let ci_root = camino_tempfile::Utf8TempDir::new()?;
-    prepare_release_root(ci_root.path(), true, &registry.base)?;
-    let ci_seed = host_npm_sample(
+    let small_root = camino_tempfile::Utf8TempDir::new()?;
+    prepare_release_root(small_root.path(), Some(small), &registry.base)?;
+    let small_ci_seed = host_npm_sample(
         host,
-        ci_root.path(),
+        small_root.path(),
         &seed_ci_args(&registry.base),
-        "ci",
-        "seed",
+        ("ci", "seed"),
         sequence,
-        &registry.counters,
+        Some(small),
+        registry,
     )?;
-    ensure!(ci_seed["success"] == true, "host npm ci cache seed failed");
-    fs::remove_dir_all(ci_root.path().join("workspace/node_modules"))?;
-    let ci_warm = host_npm_sample(
+    ensure!(
+        small_ci_seed["success"] == true,
+        "host small npm ci cache seed failed: {small_ci_seed}"
+    );
+    fs::remove_dir_all(small_root.path().join("workspace/node_modules"))?;
+    let small_ci_warm = host_npm_sample(
         host,
-        ci_root.path(),
+        small_root.path(),
         &warm_ci_args(&registry.base),
-        "ci",
-        "warm-tarball",
+        ("ci", "warm-tarball"),
         sequence,
-        &registry.counters,
+        Some(small),
+        registry,
+    )?;
+    let medium_root = camino_tempfile::Utf8TempDir::new()?;
+    prepare_release_root(medium_root.path(), Some(medium), &registry.base)?;
+    let medium_ci_seed = host_npm_sample(
+        host,
+        medium_root.path(),
+        &seed_ci_args(&registry.base),
+        ("ci", "seed"),
+        sequence,
+        Some(medium),
+        registry,
+    )?;
+    ensure!(
+        medium_ci_seed["success"] == true,
+        "host medium npm ci cache seed failed: {medium_ci_seed}"
+    );
+    fs::remove_dir_all(medium_root.path().join("workspace/node_modules"))?;
+    let medium_ci_warm = host_npm_sample(
+        host,
+        medium_root.path(),
+        &warm_ci_args(&registry.base),
+        ("ci", "warm-tarball"),
+        sequence,
+        Some(medium),
+        registry,
     )?;
     Ok(ReleaseIteration {
-        metadata_cold,
-        ci_seed,
-        ci_warm,
+        small_metadata_cold,
+        small_ci_seed,
+        small_ci_warm,
+        medium_ci_seed,
+        medium_ci_warm,
     })
 }
 
@@ -882,82 +1570,219 @@ async fn wasm_release_iteration(
     prepared: &PreparedComponent,
     npm_dir: &Utf8Path,
     registry: &ReleaseRegistry,
+    small: &ReleaseFixture,
+    medium: &ReleaseFixture,
     sequence: usize,
 ) -> anyhow::Result<ReleaseIteration> {
-    let mut metadata_instance = release_instance(prepared, npm_dir, false, &registry.base).await?;
+    let mut metadata_instance = release_instance(prepared, npm_dir, None, &registry.base).await?;
     let metadata_args = metadata_args(&registry.base);
-    let metadata_cold = wasm_npm_sample(
+    let small_metadata_cold = wasm_npm_sample(
         &mut metadata_instance,
         &metadata_args,
         "view",
         "cold",
         sequence,
-        &registry.counters,
+        None,
+        registry,
     )
     .await?;
-    let mut ci_instance = release_instance(prepared, npm_dir, true, &registry.base).await?;
-    let ci_seed = wasm_npm_sample(
-        &mut ci_instance,
+    let mut small_instance =
+        release_instance(prepared, npm_dir, Some(small), &registry.base).await?;
+    let small_ci_seed = wasm_npm_sample(
+        &mut small_instance,
         &seed_ci_args(&registry.base),
         "ci",
         "seed",
         sequence,
-        &registry.counters,
+        Some(small),
+        registry,
     )
     .await?;
-    ensure!(ci_seed["success"] == true, "Wasm npm ci cache seed failed");
-    fs::remove_dir_all(ci_instance.temp_dir_path().join("workspace/node_modules"))?;
-    let ci_warm = wasm_npm_sample(
-        &mut ci_instance,
+    ensure!(
+        small_ci_seed["success"] == true,
+        "Wasm small npm ci cache seed failed: {small_ci_seed}"
+    );
+    fs::remove_dir_all(
+        small_instance
+            .temp_dir_path()
+            .join("workspace/node_modules"),
+    )?;
+    let small_ci_warm = wasm_npm_sample(
+        &mut small_instance,
         &warm_ci_args(&registry.base),
         "ci",
         "warm-tarball",
         sequence,
-        &registry.counters,
+        Some(small),
+        registry,
+    )
+    .await?;
+    let mut medium_instance =
+        release_instance(prepared, npm_dir, Some(medium), &registry.base).await?;
+    let medium_ci_seed = wasm_npm_sample(
+        &mut medium_instance,
+        &seed_ci_args(&registry.base),
+        "ci",
+        "seed",
+        sequence,
+        Some(medium),
+        registry,
+    )
+    .await?;
+    ensure!(
+        medium_ci_seed["success"] == true,
+        "Wasm medium npm ci cache seed failed: {medium_ci_seed}"
+    );
+    fs::remove_dir_all(
+        medium_instance
+            .temp_dir_path()
+            .join("workspace/node_modules"),
+    )?;
+    let medium_ci_warm = wasm_npm_sample(
+        &mut medium_instance,
+        &warm_ci_args(&registry.base),
+        "ci",
+        "warm-tarball",
+        sequence,
+        Some(medium),
+        registry,
     )
     .await?;
     Ok(ReleaseIteration {
-        metadata_cold,
-        ci_seed,
-        ci_warm,
+        small_metadata_cold,
+        small_ci_seed,
+        small_ci_warm,
+        medium_ci_seed,
+        medium_ci_warm,
     })
 }
 
 #[derive(Default)]
 struct ReleaseSeries {
-    metadata_cold: Vec<Value>,
-    ci_seeds: Vec<Value>,
-    ci_warm: Vec<Value>,
+    small_metadata_cold: Vec<Value>,
+    small_ci_seeds: Vec<Value>,
+    small_ci_warm: Vec<Value>,
+    medium_ci_seeds: Vec<Value>,
+    medium_ci_warm: Vec<Value>,
 }
 
 impl ReleaseSeries {
     fn push(&mut self, iteration: ReleaseIteration) {
-        self.metadata_cold.push(iteration.metadata_cold);
-        self.ci_seeds.push(iteration.ci_seed);
-        self.ci_warm.push(iteration.ci_warm);
+        self.small_metadata_cold.push(iteration.small_metadata_cold);
+        self.small_ci_seeds.push(iteration.small_ci_seed);
+        self.small_ci_warm.push(iteration.small_ci_warm);
+        self.medium_ci_seeds.push(iteration.medium_ci_seed);
+        self.medium_ci_warm.push(iteration.medium_ci_warm);
     }
 
     fn value(&self) -> Value {
         json!({
-            "metadata": {
-                "cold": summarize_release(&self.metadata_cold),
+            "small": {
+                "metadata": {
+                    "cold": summarize_release(&self.small_metadata_cold),
+                },
+                "warmTarballCi": {
+                    "seeds": summarize_release(&self.small_ci_seeds),
+                    "timed": summarize_release(&self.small_ci_warm),
+                },
             },
-            "warmTarballCi": {
-                "seeds": summarize_release(&self.ci_seeds),
-                "timed": summarize_release(&self.ci_warm),
+            "medium": {
+                "warmTarballCi": {
+                    "seeds": summarize_release(&self.medium_ci_seeds),
+                    "timed": summarize_release(&self.medium_ci_warm),
+                },
             },
         })
     }
 
     fn samples(&self) -> impl Iterator<Item = &Value> {
-        self.metadata_cold
+        self.small_metadata_cold
             .iter()
-            .chain(&self.ci_seeds)
-            .chain(&self.ci_warm)
+            .chain(&self.small_ci_seeds)
+            .chain(&self.small_ci_warm)
+            .chain(&self.medium_ci_seeds)
+            .chain(&self.medium_ci_warm)
     }
 }
 
+fn release_fixture_value(
+    fixture: &ReleaseFixture,
+    registry: &ReleaseRegistry,
+    include_metadata: bool,
+) -> anyhow::Result<Value> {
+    let mut packages = BTreeMap::new();
+    let mut tarballs = BTreeMap::new();
+    let mut bins = BTreeMap::new();
+    let mut tarball_bytes = 0_u64;
+    let mut archive_files = 0_u64;
+    let mut unpacked_bytes = 0_u64;
+    for package in &fixture.packages {
+        packages.insert(
+            package.name.clone(),
+            json!({
+                "version": package.version,
+                "resolvedPath": package.resolved_path,
+                "integrity": package.integrity,
+                "dependencies": package.dependencies,
+                "bins": package.bins,
+            }),
+        );
+        for (name, target) in &package.bins {
+            ensure!(
+                bins.insert(
+                    name.clone(),
+                    json!({"package": package.name, "target": target}),
+                )
+                .is_none(),
+                "{} fixture has duplicate bin {name}",
+                fixture.name
+            );
+        }
+        let tarball = registry
+            .tarballs
+            .get(&package.name)
+            .with_context(|| format!("missing packed tarball for {}", package.name))?;
+        tarball_bytes += tarball["bytes"].as_u64().context("tarball bytes")?;
+        archive_files += tarball["fileCount"].as_u64().context("tarball files")?;
+        unpacked_bytes += tarball["unpackedBytes"]
+            .as_u64()
+            .context("tarball unpacked bytes")?;
+        tarballs.insert(package.name.clone(), tarball.clone());
+    }
+    let series_arguments = if include_metadata {
+        json!({
+            "metadata": metadata_args("<local>"),
+            "ciSeed": seed_ci_args("<local>"),
+            "ciTimed": warm_ci_args("<local>"),
+        })
+    } else {
+        json!({
+            "ciSeed": seed_ci_args("<local>"),
+            "ciTimed": warm_ci_args("<local>"),
+        })
+    };
+    Ok(json!({
+        "name": fixture.name,
+        "packageJsonBlake3": hash_file(fixture.directory.join("package.json"))?,
+        "packageLockBlake3": hash_file(fixture.directory.join("package-lock.json"))?,
+        "directDependencies": fixture.direct_dependencies,
+        "directDependencyCount": fixture.direct_dependencies.len(),
+        "packageCount": fixture.packages.len(),
+        "dependencyEdgeCount": fixture.dependency_edges,
+        "binCount": bins.len(),
+        "bins": bins,
+        "packages": packages,
+        "tarballs": tarballs,
+        "tarballBytes": tarball_bytes,
+        "archiveFiles": archive_files,
+        "unpackedBytes": unpacked_bytes,
+        "seriesArguments": series_arguments,
+    }))
+}
+
 async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
+    let small = load_release_fixture("small-local-registry", "tests/npm_metadata/real")?;
+    let medium = load_release_fixture("medium-local-registry", "tests/npm_metadata/medium")?;
     let host = resolve_host_npm()?;
     let build_started = Instant::now();
     let feature_combination = FeatureCombination::Normal;
@@ -970,35 +1795,57 @@ async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
     let prepared = PreparedComponent::new(compiled.wasm_path())?;
     let prepare_elapsed = prepare_started.elapsed();
     let pack_dir = camino_tempfile::tempdir()?;
-    let registry = release_registry(pack_dir.path()).await?;
+    let registry = release_registry(pack_dir.path(), &[&small, &medium]).await?;
 
     let mut host_series = ReleaseSeries::default();
     let mut wasm_series = ReleaseSeries::default();
     for iteration in 0..iterations {
         if iteration % 2 == 0 {
-            host_series.push(host_release_iteration(&host, &registry, iteration)?);
+            host_series.push(host_release_iteration(
+                &host, &registry, &small, &medium, iteration,
+            )?);
             wasm_series.push(
-                wasm_release_iteration(&prepared, &host.npm_dir, &registry, iteration).await?,
+                wasm_release_iteration(
+                    &prepared,
+                    &host.npm_dir,
+                    &registry,
+                    &small,
+                    &medium,
+                    iteration,
+                )
+                .await?,
             );
         } else {
             wasm_series.push(
-                wasm_release_iteration(&prepared, &host.npm_dir, &registry, iteration).await?,
+                wasm_release_iteration(
+                    &prepared,
+                    &host.npm_dir,
+                    &registry,
+                    &small,
+                    &medium,
+                    iteration,
+                )
+                .await?,
             );
-            host_series.push(host_release_iteration(&host, &registry, iteration)?);
+            host_series.push(host_release_iteration(
+                &host, &registry, &small, &medium, iteration,
+            )?);
         }
     }
     registry.server.abort();
 
-    let environment = release_environment(iterations, feature_combination.label())?;
-    let input_hashes = npm_input_hashes()?;
-    let npm_tool = directory_hash_evidence(&host.npm_dir)?;
+    let environment = release_environment(iterations, feature_combination.label())
+        .context("capture npm release environment")?;
+    let input_hashes = npm_input_hashes().context("hash npm release inputs")?;
+    let npm_tool =
+        directory_hash_evidence(&host.npm_dir).context("hash the pinned npm tool tree")?;
     let max_linear_memory = wasm_series
         .samples()
         .filter_map(|sample| sample["linearMemoryHighWaterBytes"].as_u64())
         .max()
         .unwrap_or(0);
     let report = json!({
-        "schema": "npm-metadata-v2",
+        "schema": "npm-metadata-v3",
         "environment": environment,
         "inputs": {
             "algorithm": INPUT_HASH_ALGORITHM,
@@ -1006,15 +1853,12 @@ async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
             "benchmarkHash": input_hashes.benchmark,
         },
         "target": target_name(),
-        "fixture": {
-            "name": "small-local-registry",
-            "packages": PACKAGES.iter().map(|(_, name)| *name).collect::<Vec<_>>(),
-            "version": VERSION,
-            "packageJsonBlake3": hash_file(Utf8Path::new(SUITE_DIR).join("real/package.json"))?,
-            "packageLockBlake3": hash_file(Utf8Path::new(SUITE_DIR).join("real/package-lock.json"))?,
-            "npmTool": npm_tool,
-            "tarballs": registry.tarballs,
-            "seriesArguments": release_series_arguments("<local>"),
+        "npmTool": npm_tool,
+        "fixtures": {
+            "small": release_fixture_value(&small, &registry, true)
+                .context("build small npm fixture evidence")?,
+            "medium": release_fixture_value(&medium, &registry, false)
+                .context("build medium npm fixture evidence")?,
         },
         "component": {
             "path": compiled.wasm_path().as_str(),
@@ -1029,9 +1873,11 @@ async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
         "memory": {
             "maxWasmLinearMemoryHighWaterBytes": max_linear_memory,
             "series": {
-                "metadataCold": release_memory_series(&wasm_series.metadata_cold)?,
-                "ciSeeds": release_memory_series(&wasm_series.ci_seeds)?,
-                "ciWarmTarball": release_memory_series(&wasm_series.ci_warm)?,
+                "smallMetadataCold": release_memory_series(&wasm_series.small_metadata_cold)?,
+                "smallCiSeeds": release_memory_series(&wasm_series.small_ci_seeds)?,
+                "smallCiWarmTarball": release_memory_series(&wasm_series.small_ci_warm)?,
+                "mediumCiSeeds": release_memory_series(&wasm_series.medium_ci_seeds)?,
+                "mediumCiWarmTarball": release_memory_series(&wasm_series.medium_ci_warm)?,
             },
             "interpretation": MEMORY_INTERPRETATION,
         },
@@ -1041,13 +1887,15 @@ async fn run_release_baseline(iterations: usize) -> anyhow::Result<()> {
             "host and Wasm use the same loopback registry and pinned tarball bytes",
             "each iteration has independent host and Wasm workspaces and caches",
             "timed npm ci runs offline after an untimed local-registry seed and external node_modules removal",
+            "the medium fixture measures installation only and never executes package bins",
         ],
     });
-    validate_release_report(&report)?;
-    validate_release_regression_guards(&report)?;
+    validate_release_report(&report).context("validate generated npm release report")?;
+    validate_release_regression_guards(&report)
+        .context("validate npm release report corruption guards")?;
     let formatted = serde_json::to_string_pretty(&report)?;
     if let Ok(path) = std::env::var("NPM_METADATA_REPORT") {
-        fs::write(path, format!("{formatted}\n"))?;
+        fs::write(path, format!("{formatted}\n")).context("write npm release report")?;
     }
     println!("{formatted}");
     Ok(())
@@ -1109,8 +1957,10 @@ struct NpmInputHashes {
 
 struct CurrentReleaseInputs {
     hashes: NpmInputHashes,
-    package_json: String,
-    package_lock: String,
+    small_package_json: String,
+    small_package_lock: String,
+    medium_package_json: String,
+    medium_package_lock: String,
 }
 
 fn npm_source_root() -> anyhow::Result<Utf8PathBuf> {
@@ -1154,6 +2004,8 @@ fn npm_input_hashes() -> anyhow::Result<NpmInputHashes> {
         "tests/npm_metadata.rs",
         "tests/npm_metadata/real/package.json",
         "tests/npm_metadata/real/package-lock.json",
+        "tests/npm_metadata/medium/package.json",
+        "tests/npm_metadata/medium/package-lock.json",
         "tests/npm_metadata/run.sh",
         "tools/dev-test.sh",
     ]);
@@ -1174,8 +2026,12 @@ fn current_release_inputs() -> anyhow::Result<CurrentReleaseInputs> {
     let source_root = npm_source_root()?;
     Ok(CurrentReleaseInputs {
         hashes: npm_input_hashes()?,
-        package_json: hash_file(source_root.join(SUITE_DIR).join("real/package.json"))?,
-        package_lock: hash_file(source_root.join(SUITE_DIR).join("real/package-lock.json"))?,
+        small_package_json: hash_file(source_root.join(SUITE_DIR).join("real/package.json"))?,
+        small_package_lock: hash_file(source_root.join(SUITE_DIR).join("real/package-lock.json"))?,
+        medium_package_json: hash_file(source_root.join(SUITE_DIR).join("medium/package.json"))?,
+        medium_package_lock: hash_file(
+            source_root.join(SUITE_DIR).join("medium/package-lock.json"),
+        )?,
     })
 }
 
@@ -1227,7 +2083,9 @@ fn npm_composite_hash(
                     .any(|component| component.as_str() == ".."),
             "input path escapes the source root: {path}"
         );
-        let metadata = fs::symlink_metadata(source_root.join(path))?;
+        let input_path = source_root.join(path);
+        let metadata = fs::symlink_metadata(&input_path)
+            .with_context(|| format!("inspect npm input {input_path}"))?;
         ensure!(
             metadata.is_file() && !metadata.file_type().is_symlink(),
             "input is not a regular file: {path}"
@@ -1237,7 +2095,10 @@ fn npm_composite_hash(
         for component in components {
             hash_part(&mut hasher, component.as_str().as_bytes());
         }
-        hash_part(&mut hasher, &fs::read(source_root.join(path))?);
+        hash_part(
+            &mut hasher,
+            &fs::read(&input_path).with_context(|| format!("read npm input {input_path}"))?,
+        );
     }
     Ok(hasher.finalize().to_hex().to_string())
 }
@@ -1317,40 +2178,190 @@ fn release_environment(iterations: usize, component_features: &str) -> anyhow::R
     }))
 }
 
+fn expected_release_packages(key: &str) -> BTreeMap<&'static str, &'static str> {
+    match key {
+        "small" => PACKAGES.iter().map(|(_, name)| (*name, VERSION)).collect(),
+        "medium" => MEDIUM_PACKAGES.iter().copied().collect(),
+        _ => unreachable!("validated fixture key"),
+    }
+}
+
+fn validate_release_fixture(fixture: &Value, key: &str) -> anyhow::Result<()> {
+    let expected_packages = expected_release_packages(key);
+    let expected_direct = match key {
+        "small" => PACKAGES.iter().map(|(_, name)| *name).collect::<Vec<_>>(),
+        "medium" => MEDIUM_DIRECT_DEPENDENCIES.to_vec(),
+        _ => anyhow::bail!("unsupported npm release fixture: {key}"),
+    };
+    let expected_name = format!("{key}-local-registry");
+    let include_metadata = key == "small";
+    let expected_arguments = if include_metadata {
+        json!({
+            "metadata": metadata_args("<local>"),
+            "ciSeed": seed_ci_args("<local>"),
+            "ciTimed": warm_ci_args("<local>"),
+        })
+    } else {
+        json!({
+            "ciSeed": seed_ci_args("<local>"),
+            "ciTimed": warm_ci_args("<local>"),
+        })
+    };
+    let packages = fixture["packages"]
+        .as_object()
+        .with_context(|| format!("{key} fixture has no package identities"))?;
+    let tarballs = fixture["tarballs"]
+        .as_object()
+        .with_context(|| format!("{key} fixture has no tarball evidence"))?;
+    ensure!(
+        fixture["name"] == expected_name
+            && fixture["directDependencies"] == json!(expected_direct)
+            && fixture["directDependencyCount"] == expected_direct.len()
+            && fixture["packageCount"] == expected_packages.len()
+            && fixture["seriesArguments"] == expected_arguments
+            && packages.len() == expected_packages.len()
+            && tarballs.len() == expected_packages.len()
+            && is_blake3_value(&fixture["packageJsonBlake3"])
+            && is_blake3_value(&fixture["packageLockBlake3"]),
+        "invalid {key} npm release fixture identity"
+    );
+
+    let mut dependency_edges = 0_usize;
+    let mut expected_bins = BTreeMap::new();
+    let mut tarball_bytes = 0_u64;
+    let mut archive_files = 0_u64;
+    let mut unpacked_bytes = 0_u64;
+    for (name, version) in expected_packages {
+        let package = &fixture["packages"][name];
+        let dependencies = package["dependencies"]
+            .as_object()
+            .with_context(|| format!("{key} package {name} has no dependency map"))?;
+        ensure!(
+            package["version"] == version
+                && package["resolvedPath"]
+                    .as_str()
+                    .is_some_and(|path| path.starts_with('/') && path.ends_with(".tgz"))
+                && package["integrity"]
+                    .as_str()
+                    .is_some_and(|integrity| integrity.starts_with("sha512-"))
+                && dependencies
+                    .keys()
+                    .all(|dependency| fixture["packages"].get(dependency).is_some()),
+            "invalid {key} package identity for {name}"
+        );
+        dependency_edges += dependencies.len();
+        let bins = package["bins"]
+            .as_object()
+            .with_context(|| format!("{key} package {name} has no bin map"))?;
+        for (bin, target) in bins {
+            ensure!(
+                expected_bins
+                    .insert(bin.clone(), json!({"package": name, "target": target}),)
+                    .is_none(),
+                "{key} fixture has duplicate bin {bin}"
+            );
+        }
+
+        let tarball = &fixture["tarballs"][name];
+        ensure!(
+            tarball["integrity"] == package["integrity"]
+                && is_blake3_value(&tarball["blake3"])
+                && tarball["bytes"].as_u64().is_some_and(|value| value > 0)
+                && tarball["fileCount"].as_u64().is_some_and(|value| value > 0)
+                && tarball["unpackedBytes"]
+                    .as_u64()
+                    .is_some_and(|value| value > 0),
+            "invalid {key} tarball evidence for {name}"
+        );
+        tarball_bytes += tarball["bytes"].as_u64().unwrap();
+        archive_files += tarball["fileCount"].as_u64().unwrap();
+        unpacked_bytes += tarball["unpackedBytes"].as_u64().unwrap();
+    }
+    ensure!(
+        fixture["dependencyEdgeCount"] == dependency_edges
+            && fixture["binCount"] == expected_bins.len()
+            && fixture["bins"] == json!(expected_bins)
+            && fixture["tarballBytes"] == tarball_bytes
+            && fixture["archiveFiles"] == archive_files
+            && fixture["unpackedBytes"] == unpacked_bytes,
+        "{key} npm fixture aggregates do not reconcile"
+    );
+    Ok(())
+}
+
 fn validate_release_report(report: &Value) -> anyhow::Result<()> {
     ensure!(
-        report["schema"] == "npm-metadata-v2",
+        report["schema"] == "npm-metadata-v3",
         "unsupported npm release schema"
     );
+    let minimum_iterations = if std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some() {
+        1
+    } else {
+        5
+    };
     let iterations = report["environment"]["iterations"]
         .as_u64()
-        .filter(|value| *value >= 5)
-        .context("npm release report needs at least five iterations")?
-        as usize;
+        .filter(|value| *value >= minimum_iterations)
+        .with_context(|| {
+            format!("npm release report needs at least {minimum_iterations} iterations")
+        })? as usize;
+    validate_release_fixture(&report["fixtures"]["small"], "small")?;
+    validate_release_fixture(&report["fixtures"]["medium"], "medium")?;
     ensure!(
-        report["fixture"]["name"] == "small-local-registry"
-            && report["fixture"]["version"] == VERSION
-            && report["fixture"]["packages"] == json!(["@types/lodash", "@types/lodash-es"])
-            && report["fixture"]["seriesArguments"] == release_series_arguments("<local>")
-            && report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
+        report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
             && report["timingBoundary"] == release_timing_boundary()
             && report["memory"]["interpretation"] == MEMORY_INTERPRETATION
             && report["environment"]["componentFeatures"] == "normal"
             && report["environment"]["componentCargoProfile"] == "release"
             && report["environment"]["harnessCargoProfile"] == "release"
             && report["environment"]["lockedBuilds"] == "1",
-        "npm release report does not identify the production small fixture"
+        "npm release report does not identify the production fixture contract"
     );
+
     let expected = [
         (
-            "metadata", "cold", "view", "cold", 1_u64, 0_u64, 1_u64, 0_u64,
+            "small", "metadata", "cold", "view", "cold", 1_u64, 0_u64, 1_u64, 0_u64,
         ),
-        ("warmTarballCi", "seeds", "ci", "seed", 0, 2, 2, 2),
-        ("warmTarballCi", "timed", "ci", "warm-tarball", 0, 0, 0, 2),
+        ("small", "warmTarballCi", "seeds", "ci", "seed", 0, 2, 2, 2),
+        (
+            "small",
+            "warmTarballCi",
+            "timed",
+            "ci",
+            "warm-tarball",
+            0,
+            0,
+            0,
+            2,
+        ),
+        (
+            "medium",
+            "warmTarballCi",
+            "seeds",
+            "ci",
+            "seed",
+            0,
+            16,
+            16,
+            16,
+        ),
+        (
+            "medium",
+            "warmTarballCi",
+            "timed",
+            "ci",
+            "warm-tarball",
+            0,
+            0,
+            0,
+            16,
+        ),
     ];
     let mut max_linear_memory = 0;
+    let mut installed_by_fixture = BTreeMap::<&str, Value>::new();
     for side in ["host", "wasm"] {
         for (
+            fixture_key,
             group,
             series_name,
             operation,
@@ -1361,10 +2372,10 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
             cache_log_lines,
         ) in expected
         {
-            let series = &report[side][group][series_name];
-            let samples = series["samples"]
-                .as_array()
-                .with_context(|| format!("missing {side} {group}/{series_name} samples"))?;
+            let series = &report[side][fixture_key][group][series_name];
+            let samples = series["samples"].as_array().with_context(|| {
+                format!("missing {side} {fixture_key}/{group}/{series_name} samples")
+            })?;
             let summary = summarize_release(samples);
             let summary_fields_match = ["medianMs", "p95Ms", "throughputPerSecond"]
                 .into_iter()
@@ -1383,20 +2394,30 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                     && series.as_object().is_some_and(|series| series.len() == 5)
                     && series["iterations"] == summary["iterations"]
                     && summary_fields_match,
-                "{side} {group}/{series_name} summary does not reconcile"
+                "{side} {fixture_key}/{group}/{series_name} summary does not reconcile"
             );
             for sample in samples {
                 let wall_ms = sample["wallMs"]
                     .as_f64()
                     .filter(|value| value.is_finite() && *value > 0.0);
+                let stdout = sample["result"]["stdout"].as_str().unwrap_or_default();
                 ensure!(
-                    sample["side"] == side
+                    sample["sequence"]
+                        .as_u64()
+                        .is_some_and(|sequence| sequence < iterations as u64)
+                        && sample["side"] == side
                         && sample["operation"] == operation
                         && sample["cache"] == cache
                         && sample["registry"] == "local"
                         && sample["success"] == true
-                        && sample["result"]["value"]["exitCode"] == 0
+                        && sample["result"]["exitCode"] == 0
                         && sample["result"]["overflowed"] == false
+                        && sample["result"]["runnerError"].is_null()
+                        && sample["result"]["stdoutBytes"] == stdout.len()
+                        && sample["result"]["stdoutBlake3"]
+                            == blake3::hash(stdout.as_bytes()).to_hex().to_string()
+                        && sample["result"]["stderrBytes"].as_u64().is_some()
+                        && is_blake3_value(&sample["result"]["stderrBlake3"])
                         && wall_ms.is_some()
                         && sample["localHttpRequests"]["metadata"] == metadata_requests
                         && sample["localHttpRequests"]["tarballs"] == tarball_requests
@@ -1405,32 +2426,48 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
                         && sample["localHttpRequests"]["unexpected"] == 0
                         && sample["npmHttpFetchLogLines"] == fetch_log_lines
                         && sample["npmHttpCacheLogLines"] == cache_log_lines,
-                    "invalid {side} {group}/{series_name} sample: {sample}"
+                    "invalid {side} {fixture_key}/{group}/{series_name} sample: {sample}"
                 );
                 if operation == "view" {
                     ensure!(
-                        sample["result"]["stdout"]
-                            .as_str()
-                            .is_some_and(|stdout| stdout.trim() == VERSION)
-                            && sample["installed"].is_null(),
+                        stdout.trim() == VERSION && sample["installed"].is_null(),
                         "metadata sample has incorrect output or install state"
                     );
                 } else {
+                    let fixture = &report["fixtures"][fixture_key];
+                    let installed = &sample["installed"];
                     ensure!(
-                        sample["installed"]["complete"] == true
-                            && sample["installed"]["packages"]["@types/lodash"]["name"]
-                                == "@types/lodash"
-                            && sample["installed"]["packages"]["@types/lodash"]["version"]
-                                == VERSION
-                            && sample["installed"]["packages"]["@types/lodash-es"]["name"]
-                                == "@types/lodash-es"
-                            && sample["installed"]["packages"]["@types/lodash-es"]["version"]
-                                == VERSION
-                            && sample["installed"]["topLevel"] == json!(["lodash", "lodash-es"])
+                        installed["complete"] == true
+                            && installed["packageNamesMatch"] == true
+                            && installed["binsMatch"] == true
+                            && installed["identityMismatches"] == json!([])
+                            && installed["fileMismatches"] == json!([])
+                            && installed["packages"] == fixture["packageCount"]
+                            && installed["packageFiles"] == fixture["archiveFiles"]
+                            && installed["packageBytes"] == fixture["unpackedBytes"]
+                            && installed["bins"] == fixture["binCount"]
+                            && installed["tree"]["directories"]
+                                .as_u64()
+                                .is_some_and(|value| value > 0)
+                            && installed["tree"]["files"]
+                                .as_u64()
+                                .is_some_and(|value| value > 0)
+                            && installed["tree"]["bytes"]
+                                .as_u64()
+                                .is_some_and(|value| value > 0)
+                            && is_blake3_value(&installed["tree"]["blake3"])
                             && sample["lockfileUnchanged"] == true
                             && is_blake3_value(&sample["lockfileBlake3"]),
-                        "npm ci sample did not install the pinned fixture"
+                        "npm ci sample did not install the pinned {fixture_key} fixture"
                     );
+                    if let Some(expected) = installed_by_fixture.get(fixture_key) {
+                        ensure!(
+                            expected == installed,
+                            "{fixture_key} installed trees differ across samples"
+                        );
+                    } else {
+                        installed_by_fixture.insert(fixture_key, installed.clone());
+                    }
                 }
                 if side == "wasm" {
                     let linear = sample["linearMemoryHighWaterBytes"]
@@ -1453,9 +2490,17 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
         "npm release memory summary does not reconcile"
     );
     for (name, path) in [
-        ("metadataCold", "/wasm/metadata/cold/samples"),
-        ("ciSeeds", "/wasm/warmTarballCi/seeds/samples"),
-        ("ciWarmTarball", "/wasm/warmTarballCi/timed/samples"),
+        ("smallMetadataCold", "/wasm/small/metadata/cold/samples"),
+        ("smallCiSeeds", "/wasm/small/warmTarballCi/seeds/samples"),
+        (
+            "smallCiWarmTarball",
+            "/wasm/small/warmTarballCi/timed/samples",
+        ),
+        ("mediumCiSeeds", "/wasm/medium/warmTarballCi/seeds/samples"),
+        (
+            "mediumCiWarmTarball",
+            "/wasm/medium/warmTarballCi/timed/samples",
+        ),
     ] {
         let samples = report
             .pointer(path)
@@ -1471,10 +2516,22 @@ fn validate_release_report(report: &Value) -> anyhow::Result<()> {
 
 fn validate_release_regression_guards(report: &Value) -> anyhow::Result<()> {
     let mut false_arguments = report.clone();
-    false_arguments["fixture"]["seriesArguments"]["ciTimed"][1] = json!("--online");
+    false_arguments["fixtures"]["medium"]["seriesArguments"]["ciTimed"][1] = json!("--online");
     ensure!(
         validate_release_report(&false_arguments).is_err(),
         "npm release validator accepted incorrect command arguments"
+    );
+    let mut false_fixture = report.clone();
+    false_fixture["fixtures"]["medium"]["packageCount"] = json!(15);
+    ensure!(
+        validate_release_report(&false_fixture).is_err(),
+        "npm release validator accepted an incorrect medium package count"
+    );
+    let mut false_integrity = report.clone();
+    false_integrity["fixtures"]["medium"]["tarballs"]["ajv"]["integrity"] = json!("sha512-wrong");
+    ensure!(
+        validate_release_report(&false_integrity).is_err(),
+        "npm release validator accepted incorrect tarball integrity"
     );
     let mut false_timing = report.clone();
     false_timing["timingBoundary"]["wasm"] = json!("component build through result");
@@ -1489,42 +2546,70 @@ fn validate_release_regression_guards(report: &Value) -> anyhow::Result<()> {
         "npm release validator accepted an incorrect input hash algorithm"
     );
     let mut false_summary = report.clone();
-    false_summary["host"]["metadata"]["cold"]["throughputPerSecond"] = json!(1.0);
+    false_summary["host"]["small"]["metadata"]["cold"]["throughputPerSecond"] = json!(1.0);
     ensure!(
         validate_release_report(&false_summary).is_err(),
         "npm release validator accepted an incorrect throughput summary"
     );
     let mut failed = report.clone();
-    failed["host"]["metadata"]["cold"]["samples"][0]["success"] = json!(false);
+    failed["host"]["small"]["metadata"]["cold"]["samples"][0]["success"] = json!(false);
     ensure!(
         validate_release_report(&failed).is_err(),
         "npm release validator accepted a failed sample"
     );
     let mut false_http = report.clone();
-    false_http["wasm"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]["tarballs"] =
+    false_http["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]["tarballs"] =
         json!(1);
     ensure!(
         validate_release_report(&false_http).is_err(),
         "npm release validator accepted unexpected warm-cache HTTP"
     );
     let mut unclassified_http = report.clone();
-    unclassified_http["wasm"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]["total"] =
-        json!(1);
-    unclassified_http["wasm"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]["unexpected"] =
-        json!(1);
+    unclassified_http["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]
+        ["total"] = json!(1);
+    unclassified_http["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["localHttpRequests"]
+        ["unexpected"] = json!(1);
     ensure!(
         validate_release_report(&unclassified_http).is_err(),
         "npm release validator accepted an unclassified registry request"
     );
     let mut missing_install = report.clone();
-    missing_install["host"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["complete"] =
+    missing_install["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["complete"] =
         json!(false);
     ensure!(
         validate_release_report(&missing_install).is_err(),
         "npm release validator accepted an incomplete install"
     );
+    let mut mismatched_identity = report.clone();
+    mismatched_identity["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["identityMismatches"] =
+        json!(["ajv"]);
+    ensure!(
+        validate_release_report(&mismatched_identity).is_err(),
+        "npm release validator accepted a package identity mismatch"
+    );
+    let mut mismatched_files = report.clone();
+    mismatched_files["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["fileMismatches"] =
+        json!(["ajv: missing dist/ajv.js"]);
+    ensure!(
+        validate_release_report(&mismatched_files).is_err(),
+        "npm release validator accepted a package file mismatch"
+    );
+    let mut mismatched_bins = report.clone();
+    mismatched_bins["host"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["binsMatch"] =
+        json!(false);
+    ensure!(
+        validate_release_report(&mismatched_bins).is_err(),
+        "npm release validator accepted a package bin mismatch"
+    );
+    let mut false_tree = report.clone();
+    false_tree["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["installed"]["tree"]["blake3"] =
+        json!("0".repeat(64));
+    ensure!(
+        validate_release_report(&false_tree).is_err(),
+        "npm release validator accepted a mismatched installed tree"
+    );
     let mut missing_memory = report.clone();
-    missing_memory["wasm"]["metadata"]["cold"]["samples"][0]["linearMemoryHighWaterBytes"] =
+    missing_memory["wasm"]["medium"]["warmTarballCi"]["timed"]["samples"][0]["linearMemoryHighWaterBytes"] =
         Value::Null;
     ensure!(
         validate_release_report(&missing_memory).is_err(),
@@ -1571,14 +2656,16 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
             && is_blake3_value(&report["inputs"]["buildHash"])
             && is_blake3_value(&report["inputs"]["benchmarkHash"])
             && is_blake3_value(&report["component"]["blake3"])
-            && is_blake3_value(&report["fixture"]["packageJsonBlake3"])
-            && is_blake3_value(&report["fixture"]["packageLockBlake3"])
-            && is_blake3_value(&report["fixture"]["npmTool"]["blake3"])
-            && report["fixture"]["npmTool"]["algorithm"] == INPUT_HASH_ALGORITHM
-            && report["fixture"]["npmTool"]["files"]
+            && is_blake3_value(&report["fixtures"]["small"]["packageJsonBlake3"])
+            && is_blake3_value(&report["fixtures"]["small"]["packageLockBlake3"])
+            && is_blake3_value(&report["fixtures"]["medium"]["packageJsonBlake3"])
+            && is_blake3_value(&report["fixtures"]["medium"]["packageLockBlake3"])
+            && is_blake3_value(&report["npmTool"]["blake3"])
+            && report["npmTool"]["algorithm"] == INPUT_HASH_ALGORITHM
+            && report["npmTool"]["files"]
                 .as_u64()
                 .is_some_and(|value| value > 0)
-            && report["fixture"]["npmTool"]["bytes"]
+            && report["npmTool"]["bytes"]
                 .as_u64()
                 .is_some_and(|value| value > 0)
             && report["component"]["bytes"]
@@ -1595,14 +2682,19 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
                 .is_some_and(|value| !value.is_empty()),
         "{path} has incomplete npm release provenance"
     );
-    for (_, name) in PACKAGES {
-        ensure!(
-            is_blake3_value(&report["fixture"]["tarballs"][*name]["blake3"])
-                && report["fixture"]["tarballs"][*name]["bytes"]
-                    .as_u64()
-                    .is_some_and(|value| value > 0),
-            "{path} has incomplete tarball provenance for {name}"
-        );
+    for fixture_key in ["small", "medium"] {
+        let packages = report["fixtures"][fixture_key]["packages"]
+            .as_object()
+            .with_context(|| format!("{path} has no {fixture_key} packages"))?;
+        for name in packages.keys() {
+            let tarball = &report["fixtures"][fixture_key]["tarballs"][name];
+            ensure!(
+                is_blake3_value(&tarball["blake3"])
+                    && tarball["bytes"].as_u64().is_some_and(|value| value > 0)
+                    && tarball["integrity"] == packages[name]["integrity"],
+                "{path} has incomplete tarball provenance for {name}"
+            );
+        }
     }
     Ok(())
 }
@@ -1614,8 +2706,10 @@ fn validate_release_currentness(
     ensure!(
         report["inputs"]["buildHash"] == current.hashes.build
             && report["inputs"]["benchmarkHash"] == current.hashes.benchmark
-            && report["fixture"]["packageJsonBlake3"] == current.package_json
-            && report["fixture"]["packageLockBlake3"] == current.package_lock,
+            && report["fixtures"]["small"]["packageJsonBlake3"] == current.small_package_json
+            && report["fixtures"]["small"]["packageLockBlake3"] == current.small_package_lock
+            && report["fixtures"]["medium"]["packageJsonBlake3"] == current.medium_package_json
+            && report["fixtures"]["medium"]["packageLockBlake3"] == current.medium_package_lock,
         "npm release report does not match the current source inputs"
     );
     Ok(())
@@ -1625,18 +2719,21 @@ fn validate_release_currentness_regression_guards(
     report: &Value,
     current: &CurrentReleaseInputs,
 ) -> anyhow::Result<()> {
-    let mut false_package = report.clone();
-    false_package["fixture"]["packageJsonBlake3"] = json!("0".repeat(64));
-    ensure!(
-        validate_release_currentness(&false_package, current).is_err(),
-        "npm currentness validator accepted an incorrect package.json digest"
-    );
-    let mut false_lock = report.clone();
-    false_lock["fixture"]["packageLockBlake3"] = json!("0".repeat(64));
-    ensure!(
-        validate_release_currentness(&false_lock, current).is_err(),
-        "npm currentness validator accepted an incorrect package-lock.json digest"
-    );
+    for pointer in [
+        "/fixtures/small/packageJsonBlake3",
+        "/fixtures/small/packageLockBlake3",
+        "/fixtures/medium/packageJsonBlake3",
+        "/fixtures/medium/packageLockBlake3",
+    ] {
+        let mut mismatched = report.clone();
+        *mismatched
+            .pointer_mut(pointer)
+            .expect("validated report has fixture digest") = json!("0".repeat(64));
+        ensure!(
+            validate_release_currentness(&mismatched, current).is_err(),
+            "npm currentness validator accepted an incorrect fixture digest: {pointer}"
+        );
+    }
     Ok(())
 }
 
@@ -1657,7 +2754,8 @@ fn validate_release_pair(
         "/inputs/algorithm",
         "/inputs/buildHash",
         "/inputs/benchmarkHash",
-        "/fixture",
+        "/npmTool",
+        "/fixtures",
     ] {
         ensure!(
             p2.pointer(field) == p3.pointer(field),
@@ -1762,8 +2860,8 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
         }
         let report: Value = serde_json::from_slice(&fs::read(&path)?)?;
         ensure!(
-            report["schema"] == "npm-metadata-v2",
-            "{} is not a checked npm-metadata-v2 release report; retain historical aggregates in Markdown instead",
+            report["schema"] == "npm-metadata-v3",
+            "{} is not a checked npm-metadata-v3 release report; retain historical aggregates in Markdown instead",
             path
         );
         validate_release_metadata(&path, &report)?;
