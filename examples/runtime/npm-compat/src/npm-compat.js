@@ -479,6 +479,7 @@ export async function probePrimitives() {
             const compressed = zlib.gzipSync('npm');
             return {
                 constantsCjs: typeof constants.COPYFILE_EXCL === 'number',
+                processExitName: process.exit.name,
                 heapSizeLimit: v8.getHeapStatistics().heap_size_limit,
                 bufferView: Buffer.isBuffer(view) && original[1] === 9,
                 bufferSpecies: species !== Buffer && species.prototype === Buffer.prototype &&

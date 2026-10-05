@@ -271,6 +271,7 @@ async fn npm_required_runtime_primitives(
     };
     let report: serde_json::Value = serde_json::from_str(&primitive_json)?;
     assert_eq!(report["value"]["constantsCjs"], true, "{report:#}");
+    assert_eq!(report["value"]["processExitName"], "exit", "{report:#}");
     assert_eq!(
         report["value"]["heapSizeLimit"],
         4_i64 * 1024 * 1024 * 1024,
