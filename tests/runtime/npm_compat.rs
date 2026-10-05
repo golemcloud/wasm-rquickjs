@@ -303,6 +303,9 @@ async fn npm_required_runtime_primitives(
             "caughtExitListener": 9,
             "caughtExitThenThrow": 2,
             "exitListenerThrows": 7,
+            "swallowedExitListenerThrows": 7,
+            "swallowedNullExitListenerThrows": 7,
+            "hardenedRunExit": 6,
             "fresh": 0,
         }),
         "{report:#}"
@@ -312,6 +315,8 @@ async fn npm_required_runtime_primitives(
         serde_json::json!({
             "suppressesPostExitError": true,
             "reportsExitListenerError": true,
+            "reportsSwallowedExitListenerError": true,
+            "reportsSwallowedNullExitListenerError": true,
         }),
         "{report:#}"
     );

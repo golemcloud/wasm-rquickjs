@@ -346,6 +346,24 @@ export async function probePrimitives() {
                 process.execPath,
                 ['-e', 'process.on("exit", () => { throw new Error("exit-listener"); }); process.exit(7)'],
             );
+            const swallowedExitListenerThrows = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { throw new Error("exit-listener-swallowed"); }); try { process.exit(7); } catch {}'],
+            );
+            const swallowedNullExitListenerThrows = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { throw null; }); try { process.exit(7); } catch {}'],
+            );
+            process._runExit.call = () => {};
+            let hardenedRunExit;
+            try {
+                hardenedRunExit = spawnSync(
+                    process.execPath,
+                    ['-e', 'process.exit(6); process.exitCode = 0'],
+                );
+            } finally {
+                delete process._runExit.call;
+            }
             const freshExitCode = spawnSync(
                 process.execPath,
                 ['-e', 'process.stdout.write("fresh")'],
@@ -490,11 +508,18 @@ export async function probePrimitives() {
                     caughtExitListener: caughtExitListenerCode.status,
                     caughtExitThenThrow: caughtExitThenThrow.status,
                     exitListenerThrows: exitListenerThrows.status,
+                    swallowedExitListenerThrows: swallowedExitListenerThrows.status,
+                    swallowedNullExitListenerThrows: swallowedNullExitListenerThrows.status,
+                    hardenedRunExit: hardenedRunExit.status,
                     fresh: freshExitCode.status,
                 },
                 childExitDiagnostics: {
                     suppressesPostExitError: caughtExitThenThrow.stderr.toString() === '',
                     reportsExitListenerError: exitListenerThrows.stderr.toString().includes('Error: exit-listener'),
+                    reportsSwallowedExitListenerError:
+                        swallowedExitListenerThrows.stderr.toString().includes('Error: exit-listener-swallowed'),
+                    reportsSwallowedNullExitListenerError:
+                        swallowedNullExitListenerThrows.stderr.toString().includes('null'),
                 },
                 execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>
                     failure.callbackError && failure.callbackError.code === 'ENOSYS' &&

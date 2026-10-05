@@ -711,6 +711,8 @@ function runInline(command, args, options) {
     const oldModuleWrapper = moduleExports.wrapper;
     let firstExitCode = null;
     let firstExitError = null;
+    let hasFirstExitError = false;
+    let firstExitErrorReported = false;
     const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
     const hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
@@ -726,6 +728,13 @@ function runInline(command, args, options) {
     let inlineBufferProbe = null;
     const checkSyntaxMode = execArgv.indexOf('-c') !== -1 || execArgv.indexOf('--check') !== -1;
     let currentScriptPath = null;
+
+    function reportFirstExitError() {
+        if (hasFirstExitError && !firstExitErrorReported) {
+            capturedStderr += formatErrorForStderr(firstExitError);
+            firstExitErrorReported = true;
+        }
+    }
 
     try {
         process.argv = [String(command)].concat(invocationArgs);
@@ -752,12 +761,13 @@ function runInline(command, args, options) {
 
         process.exit = function exit(code) {
             try {
-                return runExit.call(this, code);
+                return runExit(code);
             } catch (err) {
                 if (firstExitCode === null && process._exiting) {
                     firstExitCode = Number(process.exitCode || 0);
                     if (!err || !err.__isProcessExit) {
                         firstExitError = err;
+                        hasFirstExitError = true;
                     }
                 }
                 throw err;
@@ -1019,6 +1029,7 @@ function runInline(command, args, options) {
         }
         if (firstExitCode !== null) {
             status = firstExitCode;
+            reportFirstExitError();
         } else if (typeof process._runExitHandlers === 'function') {
             process._runExitHandlers();
             status = Number(process.exitCode || 0);
@@ -1026,9 +1037,7 @@ function runInline(command, args, options) {
     } catch (err) {
         if (firstExitCode !== null) {
             status = firstExitCode;
-            if (err === firstExitError) {
-                capturedStderr += formatErrorForStderr(err);
-            }
+            reportFirstExitError();
         } else if (err && err.__isProcessExit) {
             status = Number(err.code || 0);
         } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
