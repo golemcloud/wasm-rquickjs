@@ -208,7 +208,6 @@ const __wasmRquickjsSeen = Object.create(null);\n",
         "__wasmRquickjsDefineProperty(__wasmRquickjsRegistry, {name:?}, {{\n  value: __wasmRquickjsSync, writable: false, configurable: false, enumerable: true,\n}});"
     )
     .unwrap();
-    source.push_str("__wasmRquickjsSync(__wasmRquickjsDefault);\n");
     source.into_bytes()
 }
 
@@ -269,7 +268,7 @@ mod tests {
     use super::*;
 
     #[test]
-    fn default_only_facades_are_valid_no_op_sync_targets() {
+    fn default_only_facades_register_no_op_sync_targets() {
         let source = String::from_utf8(facade_source(
             "node:default-only",
             "__implementation",
@@ -277,7 +276,7 @@ mod tests {
         ))
         .unwrap();
         assert!(source.contains("export {\n};"));
-        assert!(source.contains("__wasmRquickjsSync(__wasmRquickjsDefault);"));
+        assert!(!source.contains("__wasmRquickjsSync(__wasmRquickjsDefault);"));
     }
 
     #[test]

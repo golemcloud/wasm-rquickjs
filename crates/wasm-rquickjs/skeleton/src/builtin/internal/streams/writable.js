@@ -25,7 +25,7 @@ import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/interna
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
-import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
+import { isDuplexStream } from "__wasm_rquickjs_builtin/internal/streams/readable";
 import { nextTick } from "node:process";
 
 function _uint8ArrayToBuffer(chunk) {
@@ -37,26 +37,6 @@ function _uint8ArrayToBuffer(chunk) {
 }
 
 const { errorOrDestroy } = destroyImpl;
-
-// This function prevents a circular dependency with Duplex
-// This checks if the passed stream is an instance of a Readable stream
-// and one of its prototypes is named Duplex
-function isDuplexStream(maybe_duplex) {
-    const isReadable = Readable.prototype.isPrototypeOf(maybe_duplex);
-
-    let prototype = maybe_duplex;
-    let isDuplex = false;
-    while (prototype?.constructor && prototype.constructor.name !== "Object") {
-        if (prototype.constructor.name === "Duplex") {
-            isDuplex = true;
-            break;
-        }
-        prototype = Object.getPrototypeOf(prototype);
-    }
-
-    return isReadable && isDuplex;
-}
-
 
 function nop() { }
 

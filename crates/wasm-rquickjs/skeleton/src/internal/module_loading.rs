@@ -436,6 +436,30 @@ impl Resolver for PublicBuiltinAliasResolver {
     }
 }
 
+/// Resolves generated component modules before schemeless builtin aliases while
+/// keeping private builtin dependencies on their canonical implementations.
+struct EmbeddedModuleResolver;
+
+impl Resolver for EmbeddedModuleResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if !PrivateBuiltinResolverGuard::is_private_builtin(base)
+            && (name == crate::JS_EXPORT_MODULE_NAME
+                || crate::JS_ADDITIONAL_MODULES
+                    .iter()
+                    .any(|(module_name, _)| name == *module_name))
+        {
+            Ok(name.to_string())
+        } else {
+            Err(Error::new_resolving(base, name))
+        }
+    }
+}
+
 struct PrivateBuiltinResolverGuard;
 
 impl PrivateBuiltinResolverGuard {
@@ -11846,11 +11870,8 @@ impl Loader for VirtualBuiltinModuleLoader {
 }
 
 pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncContext) {
-    let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-    for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-        builtin_resolver = builtin_resolver.with_module(name.to_string());
-    }
-    let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
+    let builtin_resolver =
+        crate::modules::add_native_module_resolvers(BuiltinResolver::default());
     let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
     let file_resolver = FileResolver::default()
@@ -11871,6 +11892,7 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             RegisteredLoaderResolver,
         ),
         (
+            EmbeddedModuleResolver,
             PublicBuiltinAliasResolver,
             builtin_resolver,
             NodeBuiltinNamespaceGuard,

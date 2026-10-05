@@ -4628,6 +4628,12 @@ export const testSyncBuiltinEsmExports = async () => {
 export const testBuiltinFirstImport = async (specifier) => {
     try {
         const namespace = await import(specifier);
+        if (specifier === 'node:crypto') {
+            const digest = namespace.createHash('sha256')
+                .update('first builtin import')
+                .digest('hex');
+            assert.strictEqual(digest.length, 64);
+        }
         const module = await import('node:module');
         const require = module.createRequire(import.meta.url);
         assert.strictEqual(require(specifier), namespace.default);

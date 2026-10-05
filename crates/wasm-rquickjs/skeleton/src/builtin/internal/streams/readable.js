@@ -38,6 +38,30 @@ const nop = () => { };
 
 const { errorOrDestroy } = destroyImpl;
 
+// Detect Duplex without depending on node:stream's public initialization.
+// Writable imports this helper so both sides use the same circularity-safe check.
+function isDuplexStream(maybeDuplex) {
+    const isReadable = Readable.prototype.isPrototypeOf(maybeDuplex);
+
+    let prototype = maybeDuplex;
+    while (prototype?.constructor && prototype.constructor.name !== "Object") {
+        if (prototype.constructor.name === "Duplex") {
+            return isReadable;
+        }
+        prototype = Object.getPrototypeOf(prototype);
+    }
+
+    return false;
+}
+
+function uint8ArrayToBuffer(chunk) {
+    return Buffer.from(
+        chunk.buffer,
+        chunk.byteOffset,
+        chunk.byteLength,
+    );
+}
+
 function ReadableState(options, stream, isDuplex) {
     // Duplex streams are both readable and writable, but share
     // the same options object.
@@ -45,7 +69,7 @@ function ReadableState(options, stream, isDuplex) {
     // values for the readable and the writable sides of the duplex stream.
     // These options can be provided separately as readableXXX and writableXXX.
     if (typeof isDuplex !== "boolean") {
-        isDuplex = stream instanceof Stream.Duplex;
+        isDuplex = isDuplexStream(stream);
     }
 
     // Object stream flag. Used to make read(n) ignore n and to
@@ -165,7 +189,7 @@ function Readable(options) {
 
     // Checking for a Stream.Duplex instance is faster here instead of inside
     // the ReadableState constructor, at least with V8 6.5.
-    const isDuplex = this instanceof Stream.Duplex;
+    const isDuplex = isDuplexStream(this);
 
     this._readableState = new ReadableState(options, this, isDuplex);
 
@@ -243,7 +267,7 @@ function readableAddChunk(stream, chunk, encoding, addToFront) {
         } else if (chunk instanceof Buffer) {
             encoding = "";
         } else if (ArrayBuffer.isView(chunk)) {
-            chunk = Stream._uint8ArrayToBuffer(chunk);
+            chunk = uint8ArrayToBuffer(chunk);
             encoding = "";
         } else if (chunk != null) {
             err = new ERR_INVALID_ARG_TYPE(
@@ -2570,4 +2594,4 @@ Readable.toWeb = function(streamReadable, options) {
 };
 
 export default Readable;
-export { fromList as _fromList, readableFrom as from, ReadableState, wrap, newStreamReadableFromReadableStream as fromWeb, newReadableStreamFromStreamReadable as toWeb };
+export { fromList as _fromList, isDuplexStream, readableFrom as from, ReadableState, wrap, newStreamReadableFromReadableStream as fromWeb, newReadableStreamFromStreamReadable as toWeb };
