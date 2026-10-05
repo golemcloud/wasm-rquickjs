@@ -293,6 +293,17 @@ async fn npm_required_runtime_primitives(
     );
     assert_eq!(report["value"]["shellNodeShebangs"], true, "{report:#}");
     assert_eq!(
+        report["value"]["childExitStatus"],
+        serde_json::json!({
+            "assigned": 7,
+            "beforeExit": 9,
+            "omittedExplicit": 7,
+            "exitListener": 9,
+            "fresh": 0,
+        }),
+        "{report:#}"
+    );
+    assert_eq!(
         report["value"]["shellOptionFailsExplicitly"], true,
         "{report:#}"
     );
@@ -1425,6 +1436,32 @@ async fn npm_exec_runs_persistent_local_bin(
     );
     fs::remove_file(&result_file)?;
 
+    let failed_execution = instance
+        .invoke(
+            None,
+            "run",
+            &[string_list(&[
+                "exec",
+                "--offline",
+                "--",
+                "fixture-bin",
+                "exit-7",
+            ])],
+        )
+        .await
+        .context("running a failing npm exec")?;
+    let Some(Val::String(failed_json)) = failed_execution else {
+        anyhow::bail!("expected failing npm exec JSON result")
+    };
+    let failed_report: serde_json::Value = serde_json::from_str(&failed_json)?;
+    assert_eq!(failed_report["value"]["exitCode"], 7, "{failed_report:#}");
+    assert_eq!(failed_report["stderr"], "", "{failed_report:#}");
+    assert_eq!(
+        failed_report["stdout"], "npm-exec:ok\n",
+        "{failed_report:#}"
+    );
+    fs::remove_file(&result_file)?;
+
     let execution = instance
         .invoke(
             None,
@@ -1482,6 +1519,27 @@ async fn npx_runs_persistent_local_bin(
     };
     let ci_report: serde_json::Value = serde_json::from_str(&ci_json)?;
     assert_eq!(ci_report["value"]["exitCode"], 0, "{ci_report:#}");
+    let failed_execution = instance
+        .invoke(
+            None,
+            "run-npx",
+            &[string_list(&["--offline", "fixture-bin", "exit-7"])],
+        )
+        .await?;
+    let Some(Val::String(failed_json)) = failed_execution else {
+        anyhow::bail!("expected failing npx execution JSON result")
+    };
+    let failed_report: serde_json::Value = serde_json::from_str(&failed_json)?;
+    assert_eq!(failed_report["value"]["exitCode"], 7, "{failed_report:#}");
+    assert_eq!(failed_report["stderr"], "", "{failed_report:#}");
+    assert_eq!(
+        failed_report["stdout"], "npm-exec:ok\n",
+        "{failed_report:#}"
+    );
+    let result_file = instance
+        .temp_dir_path()
+        .join("workspace/npm-exec-result.json");
+    fs::remove_file(&result_file)?;
     let execution = instance
         .invoke(
             None,
@@ -1496,9 +1554,6 @@ async fn npx_runs_persistent_local_bin(
     assert_eq!(report["value"]["exitCode"], 0, "{report:#}");
     assert_eq!(report["stderr"], "", "{report:#}");
     assert_eq!(report["stdout"], "npm-exec:ok\n", "{report:#}");
-    let result_file = instance
-        .temp_dir_path()
-        .join("workspace/npm-exec-result.json");
     let exec_result: serde_json::Value = serde_json::from_slice(&fs::read(result_file)?)?;
     assert_eq!(exec_result["cwd"], "/workspace");
     assert_eq!(

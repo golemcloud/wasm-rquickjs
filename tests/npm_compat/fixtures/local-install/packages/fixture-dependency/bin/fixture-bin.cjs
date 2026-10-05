@@ -6,3 +6,4 @@ writeFileSync('/workspace/npm-exec-result.json', JSON.stringify({
   cwd: process.cwd(),
 }));
 console.log('npm-exec:ok');
+if (process.argv.includes('exit-7')) process.exitCode = 7;

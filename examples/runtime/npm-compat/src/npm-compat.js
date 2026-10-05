@@ -314,6 +314,26 @@ export async function probePrimitives() {
             const shellSync = spawnSync(process.execPath, ['-e', 'process.stdout.write("bad")'], {
                 shell: true,
             });
+            const assignedExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.exitCode = 7'],
+            );
+            const beforeExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("beforeExit", () => { process.exitCode = 9; })'],
+            );
+            const omittedExplicitExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.exitCode = 7; process.exit()'],
+            );
+            const exitListenerCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { process.exitCode = 9; }); process.exit(7)'],
+            );
+            const freshExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.stdout.write("fresh")'],
+            );
             const shellAsync = await new Promise(resolve => {
                 const child = spawn(process.execPath, ['-e', 'process.stdout.write("bad")'], {
                     shell: true,
@@ -445,6 +465,13 @@ export async function probePrimitives() {
                     shellAsync.code === -38 && shellAsync.error &&
                     shellAsync.error.code === 'ENOSYS' &&
                     shellAsync.events.join(',') === 'error,close',
+                childExitStatus: {
+                    assigned: assignedExitCode.status,
+                    beforeExit: beforeExitCode.status,
+                    omittedExplicit: omittedExplicitExitCode.status,
+                    exitListener: exitListenerCode.status,
+                    fresh: freshExitCode.status,
+                },
                 execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>
                     failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
                     failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
