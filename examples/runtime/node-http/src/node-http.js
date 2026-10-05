@@ -1834,7 +1834,12 @@ export async function netWriteTimeoutLifecycle() {
     overflowSocket.setTimeout(0);
     overflowSocket.destroy();
 
-    if (!validationOrdering || !invalidValueOrdering || !normalizedOverflow) return false;
+    if (!validationOrdering || !invalidValueOrdering || !normalizedOverflow) {
+        throw new Error(`socket timeout validation: ${JSON.stringify({
+            destroyedOrdering, invalidCallbackCode, scheduledTimeouts,
+            invalidTypeCode, invalidRangeCode, invalidValueOrdering, normalizedOverflow,
+        })}`);
+    }
 
     // Keep the exact queue-size policy deterministic as a supplement to the
     // public TCP lifecycle below: any changed sample, including an increase or
@@ -1866,7 +1871,11 @@ export async function netWriteTimeoutLifecycle() {
         policyResets === 3 && policyTimeouts === 1 &&
         policySocket._lastWriteQueueSize === 0;
     policySocket.destroy();
-    if (!progressPolicy) return false;
+    if (!progressPolicy) {
+        throw new Error(`socket timeout progress policy: ${JSON.stringify({
+            increasingProgress, policyResets, policyTimeouts, policyPending,
+        })}`);
+    }
 
     // Start with no timeout, then enable, disable, replace, and shorten it after
     // a real native write is pending. A stalled timeout is advisory; the first
@@ -2020,7 +2029,9 @@ export async function netWriteTimeoutLifecycle() {
         stalledWrite.writeErrors >= 1 &&
         stalledWrite.uncaughtTimeouts === 1 &&
         stalledWrite.error === undefined;
-    if (!stalledWritePassed) return false;
+    if (!stalledWritePassed) {
+        throw new Error(`socket timeout stalled write: ${JSON.stringify(stalledWrite)}`);
+    }
 
     // After a real write drains, ordinary idle timeout semantics resume.
     const drainedWrite = await new Promise((resolve) => {
@@ -2074,7 +2085,9 @@ export async function netWriteTimeoutLifecycle() {
         });
     });
 
-    if (!drainedWrite.ok) return false;
+    if (!drainedWrite.ok) {
+        throw new Error(`socket timeout drained write: ${JSON.stringify(drainedWrite)}`);
+    }
     const result = validationOrdering && normalizedOverflow && progressPolicy && drainedWrite.ok &&
         stalledWritePassed;
     return result;
