@@ -73,6 +73,14 @@ package/file content.
 | P2 medium warm-tarball `npm ci` | 903.200 ms | 22,694.225 ms | 25.13x | 2,806.400 ms (`2x + 1s`) | misses by 19,887.825 ms |
 | P3 medium warm-tarball `npm ci` | 806.454 ms | 22,788.904 ms | 28.26x | 2,612.909 ms (`2x + 1s`) | misses by 20,175.995 ms |
 
+The P2 metadata row meets the formula by only 2.195 ms and is not a robust
+goal pass. Its five host samples span 145.254-411.509 ms, while the P3 host
+samples span 155.729-524.204 ms; both series are bimodal. Relative to the v2
+anchor, the P2 host median rose from 156.724 to 190.158 ms while the Wasm
+median was effectively unchanged at 1,069.307 versus 1,068.279 ms. The table
+keeps the preregistered median arithmetic, but this status reflects host
+dispersion rather than a Wasm improvement.
+
 The representative medium graph exposes a material scaling owner: both Wasm
 targets take about 22.7-22.8 seconds with a warm tarball cache. Wasm medium
 p95 is 24,627.521 ms for P2 and 24,526.309 ms for P3, respectively 8.5% and
