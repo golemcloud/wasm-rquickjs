@@ -54,6 +54,7 @@ fn zlib_compress_sync_impl(data: &[u8], level: i32, window_bits: i32) -> Option<
 
 enum SyncDecompressError {
     Buffer,
+    #[cfg(feature = "brotli")]
     Brotli { code: String, errno: i32 },
     Data(String),
     Generic,
@@ -1123,6 +1124,7 @@ pub mod native_module {
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
             }
+            #[cfg(feature = "brotli")]
             Err(super::SyncDecompressError::Brotli { code, errno }) => {
                 Ok(List((None, Some(code), errno)))
             }
@@ -1155,6 +1157,7 @@ pub mod native_module {
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
             }
+            #[cfg(feature = "brotli")]
             Err(super::SyncDecompressError::Brotli { code, errno }) => {
                 Ok(List((None, Some(code), errno)))
             }
