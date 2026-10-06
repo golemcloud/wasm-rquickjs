@@ -1013,9 +1013,7 @@ pub mod native_module {
         level: i32,
         window_bits: i32,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to zlibCompressSync is detached");
+        let input = data.as_bytes().unwrap_or_default();
         super::zlib_compress_sync_impl(input, level, window_bits)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1027,9 +1025,13 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         window_bits: i32,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to zlibDecompressSync is detached");
+        let input = data.as_bytes().unwrap_or_default();
+        if input.is_empty() {
+            let error_ctor: rquickjs::Function = ctx.globals().get("Error")?;
+            let error_obj: rquickjs::Object = error_ctor.call(("unexpected end of file",))?;
+            error_obj.set("code", "Z_BUF_ERROR")?;
+            return Err(ctx.throw(error_obj.into_value()));
+        }
         let (result, error_msg) = super::zlib_decompress_sync_impl(input, window_bits);
         if let Some(msg) = error_msg {
             // Throw a JS Error with both message and code properties
@@ -1048,9 +1050,7 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         params_json: String,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to brotliCompressSync is detached");
+        let input = data.as_bytes().unwrap_or_default();
         super::brotli_compress_sync_impl(input, &params_json)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1061,9 +1061,14 @@ pub mod native_module {
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to brotliDecompressSync is detached");
+        let input = data.as_bytes().unwrap_or_default();
+        #[cfg(feature = "brotli")]
+        if input.is_empty() {
+            let error_ctor: rquickjs::Function = ctx.globals().get("Error")?;
+            let error_obj: rquickjs::Object = error_ctor.call(("unexpected end of file",))?;
+            error_obj.set("code", "Z_BUF_ERROR")?;
+            return Err(ctx.throw(error_obj.into_value()));
+        }
         super::brotli_decompress_sync_impl(input)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1071,9 +1076,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn crc32_compute(data: TypedArray<'_, u8>, initial: u32) -> u32 {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to crc32Compute is detached");
+        let input = data.as_bytes().unwrap_or_default();
         super::crc32_compute_impl(input, initial)
     }
 
@@ -1097,9 +1100,7 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         flush: i32,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to zlibStreamPush is detached");
+        let input = data.as_bytes().unwrap_or_default();
         super::zlib_stream_push_impl(id, input, flush)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1139,9 +1140,7 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         flush: u8,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data
-            .as_bytes()
-            .expect("the Uint8Array passed to brotliStreamPush is detached");
+        let input = data.as_bytes().unwrap_or_default();
         super::brotli_stream_push_impl(id, input, flush)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()

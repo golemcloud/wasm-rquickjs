@@ -20,10 +20,36 @@ import {
 } from '__wasm_rquickjs_builtin/zlib_native';
 
 const setPrototypeOf = Object.setPrototypeOf;
+const BufferPrototype = Buffer.prototype;
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const getTypedArrayBuffer = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get,
+);
+const getDataViewBuffer = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer').get,
+);
+const getArrayBufferDetached = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached').get,
+);
 
 function bufferFromNativeBytes(bytes) {
-  setPrototypeOf(bytes, Buffer.prototype);
+  setPrototypeOf(bytes, BufferPrototype);
   return bytes;
+}
+
+function isDetachedArrayBufferView(value) {
+  if (!ArrayBuffer.isView(value)) return false;
+  let buffer;
+  try {
+    buffer = getTypedArrayBuffer(value);
+  } catch {
+    buffer = getDataViewBuffer(value);
+  }
+  try {
+    return getArrayBufferDetached(buffer);
+  } catch {
+    return false;
+  }
 }
 
 // Capture buffer.kMaxLength at require('zlib') time, matching Node.js CJS behavior
@@ -684,6 +710,9 @@ class ZlibBase extends Transform {
      throw makeTypeError('ERR_INVALID_ARG_TYPE',
        'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
        invalidArgTypeHelper(chunk));
+   }
+   if (!Buffer.isBuffer(chunk) && isDetachedArrayBufferView(chunk)) {
+     throw new TypeError('Cannot perform Construct on a detached ArrayBuffer');
    }
 
    const buf = toBuffer(chunk);
