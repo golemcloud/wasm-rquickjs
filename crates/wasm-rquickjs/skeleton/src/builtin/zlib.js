@@ -1199,9 +1199,9 @@ export function brotliDecompressSync(data, opts) {
     validated.finishFlush,
   );
   if (errno !== 0) {
-    throw errno === Z_BUF_ERROR
-      ? makeZlibError(errorMessage, errno)
-      : makeBrotliError(errorMessage, errno);
+    throw typeof errorMessage === 'string' && errorMessage.startsWith('ERR_')
+      ? makeBrotliError(errorMessage, errno)
+      : makeZlibError(errorMessage, errno);
   }
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
