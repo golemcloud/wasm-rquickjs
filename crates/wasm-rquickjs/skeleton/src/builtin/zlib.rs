@@ -617,8 +617,9 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                 if result.stream_end {
                     // Deflate stream ended; remaining bytes are trailer + possibly next member
                     remaining.drain(..result.input_consumed);
-                    *trailer_remaining = 8; // gzip trailer: CRC32 (4) + ISIZE (4)
-                // Loop back to skip trailer and potentially process next member
+                    // The gzip trailer is CRC32 (4 bytes) followed by ISIZE (4 bytes).
+                    *trailer_remaining = 8;
+                    // Loop back to skip trailer and potentially process next member
                 } else {
                     break;
                 }

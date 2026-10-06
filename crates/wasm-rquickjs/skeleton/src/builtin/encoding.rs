@@ -1,7 +1,7 @@
 #[cfg(feature = "encoding")]
-use encoding_rs::{CoderResult, Decoder, DecoderResult, Encoding, UTF_8, UTF_16BE, UTF_16LE};
-use rquickjs::JsLifetime;
+use encoding_rs::{CoderResult, Decoder, DecoderResult, Encoding, UTF_16BE, UTF_16LE, UTF_8};
 use rquickjs::class::Trace;
+use rquickjs::JsLifetime;
 #[cfg(feature = "encoding")]
 use std::cell::RefCell;
 use std::ptr;
