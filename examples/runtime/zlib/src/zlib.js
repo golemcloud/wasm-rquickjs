@@ -78,6 +78,27 @@ function expectZBufError(operation, label) {
   }
 }
 
+function expectBrotliDecodeError(
+  operation,
+  label,
+  code = 'ERR__ERROR_FORMAT_PADDING_2',
+  errno = -15,
+) {
+  let error;
+  try {
+    operation();
+  } catch (caught) {
+    error = caught;
+  }
+  if (error?.code !== code || error.errno !== errno ||
+      error.message !== 'Decompression failed') {
+    throw new Error(
+      `${label} did not report the Brotli decoder error: ` +
+      `${error?.code}/${error?.errno}/${error?.message}`,
+    );
+  }
+}
+
 export async function testByteTransfer() {
   const source = Buffer.alloc(131103);
   for (let i = 0; i < source.length; i++) source[i] = i % 251;
@@ -185,17 +206,27 @@ export async function testByteTransfer() {
     }
   }
 
-  let corruptBrotliError;
-  try {
-    brotliDecompressSync(Buffer.from([0xff]), {
-      finishFlush: constants.BROTLI_OPERATION_FLUSH,
-    });
-  } catch (error) {
-    corruptBrotliError = error;
+  for (const options of [undefined, { finishFlush: constants.BROTLI_OPERATION_FLUSH }]) {
+    expectBrotliDecodeError(
+      () => brotliDecompressSync(Buffer.from([0xff]), options),
+      'corrupt Brotli decompression',
+    );
   }
-  if (corruptBrotliError?.code !== 'ERR_ZLIB_INITIALIZATION_FAILED') {
-    throw new Error('permissive corrupt Brotli decompression');
-  }
+
+  // Its 10-bit window forces 8 KiB of the first meta-block through the native
+  // 4 KiB output chunk before the corrupt second meta-block fails. No partial
+  // output may escape as a successful result.
+  const lateCorruptBrotli = Buffer.from(
+    '21fc7fc02f11168f0502b91700357e85df48e9662ed2c9911ee84adf0bb282aa' +
+    'c2de6022070ecd83ec88f2e6219d8336d2e4802165be21daed9db82780f2070d02',
+    'hex',
+  );
+  expectBrotliDecodeError(
+    () => brotliDecompressSync(lateCorruptBrotli),
+    'late corrupt Brotli decompression',
+    'ERR__ERROR_FORMAT_SIMPLE_HUFFMAN_ALPHABET',
+    -4,
+  );
 
   const gzipWithPadding = gzipSync(partialSource);
   if (!gunzipSync(Buffer.concat([gzipWithPadding, Buffer.from([0])])).equals(partialSource)) {

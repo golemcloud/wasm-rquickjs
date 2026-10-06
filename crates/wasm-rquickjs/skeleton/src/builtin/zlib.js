@@ -327,6 +327,13 @@ function makeZlibError(message, errno) {
   return err;
 }
 
+function makeBrotliError(code, errno) {
+  const err = new ErrorConstructor('Decompression failed');
+  err.code = code;
+  err.errno = errno;
+  return err;
+}
+
 function makeTypeError(code, message) {
   const err = new TypeError(message);
   err.code = code;
@@ -1192,7 +1199,9 @@ export function brotliDecompressSync(data, opts) {
     validated.finishFlush,
   );
   if (errno !== 0) {
-    throw makeZlibError(errorMessage, errno);
+    throw errno === Z_BUF_ERROR
+      ? makeZlibError(errorMessage, errno)
+      : makeBrotliError(errorMessage, errno);
   }
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');

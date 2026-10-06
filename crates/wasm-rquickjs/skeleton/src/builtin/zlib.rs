@@ -54,6 +54,7 @@ fn zlib_compress_sync_impl(data: &[u8], level: i32, window_bits: i32) -> Option<
 
 enum SyncDecompressError {
     Buffer,
+    Brotli { code: String, errno: i32 },
     Data(String),
     Generic,
 }
@@ -223,7 +224,15 @@ fn brotli_decompress_sync_impl(
         match result {
             brotli::BrotliResult::ResultSuccess => return Ok(output),
             brotli::BrotliResult::ResultFailure => {
-                return Err(SyncDecompressError::Generic);
+                let errno = state.error_code as i32;
+                let decoder_error = format!("{:?}", state.error_code);
+                let error_name = decoder_error
+                    .strip_prefix("BROTLI_DECODER")
+                    .unwrap_or(&decoder_error);
+                return Err(SyncDecompressError::Brotli {
+                    code: format!("ERR_{error_name}"),
+                    errno,
+                });
             }
             brotli::BrotliResult::NeedsMoreInput => {
                 return if finish_flush == 2 {
@@ -1114,6 +1123,9 @@ pub mod native_module {
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
             }
+            Err(super::SyncDecompressError::Brotli { code, errno }) => {
+                Ok(List((None, Some(code), errno)))
+            }
             Err(super::SyncDecompressError::Data(message)) => Ok(List((None, Some(message), -3))),
             Err(super::SyncDecompressError::Generic) => Ok(List((None, None, 0))),
         }
@@ -1142,6 +1154,9 @@ pub mod native_module {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
+            }
+            Err(super::SyncDecompressError::Brotli { code, errno }) => {
+                Ok(List((None, Some(code), errno)))
             }
             Err(super::SyncDecompressError::Data(message)) => Ok(List((None, Some(message), -3))),
             Err(super::SyncDecompressError::Generic) => Ok(List((None, None, 0))),
