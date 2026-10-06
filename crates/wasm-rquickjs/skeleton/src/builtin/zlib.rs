@@ -1043,19 +1043,30 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn brotli_compress_sync(data: TypedArray<'_, u8>, params_json: String) -> Option<Vec<u8>> {
+    pub fn brotli_compress_sync<'js>(
+        ctx: Ctx<'js>,
+        data: TypedArray<'js, u8>,
+        params_json: String,
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to brotliCompressSync is detached");
         super::brotli_compress_sync_impl(input, &params_json)
+            .map(|bytes| TypedArray::new(ctx, bytes))
+            .transpose()
     }
 
     #[rquickjs::function]
-    pub fn brotli_decompress_sync(data: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+    pub fn brotli_decompress_sync<'js>(
+        ctx: Ctx<'js>,
+        data: TypedArray<'js, u8>,
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to brotliDecompressSync is detached");
         super::brotli_decompress_sync_impl(input)
+            .map(|bytes| TypedArray::new(ctx, bytes))
+            .transpose()
     }
 
     #[rquickjs::function]
@@ -1122,16 +1133,29 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn brotli_stream_push(id: u32, data: TypedArray<'_, u8>, flush: u8) -> Option<Vec<u8>> {
+    pub fn brotli_stream_push<'js>(
+        ctx: Ctx<'js>,
+        id: u32,
+        data: TypedArray<'js, u8>,
+        flush: u8,
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         let input = data
             .as_bytes()
             .expect("the Uint8Array passed to brotliStreamPush is detached");
         super::brotli_stream_push_impl(id, input, flush)
+            .map(|bytes| TypedArray::new(ctx, bytes))
+            .transpose()
     }
 
     #[rquickjs::function]
-    pub fn brotli_stream_pull(id: u32, max_bytes: u32) -> Option<Vec<u8>> {
+    pub fn brotli_stream_pull<'js>(
+        ctx: Ctx<'js>,
+        id: u32,
+        max_bytes: u32,
+    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
         super::brotli_stream_pull_impl(id, max_bytes)
+            .map(|bytes| TypedArray::new(ctx, bytes))
+            .transpose()
     }
 
     #[rquickjs::function]

@@ -1,7 +1,7 @@
 #[cfg(feature = "encoding")]
-use encoding_rs::{CoderResult, Decoder, DecoderResult, Encoding, UTF_16BE, UTF_16LE, UTF_8};
-use rquickjs::class::Trace;
+use encoding_rs::{CoderResult, Decoder, DecoderResult, Encoding, UTF_8, UTF_16BE, UTF_16LE};
 use rquickjs::JsLifetime;
+use rquickjs::class::Trace;
 #[cfg(feature = "encoding")]
 use std::cell::RefCell;
 use std::ptr;
@@ -76,8 +76,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn encode(string: String, ctx: Ctx<'_>) -> TypedArray<'_, u8> {
-        TypedArray::new_copy(ctx, string.as_bytes())
-            .expect("failed to create UInt8Array from string")
+        TypedArray::new(ctx, string.into_bytes()).expect("failed to create UInt8Array from string")
     }
 
     #[rquickjs::function]

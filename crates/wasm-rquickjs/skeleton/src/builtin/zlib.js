@@ -19,6 +19,13 @@ import {
   brotli_stream_close,
 } from '__wasm_rquickjs_builtin/zlib_native';
 
+const setPrototypeOf = Object.setPrototypeOf;
+
+function bufferFromNativeBytes(bytes) {
+  setPrototypeOf(bytes, Buffer.prototype);
+  return bytes;
+}
+
 // Capture buffer.kMaxLength at require('zlib') time, matching Node.js CJS behavior
 let _capturedKMaxLength = null;
 const _DEFAULT_KMAXLENGTH = 0x7fffffff;
@@ -656,12 +663,12 @@ class ZlibBase extends Transform {
       }
       if (flushFlag === BROTLI_OPERATION_FINISH || flushFlag === Z_FINISH) {
         const result = brotli_stream_push(this._nativeHandle, new Uint8Array(0), 2);
-        return result ? Buffer.from(result) : Buffer.alloc(0);
+        return result ? bufferFromNativeBytes(result) : Buffer.alloc(0);
       }
       return Buffer.alloc(0);
     } else {
       const result = zlib_stream_push(this._nativeHandle, data, flushFlag);
-      return result ? Buffer.from(result) : Buffer.alloc(0);
+      return result ? bufferFromNativeBytes(result) : Buffer.alloc(0);
     }
   }
 
@@ -705,7 +712,7 @@ class ZlibBase extends Transform {
        return;
      }
      if (result.length > 0) {
-       this.push(Buffer.from(result));
+       this.push(bufferFromNativeBytes(result));
      }
      queueMicrotask(callback);
    } catch (err) {
@@ -732,7 +739,7 @@ class ZlibBase extends Transform {
         return;
       }
       if (result.length > 0) {
-        this.push(Buffer.from(result));
+        this.push(bufferFromNativeBytes(result));
       }
       this._closeHandle();
       callback();
@@ -915,7 +922,7 @@ class _BrotliDecompress extends ZlibBase {
         return;
       }
       if (result.length > 0) {
-        const ok = this.push(Buffer.from(result));
+        const ok = this.push(bufferFromNativeBytes(result));
         if (!ok) {
           this._brotliFlushCb = callback;
           return;
@@ -936,7 +943,7 @@ class _BrotliDecompress extends ZlibBase {
           callback();
           return;
         }
-        const ok = this.push(Buffer.from(chunk));
+        const ok = this.push(bufferFromNativeBytes(chunk));
         if (!ok) {
           this._brotliFlushCb = callback;
           return;
@@ -1023,7 +1030,7 @@ function doSyncCompress(data, opts, windowBitsOverride, mode) {
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Compression failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (validated.info) {
     const EngineClass = windowBitsOverride >= 24 ? _Gzip :
                         windowBitsOverride < 0 ? _DeflateRaw : _Deflate;
@@ -1042,7 +1049,7 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Decompression failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (output.length > maxLen) {
     throw makeRangeError('ERR_BUFFER_TOO_LARGE',
       `Cannot create a Buffer larger than ${maxLen} bytes`);
@@ -1094,7 +1101,7 @@ export function brotliCompressSync(data, opts) {
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (validated.info) {
     return { buffer: output, engine: new _BrotliCompress(opts) };
   }
@@ -1110,7 +1117,7 @@ export function brotliDecompressSync(data, opts) {
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (output.length > maxLen) {
     throw makeRangeError('ERR_BUFFER_TOO_LARGE',
       `Cannot create a Buffer larger than ${maxLen} bytes`);
