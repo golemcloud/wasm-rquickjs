@@ -60,9 +60,16 @@ enum SyncDecompressError {
 
 /// Decompress multi-member gzip data, handling trailing null bytes and
 /// detecting invalid gzip headers (e.g. unknown compression method).
-fn gzip_decompress_multi_member(data: &[u8]) -> Result<Vec<u8>, SyncDecompressError> {
+fn gzip_decompress_multi_member(
+    data: &[u8],
+    allow_partial: bool,
+) -> Result<Vec<u8>, SyncDecompressError> {
     if data.is_empty() {
-        return Err(SyncDecompressError::Buffer);
+        return if allow_partial {
+            Ok(Vec::new())
+        } else {
+            Err(SyncDecompressError::Buffer)
+        };
     }
     let mut output = Vec::new();
     let mut cursor = Cursor::new(data);
@@ -72,13 +79,17 @@ fn gzip_decompress_multi_member(data: &[u8]) -> Result<Vec<u8>, SyncDecompressEr
         let pos = cursor.position() as usize;
         let remaining = &data[pos..];
 
-        if remaining.len() < 2 {
-            return Err(SyncDecompressError::Buffer);
+        // Node ignores zero padding after at least one complete gzip member.
+        if members_decoded > 0 && remaining.iter().all(|&byte| byte == 0) {
+            break;
         }
 
-        // Trailing null bytes after valid gzip members are ignored (Node.js behavior)
-        if remaining.iter().all(|&b| b == 0) {
-            break;
+        if remaining.len() < 2 {
+            return if allow_partial {
+                Ok(output)
+            } else {
+                Err(SyncDecompressError::Buffer)
+            };
         }
 
         // Need at least 2 bytes for gzip magic
@@ -99,7 +110,11 @@ fn gzip_decompress_multi_member(data: &[u8]) -> Result<Vec<u8>, SyncDecompressEr
                 members_decoded += 1;
             }
             Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
-                return Err(SyncDecompressError::Buffer);
+                return if allow_partial {
+                    Ok(output)
+                } else {
+                    Err(SyncDecompressError::Buffer)
+                };
             }
             Err(_) => return Err(SyncDecompressError::Generic),
         }
@@ -112,17 +127,23 @@ fn gzip_decompress_multi_member(data: &[u8]) -> Result<Vec<u8>, SyncDecompressEr
     }
 }
 
-fn inflate_sync(data: &[u8], zlib_header: bool) -> Result<Vec<u8>, SyncDecompressError> {
+fn inflate_sync(
+    data: &[u8],
+    zlib_header: bool,
+    finish_flush: i32,
+) -> Result<Vec<u8>, SyncDecompressError> {
+    let allow_partial = finish_flush != 4;
+    let flush = if allow_partial {
+        map_flush_decompress(finish_flush)
+    } else {
+        FlushDecompress::None
+    };
     let mut output = vec![0; data.len().max(4096)];
-    let Some(result) = decompress_loop(
-        &mut Decompress::new(zlib_header),
-        data,
-        &mut output,
-        FlushDecompress::None,
-    ) else {
+    let Some(result) = decompress_loop(&mut Decompress::new(zlib_header), data, &mut output, flush)
+    else {
         return Err(SyncDecompressError::Generic);
     };
-    if !result.stream_end {
+    if !result.stream_end && !allow_partial {
         return Err(SyncDecompressError::Buffer);
     }
     output.truncate(result.output_len);
@@ -132,19 +153,21 @@ fn inflate_sync(data: &[u8], zlib_header: bool) -> Result<Vec<u8>, SyncDecompres
 fn zlib_decompress_sync_impl(
     data: &[u8],
     window_bits: i32,
+    finish_flush: i32,
 ) -> Result<Vec<u8>, SyncDecompressError> {
+    let allow_partial = finish_flush != 4;
     if window_bits >= 24 {
-        gzip_decompress_multi_member(data)
+        gzip_decompress_multi_member(data, allow_partial)
     } else if window_bits == 0 {
         if data.len() < 2 || data.first() == Some(&0x1f) {
-            gzip_decompress_multi_member(data)
+            gzip_decompress_multi_member(data, allow_partial)
         } else {
-            inflate_sync(data, true)
+            inflate_sync(data, true, finish_flush)
         }
     } else if window_bits < 0 {
-        inflate_sync(data, false)
+        inflate_sync(data, false, finish_flush)
     } else {
-        inflate_sync(data, true)
+        inflate_sync(data, true, finish_flush)
     }
 }
 
@@ -167,13 +190,20 @@ fn brotli_compress_sync_impl(data: &[u8], params_json: &str) -> Option<Vec<u8>> 
 }
 
 #[cfg(feature = "brotli")]
-fn brotli_decompress_sync_impl(data: &[u8]) -> Result<Vec<u8>, SyncDecompressError> {
+fn brotli_decompress_sync_impl(
+    data: &[u8],
+    finish_flush: u8,
+) -> Result<Vec<u8>, SyncDecompressError> {
     let mut output = Vec::new();
     let mut reader = Cursor::new(data);
     match brotli::BrotliDecompress(&mut reader, &mut output) {
         Ok(()) => Ok(output),
         Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
-            Err(SyncDecompressError::Buffer)
+            if finish_flush == 2 {
+                Err(SyncDecompressError::Buffer)
+            } else {
+                Ok(output)
+            }
         }
         Err(_) => Err(SyncDecompressError::Generic),
     }
@@ -213,7 +243,10 @@ fn brotli_compress_sync_impl(_data: &[u8], _params_json: &str) -> Option<Vec<u8>
 }
 
 #[cfg(not(feature = "brotli"))]
-fn brotli_decompress_sync_impl(_data: &[u8]) -> Result<Vec<u8>, SyncDecompressError> {
+fn brotli_decompress_sync_impl(
+    _data: &[u8],
+    _finish_flush: u8,
+) -> Result<Vec<u8>, SyncDecompressError> {
     Err(SyncDecompressError::Generic)
 }
 
@@ -1045,9 +1078,10 @@ pub mod native_module {
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
         window_bits: i32,
+        finish_flush: i32,
     ) -> rquickjs::Result<DecompressOutcome<'js>> {
         let input = data.as_bytes().unwrap_or_default();
-        match super::zlib_decompress_sync_impl(input, window_bits) {
+        match super::zlib_decompress_sync_impl(input, window_bits, finish_flush) {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
@@ -1073,9 +1107,10 @@ pub mod native_module {
     pub fn brotli_decompress_sync<'js>(
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
+        finish_flush: u8,
     ) -> rquickjs::Result<DecompressOutcome<'js>> {
         let input = data.as_bytes().unwrap_or_default();
-        match super::brotli_decompress_sync_impl(input) {
+        match super::brotli_decompress_sync_impl(input, finish_flush) {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))

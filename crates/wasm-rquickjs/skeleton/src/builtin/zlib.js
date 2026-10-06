@@ -1112,7 +1112,11 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
-  const [result, errorMessage, errno] = zlib_decompress_sync(uint8, wb);
+  const [result, errorMessage, errno] = zlib_decompress_sync(
+    uint8,
+    wb,
+    validated.finishFlush,
+  );
   if (errno !== 0) {
     throw makeZlibError(errorMessage, errno);
   }
@@ -1183,7 +1187,10 @@ export function brotliDecompressSync(data, opts) {
   const maxLen = validated.maxOutputLength !== undefined ? validated.maxOutputLength : _getKMaxLength();
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
-  const [result, errorMessage, errno] = _brotli_decompress_sync(uint8);
+  const [result, errorMessage, errno] = _brotli_decompress_sync(
+    uint8,
+    validated.finishFlush,
+  );
   if (errno !== 0) {
     throw makeZlibError(errorMessage, errno);
   }

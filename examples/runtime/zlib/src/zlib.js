@@ -7,12 +7,14 @@ import {
   createGzip,
   createGunzip,
   crc32,
+  constants,
   deflateRawSync,
   deflateSync,
   gzipSync,
   gunzipSync,
   inflateRawSync,
   inflateSync,
+  unzipSync,
 } from 'node:zlib';
 
 async function streamRoundTrip(source, compress, decompress, expectedPrototype) {
@@ -81,7 +83,9 @@ export async function testByteTransfer() {
   for (let i = 0; i < source.length; i++) source[i] = i % 251;
   for (const [compress, decompress] of [
     [gzipSync, gunzipSync],
+    [gzipSync, unzipSync],
     [deflateSync, inflateSync],
+    [deflateSync, unzipSync],
     [deflateRawSync, inflateRawSync],
     [brotliCompressSync, brotliDecompressSync],
   ]) {
@@ -163,6 +167,32 @@ export async function testByteTransfer() {
       'truncated decompression',
     );
   }
+
+  const partialSource = Buffer.from('permissive truncated input '.repeat(8));
+  for (const [compress, decompress, finishFlush] of [
+    [gzipSync, gunzipSync, constants.Z_SYNC_FLUSH],
+    [gzipSync, unzipSync, constants.Z_SYNC_FLUSH],
+    [deflateSync, inflateSync, constants.Z_SYNC_FLUSH],
+    [deflateSync, unzipSync, constants.Z_SYNC_FLUSH],
+    [deflateRawSync, inflateRawSync, constants.Z_SYNC_FLUSH],
+    [brotliCompressSync, brotliDecompressSync, constants.BROTLI_OPERATION_FLUSH],
+  ]) {
+    const compressed = compress(partialSource);
+    const output = decompress(compressed.subarray(0, compressed.length - 1), { finishFlush });
+    if (!Buffer.isBuffer(output) || output.length === 0 ||
+        !output.equals(partialSource.subarray(0, output.length))) {
+      throw new Error('permissive truncated decompression');
+    }
+  }
+
+  const gzipWithPadding = gzipSync(partialSource);
+  if (!gunzipSync(Buffer.concat([gzipWithPadding, Buffer.from([0])])).equals(partialSource)) {
+    throw new Error('single-byte gzip zero padding');
+  }
+  expectZBufError(
+    () => gunzipSync(Buffer.concat([gzipWithPadding, Buffer.from([0x1f])])),
+    'incomplete next gzip member',
+  );
 
   const OriginalError = globalThis.Error;
   try {
