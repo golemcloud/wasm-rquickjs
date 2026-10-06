@@ -206,20 +206,21 @@ export async function testByteTransfer() {
     }
   }
 
+  const corruptBrotliCases = [
+    [Buffer.from([0xff]), 'ERR__ERROR_FORMAT_PADDING_2', -15],
+    [
+      Buffer.from(
+        '21fc7fc02f11168f0502b91700317e85df18e9662ed2c9911ee84adf0bb282aa' +
+        'c2de6022070ecd83ec88f2e6219d8336d2e4802165be21daed9db82780f2070d02',
+        'hex',
+      ),
+      'ERR__ERROR_FORMAT_SIMPLE_HUFFMAN_SAME',
+      -5,
+    ],
+    [Buffer.from([0x6c, 0x98, 0x60, 0]), 'ERR__ERROR_FORMAT_EXUBERANT_META_NIBBLE', -3],
+  ];
   for (const options of [undefined, { finishFlush: constants.BROTLI_OPERATION_FLUSH }]) {
-    for (const [input, code, errno] of [
-      [Buffer.from([0xff]), 'ERR__ERROR_FORMAT_PADDING_2', -15],
-      [
-        Buffer.from(
-          '21fc7fc02f11168f0502b91700317e85df18e9662ed2c9911ee84adf0bb282aa' +
-          'c2de6022070ecd83ec88f2e6219d8336d2e4802165be21daed9db82780f2070d02',
-          'hex',
-        ),
-        'ERR__ERROR_FORMAT_SIMPLE_HUFFMAN_SAME',
-        -5,
-      ],
-      [Buffer.from([0x6c, 0x98, 0x60, 0]), 'ERR__ERROR_FORMAT_EXUBERANT_META_NIBBLE', -3],
-    ]) {
+    for (const [input, code, errno] of corruptBrotliCases) {
       expectBrotliDecodeError(
         () => brotliDecompressSync(input, options),
         'corrupt Brotli decompression',
@@ -227,6 +228,21 @@ export async function testByteTransfer() {
         errno,
       );
     }
+  }
+
+  const originalStartsWith = String.prototype.startsWith;
+  try {
+    String.prototype.startsWith = () => { throw new Error('mutable String.prototype.startsWith called'); };
+    for (const [input, code, errno] of [corruptBrotliCases[1], corruptBrotliCases[2]]) {
+      expectBrotliDecodeError(
+        () => brotliDecompressSync(input),
+        'poisoned startsWith Brotli decompression',
+        code,
+        errno,
+      );
+    }
+  } finally {
+    String.prototype.startsWith = originalStartsWith;
   }
 
   // Its 10-bit window forces 8 KiB of the first meta-block through the native

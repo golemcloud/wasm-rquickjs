@@ -23,6 +23,7 @@ const setPrototypeOf = Object.setPrototypeOf;
 const BufferPrototype = Buffer.prototype;
 const ErrorConstructor = Error;
 const isArrayBufferView = ArrayBuffer.isView;
+const stringStartsWith = Function.prototype.call.bind(String.prototype.startsWith);
 const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const getTypedArrayBuffer = Function.prototype.call.bind(
   Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get,
@@ -1199,7 +1200,7 @@ export function brotliDecompressSync(data, opts) {
     validated.finishFlush,
   );
   if (errno !== 0) {
-    throw typeof errorMessage === 'string' && errorMessage.startsWith('ERR_')
+    throw typeof errorMessage === 'string' && stringStartsWith(errorMessage, 'ERR_')
       ? makeBrotliError(errorMessage, errno)
       : makeZlibError(errorMessage, errno);
   }
