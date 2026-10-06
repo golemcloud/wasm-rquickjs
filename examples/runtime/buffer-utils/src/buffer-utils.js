@@ -21,6 +21,26 @@ export function testUtf8Encoding() {
   }
   if (Buffer.from('').length !== 0 || Buffer.byteLength('') !== 0) return false;
   if (Buffer.byteLength('é', 'unknown') !== 2) return false;
+  for (const [text, expectedBackingLength] of [
+    ['a'.repeat(4095), Buffer.poolSize],
+    ['é'.repeat(2047) + 'a', Buffer.poolSize],
+    ['a'.repeat(4096), 4096],
+    ['é'.repeat(2048), 4096],
+  ]) {
+    const result = Buffer.from(text, 'UTF-8');
+    if (result.length !== Buffer.byteLength(text) || result.buffer.byteLength !== expectedBackingLength) throw new Error('UTF-8 pool boundary');
+  }
+  const originalToLowerCase = String.prototype.toLowerCase;
+  try {
+    String.prototype.toLowerCase = () => { throw new Error('overridden toLowerCase called'); };
+    if (!Buffer.isEncoding('UTF-8')) throw new Error('mutable encoding normalizer');
+    if (Buffer.from('é', 'UTF-8').toString('hex') !== 'c3a9') throw new Error('mutable from encoding normalizer');
+    if (Buffer.byteLength('é', 'UTF-8') !== 2) throw new Error('mutable byteLength encoding normalizer');
+    const target = Buffer.alloc(2);
+    if (target.write('é', 0, 2, 'UTF-8') !== 2 || target.toString('hex') !== 'c3a9') throw new Error('mutable write encoding normalizer');
+  } finally {
+    String.prototype.toLowerCase = originalToLowerCase;
+  }
   const publicArrayBuffer = new ArrayBuffer(1);
   const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
   const intrinsicDescriptors = [
@@ -74,6 +94,45 @@ export function testUtf8TrailingSurrogates() {
     if (target.subarray(0, offset).some(byte => byte !== 0x55) ||
         target.subarray(offset + written).some(byte => byte !== 0x55)) throw new Error('partial replacement write');
   }
+  for (const [text, hex] of [['¢', 'c2a2'], ['€', 'e282ac'], ['😀', 'f09f9880']]) {
+    const width = hex.length / 2;
+    for (const size of Array.from({length: width + 1}, (_, index) => index)) {
+      for (const write of [
+        (target, offset) => target.write(text, offset, size, 'utf8'),
+        (target, offset) => target.utf8Write(text, offset, size),
+      ]) {
+        const offset = 2;
+        const target = Buffer.alloc(12, 0x55);
+        const written = write(target, offset);
+        const expected = size < width ? 0 : width;
+        if (written !== expected) throw new Error('bounded multibyte write length');
+        if (target.subarray(offset, offset + written).toString('hex') !== hex.slice(0, written * 2)) throw new Error('bounded multibyte write bytes');
+        if (target.subarray(0, offset).some(byte => byte !== 0x55) ||
+            target.subarray(offset + written).some(byte => byte !== 0x55)) throw new Error('partial multibyte write');
+      }
+    }
+  }
+  const longTail = 'a'.repeat(1_000_000);
+  for (const [text, length, expectedHex] of [
+    [longTail, 1, '61'],
+    ['😀' + longTail, 3, ''],
+    ['😀' + longTail, 4, 'f09f9880'],
+    ['\ud800' + longTail, 2, ''],
+    ['\ud800' + longTail, 3, 'efbfbd'],
+  ]) {
+    const target = Buffer.alloc(4, 0x55);
+    const written = target.write(text, 0, length, 'utf8');
+    if (written !== expectedHex.length / 2 || target.subarray(0, written).toString('hex') !== expectedHex) throw new Error('bounded long UTF-8 source');
+    if (target.subarray(written).some(byte => byte !== 0x55)) throw new Error('bounded long UTF-8 overwrite');
+  }
+  const originalSlice = String.prototype.slice;
+  try {
+    String.prototype.slice = () => { throw new Error('overridden slice called'); };
+    const target = Buffer.alloc(1);
+    if (target.write(longTail, 0, 1, 'utf8') !== 1 || target[0] !== 0x61) throw new Error('mutable slice intrinsic');
+  } finally {
+    String.prototype.slice = originalSlice;
+  }
   const originalCharCodeAt = String.prototype.charCodeAt;
   try {
     String.prototype.charCodeAt = () => { throw new Error('zero-length write scanned input'); };
@@ -81,19 +140,43 @@ export function testUtf8TrailingSurrogates() {
   } finally {
     String.prototype.charCodeAt = originalCharCodeAt;
   }
+  for (const length of [0, 1]) {
+    for (const write of [
+      (target, value) => target.write(value, 0, length, 'utf8'),
+      (target, value) => target.utf8Write(value, 0, length),
+    ]) {
+      const target = Buffer.alloc(4);
+      let coerced = false;
+      const hostile = {toString() { coerced = true; throw new Error('source was coerced'); }};
+      try {
+        write(target, hostile);
+        throw new Error('non-string UTF-8 source accepted');
+      } catch (error) {
+        if (error.code !== 'ERR_INVALID_ARG_TYPE') throw error;
+      }
+      if (coerced) throw new Error('non-string UTF-8 source was coerced');
+    }
+  }
   const originalTest = RegExp.prototype.test;
   const originalExec = RegExp.prototype.exec;
+  const originalToWellFormed = String.prototype.toWellFormed;
+  const originalIsWellFormed = String.prototype.isWellFormed;
   try {
     RegExp.prototype.test = () => { throw new Error('overridden test called'); };
     RegExp.prototype.exec = () => { throw new Error('overridden exec called'); };
+    String.prototype.toWellFormed = () => { throw new Error('overridden toWellFormed called'); };
+    String.prototype.isWellFormed = () => { throw new Error('overridden isWellFormed called'); };
     for (const [text, expectedLength] of [
-      ['abc', 3], ['\ud800', 3], ['a'.repeat(9000), 9000], ['\ud800'.repeat(9000), 27000],
+      ['abc', 3], ['\ud800', 3], ['😀', 4], ['a'.repeat(9000), 9000],
+      ['😀'.repeat(9000), 36000], ['\ud800'.repeat(9000), 27000],
     ]) {
-      if (Buffer.byteLength(text) !== expectedLength || Buffer.from(text).length !== expectedLength) throw new Error('mutable RegExp intrinsic');
+      if (Buffer.byteLength(text) !== expectedLength || Buffer.from(text).length !== expectedLength) throw new Error('mutable UTF-8 intrinsic');
     }
   } finally {
     RegExp.prototype.test = originalTest;
     RegExp.prototype.exec = originalExec;
+    String.prototype.toWellFormed = originalToWellFormed;
+    String.prototype.isWellFormed = originalIsWellFormed;
   }
   return true;
 }
