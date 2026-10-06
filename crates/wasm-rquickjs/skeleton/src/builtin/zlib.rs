@@ -194,18 +194,46 @@ fn brotli_decompress_sync_impl(
     data: &[u8],
     finish_flush: u8,
 ) -> Result<Vec<u8>, SyncDecompressError> {
+    let mut state = brotli::BrotliState::new(
+        brotli::HeapAlloc::<u8>::default(),
+        brotli::HeapAlloc::<u32>::default(),
+        brotli::HeapAlloc::<brotli::HuffmanCode>::default(),
+    );
+    let mut available_in = data.len();
+    let mut input_offset = 0;
     let mut output = Vec::new();
-    let mut reader = Cursor::new(data);
-    match brotli::BrotliDecompress(&mut reader, &mut output) {
-        Ok(()) => Ok(output),
-        Err(error) if error.kind() == std::io::ErrorKind::UnexpectedEof => {
-            if finish_flush == 2 {
-                Err(SyncDecompressError::Buffer)
-            } else {
-                Ok(output)
+    let mut chunk = [0; 4096];
+
+    loop {
+        let mut available_out = chunk.len();
+        let mut output_offset = 0;
+        let mut total_out = 0;
+        let result = brotli::BrotliDecompressStream(
+            &mut available_in,
+            &mut input_offset,
+            data,
+            &mut available_out,
+            &mut output_offset,
+            &mut chunk,
+            &mut total_out,
+            &mut state,
+        );
+        output.extend_from_slice(&chunk[..output_offset]);
+
+        match result {
+            brotli::BrotliResult::ResultSuccess => return Ok(output),
+            brotli::BrotliResult::ResultFailure => {
+                return Err(SyncDecompressError::Generic);
             }
+            brotli::BrotliResult::NeedsMoreInput => {
+                return if finish_flush == 2 {
+                    Err(SyncDecompressError::Buffer)
+                } else {
+                    Ok(output)
+                };
+            }
+            brotli::BrotliResult::NeedsMoreOutput => {}
         }
-        Err(_) => Err(SyncDecompressError::Generic),
     }
 }
 

@@ -185,6 +185,18 @@ export async function testByteTransfer() {
     }
   }
 
+  let corruptBrotliError;
+  try {
+    brotliDecompressSync(Buffer.from([0xff]), {
+      finishFlush: constants.BROTLI_OPERATION_FLUSH,
+    });
+  } catch (error) {
+    corruptBrotliError = error;
+  }
+  if (corruptBrotliError?.code !== 'ERR_ZLIB_INITIALIZATION_FAILED') {
+    throw new Error('permissive corrupt Brotli decompression');
+  }
+
   const gzipWithPadding = gzipSync(partialSource);
   if (!gunzipSync(Buffer.concat([gzipWithPadding, Buffer.from([0])])).equals(partialSource)) {
     throw new Error('single-byte gzip zero padding');
