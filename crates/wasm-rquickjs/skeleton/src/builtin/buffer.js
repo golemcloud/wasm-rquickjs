@@ -17,9 +17,20 @@ import { encode as nativeUtf8Encode, utf8_byte_length as nativeUtf8ByteLength } 
 // Rust strings cannot represent lone UTF-16 surrogates. Keep the existing
 // encoder for all surrogate-containing input, including valid pairs.
 const hasSurrogate = /[\uD800-\uDFFF]/
+const execRegExp = Function.prototype.call.bind(RegExp.prototype.exec)
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype)
+const getTypedArrayBuffer = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get)
+const getTypedArrayByteOffset = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteOffset').get)
+const getTypedArrayByteLength = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteLength').get)
+const getArrayBufferByteLengthIntrinsic = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get)
+const getSharedArrayBufferByteLengthIntrinsic = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength').get)
+
+function containsSurrogate (string) {
+    return execRegExp(hasSurrogate, string) !== null
+}
 
 function utf8ByteLength (string) {
-    return hasSurrogate.test(string) ? utf8ToBytes(string).length : nativeUtf8ByteLength(string)
+    return containsSurrogate(string) ? utf8ToBytes(string).length : nativeUtf8ByteLength(string)
 }
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom')
@@ -429,10 +440,11 @@ function fromString (string, encoding) {
 
     // Small strings retain the existing pooled allocation behavior.
     if ((encoding === 'utf8' || encoding === 'utf-8') &&
-        string.length >= Buffer.poolSize && !hasSurrogate.test(string)) {
+        string.length >= Buffer.poolSize && !containsSurrogate(string)) {
         const bytes = nativeUtf8Encode(string)
-        checked(bytes.byteLength)
-        return fromArrayBuffer(bytes.buffer, bytes.byteOffset, bytes.byteLength)
+        const length = getTypedArrayByteLength(bytes)
+        checked(length)
+        return new FastBuffer(getTypedArrayBuffer(bytes), getTypedArrayByteOffset(bytes), length)
     }
 
     const length = byteLength(string, encoding) | 0
@@ -472,8 +484,17 @@ function fromArrayView (arrayView) {
 function getArrayBufferByteLength (array) {
     try {
         return array.byteLength
-    } catch {
-        return undefined
+    } catch (error) {
+        try {
+            getArrayBufferByteLengthIntrinsic(array)
+        } catch {
+            try {
+                getSharedArrayBufferByteLengthIntrinsic(array)
+            } catch {
+                return undefined
+            }
+        }
+        throw error
     }
 }
 
@@ -1134,7 +1155,8 @@ function hexWrite (buf, string, offset, length) {
 }
 
 function utf8Write (buf, string, offset, length) {
-    return blitBuffer(utf8ToBytes(string, buf.length - offset), buf, offset, length)
+    if (length === 0) return 0
+    return blitBuffer(utf8ToBytes(string, length), buf, offset, length)
 }
 
 function asciiWrite (buf, string, offset, length) {

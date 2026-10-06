@@ -21,7 +21,33 @@ export function testUtf8Encoding() {
   }
   if (Buffer.from('').length !== 0 || Buffer.byteLength('') !== 0) return false;
   if (Buffer.byteLength('é', 'unknown') !== 2) return false;
-  if (Buffer.byteLength('é', 'unknown', true) !== -1) return false;
+  const publicArrayBuffer = new ArrayBuffer(1);
+  const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+  const intrinsicDescriptors = [
+    [typedArrayPrototype, 'buffer'],
+    [typedArrayPrototype, 'byteOffset'],
+    [ArrayBuffer.prototype, 'byteLength'],
+  ].map(([target, property]) => [target, property, Object.getOwnPropertyDescriptor(target, property)]);
+  try {
+    for (const [target, property] of intrinsicDescriptors) {
+      Object.defineProperty(target, property, {
+        configurable: true,
+        get: () => { throw new Error(`overridden ${property} called`); },
+      });
+    }
+    const result = Buffer.from('a'.repeat(9000));
+    if (result.length !== 9000 || result[0] !== 0x61 || result[8999] !== 0x61) throw new Error('mutable typed array intrinsic');
+    let observedArrayBufferGetter = false;
+    try {
+      Buffer.from(publicArrayBuffer);
+    } catch (error) {
+      if (error.message !== 'overridden byteLength called') throw error;
+      observedArrayBufferGetter = true;
+    }
+    if (!observedArrayBufferGetter) throw new Error('ArrayBuffer byteLength getter was bypassed');
+  } finally {
+    for (const [target, property, descriptor] of intrinsicDescriptors) Object.defineProperty(target, property, descriptor);
+  }
   return true;
 }
 
@@ -39,12 +65,35 @@ export function testUtf8TrailingSurrogates() {
   }
   // UTF-8 writes must never emit a partial replacement character.
   for (const size of [1, 2, 3, 4, 5, 6, 7]) {
-    const target = Buffer.alloc(size, 0x55);
-    const written = target.write('\ud800\ud801', 0, size, 'utf8');
+    const offset = 2;
+    const target = Buffer.alloc(12, 0x55);
+    const written = target.write('\ud800\ud801', offset, size, 'utf8');
     const expected = Math.min(2, Math.floor(size / 3)) * 3;
     if (written !== expected) throw new Error('bounded surrogate write length');
-    if (target.subarray(0, written).toString('hex') !== 'efbfbd'.repeat(expected / 3)) throw new Error('bounded surrogate write bytes');
-    if (target.subarray(written).some(byte => byte !== 0x55)) throw new Error('partial replacement write');
+    if (target.subarray(offset, offset + written).toString('hex') !== 'efbfbd'.repeat(expected / 3)) throw new Error('bounded surrogate write bytes');
+    if (target.subarray(0, offset).some(byte => byte !== 0x55) ||
+        target.subarray(offset + written).some(byte => byte !== 0x55)) throw new Error('partial replacement write');
+  }
+  const originalCharCodeAt = String.prototype.charCodeAt;
+  try {
+    String.prototype.charCodeAt = () => { throw new Error('zero-length write scanned input'); };
+    if (Buffer.alloc(8).write('abc', 2, 0, 'utf8') !== 0) throw new Error('zero-length write');
+  } finally {
+    String.prototype.charCodeAt = originalCharCodeAt;
+  }
+  const originalTest = RegExp.prototype.test;
+  const originalExec = RegExp.prototype.exec;
+  try {
+    RegExp.prototype.test = () => { throw new Error('overridden test called'); };
+    RegExp.prototype.exec = () => { throw new Error('overridden exec called'); };
+    for (const [text, expectedLength] of [
+      ['abc', 3], ['\ud800', 3], ['a'.repeat(9000), 9000], ['\ud800'.repeat(9000), 27000],
+    ]) {
+      if (Buffer.byteLength(text) !== expectedLength || Buffer.from(text).length !== expectedLength) throw new Error('mutable RegExp intrinsic');
+    }
+  } finally {
+    RegExp.prototype.test = originalTest;
+    RegExp.prototype.exec = originalExec;
   }
   return true;
 }

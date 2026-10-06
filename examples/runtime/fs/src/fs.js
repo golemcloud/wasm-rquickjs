@@ -12,17 +12,23 @@ export const testReadSyncBulkCopy = () => {
     const fd = openSync(path, 'r');
     try {
         for (const target of [Buffer.alloc(80, 0x55).subarray(5, 60),
-            new Uint8Array(new ArrayBuffer(80), 5, 55).fill(0x55)]) {
+            new Uint8Array(new ArrayBuffer(80), 5, 55),
+            new Int8Array(new ArrayBuffer(80), 5, 55),
+            new Uint8ClampedArray(new ArrayBuffer(80), 5, 55),
+            new Uint16Array(new ArrayBuffer(120), 6, 27),
+            new DataView(new ArrayBuffer(80), 5, 55)]) {
+            const targetBytes = new Uint8Array(target.buffer, target.byteOffset, target.byteLength);
+            targetBytes.fill(0x55);
             if (readSync(fd, target, 3, 21, 17) !== 21) throw new Error('read count');
-            for (let i = 0; i < target.length; i++) {
+            for (let i = 0; i < targetBytes.length; i++) {
                 const expected = i >= 3 && i < 24 ? source[17 + i - 3] : 0x55;
-                if (target[i] !== expected) throw new Error('offset or sentinel mismatch');
+                if (targetBytes[i] !== expected) throw new Error('offset or sentinel mismatch');
             }
-            target.fill(0x55);
-            if (readSync(fd, target, 2, 30, source.length - 7) !== 7) throw new Error('partial read count');
-            for (let i = 0; i < target.length; i++) {
+            targetBytes.fill(0x55);
+            if (readSync(fd, target, {offset: 2, length: 30, position: source.length - 7}) !== 7) throw new Error('partial read count');
+            for (let i = 0; i < targetBytes.length; i++) {
                 const expected = i >= 2 && i < 9 ? source[source.length - 7 + i - 2] : 0x55;
-                if (target[i] !== expected) throw new Error('partial read overwrite');
+                if (targetBytes[i] !== expected) throw new Error('partial read overwrite');
             }
             if (readSync(fd, target, 0, 0, 0) !== 0) throw new Error('zero read');
             if (readSync(fd, target, 0, 20, source.length) !== 0) throw new Error('EOF');
@@ -41,6 +47,25 @@ export const testReadSyncBulkCopy = () => {
             if (readSync(fd, target, 0, 21, 17) !== 21 || !target.equals(source.subarray(17, 38))) throw new Error('overridden set read');
         } finally {
             Uint8Array.prototype.set = originalSet;
+        }
+        const hasInstanceDescriptor = Object.getOwnPropertyDescriptor(Uint8Array, Symbol.hasInstance);
+        const first = Buffer.alloc(1);
+        const second = Buffer.alloc(1);
+        const positionFd = openSync(path, 'r');
+        try {
+            try {
+                Object.defineProperty(Uint8Array, Symbol.hasInstance, {
+                    configurable: true,
+                    value: () => { throw new Error('overridden hasInstance called'); },
+                });
+                if (readSync(positionFd, first, 0, 1, null) !== 1) throw new Error('implicit first read');
+            } finally {
+                if (hasInstanceDescriptor) Object.defineProperty(Uint8Array, Symbol.hasInstance, hasInstanceDescriptor);
+                else delete Uint8Array[Symbol.hasInstance];
+            }
+            if (readSync(positionFd, second, 0, 1, null) !== 1 || first[0] !== source[0] || second[0] !== source[1]) throw new Error('implicit file position');
+        } finally {
+            closeSync(positionFd);
         }
         return true;
     } finally {

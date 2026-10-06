@@ -25,7 +25,34 @@ import {
 } from '__wasm_rquickjs_builtin/internal/fs/shared';
 
 const kIoMaxLength = 2 ** 31 - 1;
+const isArrayBufferView = ArrayBuffer.isView;
+const Uint8ArrayConstructor = Uint8Array;
 const setUint8Array = Function.prototype.call.bind(Uint8Array.prototype.set);
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const getTypedArrayBuffer = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get);
+const getTypedArrayByteOffset = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteOffset').get);
+const getTypedArrayByteLength = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteLength').get);
+const getTypedArrayLength = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'length').get);
+const getDataViewBuffer = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer').get);
+const getDataViewByteOffset = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(DataView.prototype, 'byteOffset').get);
+const getDataViewByteLength = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength').get);
+
+function getByteView(view) {
+    let buffer;
+    let byteOffset;
+    let byteLength;
+    try {
+        buffer = getTypedArrayBuffer(view);
+        byteOffset = getTypedArrayByteOffset(view);
+        byteLength = getTypedArrayByteLength(view);
+        if (getTypedArrayLength(view) === byteLength) return view;
+    } catch {
+        buffer = getDataViewBuffer(view);
+        byteOffset = getDataViewByteOffset(view);
+        byteLength = getDataViewByteLength(view);
+    }
+    return new Uint8ArrayConstructor(buffer, byteOffset, byteLength);
+}
 
 let _Buffer = null;
 function getBuffer() {
@@ -313,7 +340,7 @@ function validateFd(fd) {
 }
 
 function validateBuffer(buffer, name) {
-    if (!ArrayBuffer.isView(buffer)) {
+    if (!isArrayBufferView(buffer)) {
         const err = new TypeError(`The "${name || 'buffer'}" argument must be an instance of Buffer, TypedArray, or DataView. Received ${describeType(buffer)}`);
         err.code = 'ERR_INVALID_ARG_TYPE';
         throw err;
@@ -1055,7 +1082,7 @@ export let readSync = function readSync(fd, buffer, offsetOrOptions, length, pos
     const argCount = arguments.length;
 
     // When second arg is an options object (not a buffer), extract buffer from it
-    if (buffer != null && typeof buffer === 'object' && !ArrayBuffer.isView(buffer) && !Array.isArray(buffer) && offsetOrOptions === undefined) {
+    if (buffer != null && typeof buffer === 'object' && !isArrayBufferView(buffer) && !Array.isArray(buffer) && offsetOrOptions === undefined) {
         const opts = buffer;
         if (opts.buffer == null) {
             validateBuffer(opts, 'buffer');
@@ -1065,7 +1092,7 @@ export let readSync = function readSync(fd, buffer, offsetOrOptions, length, pos
     }
     let offset = 0;
     if (argCount <= 3) {
-        if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions === 'object' && !ArrayBuffer.isView(offsetOrOptions) && !Array.isArray(offsetOrOptions)) {
+        if (offsetOrOptions !== undefined && offsetOrOptions !== null && typeof offsetOrOptions === 'object' && !isArrayBufferView(offsetOrOptions) && !Array.isArray(offsetOrOptions)) {
             offset = offsetOrOptions.offset ?? 0;
             length = offsetOrOptions.length !== undefined ? offsetOrOptions.length : buffer.byteLength - offset;
             position = offsetOrOptions.position !== undefined ? offsetOrOptions.position : null;
@@ -1098,6 +1125,7 @@ export let readSync = function readSync(fd, buffer, offsetOrOptions, length, pos
 
     validateOffsetLengthRead(offset, length, buffer.byteLength);
     position = validateReadPosition(position, length);
+    const byteView = getByteView(buffer);
 
     const result = native.fs_read(fd, length, position);
     if (result.error) {
@@ -1106,13 +1134,7 @@ export let readSync = function readSync(fd, buffer, offsetOrOptions, length, pos
 
     const src = result.buffer;
     const bytesRead = result.bytesRead;
-    if (buffer instanceof Uint8Array) {
-        setUint8Array(buffer, src, offset);
-    } else {
-        for (let i = 0; i < bytesRead; i++) {
-            buffer[offset + i] = src[i];
-        }
-    }
+    setUint8Array(byteView, src, offset);
     return bytesRead;
 };
 
