@@ -55,6 +55,27 @@ function detachedUint8Array(bytes) {
   return view;
 }
 
+function detachedDataView(bytes) {
+  const arrayBuffer = new ArrayBuffer(bytes.length);
+  const view = new DataView(arrayBuffer);
+  new Uint8Array(arrayBuffer).set(bytes);
+  structuredClone(arrayBuffer, { transfer: [arrayBuffer] });
+  return view;
+}
+
+function expectZBufError(operation, label) {
+  let error;
+  try {
+    operation();
+  } catch (caught) {
+    error = caught;
+  }
+  if (error?.code !== 'Z_BUF_ERROR' || error.errno !== -5 ||
+      error.message !== 'unexpected end of file') {
+    throw new Error(`${label} did not report Z_BUF_ERROR`);
+  }
+}
+
 export async function testByteTransfer() {
   const source = Buffer.alloc(131103);
   for (let i = 0; i < source.length; i++) source[i] = i % 251;
@@ -101,16 +122,66 @@ export async function testByteTransfer() {
   }
   if (crc32(detached) !== crc32(empty)) throw new Error('detached crc32 input');
   for (const decompress of [gunzipSync, brotliDecompressSync]) {
+    expectZBufError(() => decompress(detached), 'detached Buffer decompression');
+  }
+
+  const detachedTypedArray = detachedUint8Array([1, 2, 3]);
+  if (!gzipSync(detachedTypedArray).equals(gzipSync(empty))) {
+    throw new Error('detached Uint8Array gzip input');
+  }
+  if (!brotliCompressSync(detachedTypedArray).equals(brotliCompressSync(empty))) {
+    throw new Error('detached Uint8Array brotli input');
+  }
+  if (crc32(detachedTypedArray) !== crc32(empty)) {
+    throw new Error('detached Uint8Array crc32 input');
+  }
+  for (const decompress of [gunzipSync, brotliDecompressSync]) {
+    expectZBufError(() => decompress(detachedTypedArray), 'detached Uint8Array decompression');
+  }
+
+  const detachedView = detachedDataView([1, 2, 3]);
+  for (const transform of [gzipSync, gunzipSync, brotliCompressSync, brotliDecompressSync]) {
     let error;
     try {
-      decompress(detached);
+      transform(detachedView);
     } catch (caught) {
       error = caught;
     }
-    if (error?.code !== 'Z_BUF_ERROR' || error.message !== 'unexpected end of file') {
-      throw new Error('detached decompression did not match empty-input failure');
-    }
+    if (!(error instanceof TypeError)) throw new Error('detached DataView zlib input');
   }
+  if (crc32(detachedView) !== crc32(empty)) throw new Error('detached DataView crc32 input');
+
+  for (const [compress, decompress] of [
+    [gzipSync, gunzipSync],
+    [deflateSync, inflateSync],
+    [deflateRawSync, inflateRawSync],
+    [brotliCompressSync, brotliDecompressSync],
+  ]) {
+    const compressed = compress(Buffer.from('truncated input'));
+    expectZBufError(
+      () => decompress(compressed.subarray(0, compressed.length - 1)),
+      'truncated decompression',
+    );
+  }
+
+  const OriginalError = globalThis.Error;
+  try {
+    globalThis.Error = function PoisonedError() { throw new OriginalError('mutable global Error called'); };
+    expectZBufError(() => gunzipSync(empty), 'poisoned Error constructor');
+  } finally {
+    globalThis.Error = OriginalError;
+  }
+
+  const originalIsView = ArrayBuffer.isView;
+  try {
+    ArrayBuffer.isView = () => false;
+    if (!gzipSync(new Uint8Array([1, 2, 3])).equals(gzipSync(Buffer.from([1, 2, 3])))) {
+      throw new Error('mutable ArrayBuffer.isView');
+    }
+  } finally {
+    ArrayBuffer.isView = originalIsView;
+  }
+
   const gzip = createGzip();
   try {
     let error;

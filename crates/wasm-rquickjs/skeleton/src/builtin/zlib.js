@@ -21,12 +21,26 @@ import {
 
 const setPrototypeOf = Object.setPrototypeOf;
 const BufferPrototype = Buffer.prototype;
+const ErrorConstructor = Error;
+const isArrayBufferView = ArrayBuffer.isView;
 const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
 const getTypedArrayBuffer = Function.prototype.call.bind(
   Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get,
 );
+const getTypedArrayByteOffset = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteOffset').get,
+);
+const getTypedArrayByteLength = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteLength').get,
+);
 const getDataViewBuffer = Function.prototype.call.bind(
   Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer').get,
+);
+const getDataViewByteOffset = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(DataView.prototype, 'byteOffset').get,
+);
+const getDataViewByteLength = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength').get,
 );
 const getArrayBufferDetached = Function.prototype.call.bind(
   Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached').get,
@@ -37,14 +51,7 @@ function bufferFromNativeBytes(bytes) {
   return bytes;
 }
 
-function isDetachedArrayBufferView(value) {
-  if (!ArrayBuffer.isView(value)) return false;
-  let buffer;
-  try {
-    buffer = getTypedArrayBuffer(value);
-  } catch {
-    buffer = getDataViewBuffer(value);
-  }
+function isDetachedArrayBuffer(buffer) {
   try {
     return getArrayBufferDetached(buffer);
   } catch {
@@ -308,8 +315,15 @@ export const codes = Object.freeze({
 // ===== Error helpers =====
 
 function makeError(code, message) {
-  const err = new Error(message);
+  const err = new ErrorConstructor(message);
   err.code = code;
+  return err;
+}
+
+function makeZlibError(message, errno) {
+  const err = new ErrorConstructor(message);
+  err.code = errno === Z_BUF_ERROR ? 'Z_BUF_ERROR' : 'Z_DATA_ERROR';
+  err.errno = errno;
   return err;
 }
 
@@ -380,8 +394,23 @@ function toBuffer(input) {
   if (Buffer.isBuffer(input)) {
     return input;
   }
-  if (ArrayBuffer.isView(input)) {
-    return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  if (isArrayBufferView(input)) {
+    let buffer;
+    let byteOffset;
+    let byteLength;
+    try {
+      buffer = getTypedArrayBuffer(input);
+      byteOffset = getTypedArrayByteOffset(input);
+      byteLength = getTypedArrayByteLength(input);
+    } catch {
+      return Buffer.from(
+        getDataViewBuffer(input),
+        getDataViewByteOffset(input),
+        getDataViewByteLength(input),
+      );
+    }
+    if (isDetachedArrayBuffer(buffer)) return Buffer.alloc(0);
+    return Buffer.from(buffer, byteOffset, byteLength);
   }
   if (input instanceof ArrayBuffer) {
     return Buffer.from(input);
@@ -389,6 +418,19 @@ function toBuffer(input) {
   throw makeTypeError('ERR_INVALID_ARG_TYPE',
     'The "buffer" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
     invalidArgTypeHelper(input));
+}
+
+function toCrcBuffer(input) {
+  if (!Buffer.isBuffer(input) && isArrayBufferView(input)) {
+    try {
+      const buffer = getTypedArrayBuffer(input);
+      if (isDetachedArrayBuffer(buffer)) return Buffer.alloc(0);
+    } catch {
+      const buffer = getDataViewBuffer(input);
+      if (isDetachedArrayBuffer(buffer)) return Buffer.alloc(0);
+    }
+  }
+  return toBuffer(input);
 }
 
 function toUint8Array(buf) {
@@ -711,10 +753,6 @@ class ZlibBase extends Transform {
        'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
        invalidArgTypeHelper(chunk));
    }
-   if (!Buffer.isBuffer(chunk) && isDetachedArrayBufferView(chunk)) {
-     throw new TypeError('Cannot perform Construct on a detached ArrayBuffer');
-   }
-
    const buf = toBuffer(chunk);
    const data = toUint8Array(buf);
    this._bytesWritten += data.length;
@@ -1074,7 +1112,10 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
-  const result = zlib_decompress_sync(uint8, wb);
+  const [result, errorMessage, errno] = zlib_decompress_sync(uint8, wb);
+  if (errno !== 0) {
+    throw makeZlibError(errorMessage, errno);
+  }
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Decompression failed');
   }
@@ -1142,7 +1183,10 @@ export function brotliDecompressSync(data, opts) {
   const maxLen = validated.maxOutputLength !== undefined ? validated.maxOutputLength : _getKMaxLength();
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
-  const result = _brotli_decompress_sync(uint8);
+  const [result, errorMessage, errno] = _brotli_decompress_sync(uint8);
+  if (errno !== 0) {
+    throw makeZlibError(errorMessage, errno);
+  }
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
   }
@@ -1189,7 +1233,7 @@ export function brotliDecompress(data, opts, callback) { asyncConvenience(brotli
 // ===== CRC32 =====
 
 export function crc32(data, value) {
-  if (typeof data !== 'string' && !Buffer.isBuffer(data) && !ArrayBuffer.isView(data)) {
+  if (typeof data !== 'string' && !Buffer.isBuffer(data) && !isArrayBufferView(data)) {
     throw makeTypeError('ERR_INVALID_ARG_TYPE',
       'The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' +
       (data === null ? 'null' : data === undefined ? 'undefined' : typeof data === 'function' ? 'function ' + (data.name || '') : typeof data === 'object' ? 'an instance of ' + (data.constructor ? data.constructor.name : 'Object') : 'type ' + typeof data + ' (' + data + ')'));
@@ -1202,7 +1246,7 @@ export function crc32(data, value) {
     }
   }
 
-  const buf = toBuffer(data);
+  const buf = toCrcBuffer(data);
   const uint8 = toUint8Array(buf);
   const initial = (value !== undefined) ? (value >>> 0) : 0;
   // Native returns i32; convert to unsigned u32

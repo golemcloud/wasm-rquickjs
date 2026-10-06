@@ -112,6 +112,30 @@ export function testUtf8TrailingSurrogates() {
       }
     }
   }
+  for (const write of [
+    (target, offset, length) => target.write('A'.repeat(16), offset, length, 'utf8'),
+    (target, offset, length) => target.utf8Write('A'.repeat(16), offset, length),
+  ]) {
+    const pooled = Buffer.allocUnsafe(64).fill(0x55);
+    const target = pooled.subarray(8, 9);
+    Object.defineProperty(target, 'length', {value: 16});
+    if (write(target, 0, 16) !== 1 || pooled[8] !== 0x41) throw new Error('shadowed UTF-8 write length');
+    if (pooled.subarray(0, 8).some(byte => byte !== 0x55) ||
+        pooled.subarray(9).some(byte => byte !== 0x55)) {
+      throw new Error('shadowed UTF-8 write escaped Buffer bounds');
+    }
+    for (const length of [0, 1]) {
+      let error;
+      try {
+        write(target, 2, length);
+      } catch (caught) {
+        error = caught;
+      }
+      if (error?.code !== 'ERR_BUFFER_OUT_OF_BOUNDS') {
+        throw new Error('shadowed UTF-8 write accepted out-of-bounds offset');
+      }
+    }
+  }
   const longTail = 'a'.repeat(1_000_000);
   for (const [text, length, expectedHex] of [
     [longTail, 1, '61'],

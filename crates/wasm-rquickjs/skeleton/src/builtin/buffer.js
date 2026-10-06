@@ -1168,6 +1168,11 @@ function utf8Write (buf, string, offset, length) {
     if (typeof string !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('string', 'string', string)
     }
+    const byteLength = getTypedArrayByteLength(buf)
+    if (offset > byteLength) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
+    }
+    length = Math.min(length, byteLength - offset)
     if (length === 0) return 0
     const target = new Uint8ArrayConstructor(
         getTypedArrayBuffer(buf),
