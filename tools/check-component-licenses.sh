@@ -126,6 +126,7 @@ replace_swc_sourcemap_fallback() {
                 print ""
             } else {
                 if (index(block, "swc_sourcemap 10.0.2") > 0) {
+                    unexpected++
                     print "Unexpected swc_sourcemap fallback block:" > "/dev/stderr"
                     printf "%s", block > "/dev/stderr"
                 }
@@ -147,7 +148,7 @@ replace_swc_sourcemap_fallback() {
         }
         END {
             emit_block()
-            if (replacements != 1) {
+            if (replacements != 1 || unexpected != 0) {
                 exit 1
             }
         }
@@ -186,6 +187,7 @@ replace_rquickjs_fallback() {
             } else {
                 if (index(block, "rquickjs-core 0.10.0") > 0 ||
                     index(block, "rquickjs-macro 0.10.0") > 0) {
+                    unexpected++
                     print "Unexpected rquickjs fallback block:" > "/dev/stderr"
                     printf "%s", block > "/dev/stderr"
                 }
@@ -207,7 +209,7 @@ replace_rquickjs_fallback() {
         }
         END {
             emit_block()
-            if (replacements != 1) {
+            if (replacements != 1 || unexpected != 0) {
                 exit 1
             }
         }

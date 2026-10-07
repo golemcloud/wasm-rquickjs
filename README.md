@@ -65,9 +65,10 @@ Every generated crate also contains a target-specific `THIRD_PARTY_COMPONENT_LIC
 locked Cargo dependency union of the standard `normal` / `normal-p3` TypeScript runtime and
 transform profiles. It is deliberately a superset for crates that enable fewer features.
 Distributors must ship that notice with the compiled component and separately audit application
-code, custom feature combinations, repository-owned bundled JavaScript, toolchain and WASI sysroot
-components, vendored native sources, and upstream `NOTICE` obligations. Maintainers can regenerate
-and verify the retained notices with
+code, custom feature combinations, bundled JavaScript in the skeleton (including third-party code
+adapted from Node.js, Deno, and web-streams-polyfill), toolchain and WASI sysroot components,
+vendored native sources, and upstream `NOTICE` obligations. Maintainers can regenerate and verify
+the retained notices with
 `tools/check-component-licenses.sh --write` and `--check`, respectively, using the pinned
 `cargo-about` version named by the script.
 
@@ -160,6 +161,34 @@ Wizer pre-initialization (`optimize`) supports Preview 3 components. As with Pre
 initialization must become quiescent before the snapshot and cannot leave timers or tasks pending.
 Runtime arguments and environment variables are restored before the first export runs; modules
 must not capture their values or immutable aliases during top-level initialization.
+
+Library callers using the `optimize` feature can configure the guest-to-host copy budget for
+initialization and Wizer snapshot memory extraction:
+
+```rust,no_run
+use wasm_rquickjs::{OptimizeOptions, optimize_component_with_options};
+
+# async fn example(input: &camino::Utf8Path, output: &camino::Utf8Path) -> anyhow::Result<()> {
+optimize_component_with_options(
+    input,
+    output,
+    "wizer-initialize",
+    &OptimizeOptions {
+        hostcall_fuel: Some(512 * 1024 * 1024), // 512 MiB per hostcall
+    },
+).await?;
+# Ok(())
+# }
+```
+
+An explicit budget requires `use-golem-wasmtime` **and** Cargo patches selecting Golem's
+compatible Wasmtime 46.0.1 fork (see the commented patches in `Cargo.toml`); the feature alone
+does not select the fork. Stock Wasmtime does not expose this setting, and an explicit budget
+without the feature returns an error. `optimize_component` and `OptimizeOptions::default()`
+leave the engine default unchanged (128 MiB in Golem's fork). This limits bytes copied per
+hostcall, not Wasm instruction fuel or the total snapshot size. Raising it allows larger
+copies and increases potential host memory use; insufficient fuel can still trigger Wizer's
+existing snapshot-extraction panic.
 
 Preview 3 is opt-in and evolving; Preview 2 (`--target wasi-p2`) remains the default and stable
 path.
