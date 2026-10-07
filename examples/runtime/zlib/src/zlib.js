@@ -308,6 +308,21 @@ export async function testByteTransfer() {
       `${label} invalid next gzip magic`,
       invalidMagicMessage,
     );
+    for (const [suffix, expectedMessage] of [
+      [Buffer.from([0x1f, 0x01]), 'incorrect header check'],
+      [Buffer.from([0x1f, 0x1f]), invalidMagicMessage],
+    ]) {
+      expectZDataError(
+        () => decompress(suffix),
+        `${label} invalid initial gzip or zlib header`,
+        expectedMessage,
+      );
+      expectZDataError(
+        () => decompress(Buffer.concat([gzipWithSuffix, suffix])),
+        `${label} invalid next gzip or zlib header`,
+        expectedMessage,
+      );
+    }
     expectZDataError(
       () => decompress(Buffer.concat([gzipWithSuffix, Buffer.from([0x1f, 0x8b, 0, 0])])),
       `${label} invalid next gzip method`,
