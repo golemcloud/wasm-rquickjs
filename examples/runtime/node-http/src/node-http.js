@@ -2115,6 +2115,7 @@ export async function netWriteTimeoutLifecycle() {
         let openAtFirstTimeout = false;
         let firstTimeoutElapsed = 0;
         let secondTimeoutElapsed = 0;
+        let rearmedAt = 0;
         let resumedBytes = 0;
         let resumedThenPaused = false;
         let writerClosed = false;
@@ -2138,10 +2139,17 @@ export async function netWriteTimeoutLifecycle() {
                 if (timeoutCount === 1) {
                     openAtFirstTimeout = !socket.destroyed;
                     firstTimeoutElapsed = Date.now() - configuredAt;
+                    // Widen the window in which the JS timer wins the race with
+                    // the native P2 deadline, then replace that native deadline.
+                    const rearmAt = Date.now() + 50;
+                    while (Date.now() < rearmAt) {
+                        // Keep the listener active until the old native deadline is due.
+                    }
                     client.resume();
+                    rearmedAt = Date.now();
                     socket.setTimeout(750);
                 } else {
-                    secondTimeoutElapsed = Date.now() - configuredAt - firstTimeoutElapsed;
+                    secondTimeoutElapsed = Date.now() - rearmedAt;
                     firstWriteCallbacksBeforeDestroy = firstWriteCallbacks;
                     secondWriteCallbacksBeforeDestroy = secondWriteCallbacks;
                     writeErrorsBeforeDestroy = writeErrors;
