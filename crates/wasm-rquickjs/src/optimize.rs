@@ -78,7 +78,22 @@ impl wasmtime_wasi_http::p3::WasiHttpView for WizerHost {
     }
 }
 
-/// Pre-initialize a WebAssembly component using Wizer.
+/// Configuration for Wizer pre-initialization.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptimizeOptions {
+    /// Guest-to-host copy budget in bytes per hostcall, including Wizer snapshot
+    /// memory extraction. This is not WebAssembly instruction fuel or a limit
+    /// on the total snapshot size.
+    ///
+    /// `None` preserves Wasmtime's default (128 MiB in Golem's 46.0.1 fork).
+    /// `Some(0)` permits no copying; values are passed through unchanged.
+    /// An explicit budget requires `use-golem-wasmtime` and Golem's compatible
+    /// Wasmtime fork via Cargo patches. Stock Wasmtime does not expose this
+    /// setting, so requesting it without the feature returns an error.
+    pub hostcall_fuel: Option<usize>,
+}
+
+/// Pre-initialize a WebAssembly component using Wizer with default options.
 ///
 /// Reads the component from `input`, runs the specified `init_func` to capture
 /// the initialized state, and writes the pre-initialized component to `output`.
@@ -92,6 +107,27 @@ pub async fn optimize_component(
     output: &Utf8Path,
     init_func: &str,
 ) -> anyhow::Result<()> {
+    optimize_component_with_options(input, output, init_func, &OptimizeOptions::default()).await
+}
+
+/// Pre-initialize a WebAssembly component using Wizer with explicit options.
+///
+/// Behaves like [`optimize_component`], but allows configuring the guest-to-host
+/// copy budget on Golem's Wasmtime fork. The budget is set before instantiation
+/// and applies to initialization and snapshot extraction on the same store.
+pub async fn optimize_component_with_options(
+    input: &Utf8Path,
+    output: &Utf8Path,
+    init_func: &str,
+    options: &OptimizeOptions,
+) -> anyhow::Result<()> {
+    #[cfg(not(feature = "use-golem-wasmtime"))]
+    if options.hostcall_fuel.is_some() {
+        anyhow::bail!(
+            "Configuring optimizer hostcall fuel requires use-golem-wasmtime and Golem's compatible Wasmtime fork"
+        );
+    }
+
     eprintln!("Reading component from {input}...");
     let wasm_bytes = std::fs::read(input.as_std_path())
         .map_err(|e| anyhow!("Failed to read input component: {e}"))?;
@@ -121,6 +157,11 @@ pub async fn optimize_component(
             io_ctx,
         },
     );
+
+    #[cfg(feature = "use-golem-wasmtime")]
+    if let Some(fuel) = options.hostcall_fuel {
+        store.set_hostcall_fuel(fuel);
+    }
 
     let init_func_name = init_func.to_string();
 
