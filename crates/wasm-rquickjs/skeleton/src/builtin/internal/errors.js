@@ -1,4 +1,5 @@
 import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
+import { nativeWeakMapSet } from "__wasm_rquickjs_builtin/internal/binding/util";
 
 // ---------------------------------------------------------------------------
 // V8-compatible CallSite objects
@@ -252,7 +253,7 @@ function _dispatchPrepareStackTrace(error, callSites) {
         ? prepare(error, callSites.map(_toCompatibleCallSite))
         : _prepareSourceMappedStack(error, callSites);
     if (error && (typeof error === 'object' || typeof error === 'function')) {
-        preparedNativeStacks.set(error, result);
+        nativeWeakMapSet.call(preparedNativeStacks, error, result);
     }
     return result;
 }

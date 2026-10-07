@@ -30,6 +30,10 @@ import {
     get_proxy_details as getProxyDetailsNative,
 } from "__wasm_rquickjs_builtin/internal/binding/util_native";
 
+// Runtime-private caches must stay weak and avoid the public inspection shim's
+// retained entries and linear insertion scan. Capture the engine setter first.
+export const nativeWeakMapSet = WeakMap.prototype.set;
+
 const privateSymbolRegistryKey = "__wasm_rquickjs_internal_private_symbols";
 
 function installPrivateSymbolAccessor(privateSymbol, store) {
