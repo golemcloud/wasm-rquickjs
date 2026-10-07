@@ -32,6 +32,9 @@ async function checkPreparedStackCacheLifetime(customStack) {
         }
         const held = Array.from({ length: 8 }, (_, i) => new Error(`held-${i}`));
         const heldStacks = held.map(error => error.stack);
+        const unreadHeld = customStack
+            ? []
+            : Array.from({ length: 8 }, (_, i) => new Error(`unread-held-${i}`));
         function discardedErrors() {
             return Array.from({ length: 64 }, () => {
                 const error = new Error('discarded');
@@ -84,11 +87,12 @@ async function checkPreparedStackCacheLifetime(customStack) {
         for (let i = 0; i < held.length; i++) {
             assert.strictEqual(held[i].stack, heldStacks[i]);
             if (customStack) assert.strictEqual(held[i].stack.error, held[i]);
-            else {
-                assert(held[i].stack.includes(`held-${i}`));
-                held[i].name = 404;
-                assert.match(inspect(held[i]), new RegExp(`^404 \\[Error\\]: held-${i}(?:\\n|$)`));
-            }
+            else assert(held[i].stack.includes(`held-${i}`));
+        }
+        for (let i = 0; i < unreadHeld.length; i++) {
+            unreadHeld[i].name = 404;
+            assert.match(inspect(unreadHeld[i]),
+                new RegExp(`^404 \\[Error\\]: unread-held-${i}(?:\\n|$)`));
         }
         assert.strictEqual(hookCalls, callsBeforeGc, 'held stacks remain cached across GC');
         return true;
