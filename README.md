@@ -65,9 +65,10 @@ Every generated crate also contains a target-specific `THIRD_PARTY_COMPONENT_LIC
 locked Cargo dependency union of the standard `normal` / `normal-p3` TypeScript runtime and
 transform profiles. It is deliberately a superset for crates that enable fewer features.
 Distributors must ship that notice with the compiled component and separately audit application
-code, custom feature combinations, repository-owned bundled JavaScript, toolchain and WASI sysroot
-components, vendored native sources, and upstream `NOTICE` obligations. Maintainers can regenerate
-and verify the retained notices with
+code, custom feature combinations, bundled JavaScript in the skeleton (including third-party code
+adapted from Node.js, Deno, and web-streams-polyfill), toolchain and WASI sysroot components,
+vendored native sources, and upstream `NOTICE` obligations. Maintainers can regenerate and verify
+the retained notices with
 `tools/check-component-licenses.sh --write` and `--check`, respectively, using the pinned
 `cargo-about` version named by the script.
 

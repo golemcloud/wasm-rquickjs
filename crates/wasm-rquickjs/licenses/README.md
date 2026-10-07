@@ -41,10 +41,11 @@ Profiles using capabilities outside `normal` / `normal-p3` must be audited separ
 
 This Cargo audit is only one release-compliance input. It does not inventory the Rust standard
 library, `core`, `alloc`, `compiler_builtins`, a WASI SDK/sysroot, separately licensed native files
-vendored inside a crate, repository-owned bundled JavaScript sources, or upstream Apache `NOTICE`
-files. Release owners must audit those inputs for the concrete toolchain and distribution, along
-with any application JavaScript and Rust code. Source-level copyright headers already present in
-the skeleton remain in the generated crate, but this Cargo notice does not claim to inventory them.
-The unpublished repository-owned skeleton root is excluded from the third-party list. Code
-generation also removes its `publish = false` marker (and any future skeleton license field),
-because wrapper-crate publication and licensing belong to the owner of the embedded application.
+vendored inside a crate, bundled JavaScript in the skeleton (including third-party code adapted from
+Node.js, Deno, and web-streams-polyfill), or upstream Apache `NOTICE` files. Release owners must
+audit those inputs for the concrete toolchain and distribution, along with any application
+JavaScript and Rust code. Source-level copyright headers already present in the skeleton remain in
+the generated crate, but this Cargo notice does not claim to inventory them. The unpublished
+repository-owned skeleton root is excluded from the Cargo third-party list. Code generation also
+removes its `publish = false` marker (and any future skeleton license field), because wrapper-crate
+publication and licensing belong to the owner of the embedded application.
