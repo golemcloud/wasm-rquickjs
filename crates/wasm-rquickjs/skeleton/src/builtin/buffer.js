@@ -12,6 +12,23 @@ import { Blob as _BlobImport, File as _FileImport } from "__wasm_rquickjs_builti
 import { inspect as utilInspect } from "__wasm_rquickjs_builtin/internal/util/inspect"
 import { ALL_PROPERTIES, ONLY_ENUMERABLE, getOwnNonIndexProperties } from "__wasm_rquickjs_builtin/internal/binding/util"
 import { utf8_decode as nativeUtf8Decode } from '__wasm_rquickjs_builtin/string_decoder_native'
+import { encode as nativeUtf8Encode, encode_into as nativeUtf8EncodeInto, utf8_byte_length as nativeUtf8ByteLength } from '__wasm_rquickjs_builtin/encoding_native'
+
+const toWellFormedString = Function.prototype.call.bind(String.prototype.toWellFormed)
+const toLowerCaseString = Function.prototype.call.bind(String.prototype.toLowerCase)
+const sliceString = Function.prototype.call.bind(String.prototype.slice)
+const StringConstructor = String
+const Uint8ArrayConstructor = Uint8Array
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype)
+const getTypedArrayBuffer = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get)
+const getTypedArrayByteOffset = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteOffset').get)
+const getTypedArrayByteLength = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteLength').get)
+const getArrayBufferByteLengthIntrinsic = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'byteLength').get)
+const getSharedArrayBufferByteLengthIntrinsic = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(SharedArrayBuffer.prototype, 'byteLength').get)
+
+function utf8ByteLength (string) {
+    return nativeUtf8ByteLength(toWellFormedString(string))
+}
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom')
 
@@ -418,6 +435,28 @@ function fromString (string, encoding) {
         throw new ERR_UNKNOWN_ENCODING(encoding)
     }
 
+    const normalizedEncoding = toLowerCaseString(StringConstructor(encoding))
+    if (normalizedEncoding === 'utf8' || normalizedEncoding === 'utf-8') {
+        const wellFormedString = toWellFormedString(string)
+        const poolThreshold = Buffer.poolSize >>> 1
+        if (wellFormedString.length < poolThreshold) {
+            const byteLength = checked(nativeUtf8ByteLength(wellFormedString))
+            if (byteLength < poolThreshold) {
+                const buf = allocFromPool(byteLength)
+                if (byteLength > 0) nativeUtf8EncodeInto(wellFormedString, buf)
+                return buf
+            }
+        }
+
+        const bytes = nativeUtf8Encode(wellFormedString)
+        const byteLength = checked(getTypedArrayByteLength(bytes))
+        return new FastBuffer(
+            getTypedArrayBuffer(bytes),
+            getTypedArrayByteOffset(bytes),
+            byteLength
+        )
+    }
+
     const length = byteLength(string, encoding) | 0
     let buf = length <= (Buffer.poolSize >>> 1)
         ? allocFromPool(length)
@@ -455,8 +494,17 @@ function fromArrayView (arrayView) {
 function getArrayBufferByteLength (array) {
     try {
         return array.byteLength
-    } catch {
-        return undefined
+    } catch (error) {
+        try {
+            getArrayBufferByteLengthIntrinsic(array)
+        } catch {
+            try {
+                getSharedArrayBufferByteLengthIntrinsic(array)
+            } catch {
+                return undefined
+            }
+        }
+        throw error
     }
 }
 
@@ -578,7 +626,7 @@ Buffer.compare = function compare (a, b) {
 }
 
 Buffer.isEncoding = function isEncoding (encoding) {
-    switch (String(encoding).toLowerCase()) {
+    switch (toLowerCaseString(StringConstructor(encoding))) {
         case 'hex':
         case 'utf8':
         case 'utf-8':
@@ -659,7 +707,7 @@ function byteLength (string, encoding) {
                 return len
             case 'utf8':
             case 'utf-8':
-                return utf8ToBytes(string).length
+                return utf8ByteLength(string)
             case 'ucs2':
             case 'ucs-2':
             case 'utf16le':
@@ -673,9 +721,9 @@ function byteLength (string, encoding) {
                 return base64ToBytes(base64UrlToBase64(string)).length
             default:
                 if (loweredCase) {
-                    return mustMatch ? -1 : utf8ToBytes(string).length // assume utf8
+                    return mustMatch ? -1 : utf8ByteLength(string) // assume utf8
                 }
-                encoding = ('' + encoding).toLowerCase()
+                encoding = toLowerCaseString('' + encoding)
                 loweredCase = true
         }
     }
@@ -1117,7 +1165,22 @@ function hexWrite (buf, string, offset, length) {
 }
 
 function utf8Write (buf, string, offset, length) {
-    return blitBuffer(utf8ToBytes(string, buf.length - offset), buf, offset, length)
+    if (typeof string !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('string', 'string', string)
+    }
+    const byteLength = getTypedArrayByteLength(buf)
+    if (offset > byteLength) {
+        throw new ERR_BUFFER_OUT_OF_BOUNDS('offset')
+    }
+    length = Math.min(length, byteLength - offset)
+    if (length === 0) return 0
+    const target = new Uint8ArrayConstructor(
+        getTypedArrayBuffer(buf),
+        getTypedArrayByteOffset(buf) + offset,
+        length
+    )
+    const sourcePrefix = sliceString(string, 0, length + 1)
+    return nativeUtf8EncodeInto(toWellFormedString(sourcePrefix), target).written
 }
 
 function asciiWrite (buf, string, offset, length) {
@@ -1256,7 +1319,7 @@ Buffer.prototype.write = function write (string, offset, length, encoding) {
 
             default:
                 if (loweredCase) throw new ERR_UNKNOWN_ENCODING(encoding)
-                encoding = ('' + encoding).toLowerCase()
+                encoding = toLowerCaseString('' + encoding)
                 loweredCase = true
         }
     }
@@ -2253,86 +2316,6 @@ function base64urlSlice (buf, start, end) {
     const base64str = base64Slice(buf, start, end)
     // Convert to base64url: replace chars and remove padding
     return base64str.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
-
-function utf8ToBytes (string, units) {
-    units = units || Infinity
-    let codePoint
-    const length = string.length
-    let leadSurrogate = null
-    const bytes = []
-
-    for (let i = 0; i < length; ++i) {
-        codePoint = string.charCodeAt(i)
-
-        // is surrogate component
-        if (codePoint > 0xD7FF && codePoint < 0xE000) {
-            // last char was a lead
-            if (!leadSurrogate) {
-                // no lead yet
-                if (codePoint > 0xDBFF) {
-                    // unexpected trail
-                    if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
-                    continue
-                } else if (i + 1 === length) {
-                    // unpaired lead
-                    if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
-                    continue
-                }
-
-                // valid lead
-                leadSurrogate = codePoint
-
-                continue
-            }
-
-            // 2 leads in a row
-            if (codePoint < 0xDC00) {
-                if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
-                leadSurrogate = codePoint
-                continue
-            }
-
-            // valid surrogate pair
-            codePoint = (leadSurrogate - 0xD800 << 10 | codePoint - 0xDC00) + 0x10000
-        } else if (leadSurrogate) {
-            // valid bmp char, but last char was a lead
-            if ((units -= 3) > -1) bytes.push(0xEF, 0xBF, 0xBD)
-        }
-
-        leadSurrogate = null
-
-        // encode utf8
-        if (codePoint < 0x80) {
-            if ((units -= 1) < 0) break
-            bytes.push(codePoint)
-        } else if (codePoint < 0x800) {
-            if ((units -= 2) < 0) break
-            bytes.push(
-                codePoint >> 0x6 | 0xC0,
-                codePoint & 0x3F | 0x80
-            )
-        } else if (codePoint < 0x10000) {
-            if ((units -= 3) < 0) break
-            bytes.push(
-                codePoint >> 0xC | 0xE0,
-                codePoint >> 0x6 & 0x3F | 0x80,
-                codePoint & 0x3F | 0x80
-            )
-        } else if (codePoint < 0x110000) {
-            if ((units -= 4) < 0) break
-            bytes.push(
-                codePoint >> 0x12 | 0xF0,
-                codePoint >> 0xC & 0x3F | 0x80,
-                codePoint >> 0x6 & 0x3F | 0x80,
-                codePoint & 0x3F | 0x80
-            )
-        } else {
-            throw new Error('Invalid code point')
-        }
-    }
-
-    return bytes
 }
 
 function asciiToBytes (str) {

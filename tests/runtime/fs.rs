@@ -47,6 +47,18 @@ async fn fs_async(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<
 }
 
 #[test]
+async fn fs_read_sync_bulk_copy(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    assert_eq!(
+        instance
+            .invoke(None, "test-read-sync-bulk-copy", &[])
+            .await?,
+        Some(Val::Bool(true))
+    );
+    Ok(())
+}
+
+#[test]
 async fn fs_read_file_sync_fast_path(
     #[tagged_as("fs")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
