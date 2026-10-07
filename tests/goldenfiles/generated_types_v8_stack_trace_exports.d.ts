@@ -12,4 +12,6 @@ declare module 'v8-stack-trace' {
   export function testConstructorOpt(): Promise<boolean>;
   export function testStackTraceLimit(): Promise<boolean>;
   export function testDepdPattern(): Promise<boolean>;
+  export function testPreparedStackCacheDoesNotRetainErrors(): Promise<boolean>;
+  export function testPreparedStackCacheDoesNotRetainCustomCycles(): Promise<boolean>;
 }

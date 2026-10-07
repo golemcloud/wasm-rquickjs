@@ -18,6 +18,72 @@ export const testCaptureStackTraceExists = () => {
     }
 };
 
+async function checkPreparedStackCacheLifetime(customStack) {
+    const descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    let hookCalls = 0;
+    try {
+        assert.strictEqual(typeof globalThis.gc, 'function');
+        if (customStack) {
+            Error.prepareStackTrace = error => {
+                hookCalls++;
+                // Exercise the weak-key/value-to-key cycle as well as strings.
+                return { error, message: error.message };
+            };
+        }
+        const held = Array.from({ length: 8 }, (_, i) => new Error(`held-${i}`));
+        const heldStacks = held.map(error => error.stack);
+        function discardedErrors() {
+            return Array.from({ length: 64 }, () => {
+                const error = new Error('discarded');
+                error.self = error;
+                void error.stack;
+                return new WeakRef(error);
+            });
+        }
+        function discardedPlainCycles() {
+            return Array.from({ length: 64 }, () => {
+                const object = {};
+                object.self = object;
+                return new WeakRef(object);
+            });
+        }
+        const errors = discardedErrors();
+        const plain = discardedPlainCycles();
+        const callsBeforeGc = hookCalls;
+        const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+        // End the allocation job before collecting. The runtime defers its
+        // native collector to a timer, keeping it off async-generator stacks.
+        await tick();
+        for (let i = 0; i < 3; i++) {
+            globalThis.gc();
+            await tick();
+            await tick();
+        }
+        assert.strictEqual(plain.filter(ref => ref.deref() === undefined).length, 64,
+            'GC positive control must collect plain cycles');
+        assert.strictEqual(errors.filter(ref => ref.deref() === undefined).length, 64,
+            'private prepared-stack cache must not retain discarded errors');
+        for (let i = 0; i < held.length; i++) {
+            assert.strictEqual(held[i].stack, heldStacks[i]);
+            if (customStack) assert.strictEqual(held[i].stack.error, held[i]);
+            else assert(held[i].stack.includes(`held-${i}`));
+        }
+        assert.strictEqual(hookCalls, callsBeforeGc, 'held stacks remain cached across GC');
+        return true;
+    } finally {
+        if (descriptor) Object.defineProperty(Error, 'prepareStackTrace', descriptor);
+        else delete Error.prepareStackTrace;
+    }
+}
+
+export async function testPreparedStackCacheDoesNotRetainErrors() {
+    return await checkPreparedStackCacheLifetime(false);
+}
+
+export async function testPreparedStackCacheDoesNotRetainCustomCycles() {
+    return await checkPreparedStackCacheLifetime(true);
+}
+
 // Test 2: Basic Error.captureStackTrace usage — sets .stack on target
 export const testCaptureStackTraceBasic = () => {
     try {
