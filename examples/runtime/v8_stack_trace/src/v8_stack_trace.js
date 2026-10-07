@@ -51,18 +51,38 @@ async function checkPreparedStackCacheLifetime(customStack) {
             });
         }
         function discardedPublicWeakEntries() {
-            const mapKey = { marker: 'public-map-key' };
-            const mapValue = { mapKey };
-            const setValue = { marker: 'public-set-value' };
-            setValue.self = setValue;
-            publicWeakMap.set(mapKey, mapValue);
-            publicWeakSet.add(setValue);
+            const refs = [];
+            for (let i = 0; i < 32; i++) {
+                const mapKey = { marker: `public-map-key-${i}` };
+                const mapValue = { mapKey };
+                const setValue = { marker: `public-set-value-${i}` };
+                setValue.self = setValue;
+                publicWeakMap.set(mapKey, mapValue);
+                publicWeakSet.add(setValue);
+                refs.push(new WeakRef(mapKey), new WeakRef(setValue));
+            }
             assert.match(inspect(publicWeakMap, { showHidden: true }), /public-map-key/);
             assert.match(inspect(publicWeakSet, { showHidden: true }), /public-set-value/);
-            return [new WeakRef(mapKey), new WeakRef(setValue)];
+            return refs;
         }
         const publicWeakMap = new WeakMap();
         const publicWeakSet = new WeakSet();
+        const liveMapKey = { marker: 'live-map-key' };
+        const readdedMapKey = { marker: 'readded-map-key' };
+        const currentMapValue = { marker: 'current-map-value' };
+        const currentReaddedMapValue = { marker: 'current-readded-map-value' };
+        const liveSetValue = { marker: 'live-set-value' };
+        const readdedSetValue = { marker: 'readded-set-value' };
+        publicWeakMap.set(liveMapKey, { marker: 'stale-map-value' });
+        publicWeakMap.set(liveMapKey, currentMapValue);
+        publicWeakMap.set(readdedMapKey, { marker: 'stale-readded-map-value' });
+        publicWeakMap.delete(readdedMapKey);
+        publicWeakMap.set(readdedMapKey, currentReaddedMapValue);
+        publicWeakSet.add(liveSetValue);
+        publicWeakSet.add(liveSetValue);
+        publicWeakSet.add(readdedSetValue);
+        publicWeakSet.delete(readdedSetValue);
+        publicWeakSet.add(readdedSetValue);
         const errors = discardedErrors();
         const plain = discardedPlainCycles();
         const publicWeakEntries = discardedPublicWeakEntries();
@@ -80,10 +100,24 @@ async function checkPreparedStackCacheLifetime(customStack) {
             'GC positive control must collect plain cycles');
         assert.strictEqual(errors.filter(ref => ref.deref() === undefined).length, 64,
             'private prepared-stack cache must not retain discarded errors');
-        assert.strictEqual(publicWeakEntries.filter(ref => ref.deref() === undefined).length, 2,
+        assert.strictEqual(publicWeakEntries.filter(ref => ref.deref() === undefined).length, 64,
             'inspection bookkeeping must not retain public weak entries');
-        assert.doesNotMatch(inspect(publicWeakMap, { showHidden: true }), /public-map-key/);
-        assert.doesNotMatch(inspect(publicWeakSet, { showHidden: true }), /public-set-value/);
+        assert.strictEqual(publicWeakMap.get(liveMapKey), currentMapValue);
+        assert.strictEqual(publicWeakMap.get(readdedMapKey), currentReaddedMapValue);
+        assert.strictEqual(publicWeakSet.has(liveSetValue), true);
+        assert.strictEqual(publicWeakSet.has(readdedSetValue), true);
+        const inspectedWeakMap = inspect(publicWeakMap, { showHidden: true });
+        const inspectedWeakSet = inspect(publicWeakSet, { showHidden: true });
+        assert.doesNotMatch(inspectedWeakMap, /public-map-key/);
+        assert.doesNotMatch(inspectedWeakSet, /public-set-value/);
+        assert.match(inspectedWeakMap, /current-map-value/);
+        assert.match(inspectedWeakMap, /current-readded-map-value/);
+        assert.doesNotMatch(inspectedWeakMap, /stale-map-value/);
+        assert.doesNotMatch(inspectedWeakMap, /stale-readded-map-value/);
+        assert.strictEqual(inspectedWeakMap.match(/live-map-key/g)?.length, 1);
+        assert.strictEqual(inspectedWeakMap.match(/readded-map-key/g)?.length, 1);
+        assert.strictEqual(inspectedWeakSet.match(/live-set-value/g)?.length, 1);
+        assert.strictEqual(inspectedWeakSet.match(/readded-set-value/g)?.length, 1);
         for (let i = 0; i < held.length; i++) {
             assert.strictEqual(held[i].stack, heldStacks[i]);
             if (customStack) assert.strictEqual(held[i].stack.error, held[i]);

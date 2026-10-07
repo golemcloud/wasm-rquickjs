@@ -1,5 +1,10 @@
 import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
-import { nativeWeakMapSet } from "__wasm_rquickjs_builtin/internal/binding/util";
+import {
+    nativeWeakMapDelete,
+    nativeWeakMapGet,
+    nativeWeakMapHas,
+    nativeWeakMapSet,
+} from "__wasm_rquickjs_builtin/internal/weak_collections";
 
 // ---------------------------------------------------------------------------
 // V8-compatible CallSite objects
@@ -127,15 +132,15 @@ const nativeCallSiteCaptures = new WeakMap();
 
 function _captureNativeCallSites(error, callSites) {
     if (error && (typeof error === 'object' || typeof error === 'function')) {
-        nativeCallSiteCaptures.set(error, callSites);
+        nativeWeakMapSet(nativeCallSiteCaptures, error, callSites);
     }
     return '';
 }
 
 function _takeNativeCallSites(error) {
-    const callSites = nativeCallSiteCaptures.get(error);
+    const callSites = nativeWeakMapGet(nativeCallSiteCaptures, error);
     if (!callSites) return undefined;
-    nativeCallSiteCaptures.delete(error);
+    nativeWeakMapDelete(nativeCallSiteCaptures, error);
     return callSites;
 }
 
@@ -240,13 +245,13 @@ const preparedNativeStacks = new WeakMap();
 export function isPreparedNativeStack(error, stack) {
     return error !== null &&
         (typeof error === 'object' || typeof error === 'function') &&
-        preparedNativeStacks.get(error) === stack;
+        nativeWeakMapGet(preparedNativeStacks, error) === stack;
 }
 
 function _dispatchPrepareStackTrace(error, callSites) {
     if (error && (typeof error === 'object' || typeof error === 'function') &&
-        preparedNativeStacks.has(error)) {
-        return preparedNativeStacks.get(error);
+        nativeWeakMapHas(preparedNativeStacks, error)) {
+        return nativeWeakMapGet(preparedNativeStacks, error);
     }
     const prepare = NativeError.prepareStackTrace;
     const result = typeof prepare === 'function'
