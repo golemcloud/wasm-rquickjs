@@ -55,17 +55,23 @@ fn zlib_compress_sync_impl(data: &[u8], level: i32, window_bits: i32) -> Option<
 enum SyncDecompressError {
     Buffer,
     #[cfg(feature = "brotli")]
-    Brotli { code: String, errno: i32 },
+    Brotli {
+        code: String,
+        errno: i32,
+    },
     Data(String),
     Generic,
 }
 
-/// Decompress multi-member gzip data, handling trailing null bytes and
-/// detecting invalid gzip headers (e.g. unknown compression method).
+/// Decompress multi-member gzip data, handling zero-prefixed trailing padding
+/// and detecting invalid gzip headers (e.g. unknown compression method).
 fn gzip_decompress_multi_member(
     data: &[u8],
-    allow_partial: bool,
+    finish_flush: i32,
+    auto_detect: bool,
 ) -> Result<Vec<u8>, SyncDecompressError> {
+    let allow_partial = finish_flush != 4;
+    let stop_at_block = finish_flush == 5;
     if data.is_empty() {
         return if allow_partial {
             Ok(Vec::new())
@@ -81,8 +87,9 @@ fn gzip_decompress_multi_member(
         let pos = cursor.position() as usize;
         let remaining = &data[pos..];
 
-        // Node ignores zero padding after at least one complete gzip member.
-        if members_decoded > 0 && remaining.iter().all(|&byte| byte == 0) {
+        // Node treats any suffix beginning with zero after a complete member as
+        // gzip padding, including a zero followed by otherwise non-padding data.
+        if members_decoded > 0 && remaining[0] == 0 {
             break;
         }
 
@@ -94,16 +101,31 @@ fn gzip_decompress_multi_member(
             };
         }
 
-        // Need at least 2 bytes for gzip magic
-        if remaining.len() < 2 || remaining[0] != 0x1f || remaining[1] != 0x8b {
-            break;
+        if remaining[0] != 0x1f || remaining[1] != 0x8b {
+            let message = if auto_detect && remaining[0] == 0x1f {
+                "unknown compression method"
+            } else {
+                "incorrect header check"
+            };
+            return Err(SyncDecompressError::Data(message.to_string()));
         }
 
-        // Gzip header byte 2 is the compression method (must be 8 = deflate)
-        if remaining.len() >= 3 && remaining[2] != 8 {
+        // Gzip header byte 2 is the compression method (must be 8 = deflate).
+        // Node needs the following flags byte before it validates the method.
+        if remaining.len() >= 4 && remaining[2] != 8 {
             return Err(SyncDecompressError::Data(
                 "unknown compression method".to_string(),
             ));
+        }
+        if remaining.len() >= 4 && remaining[3] & 0xe0 != 0 {
+            return Err(SyncDecompressError::Data(
+                "unknown header flags set".to_string(),
+            ));
+        }
+        // Z_BLOCK stops at the boundary after a valid gzip header, before the
+        // first deflate block produces output or any later member is examined.
+        if stop_at_block && remaining.len() >= 4 {
+            return Ok(output);
         }
 
         let mut decoder = flate2::bufread::GzDecoder::new(&mut cursor);
@@ -157,12 +179,11 @@ fn zlib_decompress_sync_impl(
     window_bits: i32,
     finish_flush: i32,
 ) -> Result<Vec<u8>, SyncDecompressError> {
-    let allow_partial = finish_flush != 4;
     if window_bits >= 24 {
-        gzip_decompress_multi_member(data, allow_partial)
+        gzip_decompress_multi_member(data, finish_flush, false)
     } else if window_bits == 0 {
         if data.len() < 2 || data.first() == Some(&0x1f) {
-            gzip_decompress_multi_member(data, allow_partial)
+            gzip_decompress_multi_member(data, finish_flush, true)
         } else {
             inflate_sync(data, true, finish_flush)
         }

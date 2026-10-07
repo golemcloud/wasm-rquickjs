@@ -78,6 +78,22 @@ function expectZBufError(operation, label) {
   }
 }
 
+function expectZDataError(operation, label, message = 'incorrect header check') {
+  let error;
+  try {
+    operation();
+  } catch (caught) {
+    error = caught;
+  }
+  if (error?.code !== 'Z_DATA_ERROR' || error.errno !== -3 ||
+      error.message !== message) {
+    throw new Error(
+      `${label} did not report Z_DATA_ERROR: ` +
+      `${error?.code}/${error?.errno}/${error?.message}`,
+    );
+  }
+}
+
 function expectBrotliDecodeError(
   operation,
   label,
@@ -260,14 +276,64 @@ export async function testByteTransfer() {
     -4,
   );
 
-  const gzipWithPadding = gzipSync(partialSource);
-  if (!gunzipSync(Buffer.concat([gzipWithPadding, Buffer.from([0])])).equals(partialSource)) {
-    throw new Error('single-byte gzip zero padding');
+  const gzipWithSuffix = gzipSync(partialSource);
+  for (const [decompress, label, invalidMagicMessage] of [
+    [gunzipSync, 'gunzip', 'incorrect header check'],
+    [unzipSync, 'unzip', 'unknown compression method'],
+  ]) {
+    for (const suffix of [Buffer.from([0]), Buffer.from([0, 1])]) {
+      const output = decompress(Buffer.concat([gzipWithSuffix, suffix]));
+      if (!output.equals(partialSource)) {
+        throw new Error(`${label} rejected zero-prefixed gzip padding`);
+      }
+    }
+    const incompleteMemberSuffixes = [
+      Buffer.from([1]),
+      Buffer.from([0x1f]),
+      Buffer.from([0x1f, 0x8b]),
+      Buffer.from([0x1f, 0x8b, 0]),
+    ];
+    for (const suffix of incompleteMemberSuffixes) {
+      expectZBufError(
+        () => decompress(Buffer.concat([gzipWithSuffix, suffix])),
+        `${label} incomplete next gzip member`,
+      );
+    }
+    expectZDataError(
+      () => decompress(Buffer.concat([gzipWithSuffix, Buffer.from([1, 2])])),
+      `${label} non-padding gzip suffix`,
+    );
+    expectZDataError(
+      () => decompress(Buffer.concat([gzipWithSuffix, Buffer.from([0x1f, 0])])),
+      `${label} invalid next gzip magic`,
+      invalidMagicMessage,
+    );
+    expectZDataError(
+      () => decompress(Buffer.concat([gzipWithSuffix, Buffer.from([0x1f, 0x8b, 0, 0])])),
+      `${label} invalid next gzip method`,
+      'unknown compression method',
+    );
+    expectZDataError(
+      () => decompress(Buffer.concat([gzipWithSuffix, Buffer.from([0x1f, 0x8b, 8, 0x20])])),
+      `${label} invalid next gzip flags`,
+      'unknown header flags set',
+    );
+
+    const blockOutput = decompress(
+      Buffer.concat([gzipWithSuffix, Buffer.from([1, 2])]),
+      { finishFlush: constants.Z_BLOCK },
+    );
+    if (blockOutput.length !== 0) {
+      throw new Error(`${label} Z_BLOCK produced gzip payload bytes`);
+    }
+    expectZDataError(
+      () => decompress(Buffer.from([0x1f, 0x8b, 0, 0]), {
+        finishFlush: constants.Z_BLOCK,
+      }),
+      `${label} Z_BLOCK invalid gzip method`,
+      'unknown compression method',
+    );
   }
-  expectZBufError(
-    () => gunzipSync(Buffer.concat([gzipWithPadding, Buffer.from([0x1f])])),
-    'incomplete next gzip member',
-  );
 
   const OriginalError = globalThis.Error;
   try {
