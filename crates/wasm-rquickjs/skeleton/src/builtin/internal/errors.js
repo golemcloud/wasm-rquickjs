@@ -253,7 +253,7 @@ function _dispatchPrepareStackTrace(error, callSites) {
         ? prepare(error, callSites.map(_toCompatibleCallSite))
         : _prepareSourceMappedStack(error, callSites);
     if (error && (typeof error === 'object' || typeof error === 'function')) {
-        nativeWeakMapSet.call(preparedNativeStacks, error, result);
+        nativeWeakMapSet(preparedNativeStacks, error, result);
     }
     return result;
 }

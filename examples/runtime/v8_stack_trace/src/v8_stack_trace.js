@@ -47,8 +47,22 @@ async function checkPreparedStackCacheLifetime(customStack) {
                 return new WeakRef(object);
             });
         }
+        function discardedPublicWeakEntries() {
+            const mapKey = { marker: 'public-map-key' };
+            const mapValue = { mapKey };
+            const setValue = { marker: 'public-set-value' };
+            setValue.self = setValue;
+            publicWeakMap.set(mapKey, mapValue);
+            publicWeakSet.add(setValue);
+            assert.match(inspect(publicWeakMap, { showHidden: true }), /public-map-key/);
+            assert.match(inspect(publicWeakSet, { showHidden: true }), /public-set-value/);
+            return [new WeakRef(mapKey), new WeakRef(setValue)];
+        }
+        const publicWeakMap = new WeakMap();
+        const publicWeakSet = new WeakSet();
         const errors = discardedErrors();
         const plain = discardedPlainCycles();
+        const publicWeakEntries = discardedPublicWeakEntries();
         const callsBeforeGc = hookCalls;
         const tick = () => new Promise(resolve => setTimeout(resolve, 0));
         // End the allocation job before collecting. The runtime defers its
@@ -63,10 +77,18 @@ async function checkPreparedStackCacheLifetime(customStack) {
             'GC positive control must collect plain cycles');
         assert.strictEqual(errors.filter(ref => ref.deref() === undefined).length, 64,
             'private prepared-stack cache must not retain discarded errors');
+        assert.strictEqual(publicWeakEntries.filter(ref => ref.deref() === undefined).length, 2,
+            'inspection bookkeeping must not retain public weak entries');
+        assert.doesNotMatch(inspect(publicWeakMap, { showHidden: true }), /public-map-key/);
+        assert.doesNotMatch(inspect(publicWeakSet, { showHidden: true }), /public-set-value/);
         for (let i = 0; i < held.length; i++) {
             assert.strictEqual(held[i].stack, heldStacks[i]);
             if (customStack) assert.strictEqual(held[i].stack.error, held[i]);
-            else assert(held[i].stack.includes(`held-${i}`));
+            else {
+                assert(held[i].stack.includes(`held-${i}`));
+                held[i].name = 404;
+                assert.match(inspect(held[i]), new RegExp(`^404 \\[Error\\]: held-${i}(?:\\n|$)`));
+            }
         }
         assert.strictEqual(hookCalls, callsBeforeGc, 'held stacks remain cached across GC');
         return true;
