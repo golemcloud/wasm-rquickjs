@@ -113,3 +113,25 @@ async fn timeout_3(#[tagged_as("timeout")] compiled: &CompiledTest) -> anyhow::R
 
     Ok(())
 }
+
+#[test]
+async fn runtime_idle_wait_uses_export_liveness_boundary(
+    #[tagged_as("timeout")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "await-runtime-idle", &[]).await;
+    let _ = r?;
+
+    assert_eq!(
+        output,
+        indoc!(
+            r#"
+            before idle
+            referenced timer
+            after idle
+        "#
+        )
+    );
+
+    Ok(())
+}

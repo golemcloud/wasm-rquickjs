@@ -101,6 +101,8 @@ jobs:
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
       - name: Local test profile contracts
         run: cargo test --test dev_test_profiles $CI_WASMTIME_FORK_FEATURES
+      - name: Optimizer copy budget contracts (Golem fork)
+        run: cargo test --test optimize $CI_WASMTIME_FORK_FEATURES
       - name: Node compatibility parser contracts
         run: cargo test --test js_subtest_parser $CI_WASMTIME_FORK_FEATURES -- --report-time
       - name: Module loader architecture contracts
@@ -229,6 +231,8 @@ jobs:
         # These are ordinary libtest tests (default harness), so they do not take
         # the test-r `--format ctrf` reporter flags used by the other jobs.
         run: cargo test --test p3_generation --test p3_exported_resource --test p3_async_values
+      - name: Optimizer copy budget contracts (stock Wasmtime)
+        run: cargo test --test optimize
 
   # The full runtime suite, run against the WASI Preview 3 generation path (async component
   # exports, Component Model async host) instead of Preview 2. Runs *every* runtime test — there is

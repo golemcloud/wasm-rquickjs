@@ -80,7 +80,7 @@ mod wit;
 
 pub use inject::{SLOT_END_MAGIC, SLOT_MAGIC, create_marker_file, inject_js_into_component};
 #[cfg(feature = "optimize")]
-pub use optimize::optimize_component;
+pub use optimize::{OptimizeOptions, optimize_component, optimize_component_with_options};
 
 /// Write `contents` to `path` only if the file doesn't exist or its current content differs.
 /// This preserves file timestamps when content hasn't changed, avoiding unnecessary recompilation.

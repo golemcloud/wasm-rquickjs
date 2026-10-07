@@ -15,4 +15,5 @@ declare module 'fs' {
   export function testUnlinkSync(): Promise<void>;
   export function testUnlinkCallback(): Promise<void>;
   export function testReadFileSyncFastPath(): Promise<string>;
+  export function testReadSyncBulkCopy(): Promise<boolean>;
 }

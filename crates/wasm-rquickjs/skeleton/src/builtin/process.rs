@@ -1,7 +1,7 @@
 // Native functions for the process implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::Ctx;
+    use rquickjs::{Ctx, Persistent, Promise};
     use std::collections::HashMap;
     use std::path::Path;
     use std::time::Instant;
@@ -104,6 +104,29 @@ pub mod native_module {
         } else {
             None
         }
+    }
+
+    /// Returns a promise that resolves once every referenced task scheduled by the current
+    /// component runtime has reached quiescence. Unlike a timer-based approximation, the wait is
+    /// driven by the same runtime boundary used after an exported function returns.
+    #[rquickjs::function]
+    pub fn await_runtime_idle<'js>(ctx: Ctx<'js>) -> rquickjs::Result<Promise<'js>> {
+        let services = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized");
+        if !services.execution_enabled.get() {
+            return Err(rquickjs::Exception::throw_message(
+                &ctx,
+                "runtime idle waits are only available in the component runtime",
+            ));
+        }
+
+        let (promise, resolve, reject) = Promise::new(&ctx)?;
+        crate::internal::spawn_runtime_idle_waiter(
+            Persistent::save(&ctx, resolve),
+            Persistent::save(&ctx, reject),
+        );
+        Ok(promise)
     }
 }
 

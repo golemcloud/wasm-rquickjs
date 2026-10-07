@@ -29,6 +29,17 @@ import {
     get_promise_details as getPromiseDetailsNative,
     get_proxy_details as getProxyDetailsNative,
 } from "__wasm_rquickjs_builtin/internal/binding/util_native";
+import {
+    NativeWeakRef,
+    nativeWeakMapDelete,
+    nativeWeakMapGet,
+    nativeWeakMapHas,
+    nativeWeakMapSet,
+    nativeWeakRefDeref,
+    nativeWeakSetAdd,
+    nativeWeakSetDelete,
+    nativeWeakSetHas,
+} from "__wasm_rquickjs_builtin/internal/weak_collections";
 
 const privateSymbolRegistryKey = "__wasm_rquickjs_internal_private_symbols";
 
@@ -121,81 +132,87 @@ export const SKIP_SYMBOLS = 16;
 const previewEntriesCache = new WeakMap();
 const weakMapEntriesCache = new WeakMap();
 const weakSetEntriesCache = new WeakMap();
+const minimumWeakEntryCompactionInterval = 16;
+
+function createWeakEntryState() {
+    return {
+        refs: [],
+        additionsSinceCompaction: 0,
+        compactionInterval: minimumWeakEntryCompactionInterval,
+    };
+}
+
+function compactWeakEntryState(state, removedValue) {
+    const refs = state.refs;
+    let next = 0;
+    for (let i = 0; i < refs.length; i++) {
+        const ref = refs[i];
+        const value = nativeWeakRefDeref(ref);
+        if (value !== undefined && value !== removedValue) {
+            refs[next++] = ref;
+        }
+    }
+    refs.length = next;
+    state.additionsSinceCompaction = 0;
+    state.compactionInterval = refs.length > minimumWeakEntryCompactionInterval
+        ? refs.length
+        : minimumWeakEntryCompactionInterval;
+}
+
+function trackWeakEntry(cache, collection, value) {
+    let state = nativeWeakMapGet(cache, collection);
+    if (state === undefined) {
+        state = createWeakEntryState();
+        nativeWeakMapSet(cache, collection, state);
+    }
+
+    state.refs[state.refs.length] = new NativeWeakRef(value);
+    state.additionsSinceCompaction++;
+    if (state.additionsSinceCompaction >= state.compactionInterval) {
+        compactWeakEntryState(state, undefined);
+    }
+}
+
+function removeWeakEntry(cache, collection, value) {
+    const state = nativeWeakMapGet(cache, collection);
+    if (state !== undefined) {
+        compactWeakEntryState(state, value);
+    }
+}
 
 if (typeof WeakMap === "function") {
-    const weakMapSet = WeakMap.prototype.set;
-    const weakMapDelete = WeakMap.prototype.delete;
-
     WeakMap.prototype.set = function set(key, value) {
-        const result = weakMapSet.call(this, key, value);
-        let entries = weakMapEntriesCache.get(this);
-        if (entries === undefined) {
-            entries = [];
-            weakMapEntriesCache.set(this, entries);
+        const alreadyPresent = nativeWeakMapHas(this, key);
+        const result = nativeWeakMapSet(this, key, value);
+        if (!alreadyPresent) {
+            trackWeakEntry(weakMapEntriesCache, this, key);
         }
-
-        for (let i = 0; i < entries.length; i++) {
-            if (Object.is(entries[i][0], key)) {
-                entries[i][1] = value;
-                return result;
-            }
-        }
-
-        entries.push([key, value]);
         return result;
     };
 
     WeakMap.prototype.delete = function del(key) {
-        const deleted = weakMapDelete.call(this, key);
+        const deleted = nativeWeakMapDelete(this, key);
         if (deleted) {
-            const entries = weakMapEntriesCache.get(this);
-            if (entries !== undefined) {
-                for (let i = 0; i < entries.length; i++) {
-                    if (Object.is(entries[i][0], key)) {
-                        entries.splice(i, 1);
-                        break;
-                    }
-                }
-            }
+            removeWeakEntry(weakMapEntriesCache, this, key);
         }
         return deleted;
     };
 }
 
 if (typeof WeakSet === "function") {
-    const weakSetAdd = WeakSet.prototype.add;
-    const weakSetDelete = WeakSet.prototype.delete;
-
     WeakSet.prototype.add = function add(value) {
-        const result = weakSetAdd.call(this, value);
-        let entries = weakSetEntriesCache.get(this);
-        if (entries === undefined) {
-            entries = [];
-            weakSetEntriesCache.set(this, entries);
+        const alreadyPresent = nativeWeakSetHas(this, value);
+        const result = nativeWeakSetAdd(this, value);
+        if (!alreadyPresent) {
+            trackWeakEntry(weakSetEntriesCache, this, value);
         }
-
-        for (let i = 0; i < entries.length; i++) {
-            if (Object.is(entries[i], value)) {
-                return result;
-            }
-        }
-
-        entries.push(value);
         return result;
     };
 
     WeakSet.prototype.delete = function del(value) {
-        const deleted = weakSetDelete.call(this, value);
+        const deleted = nativeWeakSetDelete(this, value);
         if (deleted) {
-            const entries = weakSetEntriesCache.get(this);
-            if (entries !== undefined) {
-                for (let i = 0; i < entries.length; i++) {
-                    if (Object.is(entries[i], value)) {
-                        entries.splice(i, 1);
-                        break;
-                    }
-                }
-            }
+            removeWeakEntry(weakSetEntriesCache, this, value);
         }
         return deleted;
     };
@@ -206,25 +223,55 @@ const originalObjectSetPrototypeOf = Object.setPrototypeOf;
 const originalReflectSetPrototypeOf = Reflect.setPrototypeOf;
 
 export function getWeakMapEntries(value) {
-    const pairs = weakMapEntriesCache.get(value);
-    if (!Array.isArray(pairs)) {
+    const state = nativeWeakMapGet(weakMapEntriesCache, value);
+    if (state === undefined) {
         return [];
     }
 
+    const refs = state.refs;
     const entries = [];
-    for (let i = 0; i < pairs.length; i++) {
-        entries.push(pairs[i][0], pairs[i][1]);
+    let next = 0;
+    for (let i = 0; i < refs.length; i++) {
+        const ref = refs[i];
+        const key = nativeWeakRefDeref(ref);
+        if (key === undefined) {
+            continue;
+        }
+        refs[next++] = ref;
+        entries.push(key, nativeWeakMapGet(value, key));
     }
+    refs.length = next;
+    state.additionsSinceCompaction = 0;
+    state.compactionInterval = refs.length > minimumWeakEntryCompactionInterval
+        ? refs.length
+        : minimumWeakEntryCompactionInterval;
     return entries;
 }
 
 export function getWeakSetEntries(value) {
-    const entries = weakSetEntriesCache.get(value);
-    if (!Array.isArray(entries)) {
+    const state = nativeWeakMapGet(weakSetEntriesCache, value);
+    if (state === undefined) {
         return [];
     }
 
-    return entries.slice();
+    const refs = state.refs;
+    const entries = [];
+    let next = 0;
+    for (let i = 0; i < refs.length; i++) {
+        const ref = refs[i];
+        const entry = nativeWeakRefDeref(ref);
+        if (entry === undefined) {
+            continue;
+        }
+        refs[next++] = ref;
+        entries.push(entry);
+    }
+    refs.length = next;
+    state.additionsSinceCompaction = 0;
+    state.compactionInterval = refs.length > minimumWeakEntryCompactionInterval
+        ? refs.length
+        : minimumWeakEntryCompactionInterval;
+    return entries;
 }
 
 function isObjectLike(value) {
