@@ -25,7 +25,7 @@ import BufferList from "__wasm_rquickjs_builtin/internal/streams/buffer_list";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import { nextTick } from "node:process";
-import { isDestroyed, isReadable, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDestroyed, isReadable, kIsDuplex, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 
 let debug = debuglog("stream", (fn) => {
@@ -144,10 +144,12 @@ function ReadableState(options, stream, isDuplex) {
 }
 
 
-function Readable(options, isDuplex = false) {
+function Readable(options, duplexMarker) {
     if (!(this instanceof Readable)) {
         return new Readable(options);
     }
+
+    const isDuplex = duplexMarker === kIsDuplex;
 
     // Pre-initialize _events with well-known event slots to preserve
     // property insertion order (matching Node.js v22 behavior).

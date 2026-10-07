@@ -183,6 +183,8 @@ pub fn generate_wrapper_crate_with_target(
     world: Option<&str>,
     target: GenerationTarget,
 ) -> anyhow::Result<()> {
+    validate_js_module_names(js_modules)?;
+
     if target.is_p3() && uses_composition(js_modules) {
         anyhow::bail!(
             "Composition (@composition) JS modules are not supported by the WASI Preview 3 generation path yet"
@@ -745,4 +747,79 @@ fn uses_composition(js_module_spec: &[JsModuleSpec]) -> bool {
     js_module_spec
         .iter()
         .any(|m| matches!(m.mode, EmbeddingMode::Composition))
+}
+
+fn validate_js_module_names(js_modules: &[JsModuleSpec]) -> anyhow::Result<()> {
+    for (index, module) in js_modules.iter().enumerate() {
+        let reserved_namespace = if module.name.starts_with("node:") {
+            Some("node:")
+        } else if module.name.starts_with("__wasm_rquickjs_builtin/") {
+            Some("__wasm_rquickjs_builtin/")
+        } else {
+            None
+        };
+
+        if let Some(reserved_namespace) = reserved_namespace {
+            let position = if index == 0 { "primary" } else { "additional" };
+            anyhow::bail!(
+                "{position} JavaScript module name `{}` uses reserved runtime namespace `{reserved_namespace}`",
+                module.name
+            );
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
+    use camino::Utf8Path;
+    use camino_tempfile::Utf8TempDir;
+
+    fn module(name: &str) -> JsModuleSpec {
+        JsModuleSpec {
+            name: name.to_string(),
+            mode: EmbeddingMode::Composition,
+        }
+    }
+
+    #[test]
+    fn rejects_reserved_primary_javascript_module_name() {
+        let output = Utf8TempDir::new().unwrap();
+        let error = generate_wrapper_crate(
+            Utf8Path::new("unused-wit"),
+            &[module("node:crypto")],
+            &output.path().join("out"),
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "primary JavaScript module name `node:crypto` uses reserved runtime namespace `node:`"
+        );
+        assert!(!output.path().join("out").exists());
+    }
+
+    #[test]
+    fn rejects_reserved_additional_javascript_module_name() {
+        let output = Utf8TempDir::new().unwrap();
+        let error = generate_wrapper_crate(
+            Utf8Path::new("unused-wit"),
+            &[
+                module("main"),
+                module("__wasm_rquickjs_builtin/internal/test"),
+            ],
+            &output.path().join("out"),
+            None,
+        )
+        .unwrap_err();
+
+        assert_eq!(
+            error.to_string(),
+            "additional JavaScript module name `__wasm_rquickjs_builtin/internal/test` uses reserved runtime namespace `__wasm_rquickjs_builtin/`"
+        );
+        assert!(!output.path().join("out").exists());
+    }
 }

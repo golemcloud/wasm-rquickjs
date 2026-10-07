@@ -6,8 +6,6 @@ import { createRequire } from 'node:module';
 export const testModuleNameCollisions = () => {
     assert.strictEqual(applicationCrypto, 'application crypto module');
     assert.strictEqual(applicationMarker, 'application crypto module');
-    assert.strictEqual(globalThis.__reservedNodeCryptoModuleLoaded, undefined);
-
     const require = createRequire(import.meta.url);
     const requiredNodeCrypto = require('node:crypto');
     assert.strictEqual(require('crypto'), requiredNodeCrypto);

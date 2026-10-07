@@ -181,6 +181,18 @@ export async function testWritableToWeb() {
 
 // Duplex.fromWeb: convert a Web ReadableStream/WritableStream pair to Node.js Duplex
 export async function testDuplexFromWeb() {
+    const spoofedReadable = new Readable({
+        read() { },
+        readableObjectMode: true,
+    }, true);
+    assert.strictEqual(spoofedReadable.readableObjectMode, false);
+
+    const spoofedWritable = new Writable({
+        write(_chunk, _encoding, callback) { callback(); },
+        writableObjectMode: true,
+    }, true);
+    assert.strictEqual(spoofedWritable.writableObjectMode, false);
+
     const FakeDuplex = class Duplex extends Readable {};
     const controller = new AbortController();
     const fakeDuplex = new FakeDuplex({

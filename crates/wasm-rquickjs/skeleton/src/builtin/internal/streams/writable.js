@@ -20,7 +20,7 @@ import {
     ERR_STREAM_PREMATURE_CLOSE,
     AbortError,
 } from "__wasm_rquickjs_builtin/internal/errors";
-import { isDestroyed, isWritable, isWritableEnded, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDestroyed, isWritable, isWritableEnded, kIsDuplex, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
@@ -178,7 +178,9 @@ Object.defineProperty(WritableState.prototype, "bufferedRequestCount", {
     },
 });
 
-function Writable(options, isDuplex = false) {
+function Writable(options, duplexMarker) {
+    const isDuplex = duplexMarker === kIsDuplex;
+
     // Writable ctor is applied to Duplexes, too.
     // `realHasInstance` is necessary because using plain `instanceof`
     // would return false, as no `_writableState` property is attached.

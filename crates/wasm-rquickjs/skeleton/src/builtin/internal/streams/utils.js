@@ -5,6 +5,7 @@
 import { Buffer } from "buffer";
 
 const kIsDisturbed = Symbol("kIsDisturbed");
+const kIsDuplex = Symbol("kIsDuplex");
 
 function uint8ArrayToBuffer(chunk) {
     return Buffer.from(
@@ -275,6 +276,7 @@ export default {
     isDuplexNodeStream,
     isFinished,
     isIterable,
+    kIsDuplex,
     isReadable,
     isReadableNodeStream,
     isReadableStream,
@@ -316,6 +318,7 @@ export {
     isWritableFinished,
     isWritableNodeStream,
     isWritableStream,
+    kIsDuplex,
     kIsDisturbed,
     uint8ArrayToBuffer,
     willEmitClose,

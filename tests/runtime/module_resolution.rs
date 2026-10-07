@@ -16,16 +16,10 @@ async fn compiled_module_resolution() -> CompiledTest {
 #[test_dep(tagged_as = "module_name_collisions", scope = Cloneable)]
 async fn compiled_module_name_collisions() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/module-name-collisions");
-    let additional_modules = [
-        JsModuleSpec {
-            name: "crypto".to_string(),
-            mode: EmbeddingMode::EmbedFile(path.join("src/application-crypto.js")),
-        },
-        JsModuleSpec {
-            name: "node:crypto".to_string(),
-            mode: EmbeddingMode::EmbedFile(path.join("src/reserved-node-crypto.js")),
-        },
-    ];
+    let additional_modules = [JsModuleSpec {
+        name: "crypto".to_string(),
+        mode: EmbeddingMode::EmbedFile(path.join("src/application-crypto.js")),
+    }];
     CompiledTest::new_with_features_and_additional_modules(
         path,
         true,
