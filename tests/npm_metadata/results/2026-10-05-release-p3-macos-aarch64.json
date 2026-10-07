@@ -1,0 +1,3157 @@
+{
+  "component": {
+    "blake3": "e9508479d7621331563a5c4a6ce97c0c016ead5a5b92564cb9c1bc2face853ed",
+    "buildMs": 16813.323624999997,
+    "bytes": 13623349,
+    "initialPrepareMs": 242.28770799999998,
+    "path": "tmp/rt-target-p3/wasm32-wasip2/release/npm_compat.optimized.wasm"
+  },
+  "environment": {
+    "arch": "aarch64",
+    "artifactCache": null,
+    "cargo": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+    "commitHint": "5965bdb5416f6eca085856df383e73dffc2b7eb8",
+    "componentCargoProfile": "release",
+    "componentFeatures": "normal",
+    "dirty": false,
+    "harnessCargoProfile": "release",
+    "hostDependencyGraph": {
+      "kind": "workspace",
+      "lockBlake3": "c9db459789c19786118f80f13c58209d3713ba0198b1216674dab03347898b48"
+    },
+    "iterations": 5,
+    "lockedBuilds": "1",
+    "node": "22.14.0",
+    "npm": "10.9.2",
+    "os": "macos",
+    "preparedComponentCache": null,
+    "rustc": "rustc 1.98.1 (48a229cea 2026-09-01)",
+    "smoke": false,
+    "unoptimized": null,
+    "wasmtimeCache": null
+  },
+  "fixtures": {
+    "medium": {
+      "archiveFiles": 10070,
+      "binCount": 2,
+      "bins": {
+        "semver": {
+          "package": "semver",
+          "target": "bin/semver.js"
+        },
+        "uuid": {
+          "package": "uuid",
+          "target": "dist/esm/bin/uuid"
+        }
+      },
+      "dependencyEdgeCount": 6,
+      "directDependencies": [
+        "ajv",
+        "chalk",
+        "date-fns",
+        "debug",
+        "dotenv",
+        "lodash",
+        "ms",
+        "rxjs",
+        "semver",
+        "uuid",
+        "zod"
+      ],
+      "directDependencyCount": 11,
+      "name": "medium-local-registry",
+      "packageCount": 16,
+      "packageJsonBlake3": "d837d4efafa770ca9473ea8db731f9dee9027be24a545ac8afc153c7b630bdbe",
+      "packageLockBlake3": "7c18dd0b2862edc2a2c85acd632f22bca3698ce1b574e6d5acab9755813f830d",
+      "packages": {
+        "ajv": {
+          "bins": {},
+          "dependencies": {
+            "fast-deep-equal": "^3.1.3",
+            "fast-uri": "^3.0.1",
+            "json-schema-traverse": "^1.0.0",
+            "require-from-string": "^2.0.2"
+          },
+          "integrity": "sha512-B/gBuNg5SiMTrPkC+A2+cW0RszwxYmn6VYxB/inlBStS5nx6xHIt/ehKRhIMhqusl7a8LjQoZnjCs5vhwxOQ1g==",
+          "resolvedPath": "/ajv/-/ajv-8.17.1.tgz",
+          "version": "8.17.1"
+        },
+        "chalk": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-zgVZuo2WcZgfUEmsn6eO3kINexW8RAE4maiQ8QNs8CtpPCSyMiYsULR3HQYkm3w8FIA3SberyMJMSldGsW+U3w==",
+          "resolvedPath": "/chalk/-/chalk-5.4.1.tgz",
+          "version": "5.4.1"
+        },
+        "date-fns": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==",
+          "resolvedPath": "/date-fns/-/date-fns-4.1.0.tgz",
+          "version": "4.1.0"
+        },
+        "debug": {
+          "bins": {},
+          "dependencies": {
+            "ms": "^2.1.3"
+          },
+          "integrity": "sha512-KcKCqiftBJcZr++7ykoDIEwSa3XWowTfNPo92BYxjXiyYEVrUQh2aLyhxBCwww+heortUFxEJYcRzosstTEBYQ==",
+          "resolvedPath": "/debug/-/debug-4.4.1.tgz",
+          "version": "4.4.1"
+        },
+        "dotenv": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==",
+          "resolvedPath": "/dotenv/-/dotenv-16.4.7.tgz",
+          "version": "16.4.7"
+        },
+        "fast-deep-equal": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
+          "resolvedPath": "/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+          "version": "3.1.3"
+        },
+        "fast-uri": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==",
+          "resolvedPath": "/fast-uri/-/fast-uri-3.1.4.tgz",
+          "version": "3.1.4"
+        },
+        "json-schema-traverse": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
+          "resolvedPath": "/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
+          "version": "1.0.0"
+        },
+        "lodash": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==",
+          "resolvedPath": "/lodash/-/lodash-4.17.21.tgz",
+          "version": "4.17.21"
+        },
+        "ms": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+          "resolvedPath": "/ms/-/ms-2.1.3.tgz",
+          "version": "2.1.3"
+        },
+        "require-from-string": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
+          "resolvedPath": "/require-from-string/-/require-from-string-2.0.2.tgz",
+          "version": "2.0.2"
+        },
+        "rxjs": {
+          "bins": {},
+          "dependencies": {
+            "tslib": "^2.1.0"
+          },
+          "integrity": "sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==",
+          "resolvedPath": "/rxjs/-/rxjs-7.8.2.tgz",
+          "version": "7.8.2"
+        },
+        "semver": {
+          "bins": {
+            "semver": "bin/semver.js"
+          },
+          "dependencies": {},
+          "integrity": "sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==",
+          "resolvedPath": "/semver/-/semver-7.7.2.tgz",
+          "version": "7.7.2"
+        },
+        "tslib": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+          "resolvedPath": "/tslib/-/tslib-2.8.1.tgz",
+          "version": "2.8.1"
+        },
+        "uuid": {
+          "bins": {
+            "uuid": "dist/esm/bin/uuid"
+          },
+          "dependencies": {},
+          "integrity": "sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==",
+          "resolvedPath": "/uuid/-/uuid-11.1.0.tgz",
+          "version": "11.1.0"
+        },
+        "zod": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==",
+          "resolvedPath": "/zod/-/zod-3.25.76.tgz",
+          "version": "3.25.76"
+        }
+      },
+      "seriesArguments": {
+        "ciSeed": [
+          "ci",
+          "--install-links",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund",
+          "--registry=<local>",
+          "--loglevel=http"
+        ],
+        "ciTimed": [
+          "ci",
+          "--offline",
+          "--install-links",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund",
+          "--registry=<local>",
+          "--loglevel=http"
+        ]
+      },
+      "tarballBytes": 5234352,
+      "tarballs": {
+        "ajv": {
+          "blake3": "4c1368425e9c1c8d945774e6a2149b03917c41dde72ebdf97faea1e241b88580",
+          "bytes": 217137,
+          "fileCount": 466,
+          "integrity": "sha512-B/gBuNg5SiMTrPkC+A2+cW0RszwxYmn6VYxB/inlBStS5nx6xHIt/ehKRhIMhqusl7a8LjQoZnjCs5vhwxOQ1g==",
+          "unpackedBytes": 1030888
+        },
+        "chalk": {
+          "blake3": "0678a9664be5a0463f58210b3ba7e3b0fde5d4945fbbcbc7f925d4ac0c2fb474",
+          "bytes": 13753,
+          "fileCount": 12,
+          "integrity": "sha512-zgVZuo2WcZgfUEmsn6eO3kINexW8RAE4maiQ8QNs8CtpPCSyMiYsULR3HQYkm3w8FIA3SberyMJMSldGsW+U3w==",
+          "unpackedBytes": 44242
+        },
+        "date-fns": {
+          "blake3": "c7c979aaeeb6015d76a4294bccb5a1762611f0e3ba9717cb7276cf026ce7ee39",
+          "bytes": 3201392,
+          "fileCount": 5326,
+          "integrity": "sha512-Ukq0owbQXxa/U3EGtsdVBkR1w7KOQ5gIBqdH2hkvknzZPYvBxb/aa6E8L7tmjFtkwZBu3UXBbjIgPo/Ez4xaNg==",
+          "unpackedBytes": 22601076
+        },
+        "debug": {
+          "blake3": "447c775bc586d3ec7cad265604da52ebe5a6c70e89d1709d54c9c0602d53e3c3",
+          "bytes": 13448,
+          "fileCount": 7,
+          "integrity": "sha512-KcKCqiftBJcZr++7ykoDIEwSa3XWowTfNPo92BYxjXiyYEVrUQh2aLyhxBCwww+heortUFxEJYcRzosstTEBYQ==",
+          "unpackedBytes": 42793
+        },
+        "dotenv": {
+          "blake3": "f1e3f0488d4bfd455034f53124f4b9e6ab6ee9e0bd2aadb2d0f5b8b047a4d233",
+          "bytes": 22638,
+          "fileCount": 11,
+          "integrity": "sha512-47qPchRCykZC03FhkYAhrvwU4xDBFIj1QPqaarj6mdM/hgUzfPHcpkHJOn3mJAufFeeAxAzeGsr5X0M4k6fLZQ==",
+          "unpackedBytes": 75773
+        },
+        "fast-deep-equal": {
+          "blake3": "9b72440d70100dd8e580a5cbd4b06c41188be22d1b5bdd1671ca309dcf8c8e19",
+          "bytes": 3656,
+          "fileCount": 11,
+          "integrity": "sha512-f3qQ9oQy9j2AhBe/H9VC91wLmKBCCU/gDOnKNAYG5hswO7BLKj09Hc5HYNz9cGI++xlpDCIgDaitVs03ATR84Q==",
+          "unpackedBytes": 12966
+        },
+        "fast-uri": {
+          "blake3": "74827bf8b73e09e311d0d5a9b482a958fb0b4ab416b4becc04f46e223716777e",
+          "bytes": 30556,
+          "fileCount": 34,
+          "integrity": "sha512-8JnbkQ4juDyvYs4mgFGQqg4yCYtFDtUtmp2QIQq11ZZe5CFQ5wcqm1rqDgAh/QdMySuBnPzMUiJUNZG5N/AiQw==",
+          "unpackedBytes": 160945
+        },
+        "json-schema-traverse": {
+          "blake3": "80fc5fb129eccbe7a17b03a3b1bc0291af538aa48d45a3be3bac3f5e73958ed3",
+          "bytes": 6074,
+          "fileCount": 12,
+          "integrity": "sha512-NM8/P9n3XjXhIZn1lLhkFaACTOURQXjWhV4BA/RnOv8xvgqtqpAX9IO4mRQxSx1Rlo4tqzeqb0sOlruaOy3dug==",
+          "unpackedBytes": 22220
+        },
+        "lodash": {
+          "blake3": "05bc17f3fdcd1aa993c637ab03733fe6786e5264d94efaee13bb93a139175d6a",
+          "bytes": 318961,
+          "fileCount": 1054,
+          "integrity": "sha512-v2kDEe57lecTulaDIuNTPy3Ry4gLGJ6Z1O3vE1krgXZNrsQ+LFTGHVxVjcXPs17LhbZVGedAJv8XZ1tvj5FvSg==",
+          "unpackedBytes": 1412415
+        },
+        "ms": {
+          "blake3": "97d5cfcfa8e6cd6501afca2a53a2ac054bcef22f80fa2031ebd78e27b4cf8bfe",
+          "bytes": 2967,
+          "fileCount": 4,
+          "integrity": "sha512-6FlzubTLZG3J2a/NVCAleEhjzq5oxgHyaCU9yYXvcLsvoVaHJq/s5xXI6/XXP6tz7R9xAOtHnSO/tXtF3WRTlA==",
+          "unpackedBytes": 6721
+        },
+        "require-from-string": {
+          "blake3": "05b21596860998e47f9008b94e39625af7acc51246d0461adf8b47bcbe79c592",
+          "bytes": 1816,
+          "fileCount": 4,
+          "integrity": "sha512-Xf0nWe6RseziFMu+Ap9biiUbmplq6S9/p+7w7YXP/JBHhrUDDUhwa+vANyubuqfZWTveU//DYVGsDG7RKL/vEw==",
+          "unpackedBytes": 3422
+        },
+        "rxjs": {
+          "blake3": "70274ec0674c8b33bcf6ecbcdbf72c052ce4fc9ca3eeabbc0535932ea377dd7b",
+          "bytes": 751525,
+          "fileCount": 2277,
+          "integrity": "sha512-dhKf903U/PQZY6boNNtAGdWbG85WAbjT/1xYoZIC7FAY0yWapOBQVsVrDl58W86//e1VpMNBtRV4MaXfdMySFA==",
+          "unpackedBytes": 4497673
+        },
+        "semver": {
+          "blake3": "29e43622c74562365ad08a5c68304e982703d9cca33f30b05bb1edcaad4a34b3",
+          "bytes": 28388,
+          "fileCount": 52,
+          "integrity": "sha512-RF0Fw+rO5AMf9MAyaRXI4AV0Ulj5lMHqVxxdSgiVbixSCXoEmmX/jk0CuJw4+3SqroYO9VoUh+HcuJivvtJemA==",
+          "unpackedBytes": 97420
+        },
+        "tslib": {
+          "blake3": "bcb3fa9e52660405566a8051002f7ba4bff6074ea1f3ca9dbf94910950d32752",
+          "bytes": 18477,
+          "fileCount": 14,
+          "integrity": "sha512-oJFu94HQb+KVduSUQL7wnpmqnfmLsOA/nAh6b6EH0wCEoK0/mPeXU6c3wKDV83MkOuHPRHtSXKKU99IBazS/2w==",
+          "unpackedBytes": 90359
+        },
+        "uuid": {
+          "blake3": "db1862ea67fcadb05c1253d3e0513d58988b1c887865a9a278885361aa6bb41b",
+          "bytes": 19964,
+          "fileCount": 190,
+          "integrity": "sha512-0/A9rDy9P7cJ+8w1c9WD9V//9Wj15Ce2MPz8Ri6032usz+NfePxx5AcN3bN+r6ZL6jEo066/yNYB3tn4pQEx+A==",
+          "unpackedBytes": 132894
+        },
+        "zod": {
+          "blake3": "f96900c38e5c1eadcfdc0d8fd486995aeb577225e4b6eb04ae1c3da5d462cdb2",
+          "bytes": 583600,
+          "fileCount": 596,
+          "integrity": "sha512-gzUt/qt81nXsFGKIFcC3YnfEAx5NkunCfnDlvuBSSFS02bcXu4Lmea0AFIUwbLWxWPx3d9p8S5QoaujKcNQxcQ==",
+          "unpackedBytes": 3594196
+        }
+      },
+      "unpackedBytes": 33826003
+    },
+    "small": {
+      "archiveFiles": 1032,
+      "binCount": 0,
+      "bins": {},
+      "dependencyEdgeCount": 1,
+      "directDependencies": [
+        "@types/lodash",
+        "@types/lodash-es"
+      ],
+      "directDependencyCount": 2,
+      "name": "small-local-registry",
+      "packageCount": 2,
+      "packageJsonBlake3": "1fc7663bd0103a1e80d907f780d65fc513d2dc2295060687628ca3213351fdfa",
+      "packageLockBlake3": "ce2ad9fa112f0336d059e41e8f7e5e81446a4ca93678b68252545683c094fa03",
+      "packages": {
+        "@types/lodash": {
+          "bins": {},
+          "dependencies": {},
+          "integrity": "sha512-sviUmCE8AYdaF/KIHLDJBQgeYzPBI0vf/17NaYehBJfYD1j6/L95Slh07NlyK2iNyBNaEkb3En2jRt+a8y3xZQ==",
+          "resolvedPath": "/@types/lodash/-/lodash-4.17.12.tgz",
+          "version": "4.17.12"
+        },
+        "@types/lodash-es": {
+          "bins": {},
+          "dependencies": {
+            "@types/lodash": "*"
+          },
+          "integrity": "sha512-0NgftHUcV4v34VhXm8QBSftKVXtbkBG3ViCjs6+eJ5a6y6Mi/jiFGPc1sC7QK+9BFhWrURE3EOggmWaSxL9OzQ==",
+          "resolvedPath": "/@types/lodash-es/-/lodash-es-4.17.12.tgz",
+          "version": "4.17.12"
+        }
+      },
+      "seriesArguments": {
+        "ciSeed": [
+          "ci",
+          "--install-links",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund",
+          "--registry=<local>",
+          "--loglevel=http"
+        ],
+        "ciTimed": [
+          "ci",
+          "--offline",
+          "--install-links",
+          "--ignore-scripts",
+          "--no-audit",
+          "--no-fund",
+          "--registry=<local>",
+          "--loglevel=http"
+        ],
+        "metadata": [
+          "view",
+          "@types/lodash-es@4.17.12",
+          "version",
+          "--registry=<local>",
+          "--prefer-offline",
+          "--loglevel=http"
+        ]
+      },
+      "tarballBytes": 121451,
+      "tarballs": {
+        "@types/lodash": {
+          "blake3": "e66545d6cdbf39beefffca3ca2abf2fdd632ae1cf77e2126adf7741e2a0075f2",
+          "bytes": 101949,
+          "fileCount": 704,
+          "integrity": "sha512-sviUmCE8AYdaF/KIHLDJBQgeYzPBI0vf/17NaYehBJfYD1j6/L95Slh07NlyK2iNyBNaEkb3En2jRt+a8y3xZQ==",
+          "unpackedBytes": 867580
+        },
+        "@types/lodash-es": {
+          "blake3": "490761bfe4d298251c68a944859dc730fb76f986a624544693290104464ca050",
+          "bytes": 19502,
+          "fileCount": 328,
+          "integrity": "sha512-0NgftHUcV4v34VhXm8QBSftKVXtbkBG3ViCjs6+eJ5a6y6Mi/jiFGPc1sC7QK+9BFhWrURE3EOggmWaSxL9OzQ==",
+          "unpackedBytes": 71946
+        }
+      },
+      "unpackedBytes": 939526
+    }
+  },
+  "host": {
+    "medium": {
+      "warmTarballCi": {
+        "seeds": {
+          "iterations": 5,
+          "medianMs": 883.6677090000001,
+          "p95Ms": 1829.272917,
+          "samples": [
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "26ddabb1eec15d6fb52fc9274d5aa52ee1a5eca2c3a61682c9ece915f371b37c",
+                "stderrBytes": 2966,
+                "stdout": "\nadded 16 packages in 822ms\n",
+                "stdoutBlake3": "c772d337cd37a880292ab0afb4724f481d7c07698b5d2182c119c50816276d9a",
+                "stdoutBytes": 28
+              },
+              "sequence": 0,
+              "side": "host",
+              "success": true,
+              "wallMs": 874.477625
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "ae91399f7977c641f96fb0f07c208460dd14ca61f9398016f993c96454eefd71",
+                "stderrBytes": 2966,
+                "stdout": "\nadded 16 packages in 790ms\n",
+                "stdoutBlake3": "3e0a0a38fb525a5400239179f91767963d37cde7e334c1b3e441db8b30fff3f4",
+                "stdoutBytes": 28
+              },
+              "sequence": 1,
+              "side": "host",
+              "success": true,
+              "wallMs": 841.007042
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "201567222dee764b42a055c3c9122ada56768cd64ffa24faca3a85e4542ea0fe",
+                "stderrBytes": 2966,
+                "stdout": "\nadded 16 packages in 829ms\n",
+                "stdoutBlake3": "821eb4fdaee97593bb529c710990b78dabd921703c80d136722eeaae37fee4f9",
+                "stdoutBytes": 28
+              },
+              "sequence": 2,
+              "side": "host",
+              "success": true,
+              "wallMs": 883.6677090000001
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "bd30b82c116f79544f0a203134a5c258de308950f149b82d71f50acbf2a63f89",
+                "stderrBytes": 2967,
+                "stdout": "\nadded 16 packages in 1s\n",
+                "stdoutBlake3": "c429ef182e5bb9ef68fbe5d41c80b6c7fe5e6fcdc5971acb8b3e2c1653299690",
+                "stdoutBytes": 25
+              },
+              "sequence": 3,
+              "side": "host",
+              "success": true,
+              "wallMs": 1482.5452089999999
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "1005e67b6bbafa6d5172e89fdaafe00e89b76652d9de5219d0ed43643862e1f9",
+                "stderrBytes": 2967,
+                "stdout": "\nadded 16 packages in 2s\n",
+                "stdoutBlake3": "7f5ff48bb02c5f4b5a6e1f1668777103e7120e70f4ad9b61d5f8884484fc3998",
+                "stdoutBytes": 25
+              },
+              "sequence": 4,
+              "side": "host",
+              "success": true,
+              "wallMs": 1829.272917
+            }
+          ],
+          "throughputPerSecond": 0.8458847829317081
+        },
+        "timed": {
+          "iterations": 5,
+          "medianMs": 806.4544999999999,
+          "p95Ms": 999.237209,
+          "samples": [
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "b92ea2218b3e4e7a2a814ba6c55c925a83d83a27eca9f3e760cdd9f4b4c32a31",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 735ms\n",
+                "stdoutBlake3": "c59d421c1366cdd43ecebc9e30f89d055220cf43856f7c96af1777b329ef6f09",
+                "stdoutBytes": 28
+              },
+              "sequence": 0,
+              "side": "host",
+              "success": true,
+              "wallMs": 791.848208
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "c28ebc380b5add366fb8b5e43c4af15063116d1b2cda8aaf2ba214cc3431a289",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 733ms\n",
+                "stdoutBlake3": "bc4a66c7793be289dc82677440a3ef0cad3b6cecc2c0c993c1805660d17af34f",
+                "stdoutBytes": 28
+              },
+              "sequence": 1,
+              "side": "host",
+              "success": true,
+              "wallMs": 786.785375
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "5e8160e6baf4bb2d362b0d3c7899fafc2b3fa13d2733ca62439a6db47fea17b3",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 752ms\n",
+                "stdoutBlake3": "75fe6494cb2c5f675e33b72370246006f285443a6e8465971c8c1dabbe801285",
+                "stdoutBytes": 28
+              },
+              "sequence": 2,
+              "side": "host",
+              "success": true,
+              "wallMs": 806.4544999999999
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "1cfd112c3887ea57349c824ec17645ad5c1209fcb524c9ff82aba223d35e0868",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 909ms\n",
+                "stdoutBlake3": "d07617bfae1ec68cd4771bcaa265b99c76755a8690e2f4819f4f6f495f5085a6",
+                "stdoutBytes": 28
+              },
+              "sequence": 3,
+              "side": "host",
+              "success": true,
+              "wallMs": 991.491
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "38809558b6d31c88551b8ce9528e1cf8381897521d7b7c7eaa5c8cbfd6516339",
+                  "executableBinTargets": [
+                    "semver",
+                    "uuid"
+                  ],
+                  "executableFiles": 4,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "9f53baa0a9626c0546375ffbb1074a88941119e3a1855bdaeb6a7a6bd55d3065",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 878ms\n",
+                "stdoutBlake3": "a33685084b54033c6f8e3fbd1004ca35ff3efea6cacc6bc838708e2ec6083603",
+                "stdoutBytes": 28
+              },
+              "sequence": 4,
+              "side": "host",
+              "success": true,
+              "wallMs": 999.237209
+            }
+          ],
+          "throughputPerSecond": 1.142643947174188
+        }
+      }
+    },
+    "small": {
+      "metadata": {
+        "cold": {
+          "iterations": 5,
+          "medianMs": 193.908,
+          "p95Ms": 524.203584,
+          "samples": [
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "e411ba4ae6db2a4350e4fa005555c1324728dd80f5f4d8a5bc7d67151db4cf82",
+                "stderrBytes": 83,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 0,
+              "side": "host",
+              "success": true,
+              "wallMs": 193.908
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "7a6de2f89dd111e6ab3231015dfe229dbabcb82ee9a4803b448d93498e74a89d",
+                "stderrBytes": 83,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 1,
+              "side": "host",
+              "success": true,
+              "wallMs": 371.26054200000004
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "6aa0013bdffd5d8471b5e21bf6070c7f50b2522763e0d991421aa8e1e8d116e8",
+                "stderrBytes": 83,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 2,
+              "side": "host",
+              "success": true,
+              "wallMs": 155.729334
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "e411ba4ae6db2a4350e4fa005555c1324728dd80f5f4d8a5bc7d67151db4cf82",
+                "stderrBytes": 83,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 3,
+              "side": "host",
+              "success": true,
+              "wallMs": 524.203584
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "cd7582aaa45c891ff01babe895c647d7209c8115ad89ac4144271224ecf4db99",
+                "stderrBytes": 83,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 4,
+              "side": "host",
+              "success": true,
+              "wallMs": 167.86304199999998
+            }
+          ],
+          "throughputPerSecond": 3.538659317288355
+        }
+      },
+      "warmTarballCi": {
+        "seeds": {
+          "iterations": 5,
+          "medianMs": 266.586292,
+          "p95Ms": 375.68025,
+          "samples": [
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "ed7f32943c5bc8cc55531f1dad22ba173fc11b260526ecf0278fa5acda325ae5",
+                "stderrBytes": 419,
+                "stdout": "\nadded 2 packages in 198ms\n",
+                "stdoutBlake3": "28b2b8c4af2e193de19461d06e90a161a32c002f40c9d7bc604c1d8155ba18e6",
+                "stdoutBytes": 27
+              },
+              "sequence": 0,
+              "side": "host",
+              "success": true,
+              "wallMs": 246.83866600000002
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "ed7f32943c5bc8cc55531f1dad22ba173fc11b260526ecf0278fa5acda325ae5",
+                "stderrBytes": 419,
+                "stdout": "\nadded 2 packages in 223ms\n",
+                "stdoutBlake3": "59cab9a2ba49bcc9cb26b131ae61f7d39a6f07044a3a4988126fc469b8ad0860",
+                "stdoutBytes": 27
+              },
+              "sequence": 1,
+              "side": "host",
+              "success": true,
+              "wallMs": 270.440625
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "175afbdc0e08d4bd524095a008f182fa5fb4f5f423ce1bb3dff3e0f67bc3b0ba",
+                "stderrBytes": 419,
+                "stdout": "\nadded 2 packages in 208ms\n",
+                "stdoutBlake3": "fd4e24348492ad0ebd5d05f8c09cd84940304f00094eb5808e0f198efc307f4d",
+                "stdoutBytes": 27
+              },
+              "sequence": 2,
+              "side": "host",
+              "success": true,
+              "wallMs": 256.177708
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "f71dcc4e3089d1d74643bc02f4fcd3ab12f6906465086d61eeb253d9173e630f",
+                "stderrBytes": 419,
+                "stdout": "\nadded 2 packages in 318ms\n",
+                "stdoutBlake3": "60eb9275c11d2e25202459beb507b71770561f8b899c01e2419ca44d8753f7b3",
+                "stdoutBytes": 27
+              },
+              "sequence": 3,
+              "side": "host",
+              "success": true,
+              "wallMs": 375.68025
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "057b33e43c79eb9252fcffa2b894f944c480a65513719ceb0104ea44ae0e0f21",
+                "stderrBytes": 419,
+                "stdout": "\nadded 2 packages in 215ms\n",
+                "stdoutBlake3": "2468141c7189075ec6f601ee800ec78a5f30b31c6465cd3979f84f4572b4c017",
+                "stdoutBytes": 27
+              },
+              "sequence": 4,
+              "side": "host",
+              "success": true,
+              "wallMs": 266.586292
+            }
+          ],
+          "throughputPerSecond": 3.5317629856378865
+        },
+        "timed": {
+          "iterations": 5,
+          "medianMs": 246.983167,
+          "p95Ms": 281.165875,
+          "samples": [
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 179ms\n",
+                "stdoutBlake3": "90d5c8e94fd6570f100208ffc9583afda396410e8710167c36ac5aedd20af6ca",
+                "stdoutBytes": 27
+              },
+              "sequence": 0,
+              "side": "host",
+              "success": true,
+              "wallMs": 235.11599999999999
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 174ms\n",
+                "stdoutBlake3": "8c1da36dd948bc5c1d55c4009e1f96cfebd8c805088ef2678c1a741e9e8112b5",
+                "stdoutBytes": 27
+              },
+              "sequence": 1,
+              "side": "host",
+              "success": true,
+              "wallMs": 222.733167
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 197ms\n",
+                "stdoutBlake3": "6620406d1e20c3b048127f5248ffc229a9edbe06ae2c40f4cc80e8323ec50d73",
+                "stdoutBytes": 27
+              },
+              "sequence": 2,
+              "side": "host",
+              "success": true,
+              "wallMs": 246.983167
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 228ms\n",
+                "stdoutBlake3": "5b3c91e20a2a155241c0f19ec5f892afb06facc6927858f81c3b137d1c99d403",
+                "stdoutBytes": 27
+              },
+              "sequence": 3,
+              "side": "host",
+              "success": true,
+              "wallMs": 281.165875
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": null,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 213ms\n",
+                "stdoutBlake3": "dd12fc2d65ec626b975dc8c83d2816cff88b0c9f174828bbe241fe192f3f9c00",
+                "stdoutBytes": 27
+              },
+              "sequence": 4,
+              "side": "host",
+              "success": true,
+              "wallMs": 269.353375
+            }
+          ],
+          "throughputPerSecond": 3.9829479356438204
+        }
+      }
+    }
+  },
+  "inputs": {
+    "algorithm": "blake3-composite-v1",
+    "benchmarkHash": "6a54b090503c9dbdf06187e3385df3dd6ba81f125a6f60c4cad694c9f8aa8ea1",
+    "buildHash": "ff49dc1a6db55656a2cb82328b07cbfffc6d59a386fe5155df8310831d9b4be3"
+  },
+  "memory": {
+    "interpretation": "per-sample Wasm linear-memory values are monotone instance high-water observations read after the timed invocation",
+    "maxWasmLinearMemoryHighWaterBytes": 206241792,
+    "series": {
+      "mediumCiSeeds": {
+        "linearMemoryHighWater": {
+          "maximumBytes": 111935488,
+          "minimumBytes": 111935488,
+          "samples": [
+            111935488,
+            111935488,
+            111935488,
+            111935488,
+            111935488
+          ],
+          "variationBytes": 0
+        }
+      },
+      "mediumCiWarmTarball": {
+        "linearMemoryHighWater": {
+          "maximumBytes": 206241792,
+          "minimumBytes": 205979648,
+          "samples": [
+            206241792,
+            205979648,
+            205979648,
+            205979648,
+            205979648
+          ],
+          "variationBytes": 262144
+        }
+      },
+      "smallCiSeeds": {
+        "linearMemoryHighWater": {
+          "maximumBytes": 42467328,
+          "minimumBytes": 42467328,
+          "samples": [
+            42467328,
+            42467328,
+            42467328,
+            42467328,
+            42467328
+          ],
+          "variationBytes": 0
+        }
+      },
+      "smallCiWarmTarball": {
+        "linearMemoryHighWater": {
+          "maximumBytes": 50593792,
+          "minimumBytes": 48627712,
+          "samples": [
+            50593792,
+            50593792,
+            50593792,
+            48627712,
+            48627712
+          ],
+          "variationBytes": 1966080
+        }
+      },
+      "smallMetadataCold": {
+        "linearMemoryHighWater": {
+          "maximumBytes": 26017792,
+          "minimumBytes": 26017792,
+          "samples": [
+            26017792,
+            26017792,
+            26017792,
+            26017792,
+            26017792
+          ],
+          "variationBytes": 0
+        }
+      }
+    }
+  },
+  "notes": [
+    "manual local release measurement; no CI timing threshold",
+    "production normal feature; profiling-only instrumentation disabled",
+    "host and Wasm use the same loopback registry and pinned tarball bytes",
+    "each iteration has independent host and Wasm workspaces and caches",
+    "timed npm ci runs offline after an untimed local-registry seed and external node_modules removal",
+    "the medium fixture measures installation only and never executes package bins"
+  ],
+  "npmTool": {
+    "algorithm": "blake3-composite-v1",
+    "blake3": "5a2e6099c2717eef30fa0467936a7be99b9e7de63eb8c33281684b3e37eae3dc",
+    "bytes": 11690702,
+    "files": 2379
+  },
+  "schema": "npm-metadata-v3",
+  "target": "p3",
+  "timingBoundary": {
+    "host": "Node process spawn through exit; workspace preparation, cache seeding, and install-tree cleanup are excluded",
+    "wasm": "run export invocation through result; component instantiation, workspace preparation, cache seeding, install-tree cleanup, and linear-memory observation are excluded"
+  },
+  "wasm": {
+    "medium": {
+      "warmTarballCi": {
+        "seeds": {
+          "iterations": 5,
+          "medianMs": 21581.657417,
+          "p95Ms": 23872.490625000002,
+          "samples": [
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 111935488,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "d1f2e2d973434b10b4cda45a829a4a0f700fe471cf5005f39dc59935ab4bc052",
+                "stderrBytes": 3627,
+                "stdout": "\nadded 16 packages in 24s\n",
+                "stdoutBlake3": "acd760e7ef048196605e9480a2137d6c41b618a07c7b61f56200571d378d3829",
+                "stdoutBytes": 26
+              },
+              "sequence": 0,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 23872.490625000002
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 111935488,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "214cc806e3907d718fccd01d3fc9223b5efbf93979fcff15966b01df0c939015",
+                "stderrBytes": 3627,
+                "stdout": "\nadded 16 packages in 21s\n",
+                "stdoutBlake3": "2dfe7036d189a7d256369cd0d970b988c3eec9caefd35d344756584761925549",
+                "stdoutBytes": 26
+              },
+              "sequence": 1,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 20834.323666
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 111935488,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "752429c80f6471252d22639037f3418c75854dc3c22af996849535d9a73ac255",
+                "stderrBytes": 3627,
+                "stdout": "\nadded 16 packages in 21s\n",
+                "stdoutBlake3": "2dfe7036d189a7d256369cd0d970b988c3eec9caefd35d344756584761925549",
+                "stdoutBytes": 26
+              },
+              "sequence": 2,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 21581.657417
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 111935488,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "993f53565dd5f478288edab5bc957f9eb48df850c5a4876ad397177fd8f19c5c",
+                "stderrBytes": 3627,
+                "stdout": "\nadded 16 packages in 21s\n",
+                "stdoutBlake3": "2dfe7036d189a7d256369cd0d970b988c3eec9caefd35d344756584761925549",
+                "stdoutBytes": 26
+              },
+              "sequence": 3,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 21116.243209
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 111935488,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 16,
+                "total": 16,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 16,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "072ec2f76fabba6b65a3174a07f35fe18b9ff487882cfccd566ad2c69db505bb",
+                "stderrBytes": 3627,
+                "stdout": "\nadded 16 packages in 22s\n",
+                "stdoutBlake3": "ec507654c8e008452a1523839063a5944417146bd51f7f1c02d139060f20a5c5",
+                "stdoutBytes": 26
+              },
+              "sequence": 4,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 22129.635291
+            }
+          ],
+          "throughputPerSecond": 0.045647780723629267
+        },
+        "timed": {
+          "iterations": 5,
+          "medianMs": 22788.904375000002,
+          "p95Ms": 24526.308875000002,
+          "samples": [
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 206241792,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "60e6b138a7f5b3083aed2aa794e4553f9537efb1e59d0bfdd1ac08f4ab643cb4",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 23s\n",
+                "stdoutBlake3": "45d141510db58ca75fe76b4e9ff19b31957d47c8a32e88f36374ae0cea4d0e4d",
+                "stdoutBytes": 26
+              },
+              "sequence": 0,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 22788.904375000002
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 205979648,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "60e6b138a7f5b3083aed2aa794e4553f9537efb1e59d0bfdd1ac08f4ab643cb4",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 21s\n",
+                "stdoutBlake3": "2dfe7036d189a7d256369cd0d970b988c3eec9caefd35d344756584761925549",
+                "stdoutBytes": 26
+              },
+              "sequence": 1,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 21438.717833
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 205979648,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "60e6b138a7f5b3083aed2aa794e4553f9537efb1e59d0bfdd1ac08f4ab643cb4",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 23s\n",
+                "stdoutBlake3": "45d141510db58ca75fe76b4e9ff19b31957d47c8a32e88f36374ae0cea4d0e4d",
+                "stdoutBytes": 26
+              },
+              "sequence": 2,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 23431.986083000003
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 205979648,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "60e6b138a7f5b3083aed2aa794e4553f9537efb1e59d0bfdd1ac08f4ab643cb4",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 24s\n",
+                "stdoutBlake3": "acd760e7ef048196605e9480a2137d6c41b618a07c7b61f56200571d378d3829",
+                "stdoutBytes": 26
+              },
+              "sequence": 3,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 24526.308875000002
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 2,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "3593c382f8758e6205e617efe3c47e451a8a180d095fbfa17ac987a5bd040ca7",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 33826003,
+                "packageFiles": 10070,
+                "packageNamesMatch": true,
+                "packages": 16,
+                "tree": {
+                  "blake3": "ab14a1da0a29a8aeccac877ac651de51f77ddbd401f4e0f4d60dbf669cb15252",
+                  "bytes": 33832226,
+                  "directories": 403,
+                  "files": 10071,
+                  "symlinks": 2
+                }
+              },
+              "linearMemoryHighWaterBytes": 205979648,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "1937d4c42e2650422f7c2dd628ef0b4e1fe46dbd20952c30886255c16752b242",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 16,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "60e6b138a7f5b3083aed2aa794e4553f9537efb1e59d0bfdd1ac08f4ab643cb4",
+                "stderrBytes": 1468,
+                "stdout": "\nadded 16 packages in 22s\n",
+                "stdoutBlake3": "ec507654c8e008452a1523839063a5944417146bd51f7f1c02d139060f20a5c5",
+                "stdoutBytes": 26
+              },
+              "sequence": 4,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 22577.197792
+            }
+          ],
+          "throughputPerSecond": 0.04356800529359852
+        }
+      }
+    },
+    "small": {
+      "metadata": {
+        "cold": {
+          "iterations": 5,
+          "medianMs": 1092.40575,
+          "p95Ms": 1136.0824579999999,
+          "samples": [
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": 26017792,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "15c68cc3583105e1e5f3d0a5e3291377ac7f04b1960958983161417f86392547",
+                "stderrBytes": 700,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 0,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 1101.398083
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": 26017792,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "15c68cc3583105e1e5f3d0a5e3291377ac7f04b1960958983161417f86392547",
+                "stderrBytes": 700,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 1,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 1040.5571659999998
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": 26017792,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "d948b2e648508e7430e0b9c6a39bf2daa514c5ad8123b203c75858194db27c30",
+                "stderrBytes": 700,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 2,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 1092.40575
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": 26017792,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "d948b2e648508e7430e0b9c6a39bf2daa514c5ad8123b203c75858194db27c30",
+                "stderrBytes": 700,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 3,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 1136.0824579999999
+            },
+            {
+              "cache": "cold",
+              "installed": null,
+              "linearMemoryHighWaterBytes": 26017792,
+              "localHttpRequests": {
+                "metadata": 1,
+                "tarballs": 0,
+                "total": 1,
+                "unexpected": 0
+              },
+              "lockfileBlake3": null,
+              "lockfileUnchanged": null,
+              "npmHttpCacheLogLines": 0,
+              "npmHttpFetchLogLines": 1,
+              "operation": "view",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "d948b2e648508e7430e0b9c6a39bf2daa514c5ad8123b203c75858194db27c30",
+                "stderrBytes": 700,
+                "stdout": "4.17.12\n",
+                "stdoutBlake3": "edc18b00fcf1bc6a2293c0e3ed3effe8072f3c1e0f4f75f5b7e80e336270d8f3",
+                "stdoutBytes": 8
+              },
+              "sequence": 4,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 1040.221208
+            }
+          ],
+          "throughputPerSecond": 0.92410088400849
+        }
+      },
+      "warmTarballCi": {
+        "seeds": {
+          "iterations": 5,
+          "medianMs": 2340.458708,
+          "p95Ms": 2700.0947499999997,
+          "samples": [
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 42467328,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "b33a8f4a0dca1311ddf4c794914944dbb98adf74b583ed722420fe795906cfaf",
+                "stderrBytes": 1039,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 0,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2340.458708
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 42467328,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "37c15537f66713fec0ac8d1ef66663d459c3294e644c6f122a5d0fbf2fb0ba66",
+                "stderrBytes": 1039,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 1,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2301.1985409999998
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 42467328,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "dd2758b5bfb7b4f27daeb3347fe44a2d34d982d98dd53388c41d9ff601a04769",
+                "stderrBytes": 1039,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 2,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2381.493125
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 42467328,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "42209d5eaaf2f7036f4a87cff7351310f1a5b2fac348b241bdcd1b4d8fe9ceff",
+                "stderrBytes": 1041,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 3,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2700.0947499999997
+            },
+            {
+              "cache": "seed",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 42467328,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 2,
+                "total": 2,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 2,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "b33a8f4a0dca1311ddf4c794914944dbb98adf74b583ed722420fe795906cfaf",
+                "stderrBytes": 1039,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 4,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2260.7209159999998
+            }
+          ],
+          "throughputPerSecond": 0.41722414627269755
+        },
+        "timed": {
+          "iterations": 5,
+          "medianMs": 2359.111666,
+          "p95Ms": 2420.2086249999998,
+          "samples": [
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 50593792,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 0,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2359.111666
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 50593792,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 1,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2363.125333
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 50593792,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 2,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2420.2086249999998
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 48627712,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 3,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2350.442125
+            },
+            {
+              "cache": "warm-tarball",
+              "installed": {
+                "bins": 0,
+                "binsMatch": true,
+                "complete": true,
+                "fileMismatches": [],
+                "identityMismatches": [],
+                "modeEvidence": {
+                  "blake3": "29cfa84b2c15c067c807db3b59fd7fcdbcd506a172427b2931812f5cf7c8a928",
+                  "executableBinTargets": [],
+                  "executableFiles": 0,
+                  "includedInTreeBlake3": false,
+                  "normalization": "POSIX modes are excluded from the installed-tree equality hash because WASI chmod is unsupported; a separate mode digest and bin-target evidence remain visible"
+                },
+                "packageBytes": 939526,
+                "packageFiles": 1032,
+                "packageNamesMatch": true,
+                "packages": 2,
+                "tree": {
+                  "blake3": "90e58b4da83b989e348cb2fc2915e38dad80f2f05132ceb41526bb3b383eb377",
+                  "bytes": 940299,
+                  "directories": 5,
+                  "files": 1033,
+                  "symlinks": 0
+                }
+              },
+              "linearMemoryHighWaterBytes": 48627712,
+              "localHttpRequests": {
+                "metadata": 0,
+                "tarballs": 0,
+                "total": 0,
+                "unexpected": 0
+              },
+              "lockfileBlake3": "c3bdeb7ea13c5ba7b068a883c4418656767bd20bfba5b0abebe0751ba17d819b",
+              "lockfileUnchanged": true,
+              "npmHttpCacheLogLines": 2,
+              "npmHttpFetchLogLines": 0,
+              "operation": "ci",
+              "registry": "local",
+              "result": {
+                "exitCode": 0,
+                "overflowed": false,
+                "runnerError": null,
+                "stderrBlake3": "8dbd2219d8b6202fc799671670d84ee8271091fd08cd5013fc90a944c8ba6cd3",
+                "stderrBytes": 215,
+                "stdout": "\nadded 2 packages in 2s\n",
+                "stdoutBlake3": "f280a8ef5db12937184c4b34771b1000b3cf86181f83be0319ac0f464ec4c6db",
+                "stdoutBytes": 24
+              },
+              "sequence": 4,
+              "side": "wasm",
+              "success": true,
+              "wallMs": 2314.3662919999997
+            }
+          ],
+          "throughputPerSecond": 0.4234684866301506
+        }
+      }
+    }
+  }
+}

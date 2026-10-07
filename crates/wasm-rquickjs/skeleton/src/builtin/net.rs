@@ -165,6 +165,7 @@ fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSoc
             waiters: 0,
             pending_write_bytes: 0,
             write_timeout_deadline: None,
+            write_timeout_generation: 0,
             write_timeout_update: None,
             #[cfg(feature = "net-write-profiling")]
             write_profile: TcpWriteProfile::default(),
@@ -189,6 +190,9 @@ struct TcpInner {
     /// Deadline for the active write. JavaScript owns timeout semantics while
     /// this native state keeps a P2 capacity wait interruptible.
     write_timeout_deadline: Option<Instant>,
+    /// Identifies the deadline currently owned by JavaScript so a completed
+    /// wait cannot consume a replacement installed while that wait was pending.
+    write_timeout_generation: u64,
     /// Wakes the active capacity wait when `setTimeout()` changes its deadline.
     write_timeout_update: Option<mpsc::UnboundedSender<()>>,
     #[cfg(feature = "net-write-profiling")]
@@ -205,6 +209,21 @@ impl TcpInner {
             self.socket = None;
         }
     }
+}
+
+#[cfg(feature = "p2")]
+fn write_timeout_checkpoint_is_current(
+    selected_due: bool,
+    checkpoint_deadline: Option<Instant>,
+    checkpoint_generation: u64,
+    current_deadline: Option<Instant>,
+    current_generation: u64,
+    now: Instant,
+) -> bool {
+    selected_due
+        && current_generation == checkpoint_generation
+        && current_deadline == checkpoint_deadline
+        && checkpoint_deadline.is_some_and(|deadline| now >= deadline)
 }
 
 #[cfg(feature = "p3")]
@@ -730,7 +749,10 @@ impl TcpSocket {
                     };
                     let checkpoint_due = {
                         let capacity_wait = AsyncPollable::new(pollable).wait_for();
-                        let checkpoint_deadline = self.inner.borrow().write_timeout_deadline;
+                        let (checkpoint_deadline, checkpoint_generation) = {
+                            let inner = self.inner.borrow();
+                            (inner.write_timeout_deadline, inner.write_timeout_generation)
+                        };
                         let deadline_wait = async move {
                             if let Some(deadline) = checkpoint_deadline {
                                 let remaining = deadline.saturating_duration_since(Instant::now());
@@ -749,14 +771,28 @@ impl TcpSocket {
                             }
                         };
                         futures::pin_mut!(capacity_wait, timeout_control);
-                        match futures::future::select(capacity_wait, timeout_control).await {
-                            futures::future::Either::Left((_, _timeout_control)) => false,
-                            futures::future::Either::Right((due, _capacity_wait)) => {
-                                // The losing capacity future leaves scope with
-                                // this match, before the waiter count can reach
-                                // zero or JavaScript closes streams.
-                                due
-                            }
+                        let selected_due =
+                            match futures::future::select(capacity_wait, timeout_control).await {
+                                futures::future::Either::Left((_, _timeout_control)) => false,
+                                futures::future::Either::Right((due, _capacity_wait)) => {
+                                    // The losing capacity future leaves scope with
+                                    // this match, before the waiter count can reach
+                                    // zero or JavaScript closes streams.
+                                    due
+                                }
+                            };
+                        // The old sleep and a deadline update can become ready
+                        // together. Revalidate its identity before consuming it.
+                        {
+                            let inner = self.inner.borrow();
+                            write_timeout_checkpoint_is_current(
+                                selected_due,
+                                checkpoint_deadline,
+                                checkpoint_generation,
+                                inner.write_timeout_deadline,
+                                inner.write_timeout_generation,
+                                Instant::now(),
+                            )
                         }
                     };
                     {
@@ -852,6 +888,10 @@ impl TcpSocket {
 
     pub fn set_write_timeout(&self, timeout_ms: Option<u32>) {
         let mut inner = self.inner.borrow_mut();
+        inner.write_timeout_generation = inner
+            .write_timeout_generation
+            .checked_add(1)
+            .expect("write timeout generation overflowed");
         inner.write_timeout_deadline = timeout_ms
             .filter(|timeout_ms| *timeout_ms > 0)
             .map(|timeout_ms| Instant::now() + Duration::from_millis(timeout_ms as u64));
@@ -2310,6 +2350,7 @@ impl TcpListener {
                             waiters: 0,
                             pending_write_bytes: 0,
                             write_timeout_deadline: None,
+                            write_timeout_generation: 0,
                             write_timeout_update: None,
                             #[cfg(feature = "net-write-profiling")]
                             write_profile: TcpWriteProfile::default(),
@@ -2689,3 +2730,56 @@ impl TcpListener {
 
 pub const NET_JS: &str = include_str!("net.js");
 pub const REEXPORT_JS: &str = r#"export * from 'node:net'; export { default } from 'node:net';"#;
+
+#[cfg(all(test, feature = "p2"))]
+mod tests {
+    use super::write_timeout_checkpoint_is_current;
+    use std::time::{Duration, Instant};
+
+    #[test]
+    fn stale_write_timeout_checkpoint_cannot_consume_replacement() {
+        let now = Instant::now();
+        let stale_deadline = now - Duration::from_millis(1);
+        let replacement_deadline = now + Duration::from_secs(1);
+
+        assert!(!write_timeout_checkpoint_is_current(
+            true,
+            Some(stale_deadline),
+            1,
+            Some(replacement_deadline),
+            2,
+            now,
+        ));
+        assert!(!write_timeout_checkpoint_is_current(
+            true,
+            Some(stale_deadline),
+            1,
+            None,
+            2,
+            now,
+        ));
+    }
+
+    #[test]
+    fn current_expired_write_timeout_checkpoint_is_accepted() {
+        let now = Instant::now();
+        let deadline = now - Duration::from_millis(1);
+
+        assert!(write_timeout_checkpoint_is_current(
+            true,
+            Some(deadline),
+            2,
+            Some(deadline),
+            2,
+            now,
+        ));
+        assert!(!write_timeout_checkpoint_is_current(
+            false,
+            Some(deadline),
+            2,
+            Some(deadline),
+            2,
+            now,
+        ));
+    }
+}
