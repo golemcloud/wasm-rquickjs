@@ -103,7 +103,7 @@ fn gzip_decompress_multi_member(
 
         if remaining[0] != 0x1f || remaining[1] != 0x8b {
             let zlib_header = u16::from_be_bytes([remaining[0], remaining[1]]);
-            let message = if auto_detect && remaining[0] == 0x1f && zlib_header % 31 == 0 {
+            let message = if auto_detect && remaining[0] == 0x1f && zlib_header.is_multiple_of(31) {
                 "unknown compression method"
             } else {
                 "incorrect header check"
