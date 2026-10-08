@@ -240,8 +240,8 @@ function ServerResponse(req, options) {
     this.finished = false;
     this._finishEmitted = false;
     this._writableEnded = false;
-    this._headers = {};
-    this._headerNames = {};
+    this._headers = Object.create(null);
+    this._headerNames = Object.create(null);
     this._chunked = false;
     this._hasBody = true;
     this._keepAlive = false;
@@ -1239,10 +1239,8 @@ function createConnectionParser(server, socket) {
         error.reason = reason;
         if (includeRawPacket && state.rawPacket) {
             const bufferStart = state.bytesReceived - state.buffer.length;
-            error.bytesParsed = Math.max(0, Math.min(
-                state.rawPacket.length,
-                bufferStart + bufferBytesParsed - state.rawPacketStart,
-            ));
+            error.bytesParsed =
+                bufferStart + bufferBytesParsed - state.rawPacketStart;
             error.rawPacket = Buffer.from(state.rawPacket);
         } else {
             error.bytesParsed = 0;
@@ -1949,11 +1947,21 @@ function parseTrailerHeaders(block, complete) {
     for (let index = 0; index < lines.length; index++) {
         let line = lines[index];
         const isPartialLine = !complete && index === lines.length - 1;
-        if (isPartialLine && line.endsWith('\r')) {
+        const partialLineEndsWithCarriageReturn =
+            isPartialLine && line.endsWith('\r');
+        if (partialLineEndsWithCarriageReturn) {
             line = line.slice(0, -1);
         }
         const colonIdx = line.indexOf(':');
         if (colonIdx === -1 && isPartialLine) {
+            if (partialLineEndsWithCarriageReturn) {
+                return {
+                    error: true,
+                    type: 'trailer-error',
+                    reason: 'Invalid header token',
+                    bytesParsed: bytesParsed + line.length,
+                };
+            }
             if (line && !_checkIsHttpToken(line)) {
                 let invalidIndex = 0;
                 while (invalidIndex < line.length &&
@@ -2008,15 +2016,25 @@ function parseTrailerHeaders(block, complete) {
         const rawValue = line.substring(colonIdx + 1);
         if (_checkInvalidHeaderChar(rawValue)) {
             const invalidIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
-            const isBareLineFeed = rawValue.charCodeAt(invalidIndex) === 0x0a;
+            const invalidByte = rawValue.charCodeAt(invalidIndex);
+            const isBareLineFeed = invalidByte === 0x0a;
+            const isBareCarriageReturn = invalidByte === 0x0d;
             return {
                 error: true,
                 type: 'trailer-error',
-                code: isBareLineFeed ? 'HPE_CR_EXPECTED' : undefined,
+                code: isBareLineFeed
+                    ? 'HPE_CR_EXPECTED'
+                    : isBareCarriageReturn
+                        ? 'HPE_LF_EXPECTED'
+                        : undefined,
                 reason: isBareLineFeed
                     ? 'Missing expected CR after header value'
-                    : 'Invalid header value char',
-                bytesParsed: bytesParsed + colonIdx + 1 + invalidIndex,
+                    : isBareCarriageReturn
+                        ? 'Missing expected LF after header value'
+                        : 'Invalid header value char',
+                bytesParsed:
+                    bytesParsed + colonIdx + 1 + invalidIndex +
+                    (isBareCarriageReturn ? 1 : 0),
             };
         }
         const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');

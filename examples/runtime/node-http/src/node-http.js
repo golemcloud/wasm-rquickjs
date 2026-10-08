@@ -1397,7 +1397,7 @@ export async function httpRequestTrailers() {
     });
     if (!primaryValid) return false;
 
-    return new Promise((resolve) => {
+    const joinedValid = await new Promise((resolve) => {
         let settled = false;
         let socket;
         let requestValid = false;
@@ -1447,6 +1447,55 @@ export async function httpRequestTrailers() {
             socket.on('close', () => finish(
                 requestValid && wire.includes('joined'),
             ));
+        });
+    });
+    if (!joinedValid) return false;
+
+    return new Promise((resolve) => {
+        let settled = false;
+        let request;
+        const server = http.createServer((_req, res) => {
+            res.setHeader('__proto__', 'proto-value');
+            res.setHeader('constructor', 'constructor-value');
+            res.end('client-distinct');
+        });
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (request) request.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+        server.listen(0, () => {
+            request = http.get({ port: server.address().port }, (res) => {
+                const headersValid =
+                    Object.getPrototypeOf(res.headersDistinct) === null &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headersDistinct,
+                        '__proto__',
+                    ) &&
+                    res.headersDistinct.__proto__.join(',') === 'proto-value' &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headersDistinct,
+                        'constructor',
+                    ) &&
+                    res.headersDistinct.constructor.join(',') ===
+                        'constructor-value' &&
+                    !Object.prototype.hasOwnProperty.call(
+                        res.headers,
+                        '__proto__',
+                    ) &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headers,
+                        'constructor',
+                    ) &&
+                    res.headers.constructor === 'constructor-value';
+                res.on('end', () => finish(headersValid));
+                res.resume();
+            });
+            request.on('error', () => finish(false));
         });
     });
 }
@@ -1515,30 +1564,32 @@ export async function httpRequestTrailerErrors() {
             if (activeSocket) activeSocket.destroy();
             finish(true);
         }, 10000);
-        activeSocket = net.connect({ port: server.address().port });
-        activeSocket.on('connect', () => {
+        const socket = net.connect({ port: server.address().port });
+        activeSocket = socket;
+        socket.on('connect', () => {
             const parts = Array.isArray(payload) ? payload : [payload];
             const writePart = (index) => {
+                if (socket.destroyed) return;
                 const isLast = index === parts.length - 1;
                 if (isLast && endAfterWrite) {
-                    activeSocket.end(parts[index]);
+                    socket.end(parts[index]);
                     return;
                 }
-                activeSocket.write(parts[index], () => {
-                    if (!isLast) {
+                socket.write(parts[index], () => {
+                    if (!isLast && !socket.destroyed) {
                         setTimeout(() => writePart(index + 1), 50);
                     }
                 });
             };
             writePart(0);
         });
-        activeSocket.on('data', (chunk) => {
+        socket.on('data', (chunk) => {
             wire += chunk.toString('latin1');
         });
-        activeSocket.on('error', (error) => {
+        socket.on('error', (error) => {
             socketErrorCode = error.code;
         });
-        activeSocket.on('close', () => finish(false));
+        socket.on('close', () => finish(false));
     });
 
     const exchangeAfterResponse = (before, after) =>
@@ -1731,6 +1782,15 @@ export async function httpRequestTrailerErrors() {
                     return payload.indexOf('\nY');
                 },
             },
+            {
+                key: 'bare-cr',
+                suffix: 'X: value\rY: okay\r\n\r\n',
+                code: 'HPE_LF_EXPECTED',
+                reason: 'Missing expected LF after header value',
+                offset(payload) {
+                    return payload.indexOf('\rY') + 1;
+                },
+            },
         ]) {
             if (failure) break;
             const payload = Buffer.from(
@@ -1768,6 +1828,48 @@ export async function httpRequestTrailerErrors() {
                 ) || lastParserError.bytesParsed < 0 ||
                 !lifecycleIsAborted('split-no-colon')) {
                 failure = 'split-no-colon';
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-no-colon-cr') + 'foo\r',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-no-colon-cr',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header token',
+                    splitPrefix.length - 1,
+                    splitPrefix.toString('latin1'),
+                ) || !lifecycleIsAborted('split-no-colon-cr')) {
+                failure = 'split-no-colon-cr';
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-bare-cr') + 'X: value\r',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('Y: okay\r\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-bare-cr',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_LF_EXPECTED',
+                    'Missing expected LF after header value',
+                    0,
+                    splitSuffix.toString('latin1'),
+                ) || !lifecycleIsAborted('split-bare-cr')) {
+                failure = 'split-bare-cr';
             }
         }
 
