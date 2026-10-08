@@ -4,6 +4,7 @@ import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { initializeIncomingMessage } from '__wasm_rquickjs_builtin/node_http_incoming';
+import { _checkInvalidHeaderChar, _checkIsHttpToken } from 'node:_http_common';
 import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_DESTROYED, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
@@ -38,6 +39,7 @@ const IDLE = 3;
 const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
 const DEFAULT_WRITABLE_HIGH_WATER_MARK = 64 * 1024;
+const MAX_TRAILER_SIZE = 16 * 1024;
 
 // ===== Header helpers =====
 
@@ -64,8 +66,10 @@ const SERVER_NO_DUPLICATE_HEADERS = new Set([
 
 function parseHeaders(rawPairs, joinDuplicateHeaders) {
     const headers = {};
-    const headersDistinct = {};
+    const headersDistinct = Object.create(null);
     const rawHeaders = [];
+    const hasOwn = (object, key) =>
+        Object.prototype.hasOwnProperty.call(object, key);
 
     for (let i = 0; i < rawPairs.length; i += 2) {
         const name = rawPairs[i];
@@ -73,37 +77,42 @@ function parseHeaders(rawPairs, joinDuplicateHeaders) {
         rawHeaders.push(name, value);
         const lower = name.toLowerCase();
 
-        if (!headersDistinct[lower]) {
+        if (!hasOwn(headersDistinct, lower)) {
             headersDistinct[lower] = [];
         }
         headersDistinct[lower].push(value);
 
+        // Node keeps __proto__ in the null-prototype distinct map and in the raw
+        // pairs, but omits it from the ordinary normalized object so it cannot
+        // mutate that object's prototype.
+        if (lower === '__proto__') continue;
+
         if (lower === SET_COOKIE_HEADER) {
-            if (Array.isArray(headers[lower])) {
+            if (hasOwn(headers, lower) && Array.isArray(headers[lower])) {
                 headers[lower].push(value);
-            } else if (headers[lower] !== undefined) {
+            } else if (hasOwn(headers, lower)) {
                 headers[lower] = [headers[lower], value];
             } else {
                 headers[lower] = [value];
             }
         } else if (lower === COOKIE_HEADER) {
-            if (headers[lower] !== undefined) {
+            if (hasOwn(headers, lower)) {
                 headers[lower] += '; ' + value;
             } else {
                 headers[lower] = value;
             }
         } else if (joinDuplicateHeaders) {
-            if (headers[lower] !== undefined) {
+            if (hasOwn(headers, lower)) {
                 headers[lower] += ', ' + value;
             } else {
                 headers[lower] = value;
             }
         } else {
             if (SERVER_NO_DUPLICATE_HEADERS.has(lower)) {
-                if (headers[lower] === undefined) {
+                if (!hasOwn(headers, lower)) {
                     headers[lower] = value;
                 }
-            } else if (headers[lower] !== undefined) {
+            } else if (hasOwn(headers, lower)) {
                 headers[lower] += ', ' + value;
             } else {
                 headers[lower] = value;
@@ -231,8 +240,8 @@ function ServerResponse(req, options) {
     this.finished = false;
     this._finishEmitted = false;
     this._writableEnded = false;
-    this._headers = {};
-    this._headerNames = {};
+    this._headers = Object.create(null);
+    this._headerNames = Object.create(null);
     this._chunked = false;
     this._hasBody = true;
     this._keepAlive = false;
@@ -1171,6 +1180,10 @@ function createConnectionParser(server, socket) {
         detached: false,
         parsing: false,
         closing: false,
+        parserError: null,
+        bytesReceived: 0,
+        rawPacket: undefined,
+        rawPacketStart: 0,
     };
 
     function updateInputBackpressure() {
@@ -1215,6 +1228,54 @@ function createConnectionParser(server, socket) {
     }
     state.endConnection = endConnection;
 
+    function createParserError(
+        code,
+        reason,
+        bufferBytesParsed = 0,
+        includeRawPacket = true,
+    ) {
+        const error = new Error(`Parse Error: ${reason}`);
+        error.code = code;
+        error.reason = reason;
+        if (includeRawPacket && state.rawPacket) {
+            const bufferStart = state.bytesReceived - state.buffer.length;
+            error.bytesParsed =
+                bufferStart + bufferBytesParsed - state.rawPacketStart;
+            error.rawPacket = Buffer.from(state.rawPacket);
+        } else {
+            error.bytesParsed = 0;
+        }
+        return error;
+    }
+
+    function failParser(error, statusCode = 400) {
+        if (state.parserError) return;
+        state.parserError = error;
+
+        if (server.emit('clientError', error, socket)) return;
+
+        state.closing = true;
+        const responseStarted = state.current &&
+            state.current.res._headersSentWire;
+        if (responseStarted || !socket.writable) {
+            socket.destroy(error);
+            return;
+        }
+        const status = statusCode === 431
+            ? '431 Request Header Fields Too Large'
+            : '400 Bad Request';
+        socket.end(Buffer.from(
+            `HTTP/1.1 ${status}\r\nConnection: close\r\n\r\n`,
+        ), () => socket.destroy(error));
+    }
+
+    function destroyIncompleteRequest(req) {
+        if (req.destroyed || req.complete) return;
+        const error = new Error('aborted');
+        error.code = 'ECONNRESET';
+        req.destroy(error);
+    }
+
     // Install a single timeout handler for idle keep-alive connections
     socket.on('timeout', function onIdleTimeout() {
         const handled = server.emit('timeout', socket);
@@ -1224,13 +1285,17 @@ function createConnectionParser(server, socket) {
     });
 
     socket.on('data', function onData(data) {
-        if (state.detached || state.closing) return;
+        if (state.detached || state.closing || state.parserError) return;
 
         if (typeof data === 'string') {
             data = Buffer.from(data);
         } else if (!(data instanceof Buffer)) {
             data = Buffer.from(data);
         }
+
+        state.rawPacket = data;
+        state.rawPacketStart = state.bytesReceived;
+        state.bytesReceived += data.length;
 
         // Clear idle keep-alive timeout on new data
         socket.setTimeout(0);
@@ -1249,6 +1314,18 @@ function createConnectionParser(server, socket) {
         if (state.detached) return;
 
         state.readableEnded = true;
+
+        if (state.parserError) return;
+        if (state.state === BODY_CHUNKED &&
+            state.chunkState === 'TRAILERS' && state.current) {
+            failParser(createParserError(
+                'HPE_INVALID_EOF_STATE',
+                'Invalid EOF state',
+                0,
+                false,
+            ));
+            return;
+        }
 
         if (!server.httpAllowHalfOpen) {
             for (const context of state.responseQueue) {
@@ -1295,6 +1372,14 @@ function createConnectionParser(server, socket) {
     socket.on('error', function onError(err) {
         if (state.detached) return;
 
+        if (state.parserError) {
+            for (const context of state.responseQueue) {
+                context.res._abortPendingOutput(err);
+                destroyIncompleteRequest(context.req);
+            }
+            return;
+        }
+
         const requestsWithErrors = [];
         for (const context of state.responseQueue) {
             context.res._abortPendingOutput(err);
@@ -1322,6 +1407,11 @@ function createConnectionParser(server, socket) {
 
         for (const context of state.responseQueue) {
             context.res._abortPendingOutput(new Error('Socket is closed'));
+            if (state.parserError && !context.req.complete) {
+                destroyIncompleteRequest(context.req);
+                closeServerResponse(context.res);
+                continue;
+            }
             if (!context.req.aborted) {
                 if (!context.req.complete) {
                     context.req.complete = true;
@@ -1677,7 +1767,7 @@ function createConnectionParser(server, socket) {
                 }
 
                 if (state.state === BODY_CHUNKED) {
-                    const result = parseChunked(state);
+                    const result = parseChunked(state, server._joinDuplicateHeaders);
                     if (result === 'progress') {
                         progress = true;
                     } else if (result === 'done') {
@@ -1700,6 +1790,20 @@ function createConnectionParser(server, socket) {
                             ),
                         );
                         endConnection();
+                        return;
+                    } else if (result && result.type === 'trailer-error') {
+                        failParser(createParserError(
+                            result.code || 'HPE_INVALID_HEADER_TOKEN',
+                            result.reason,
+                            result.bytesParsed,
+                        ));
+                        return;
+                    } else if (result && result.type === 'trailer-overflow') {
+                        failParser(createParserError(
+                            'HPE_HEADER_OVERFLOW',
+                            'Header overflow',
+                            result.bytesParsed,
+                        ), 431);
                         return;
                     } else if (result === 'extension-limit') {
                         server.emit(
@@ -1726,7 +1830,7 @@ function createConnectionParser(server, socket) {
     return state;
 }
 
-function parseChunked(state) {
+function parseChunked(state, joinDuplicateHeaders) {
     while (true) {
         if (state.chunkState === 'SIZE') {
             const idx = bufferIndexOf(state.buffer, CRLF);
@@ -1756,12 +1860,8 @@ function parseChunked(state) {
             if (isNaN(size)) return 'error';
             state.buffer = state.buffer.slice(idx + 2);
             if (size === 0) {
-                // Consume trailing \r\n after final chunk
-                const trailIdx = bufferIndexOf(state.buffer, CRLF);
-                if (trailIdx === 0) {
-                    state.buffer = state.buffer.slice(2);
-                }
-                return 'done';
+                state.chunkState = 'TRAILERS';
+                continue;
             }
             state.contentLength = size;
             state.bodyReceived = 0;
@@ -1773,7 +1873,7 @@ function parseChunked(state) {
             const remaining = state.contentLength - state.bodyReceived;
             if (state.buffer.length === 0 || remaining === 0) {
                 if (remaining === 0) {
-                    state.chunkState = 'TRAILER';
+                    state.chunkState = 'DATA_CRLF';
                     continue;
                 }
                 return 'need-data';
@@ -1784,12 +1884,12 @@ function parseChunked(state) {
             state.bodyReceived += available;
             state.current.req.push(chunk);
             if (state.bodyReceived >= state.contentLength) {
-                state.chunkState = 'TRAILER';
+                state.chunkState = 'DATA_CRLF';
             }
             return 'progress';
         }
 
-        if (state.chunkState === 'TRAILER') {
+        if (state.chunkState === 'DATA_CRLF') {
             if (state.buffer.length < 2) return 'need-data';
             if (state.buffer[0] === 0x0d && state.buffer[1] === 0x0a) {
                 state.buffer = state.buffer.slice(2);
@@ -1799,8 +1899,168 @@ function parseChunked(state) {
             return 'error';
         }
 
+        if (state.chunkState === 'TRAILERS') {
+            if (state.buffer.length < 2) return 'need-data';
+            if (state.buffer[0] === 0x0d && state.buffer[1] === 0x0a) {
+                state.buffer = state.buffer.slice(2);
+                return 'done';
+            }
+
+            const idx = bufferIndexOf(state.buffer, HEADER_END);
+            const trailerResult = parseTrailerHeaders(
+                state.buffer
+                    .slice(0, idx === -1 ? state.buffer.length : idx)
+                    .toString('latin1'),
+                idx !== -1,
+            );
+            if (trailerResult.error) {
+                return {
+                    type: trailerResult.type,
+                    code: trailerResult.code,
+                    reason: trailerResult.reason,
+                    bytesParsed: trailerResult.bytesParsed,
+                };
+            }
+            if (idx === -1) return 'need-data';
+            state.buffer = state.buffer.slice(idx + HEADER_END.length);
+
+            const parsed = parseHeaders(
+                trailerResult.rawPairs,
+                !!joinDuplicateHeaders,
+            );
+            const req = state.current.req;
+            Object.assign(req.trailers, parsed.headers);
+            req._pendingTrailersDistinct = parsed.headersDistinct;
+            req.rawTrailers = parsed.rawHeaders;
+            return 'done';
+        }
+
         return 'need-data';
     }
+}
+
+function parseTrailerHeaders(block, complete) {
+    const rawPairs = [];
+    let headerBytes = 0;
+    let bytesParsed = 0;
+    const lines = block.split('\r\n');
+    for (let index = 0; index < lines.length; index++) {
+        let line = lines[index];
+        const isPartialLine = !complete && index === lines.length - 1;
+        const partialLineEndsWithCarriageReturn =
+            isPartialLine && line.endsWith('\r');
+        if (partialLineEndsWithCarriageReturn) {
+            line = line.slice(0, -1);
+        }
+        const colonIdx = line.indexOf(':');
+        if (colonIdx === -1 && isPartialLine) {
+            if (partialLineEndsWithCarriageReturn && line &&
+                _checkIsHttpToken(line)) {
+                return {
+                    error: true,
+                    type: 'trailer-error',
+                    reason: 'Invalid header token',
+                    bytesParsed: bytesParsed + line.length,
+                };
+            }
+            if (line && !_checkIsHttpToken(line)) {
+                let invalidIndex = 0;
+                while (invalidIndex < line.length &&
+                    _checkIsHttpToken(line[invalidIndex])) {
+                    invalidIndex++;
+                }
+                return {
+                    error: true,
+                    type: 'trailer-error',
+                    reason: 'Invalid header token',
+                    bytesParsed: bytesParsed + invalidIndex,
+                };
+            }
+            if (headerBytes + line.length >= MAX_TRAILER_SIZE) {
+                return {
+                    error: true,
+                    type: 'trailer-overflow',
+                    reason: 'Header overflow',
+                    bytesParsed:
+                        bytesParsed + MAX_TRAILER_SIZE - headerBytes,
+                };
+            }
+            return { rawPairs };
+        }
+        if (colonIdx <= 0) {
+            let invalidIndex = 0;
+            while (invalidIndex < line.length &&
+                _checkIsHttpToken(line[invalidIndex])) {
+                invalidIndex++;
+            }
+            return {
+                error: true,
+                type: 'trailer-error',
+                reason: 'Invalid header token',
+                bytesParsed: bytesParsed + invalidIndex,
+            };
+        }
+        const name = line.substring(0, colonIdx);
+        if (!_checkIsHttpToken(name)) {
+            let invalidIndex = 0;
+            while (invalidIndex < name.length &&
+                _checkIsHttpToken(name[invalidIndex])) {
+                invalidIndex++;
+            }
+            return {
+                error: true,
+                type: 'trailer-error',
+                reason: 'Invalid header token',
+                bytesParsed: bytesParsed + invalidIndex,
+            };
+        }
+        const rawValue = line.substring(colonIdx + 1);
+        if (_checkInvalidHeaderChar(rawValue)) {
+            const invalidIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
+            const invalidByte = rawValue.charCodeAt(invalidIndex);
+            const isBareLineFeed = invalidByte === 0x0a;
+            const isBareCarriageReturn = invalidByte === 0x0d;
+            return {
+                error: true,
+                type: 'trailer-error',
+                code: isBareLineFeed
+                    ? 'HPE_CR_EXPECTED'
+                    : isBareCarriageReturn
+                        ? 'HPE_LF_EXPECTED'
+                        : undefined,
+                reason: isBareLineFeed
+                    ? 'Missing expected CR after header value'
+                    : isBareCarriageReturn
+                        ? 'Missing expected LF after header value'
+                        : 'Invalid header value char',
+                bytesParsed:
+                    bytesParsed + colonIdx + 1 + invalidIndex +
+                    (isBareCarriageReturn ? 1 : 0),
+            };
+        }
+        const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
+        const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
+        const lineHeaderBytes = name.length + valueWithoutLeadingWhitespace.length;
+        if (headerBytes + lineHeaderBytes >= MAX_TRAILER_SIZE) {
+            const acceptedValueBytes = Math.max(
+                0,
+                MAX_TRAILER_SIZE - headerBytes - name.length,
+            );
+            return {
+                error: true,
+                type: 'trailer-overflow',
+                reason: 'Header overflow',
+                bytesParsed:
+                    bytesParsed + colonIdx + 1 +
+                    leadingWhitespaceBytes + acceptedValueBytes,
+            };
+        }
+        const value = valueWithoutLeadingWhitespace.replace(/[\t ]+$/g, '');
+        rawPairs.push(name, value);
+        headerBytes += lineHeaderBytes;
+        bytesParsed += line.length + CRLF.length;
+    }
+    return { rawPairs };
 }
 
 function bufferIndexOf(buf, search) {

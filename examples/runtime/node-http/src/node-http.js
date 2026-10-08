@@ -1127,6 +1127,910 @@ export async function httpPipelineBackpressureProfile() {
     return JSON.stringify(profile);
 }
 
+export async function httpRequestTrailers() {
+    const primaryValid = await new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let socketErrorCode;
+        let wire = '';
+        const validUrls = [];
+        let emptyTrailersValid = false;
+        let populatedTrailersValid = false;
+        let cachedDistinctValid = false;
+        let fragmentedTrailersValid = false;
+
+        const server = http.createServer((req, res) => {
+            validUrls.push(req.url);
+            if (req.url === '/empty') {
+                req.on('end', () => {
+                    const parsedDistinct = req.trailersDistinct;
+                    const assignedDistinct = { assigned: ['value'] };
+                    req.trailersDistinct = assignedDistinct;
+                    emptyTrailersValid = req.complete &&
+                        Object.keys(req.trailers).length === 0 &&
+                        Object.keys(parsedDistinct).length === 0 &&
+                        Object.getPrototypeOf(parsedDistinct) === null &&
+                        req.trailersDistinct === assignedDistinct &&
+                        req.rawTrailers.length === 0;
+                    res.end('empty');
+                });
+                req.resume();
+                return;
+            }
+
+            if (req.url === '/trailers') {
+                const trailers = req.trailers;
+                const fieldsEmptyBeforeEnd = Object.keys(trailers).length === 0;
+                const requestHeadersValid =
+                    Object.getPrototypeOf(req.headersDistinct) === null &&
+                    Object.prototype.hasOwnProperty.call(
+                        req.headersDistinct,
+                        '__proto__',
+                    ) &&
+                    req.headersDistinct.__proto__.join(',') === 'request' &&
+                    !Object.prototype.hasOwnProperty.call(
+                        req.headers,
+                        '__proto__',
+                    );
+                let body = '';
+                req.on('data', (chunk) => {
+                    body += chunk.toString();
+                });
+                req.on('end', () => {
+                    const trailersDistinct = req.trailersDistinct;
+                    const rawTrailers = req.rawTrailers;
+                    populatedTrailersValid = fieldsEmptyBeforeEnd &&
+                        requestHeadersValid &&
+                        req.complete &&
+                        req.trailers === trailers &&
+                        body === pipelineBody + 'abc' &&
+                        trailers['x-mixed'] === 'one' &&
+                        trailers['x-dupe'] === 'first, second' &&
+                        trailers.cookie === 'a=1; b=2' &&
+                        Array.isArray(trailers['set-cookie']) &&
+                        trailers['set-cookie'].join(',') === 'c=1,d=2' &&
+                        trailers['content-type'] === 'text/plain' &&
+                        trailersDistinct['x-dupe'].join(',') === 'first,second' &&
+                        trailersDistinct['content-type'].join(',') ===
+                            'text/plain,ignored' &&
+                        Object.prototype.hasOwnProperty.call(
+                            trailers,
+                            'constructor',
+                        ) &&
+                        trailers.constructor === 'safe' &&
+                        trailersDistinct.constructor.join(',') === 'safe' &&
+                        Object.getPrototypeOf(trailersDistinct) === null &&
+                        !Object.prototype.hasOwnProperty.call(
+                            trailers,
+                            '__proto__',
+                        ) &&
+                        Object.prototype.hasOwnProperty.call(
+                            trailersDistinct,
+                            '__proto__',
+                        ) &&
+                        trailersDistinct.__proto__.join(',') === 'ignored' &&
+                        trailers['x-obs-text'] === '\xa0value\xa0' &&
+                        JSON.stringify(rawTrailers) === JSON.stringify([
+                            'X-Mixed', 'one',
+                            'X-Dupe', 'first',
+                            'x-dupe', 'second',
+                            'Cookie', 'a=1',
+                            'cookie', 'b=2',
+                            'Set-Cookie', 'c=1',
+                            'Set-Cookie', 'd=2',
+                            'Content-Type', 'text/plain',
+                            'content-type', 'ignored',
+                            'constructor', 'safe',
+                            '__proto__', 'ignored',
+                            'X-Obs-Text', '\xa0value\xa0',
+                        ]);
+                    res.end('trailers');
+                });
+                return;
+            }
+
+            if (req.url === '/cached-distinct') {
+                const trailers = req.trailers;
+                const trailersDistinct = req.trailersDistinct;
+                const rawTrailers = req.rawTrailers;
+                req.on('end', () => {
+                    cachedDistinctValid = req.complete &&
+                        req.trailers === trailers &&
+                        req.trailers['x-cached'] === 'one' &&
+                        req.trailersDistinct === trailersDistinct &&
+                        Object.keys(trailersDistinct).length === 0 &&
+                        Object.getPrototypeOf(trailersDistinct) === null &&
+                        req.rawTrailers !== rawTrailers &&
+                        JSON.stringify(req.rawTrailers) ===
+                            JSON.stringify(['X-Cached', 'one']);
+                    res.end('cached-distinct');
+                });
+                req.resume();
+                return;
+            }
+
+            if (req.url === '/fragmented') {
+                req.on('end', () => {
+                    fragmentedTrailersValid = req.complete &&
+                        req.trailers['x-fragmented'] === 'bytewise' &&
+                        req.trailersDistinct['x-fragmented'][0] === 'bytewise';
+                    res.end('fragmented');
+                });
+                req.resume();
+                return;
+            }
+
+            res.end('next');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (!result) {
+                console.log(JSON.stringify({
+                    emptyTrailersValid,
+                    populatedTrailersValid,
+                    cachedDistinctValid,
+                    fragmentedTrailersValid,
+                    socketErrorCode,
+                    validUrls,
+                    wire,
+                }));
+            }
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 10000);
+        const writeBytewise = (buffer, done, index = 0) => {
+            if (index === buffer.length) {
+                done();
+                return;
+            }
+            socket.write(buffer.subarray(index, index + 1), () => {
+                setImmediate(() => writeBytewise(buffer, done, index + 1));
+            });
+        };
+
+        const pipelineBody = 'p'.repeat(17 * 1024);
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /empty HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Transfer-Encoding: chunked\r\n\r\n' +
+                    '0\r\n\r',
+                    () => {
+                        setImmediate(() => {
+                            const request = Buffer.from(
+                                '\nPOST /trailers HTTP/1.1\r\n' +
+                                'Host: localhost\r\n' +
+                                '__proto__: request\r\n' +
+                                'Transfer-Encoding: chunked\r\n\r\n' +
+                                pipelineBody.length.toString(16) + '\r\n' +
+                                pipelineBody + '\r\n' +
+                                '3\r\nabc\r\n' +
+                                '0\r\n' +
+                                'X-Mixed: one\r\n' +
+                                'X-Dupe: first\r\n' +
+                                'x-dupe: second\r\n' +
+                                'Cookie: a=1\r\n' +
+                                'cookie: b=2\r\n' +
+                                'Set-Cookie: c=1\r\n' +
+                                'Set-Cookie: d=2\r\n' +
+                                'Content-Type: text/plain\r\n' +
+                                'content-type: ignored\r\n' +
+                                'constructor: safe\r\n' +
+                                '__proto__: ignored\r\n' +
+                                'X-Obs-Text: \xa0value\xa0\r\n\r',
+                                'latin1',
+                            );
+                            socket.write(
+                                request,
+                                () => {
+                                    setImmediate(() => {
+                                        socket.write(
+                                            '\nPOST /cached-distinct HTTP/1.1\r\n' +
+                                            'Host: localhost\r\n' +
+                                            'Transfer-Encoding: chunked\r\n\r\n' +
+                                            '0\r\nX-Cached: one\r\n\r\n' +
+                                            'POST /fragmented HTTP/1.1\r\n' +
+                                            'Host: localhost\r\n' +
+                                            'Transfer-Encoding: chunked\r\n\r\n' +
+                                            '0\r\n',
+                                            () => writeBytewise(
+                                                Buffer.from(
+                                                    'X-Fragmented: bytewise\r\n\r\n',
+                                                ),
+                                                () => socket.write(
+                                                    'GET /next HTTP/1.1\r\n' +
+                                                    'Host: localhost\r\n' +
+                                                    'Connection: close\r\n\r\n',
+                                                ),
+                                            ),
+                                        );
+                                    });
+                                },
+                            );
+                        });
+                    },
+                );
+            });
+            const evaluate = () => {
+                const empty = wire.indexOf('empty');
+                const trailers = wire.indexOf('trailers', empty + 1);
+                const cached = wire.indexOf('cached-distinct', trailers + 1);
+                const fragmented = wire.indexOf('fragmented', cached + 1);
+                const next = wire.indexOf('next', fragmented + 1);
+                if (
+                    emptyTrailersValid &&
+                    populatedTrailersValid &&
+                    cachedDistinctValid &&
+                    fragmentedTrailersValid &&
+                    validUrls.join(',') ===
+                        '/empty,/trailers,/cached-distinct,/fragmented,/next' &&
+                    empty !== -1 &&
+                    trailers > empty &&
+                    cached > trailers &&
+                    fragmented > cached &&
+                    next > fragmented
+                ) {
+                    finish(true);
+                }
+            };
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                evaluate();
+            });
+            socket.on('error', (error) => {
+                socketErrorCode = error.code;
+            });
+            const evaluateTerminal = () => {
+                evaluate();
+                if (!settled) finish(false);
+            };
+            socket.on('end', evaluateTerminal);
+            socket.on('close', evaluateTerminal);
+        });
+    });
+    if (!primaryValid) return false;
+
+    const joinedValid = await new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let requestValid = false;
+        let wire = '';
+        const server = http.createServer(
+            { joinDuplicateHeaders: true },
+            (req, res) => {
+                requestValid = req.headers['content-type'] === 'first, second' &&
+                    req.headersDistinct['content-type'].join(',') ===
+                        'first,second';
+                req.on('end', () => {
+                    requestValid = requestValid && req.complete &&
+                        req.trailers['content-type'] === 'third, fourth' &&
+                        req.trailersDistinct['content-type'].join(',') ===
+                            'third,fourth';
+                    res.end('joined');
+                });
+                req.resume();
+            },
+        );
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => socket.write(
+                'POST /join HTTP/1.1\r\n' +
+                'Host: localhost\r\n' +
+                'Content-Type: first\r\n' +
+                'content-type: second\r\n' +
+                'Transfer-Encoding: chunked\r\n' +
+                'Connection: close\r\n\r\n' +
+                '0\r\n' +
+                'Content-Type: third\r\n' +
+                'content-type: fourth\r\n\r\n',
+            ));
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => finish(false));
+            socket.on('close', () => finish(
+                requestValid && wire.includes('joined'),
+            ));
+        });
+    });
+    if (!joinedValid) return false;
+
+    return new Promise((resolve) => {
+        let settled = false;
+        let request;
+        const server = http.createServer((_req, res) => {
+            res.setHeader('__proto__', 'proto-value');
+            res.setHeader('constructor', 'constructor-value');
+            res.end('client-distinct');
+        });
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (request) request.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+        server.listen(0, () => {
+            request = http.get({ port: server.address().port }, (res) => {
+                const headersValid =
+                    Object.getPrototypeOf(res.headersDistinct) === null &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headersDistinct,
+                        '__proto__',
+                    ) &&
+                    res.headersDistinct.__proto__.join(',') === 'proto-value' &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headersDistinct,
+                        'constructor',
+                    ) &&
+                    res.headersDistinct.constructor.join(',') ===
+                        'constructor-value' &&
+                    !Object.prototype.hasOwnProperty.call(
+                        res.headers,
+                        '__proto__',
+                    ) &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headers,
+                        'constructor',
+                    ) &&
+                    res.headers.constructor === 'constructor-value';
+                res.on('end', () => finish(headersValid));
+                res.resume();
+            });
+            request.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpRequestTrailerErrors() {
+    let activeSocket;
+    let currentCase;
+    let lastParserError;
+    let validSplitTrailers;
+    const requests = {};
+    const lifecycles = {};
+
+    const server = http.createServer((req, res) => {
+        const key = currentCase;
+        if (!requests[key]) requests[key] = [];
+        requests[key].push(req.url);
+        const lifecycle = {
+            req,
+            end: 0,
+            aborted: 0,
+            error: 0,
+            errorCode: undefined,
+            close: 0,
+        };
+        lifecycles[key] = lifecycle;
+        req.on('end', () => lifecycle.end++);
+        req.on('aborted', () => lifecycle.aborted++);
+        req.on('error', (error) => {
+            lifecycle.error++;
+            lifecycle.errorCode = error.code;
+        });
+        req.on('close', () => lifecycle.close++);
+        if (key === 'boundary-ok') {
+            req.on('end', () => res.end('boundary-ok'));
+        } else if (key === 'valid-final-crlf-split') {
+            req.on('end', () => {
+                validSplitTrailers = req.complete === true &&
+                    req.trailers['x-split'] === 'value' &&
+                    req.trailersDistinct['x-split'].join(',') === 'value' &&
+                    req.rawTrailers.join(',') === 'X-Split,value';
+                res.end('valid-final-crlf-split');
+            });
+        } else if (key === 'started-response') {
+            res.write('prefix');
+        }
+        req.resume();
+    });
+
+    const onClientError = (error, socket) => {
+        const lifecycle = lifecycles[currentCase];
+        lastParserError = {
+            code: error.code,
+            reason: error.reason,
+            bytesParsed: error.bytesParsed,
+            hasRawPacket: error.rawPacket instanceof Buffer,
+            rawPacket: error.rawPacket && error.rawPacket.toString('latin1'),
+            abortedAtCallback: lifecycle && lifecycle.req.aborted,
+            completeAtCallback: lifecycle && lifecycle.req.complete,
+        };
+        socket.destroy();
+    };
+    server.on('clientError', onClientError);
+
+    const exchange = (payload, endAfterWrite = false) => new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let socketErrorCode;
+        const finish = (timedOut) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve({ wire, socketErrorCode, timedOut });
+        };
+        const timeout = setTimeout(() => {
+            if (activeSocket) activeSocket.destroy();
+            finish(true);
+        }, 10000);
+        const socket = net.connect({ port: server.address().port });
+        activeSocket = socket;
+        socket.on('connect', () => {
+            const parts = Array.isArray(payload) ? payload : [payload];
+            const writePart = (index) => {
+                if (socket.destroyed) return;
+                const isLast = index === parts.length - 1;
+                if (isLast && endAfterWrite) {
+                    socket.end(parts[index]);
+                    return;
+                }
+                socket.write(parts[index], () => {
+                    if (!isLast && !socket.destroyed) {
+                        setTimeout(() => writePart(index + 1), 50);
+                    }
+                });
+            };
+            writePart(0);
+        });
+        socket.on('data', (chunk) => {
+            wire += chunk.toString('latin1');
+        });
+        socket.on('error', (error) => {
+            socketErrorCode = error.code;
+        });
+        socket.on('close', () => finish(false));
+    });
+
+    const exchangeAfterResponse = (before, after) =>
+        new Promise((resolve) => {
+            let settled = false;
+            let sentAfter = false;
+            let wire = '';
+            let socketErrorCode;
+            const finish = (timedOut) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve({ wire, socketErrorCode, timedOut });
+            };
+            const timeout = setTimeout(() => {
+                if (activeSocket) activeSocket.destroy();
+                finish(true);
+            }, 10000);
+            activeSocket = net.connect({ port: server.address().port });
+            activeSocket.on('connect', () => activeSocket.write(before));
+            activeSocket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!sentAfter) {
+                    sentAfter = true;
+                    activeSocket.write(after);
+                }
+            });
+            activeSocket.on('error', (error) => {
+                socketErrorCode = error.code;
+            });
+            activeSocket.on('close', () => finish(false));
+        });
+
+    const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+    const settleLifecycle = async () => {
+        await nextTurn();
+        await nextTurn();
+        await nextTurn();
+    };
+    const waitForLifecycleClose = async (key) => {
+        const lifecycle = lifecycles[key];
+        if (!lifecycle || lifecycle.close > 0) return;
+        await new Promise((resolve) => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve();
+            };
+            const timeout = setTimeout(finish, 2000);
+            lifecycle.req.once('close', finish);
+        });
+    };
+    const lifecycleIsAborted = (key) => {
+        const lifecycle = lifecycles[key];
+        return lifecycle && lifecycle.req.complete === false &&
+            lifecycle.end === 0 && lifecycle.aborted === 1 &&
+            lifecycle.error === 1 && lifecycle.errorCode === 'ECONNRESET' &&
+            lifecycle.close === 1;
+    };
+    const lifecycleIsComplete = (key) => {
+        const lifecycle = lifecycles[key];
+        return lifecycle && lifecycle.req.complete === true &&
+            lifecycle.end === 1 && lifecycle.aborted === 0 &&
+            lifecycle.error === 0 && lifecycle.close === 1;
+    };
+    const handledErrorIsValid = (
+        code,
+        reason,
+        bytesParsed,
+        rawPacket,
+    ) =>
+        lastParserError && lastParserError.code === code &&
+        lastParserError.reason === reason &&
+        lastParserError.bytesParsed === bytesParsed &&
+        lastParserError.hasRawPacket === (rawPacket !== undefined) &&
+        lastParserError.rawPacket === rawPacket &&
+        lastParserError.abortedAtCallback === false &&
+        lastParserError.completeAtCallback === false;
+
+    const runHandled = async (key, payload, endAfterWrite = false) => {
+        currentCase = key;
+        lastParserError = undefined;
+        const result = await exchange(payload, endAfterWrite);
+        await settleLifecycle();
+        await waitForLifecycleClose(key);
+        return result;
+    };
+
+    const closeServer = () => new Promise((resolve) => {
+        if (activeSocket) activeSocket.destroy();
+        server.closeAllConnections();
+        server.close(resolve);
+    });
+
+    let failure;
+    try {
+        await new Promise((resolve) => server.listen(0, resolve));
+
+        const validSplitPrefix = Buffer.from(
+            'POST /valid-final-crlf-split HTTP/1.1\r\n' +
+            'Host: localhost\r\nConnection: close\r\n' +
+            'Transfer-Encoding: chunked\r\n\r\n' +
+            '0\r\nX-Split: value\r\n\r',
+            'latin1',
+        );
+        const validSplitSuffix = Buffer.from('\n', 'latin1');
+        let result = await runHandled(
+            'valid-final-crlf-split',
+            [validSplitPrefix, validSplitSuffix],
+        );
+        if (result.timedOut ||
+            !result.wire.includes('valid-final-crlf-split') ||
+            lastParserError !== undefined ||
+            validSplitTrailers !== true ||
+            !lifecycleIsComplete('valid-final-crlf-split')) {
+            failure = 'valid-final-crlf-split';
+        }
+
+        const vtPayload = Buffer.from(
+            'POST /bad-vt HTTP/1.1\r\n' +
+            'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+            '0\r\nX-Bad:\x0bvalue\r\n\r\n' +
+            'GET /smuggled HTTP/1.1\r\nHost: localhost\r\n\r\n',
+            'latin1',
+        );
+        result = await runHandled('vt', vtPayload);
+        if (result.timedOut || result.wire !== '' ||
+            requests.vt.join(',') !== '/bad-vt' ||
+            !handledErrorIsValid(
+                'HPE_INVALID_HEADER_TOKEN',
+                'Invalid header value char',
+                vtPayload.indexOf(0x0b),
+                vtPayload.toString('latin1'),
+            ) || !lifecycleIsAborted('vt')) {
+            failure = 'vertical-tab';
+        }
+
+        if (!failure) {
+            const ffPrefix = Buffer.from(
+                'POST /bad-ff HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\n',
+                'latin1',
+            );
+            const ffSuffix = Buffer.from(
+                'X-Bad:\x0cvalue\r\n\r\n',
+                'latin1',
+            );
+            result = await runHandled('ff', [ffPrefix, ffSuffix]);
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header value char',
+                    ffSuffix.indexOf(0x0c),
+                    ffSuffix.toString('latin1'),
+                ) || !lifecycleIsAborted('ff')) {
+                failure = 'form-feed';
+            }
+        }
+
+        const invalidTrailerPrefix = (key) =>
+            'POST /' + key + ' HTTP/1.1\r\n' +
+            'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+            '0\r\n';
+        for (const invalidCase of [
+            {
+                key: 'no-colon',
+                suffix: 'foo\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('foo\r\n') + 3;
+                },
+            },
+            {
+                key: 'invalid-name-before-cr',
+                suffix: 'fo o\r',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('fo o') + 2;
+                },
+            },
+            {
+                key: 'invalid-name',
+                suffix: 'a b\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('a b') + 1;
+                },
+            },
+            {
+                key: 'obs-fold',
+                suffix: ' value\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf(' value');
+                },
+            },
+            {
+                key: 'empty-name',
+                suffix: ': value\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf(': value');
+                },
+            },
+            {
+                key: 'bare-lf',
+                suffix: 'X: value\nY: okay\r\n\r\n',
+                code: 'HPE_CR_EXPECTED',
+                reason: 'Missing expected CR after header value',
+                offset(payload) {
+                    return payload.indexOf('\nY');
+                },
+            },
+            {
+                key: 'bare-cr',
+                suffix: 'X: value\rY: okay\r\n\r\n',
+                code: 'HPE_LF_EXPECTED',
+                reason: 'Missing expected LF after header value',
+                offset(payload) {
+                    return payload.indexOf('\rY') + 1;
+                },
+            },
+        ]) {
+            if (failure) break;
+            const payload = Buffer.from(
+                invalidTrailerPrefix(invalidCase.key) + invalidCase.suffix,
+                'latin1',
+            );
+            result = await runHandled(invalidCase.key, payload);
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    invalidCase.code,
+                    invalidCase.reason,
+                    invalidCase.offset(payload),
+                    payload.toString('latin1'),
+                ) || !lifecycleIsAborted(invalidCase.key)) {
+                failure = invalidCase.key;
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-no-colon') + 'foo',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('\r\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-no-colon',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header token',
+                    0,
+                    splitSuffix.toString('latin1'),
+                ) || lastParserError.bytesParsed < 0 ||
+                !lifecycleIsAborted('split-no-colon')) {
+                failure = 'split-no-colon';
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-no-colon-cr') + 'foo\r',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-no-colon-cr',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header token',
+                    splitPrefix.length - 1,
+                    splitPrefix.toString('latin1'),
+                ) || !lifecycleIsAborted('split-no-colon-cr')) {
+                failure = 'split-no-colon-cr';
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-bare-cr') + 'X: value\r',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('Y: okay\r\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-bare-cr',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_LF_EXPECTED',
+                    'Missing expected LF after header value',
+                    0,
+                    splitSuffix.toString('latin1'),
+                ) || !lifecycleIsAborted('split-bare-cr')) {
+                failure = 'split-bare-cr';
+            }
+        }
+
+        for (const [key, suffix] of [
+            ['empty-eof', ''],
+            ['partial-eof', 'X-Test: value\r\n'],
+        ]) {
+            if (failure) break;
+            result = await runHandled(key,
+                'POST /' + key + ' HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\n' + suffix,
+                true,
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_EOF_STATE',
+                    'Invalid EOF state',
+                    0,
+                    undefined,
+                ) || !lifecycleIsAborted(key)) {
+                failure = key;
+            }
+        }
+
+        if (!failure) {
+            server.removeListener('clientError', onClientError);
+            currentCase = 'default';
+            result = await exchange(
+                'POST /default HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\nBad Name: value\r\n\r\n' +
+                'GET /smuggled HTTP/1.1\r\nHost: localhost\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('default');
+            if (result.timedOut ||
+                result.wire !== 'HTTP/1.1 400 Bad Request\r\n' +
+                    'Connection: close\r\n\r\n' ||
+                requests.default.join(',') !== '/default' ||
+                !lifecycleIsAborted('default')) {
+                failure = { phase: 'default-handler', result };
+            }
+        }
+
+        if (!failure) {
+            currentCase = 'boundary-ok';
+            result = await exchange(
+                'POST /boundary-ok HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n' +
+                'Connection: close\r\n\r\n' +
+                '0\r\nX: ' + 'a'.repeat(16382) + '\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('boundary-ok');
+            if (result.timedOut || !result.wire.includes('boundary-ok') ||
+                !lifecycleIsComplete('boundary-ok')) {
+                failure = { phase: 'boundary-ok', result };
+            }
+        }
+
+        if (!failure) {
+            currentCase = 'overflow';
+            result = await exchange(
+                'POST /overflow HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\nX: ' + 'a'.repeat(16383) + '\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('overflow');
+            if (result.timedOut ||
+                result.wire !==
+                    'HTTP/1.1 431 Request Header Fields Too Large\r\n' +
+                    'Connection: close\r\n\r\n' ||
+                !lifecycleIsAborted('overflow')) {
+                failure = { phase: 'overflow', result };
+            }
+        }
+
+        if (!failure) {
+            currentCase = 'started-response';
+            result = await exchangeAfterResponse(
+                'POST /started-response HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\n',
+                'Bad Name: value\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('started-response');
+            if (result.timedOut || !result.wire.includes('prefix') ||
+                result.wire.includes('400 Bad Request') ||
+                result.wire.includes('431 Request Header Fields Too Large') ||
+                result.wire.split('HTTP/1.1').length !== 2 ||
+                !lifecycleIsAborted('started-response')) {
+                failure = { phase: 'started-response', result };
+            }
+        }
+    } catch (error) {
+        failure = error && (error.stack || error.message) || String(error);
+    } finally {
+        await closeServer();
+    }
+
+    if (failure) {
+        console.log(JSON.stringify({
+            failure,
+            lastParserError,
+            requests,
+            lifecycles: Object.fromEntries(Object.entries(lifecycles).map(
+                ([key, value]) => [key, {
+                    complete: value.req.complete,
+                    end: value.end,
+                    aborted: value.aborted,
+                    error: value.error,
+                    errorCode: value.errorCode,
+                    close: value.close,
+                }],
+            )),
+        }));
+    }
+    return !failure;
+}
+
 export async function httpPipelinedResponseOrder() {
     return new Promise((resolve) => {
         let settled = false;

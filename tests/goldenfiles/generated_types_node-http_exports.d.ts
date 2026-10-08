@@ -10,6 +10,8 @@ declare module 'node-http' {
   export function httpResponsePostCloseWrites(): Promise<boolean>;
   export function httpPipelineBackpressure(): Promise<boolean>;
   export function httpPipelineBackpressureProfile(): Promise<string>;
+  export function httpRequestTrailers(): Promise<boolean>;
+  export function httpRequestTrailerErrors(): Promise<boolean>;
   export function httpPipelinedResponseOrder(): Promise<boolean>;
   export function httpHalfOpenPipelinedRequests(): Promise<boolean>;
   export function httpPipelinedCloseLifecycle(): Promise<boolean>;
