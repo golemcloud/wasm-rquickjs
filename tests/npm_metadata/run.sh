@@ -31,6 +31,11 @@ if [ "${1:-}" != "--release" ] || [ "$#" -ne 1 ]; then
     exit 2
 fi
 
+if [ -n "${NPM_METADATA_RELEASE_SMOKE:-}" ]; then
+    echo "NPM_METADATA_RELEASE_SMOKE is diagnostic-only; unset it before --release" >&2
+    exit 2
+fi
+
 node_overrides=
 for variable in NODE_COMPILE_CACHE NODE_DEBUG NODE_DEBUG_NATIVE NODE_ENV NODE_INSPECT_RESUME_ON_START NODE_OPTIONS NODE_PATH NODE_PENDING_DEPRECATION; do
     if printenv "$variable" >/dev/null 2>&1; then

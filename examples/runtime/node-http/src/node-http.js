@@ -3124,7 +3124,12 @@ export async function netWriteTimeoutLifecycle() {
     overflowSocket.setTimeout(0);
     overflowSocket.destroy();
 
-    if (!validationOrdering || !invalidValueOrdering || !normalizedOverflow) return false;
+    if (!validationOrdering || !invalidValueOrdering || !normalizedOverflow) {
+        throw new Error(`socket timeout validation: ${JSON.stringify({
+            destroyedOrdering, invalidCallbackCode, scheduledTimeouts,
+            invalidTypeCode, invalidRangeCode, invalidValueOrdering, normalizedOverflow,
+        })}`);
+    }
 
     // Keep the exact queue-size policy deterministic as a supplement to the
     // public TCP lifecycle below: any changed sample, including an increase or
@@ -3156,7 +3161,11 @@ export async function netWriteTimeoutLifecycle() {
         policyResets === 3 && policyTimeouts === 1 &&
         policySocket._lastWriteQueueSize === 0;
     policySocket.destroy();
-    if (!progressPolicy) return false;
+    if (!progressPolicy) {
+        throw new Error(`socket timeout progress policy: ${JSON.stringify({
+            increasingProgress, policyResets, policyTimeouts, policyPending,
+        })}`);
+    }
 
     // Start with no timeout, then enable, disable, replace, and shorten it after
     // a real native write is pending. A stalled timeout is advisory; the first
@@ -3177,6 +3186,7 @@ export async function netWriteTimeoutLifecycle() {
         let openAtFirstTimeout = false;
         let firstTimeoutElapsed = 0;
         let secondTimeoutElapsed = 0;
+        let rearmedAt = 0;
         let resumedBytes = 0;
         let resumedThenPaused = false;
         let writerClosed = false;
@@ -3200,10 +3210,17 @@ export async function netWriteTimeoutLifecycle() {
                 if (timeoutCount === 1) {
                     openAtFirstTimeout = !socket.destroyed;
                     firstTimeoutElapsed = Date.now() - configuredAt;
+                    // Widen the window in which the JS timer wins the race with
+                    // the native P2 deadline, then replace that native deadline.
+                    const rearmAt = Date.now() + 50;
+                    while (Date.now() < rearmAt) {
+                        // Keep the listener active until the old native deadline is due.
+                    }
                     client.resume();
+                    rearmedAt = Date.now();
                     socket.setTimeout(750);
                 } else {
-                    secondTimeoutElapsed = Date.now() - configuredAt - firstTimeoutElapsed;
+                    secondTimeoutElapsed = Date.now() - rearmedAt;
                     firstWriteCallbacksBeforeDestroy = firstWriteCallbacks;
                     secondWriteCallbacksBeforeDestroy = secondWriteCallbacks;
                     writeErrorsBeforeDestroy = writeErrors;
@@ -3310,7 +3327,9 @@ export async function netWriteTimeoutLifecycle() {
         stalledWrite.writeErrors >= 1 &&
         stalledWrite.uncaughtTimeouts === 1 &&
         stalledWrite.error === undefined;
-    if (!stalledWritePassed) return false;
+    if (!stalledWritePassed) {
+        throw new Error(`socket timeout stalled write: ${JSON.stringify(stalledWrite)}`);
+    }
 
     // After a real write drains, ordinary idle timeout semantics resume.
     const drainedWrite = await new Promise((resolve) => {
@@ -3364,7 +3383,9 @@ export async function netWriteTimeoutLifecycle() {
         });
     });
 
-    if (!drainedWrite.ok) return false;
+    if (!drainedWrite.ok) {
+        throw new Error(`socket timeout drained write: ${JSON.stringify(drainedWrite)}`);
+    }
     const result = validationOrdering && normalizedOverflow && progressPolicy && drainedWrite.ok &&
         stalledWritePassed;
     return result;

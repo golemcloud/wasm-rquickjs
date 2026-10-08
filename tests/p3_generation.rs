@@ -1422,6 +1422,39 @@ fn p3_set_timeout_resolves_promise_on_wasi_p3() -> anyhow::Result<()> {
 }
 
 #[test]
+fn p3_runtime_idle_wait_uses_export_liveness_boundary() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-runtime-idle;
+
+            world p3-runtime-idle {
+              export run: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            export async function run() {
+              const events = ['before'];
+              setTimeout(() => events.push('timer'), 5);
+              const ignored = setInterval(() => events.push('unref'), 1000);
+              ignored.unref();
+              await process._awaitRuntimeIdle();
+              events.push('after');
+              return events.join(':');
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_runtime_idle")?;
+    let result = run_p3_string_export(&wasm_path, "run")?;
+
+    assert_eq!(result, "before:timer:after");
+    Ok(())
+}
+
+#[test]
 fn p3_crypto_sha256_matches_known_digest_on_wasi_p3() -> anyhow::Result<()> {
     // The default `normal-p3` tier enables the real `crypto` capability, so `node:crypto`
     // must expose the full hashing surface. The `web_crypto_lite` fallback only provides

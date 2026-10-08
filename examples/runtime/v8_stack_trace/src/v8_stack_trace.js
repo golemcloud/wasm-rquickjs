@@ -18,6 +18,132 @@ export const testCaptureStackTraceExists = () => {
     }
 };
 
+async function checkPreparedStackCacheLifetime(customStack) {
+    const descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+    let hookCalls = 0;
+    try {
+        assert.strictEqual(typeof globalThis.gc, 'function');
+        if (customStack) {
+            Error.prepareStackTrace = error => {
+                hookCalls++;
+                // Exercise the weak-key/value-to-key cycle as well as strings.
+                return { error, message: error.message };
+            };
+        }
+        const held = Array.from({ length: 8 }, (_, i) => new Error(`held-${i}`));
+        const heldStacks = held.map(error => error.stack);
+        const unreadHeld = customStack
+            ? []
+            : Array.from({ length: 8 }, (_, i) => new Error(`unread-held-${i}`));
+        function discardedErrors() {
+            return Array.from({ length: 64 }, () => {
+                const error = new Error('discarded');
+                error.self = error;
+                void error.stack;
+                return new WeakRef(error);
+            });
+        }
+        function discardedPlainCycles() {
+            return Array.from({ length: 64 }, () => {
+                const object = {};
+                object.self = object;
+                return new WeakRef(object);
+            });
+        }
+        function discardedPublicWeakEntries() {
+            const refs = [];
+            for (let i = 0; i < 32; i++) {
+                const mapKey = { marker: `public-map-key-${i}` };
+                const mapValue = { mapKey };
+                const setValue = { marker: `public-set-value-${i}` };
+                setValue.self = setValue;
+                publicWeakMap.set(mapKey, mapValue);
+                publicWeakSet.add(setValue);
+                refs.push(new WeakRef(mapKey), new WeakRef(setValue));
+            }
+            assert.match(inspect(publicWeakMap, { showHidden: true }), /public-map-key/);
+            assert.match(inspect(publicWeakSet, { showHidden: true }), /public-set-value/);
+            return refs;
+        }
+        const publicWeakMap = new WeakMap();
+        const publicWeakSet = new WeakSet();
+        const liveMapKey = { marker: 'live-map-key' };
+        const readdedMapKey = { marker: 'readded-map-key' };
+        const currentMapValue = { marker: 'current-map-value' };
+        const currentReaddedMapValue = { marker: 'current-readded-map-value' };
+        const liveSetValue = { marker: 'live-set-value' };
+        const readdedSetValue = { marker: 'readded-set-value' };
+        publicWeakMap.set(liveMapKey, { marker: 'stale-map-value' });
+        publicWeakMap.set(liveMapKey, currentMapValue);
+        publicWeakMap.set(readdedMapKey, { marker: 'stale-readded-map-value' });
+        publicWeakMap.delete(readdedMapKey);
+        publicWeakMap.set(readdedMapKey, currentReaddedMapValue);
+        publicWeakSet.add(liveSetValue);
+        publicWeakSet.add(liveSetValue);
+        publicWeakSet.add(readdedSetValue);
+        publicWeakSet.delete(readdedSetValue);
+        publicWeakSet.add(readdedSetValue);
+        const errors = discardedErrors();
+        const plain = discardedPlainCycles();
+        const publicWeakEntries = discardedPublicWeakEntries();
+        const callsBeforeGc = hookCalls;
+        const tick = () => new Promise(resolve => setTimeout(resolve, 0));
+        // End the allocation job before collecting. The runtime defers its
+        // native collector to a timer, keeping it off async-generator stacks.
+        await tick();
+        for (let i = 0; i < 3; i++) {
+            globalThis.gc();
+            await tick();
+            await tick();
+        }
+        assert.strictEqual(plain.filter(ref => ref.deref() === undefined).length, 64,
+            'GC positive control must collect plain cycles');
+        assert.strictEqual(errors.filter(ref => ref.deref() === undefined).length, 64,
+            'private prepared-stack cache must not retain discarded errors');
+        assert.strictEqual(publicWeakEntries.filter(ref => ref.deref() === undefined).length, 64,
+            'inspection bookkeeping must not retain public weak entries');
+        assert.strictEqual(publicWeakMap.get(liveMapKey), currentMapValue);
+        assert.strictEqual(publicWeakMap.get(readdedMapKey), currentReaddedMapValue);
+        assert.strictEqual(publicWeakSet.has(liveSetValue), true);
+        assert.strictEqual(publicWeakSet.has(readdedSetValue), true);
+        const inspectedWeakMap = inspect(publicWeakMap, { showHidden: true });
+        const inspectedWeakSet = inspect(publicWeakSet, { showHidden: true });
+        assert.doesNotMatch(inspectedWeakMap, /public-map-key/);
+        assert.doesNotMatch(inspectedWeakSet, /public-set-value/);
+        assert.match(inspectedWeakMap, /current-map-value/);
+        assert.match(inspectedWeakMap, /current-readded-map-value/);
+        assert.doesNotMatch(inspectedWeakMap, /stale-map-value/);
+        assert.doesNotMatch(inspectedWeakMap, /stale-readded-map-value/);
+        assert.strictEqual(inspectedWeakMap.match(/live-map-key/g)?.length, 1);
+        assert.strictEqual(inspectedWeakMap.match(/readded-map-key/g)?.length, 1);
+        assert.strictEqual(inspectedWeakSet.match(/live-set-value/g)?.length, 1);
+        assert.strictEqual(inspectedWeakSet.match(/readded-set-value/g)?.length, 1);
+        for (let i = 0; i < held.length; i++) {
+            assert.strictEqual(held[i].stack, heldStacks[i]);
+            if (customStack) assert.strictEqual(held[i].stack.error, held[i]);
+            else assert(held[i].stack.includes(`held-${i}`));
+        }
+        for (let i = 0; i < unreadHeld.length; i++) {
+            unreadHeld[i].name = 404;
+            assert.match(inspect(unreadHeld[i]),
+                new RegExp(`^404 \\[Error\\]: unread-held-${i}(?:\\n|$)`));
+        }
+        assert.strictEqual(hookCalls, callsBeforeGc, 'held stacks remain cached across GC');
+        return true;
+    } finally {
+        if (descriptor) Object.defineProperty(Error, 'prepareStackTrace', descriptor);
+        else delete Error.prepareStackTrace;
+    }
+}
+
+export async function testPreparedStackCacheDoesNotRetainErrors() {
+    return await checkPreparedStackCacheLifetime(false);
+}
+
+export async function testPreparedStackCacheDoesNotRetainCustomCycles() {
+    return await checkPreparedStackCacheLifetime(true);
+}
+
 // Test 2: Basic Error.captureStackTrace usage — sets .stack on target
 export const testCaptureStackTraceBasic = () => {
     try {

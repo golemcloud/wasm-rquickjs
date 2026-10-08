@@ -12,6 +12,33 @@ async fn compiled_buffer_utils() -> CompiledTest {
 }
 
 #[test]
+async fn buffer_test_utf8_encoding(
+    #[tagged_as("buffer_utils")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test-utf8-encoding", &[]).await;
+    println!("Output:\n{}", output);
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn buffer_test_utf8_trailing_surrogates(
+    #[tagged_as("buffer_utils")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-utf8-trailing-surrogates",
+        &[],
+    )
+    .await;
+    println!("Output:\n{}", output);
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn buffer_test_is_ascii(
     #[tagged_as("buffer_utils")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

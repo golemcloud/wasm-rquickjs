@@ -54,6 +54,7 @@ mod v8_stack_trace;
 mod variant_list_roundtrip;
 mod websocket;
 mod xhr;
+mod zlib;
 
 // Tag suites into runtime groups for parallel CI matrix execution.
 tag_suite!(crypto, group1);
@@ -94,6 +95,7 @@ tag_suite!(cjs_require, group7);
 tag_suite!(module_resolution, group7);
 tag_suite!(timeout, group7);
 tag_suite!(buffer, group7);
+tag_suite!(zlib, group7);
 tag_suite!(bigint_roundtrip, group7);
 tag_suite!(imports, group7);
 tag_suite!(variant_list_roundtrip, group7);
