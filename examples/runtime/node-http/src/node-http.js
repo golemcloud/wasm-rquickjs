@@ -2207,7 +2207,7 @@ export async function httpExpectContinueFlow() {
         return false;
     }
 
-    let explicitRequests = 0;
+    const explicitRequests = [];
     let checkContinue = 0;
     let explicitBody = '';
     let explicitBefore;
@@ -2215,7 +2215,10 @@ export async function httpExpectContinueFlow() {
     let explicitExpect;
     let continueCallbacks = 0;
     let continueCallbackError;
-    const explicitServer = http.createServer(() => explicitRequests++);
+    const explicitServer = http.createServer((req, res) => {
+        explicitRequests.push(req.url);
+        res.end('next');
+    });
     explicitServer.on('checkContinue', (req, res) => {
         checkContinue++;
         explicitExpect = res._expect_continue;
@@ -2236,28 +2239,66 @@ export async function httpExpectContinueFlow() {
         'POST /explicit HTTP/1.1\r\n' +
         'Host: localhost\r\n' +
         'Expect: 100-continue\r\n' +
-        'Content-Length: 4\r\n' +
-        'Connection: close\r\n\r\n',
+        'Content-Length: 4\r\n\r\n',
         (wire, socket) => {
             if (!explicitBodySent && wire.includes('HTTP/1.1 100 Continue\r\n\r\n')) {
                 explicitBodySent = true;
-                socket.write('data');
+                socket.write(
+                    'data' +
+                    'GET /next HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Connection: close\r\n\r\n',
+                );
             }
         },
     );
     const explicitContinue = explicit.wire.indexOf('HTTP/1.1 100 Continue');
     const explicitFinal = explicit.wire.indexOf('HTTP/1.1 200 OK');
-    if (explicit.timedOut || explicit.error || explicitRequests !== 0 ||
+    const explicitNext = explicit.wire.indexOf('HTTP/1.1 200 OK', explicitFinal + 1);
+    if (explicit.timedOut || explicit.error ||
+        explicitRequests.join(',') !== '/next' ||
         checkContinue !== 1 || explicitExpect !== true ||
         explicitBefore !== false || explicitAfter !== true ||
         continueCallbacks !== 1 || continueCallbackError !== null ||
         explicitBody !== 'data' || explicitContinue === -1 ||
-        explicitFinal <= explicitContinue ||
-        !explicit.wire.includes('\r\n\r\nexplicit')) {
+        explicitFinal <= explicitContinue || explicitNext <= explicitFinal ||
+        !explicit.wire.slice(explicitFinal, explicitNext)
+            .includes('Connection: keep-alive') ||
+        !explicit.wire.includes('\r\n\r\nexplicit') ||
+        !explicit.wire.includes('\r\n\r\nnext')) {
         console.log(JSON.stringify({ phase: 'explicit', explicit,
             explicitRequests, checkContinue, explicitExpect, explicitBefore,
             explicitAfter, continueCallbacks, continueCallbackError,
             explicitBody }));
+        return false;
+    }
+
+    let unansweredRequests = 0;
+    let unansweredCheckContinue = 0;
+    let unansweredEnd = 0;
+    const unansweredServer = http.createServer(() => unansweredRequests++);
+    unansweredServer.on('checkContinue', (req, res) => {
+        unansweredCheckContinue++;
+        req.on('end', () => unansweredEnd++);
+        req.resume();
+        res.statusCode = 417;
+        res.end('rejected');
+    });
+    const unanswered = await exchange(
+        unansweredServer,
+        'POST /rejected HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n\r\nbody',
+    );
+    if (unanswered.timedOut || unanswered.error || unansweredRequests !== 0 ||
+        unansweredCheckContinue !== 1 || unansweredEnd !== 1 ||
+        unanswered.wire.includes('100 Continue') ||
+        !unanswered.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+        !unanswered.wire.includes('Connection: close') ||
+        !unanswered.wire.includes('\r\n\r\nrejected')) {
+        console.log(JSON.stringify({ phase: 'unanswered-continue', unanswered,
+            unansweredRequests, unansweredCheckContinue, unansweredEnd }));
         return false;
     }
 
@@ -2345,6 +2386,47 @@ export async function httpExpectContinueFlow() {
         !legacy.wire.includes('\r\n\r\nlegacy')) {
         console.log(JSON.stringify({ phase: 'http-1.0', legacy, legacyRequests,
             legacyCheckContinue, legacyCheckExpectation }));
+        return false;
+    }
+
+    let skippedHintCallbacks = 0;
+    let earlyHintCallbacks = 0;
+    let earlyHintCallbackError;
+    const earlyHintsServer = http.createServer((_req, res) => {
+        res.writeEarlyHints({ test: 'missing-link' }, () => skippedHintCallbacks++);
+        res.writeEarlyHints(
+            { link: undefined, test: 'undefined-link' },
+            () => skippedHintCallbacks++,
+        );
+        res.writeEarlyHints({ link: [] }, () => skippedHintCallbacks++);
+        res.writeEarlyHints({
+            link: '</lower.js>; rel=preload',
+            Link: '</upper.js>; rel=preload',
+            test: 'included',
+        }, (error) => {
+            earlyHintCallbacks++;
+            earlyHintCallbackError = error;
+        });
+        res.end('hints');
+    });
+    const earlyHints = await exchange(
+        earlyHintsServer,
+        'GET /hints HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    if (earlyHints.timedOut || earlyHints.error || skippedHintCallbacks !== 0 ||
+        earlyHintCallbacks !== 1 || earlyHintCallbackError !== null ||
+        earlyHints.wire.split('HTTP/1.1 103 Early Hints').length !== 2 ||
+        !earlyHints.wire.includes('Link: </lower.js>; rel=preload\r\n') ||
+        !earlyHints.wire.includes('Link: </upper.js>; rel=preload\r\n') ||
+        !earlyHints.wire.includes('test: included\r\n') ||
+        earlyHints.wire.includes('missing-link') ||
+        earlyHints.wire.includes('undefined-link') ||
+        !earlyHints.wire.includes('\r\n\r\nhints')) {
+        console.log(JSON.stringify({ phase: 'early-hints', earlyHints,
+            skippedHintCallbacks, earlyHintCallbacks,
+            earlyHintCallbackError }));
         return false;
     }
 

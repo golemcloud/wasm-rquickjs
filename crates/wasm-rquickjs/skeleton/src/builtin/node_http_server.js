@@ -633,7 +633,11 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         String(value).split(',').map((token) => token.trim().toLowerCase()).filter(Boolean)
     );
     const userSaysClose = userConnectionTokens.includes('close');
-    const canKeepAlive = !!this._keepAlive;
+    // Node closes a connection when an Expect: 100-continue request receives
+    // a final response before the interim 100. The client may still have a
+    // request body queued for that connection, so it is not safe to reuse.
+    const canKeepAlive = !!this._keepAlive &&
+        !(this._expect_continue && !this._sent100);
     const canPersistForOverflow = !!this._acceptOverflowRequest;
     const selfDelimited = !this._hasBody || this._sentContentLength || this._chunked;
     const chunkedWithoutTerminator = isNoBodyStatus && this._chunked;
@@ -1074,7 +1078,7 @@ const LINK_HEADER_REGEX = /^(?:<[^>]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$
 function _validateLinkHeaderFormat(value) {
     if (typeof value !== 'string' || !LINK_HEADER_REGEX.test(value)) {
         throw new ERR_INVALID_ARG_VALUE(
-            'hints.link', value, 'must have a valid format "<URI>; ...<attributes>"'
+            'hints', value, 'must have a valid format "<URI>; ...<attributes>"'
         );
     }
     return value;
@@ -1088,7 +1092,7 @@ function _validateLinkHeaderValue(value) {
         return value.map((item) => _validateLinkHeaderFormat(item)).join(', ');
     }
     throw new ERR_INVALID_ARG_VALUE(
-        'hints.link', value,
+        'hints', value,
         'must be an array or string of format "</styles.css>; rel=preload; as=style"'
     );
 }
@@ -1098,35 +1102,25 @@ ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
         throw new ERR_INVALID_ARG_TYPE('hints', 'Object', hints);
     }
 
-    let head = 'HTTP/1.1 103 Early Hints\r\n';
-
-    const headers = {};
-    const keys = Object.keys(hints);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        if (key.toLowerCase() === 'link') {
-            const validated = _validateLinkHeaderValue(hints[key]);
-            if (validated.length > 0) {
-                headers[key] = validated;
-            }
-        } else {
-            headers[key] = hints[key];
-        }
-    }
-
-    const headerKeys = Object.keys(headers);
-    if (headerKeys.length === 0) {
-        if (typeof cb === 'function') cb();
+    if (hints.link === null || hints.link === undefined) {
         return;
     }
 
-    for (let i = 0; i < headerKeys.length; i++) {
-        const key = headerKeys[i];
-        head += key + ': ' + headers[key] + '\r\n';
+    const link = _validateLinkHeaderValue(hints.link);
+    if (link.length === 0) {
+        return;
+    }
+
+    let head = 'HTTP/1.1 103 Early Hints\r\n';
+    head += 'Link: ' + link + '\r\n';
+    for (const key of Object.keys(hints)) {
+        if (key !== 'link') {
+            head += key + ': ' + hints[key] + '\r\n';
+        }
     }
     head += '\r\n';
 
-    this._writeOutput(Buffer.from(head), cb);
+    this._writeOutput(Buffer.from(head, 'ascii'), cb);
 };
 
 ServerResponse.prototype.addTrailers = function addTrailers() {
