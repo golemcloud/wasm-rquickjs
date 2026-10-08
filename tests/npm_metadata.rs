@@ -2001,57 +2001,72 @@ async fn run_release_baseline(iterations: usize, smoke: bool) -> anyhow::Result<
 async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
     let medium = load_release_fixture("medium-local-registry", "tests/npm_metadata/medium")?;
     let host = resolve_host_npm()?;
-    let feature_combination = FeatureCombination::TypeScriptCompilerProfiling;
-    let compiled =
-        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, feature_combination)
-            .await?;
-    let prepared = PreparedComponent::new(compiled.wasm_path())?;
+    let control_feature = FeatureCombination::Normal;
+    let control_compiled =
+        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, control_feature).await?;
+    let control_prepared = PreparedComponent::new(control_compiled.wasm_path())?;
+    let trace_feature = FeatureCombination::TypeScriptCompilerProfiling;
+    let trace_compiled =
+        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, trace_feature).await?;
+    let trace_prepared = PreparedComponent::new(trace_compiled.wasm_path())?;
     let pack_dir = camino_tempfile::tempdir()?;
     let registry = release_registry(pack_dir.path(), &[&medium]).await?;
-    let mut samples = Vec::with_capacity(iterations);
+    let mut control_samples = Vec::with_capacity(iterations);
+    let mut trace_samples = Vec::with_capacity(iterations);
     let mut npm_patch_blake3 = None;
 
     for sequence in 0..iterations {
-        let mut instance =
-            release_instance(&prepared, &host.npm_dir, Some(&medium), &registry.base).await?;
-        let patch_blake3 = patch_attribution_npm(instance.temp_dir_path())?;
-        if let Some(previous) = &npm_patch_blake3 {
-            ensure!(
-                previous == &patch_blake3,
-                "attribution npm patch is unstable"
+        if sequence % 2 == 0 {
+            control_samples.push(
+                run_attribution_medium_sample(
+                    &control_prepared,
+                    &host.npm_dir,
+                    &medium,
+                    &registry,
+                    sequence,
+                    false,
+                    &mut npm_patch_blake3,
+                )
+                .await?,
+            );
+            trace_samples.push(
+                run_attribution_medium_sample(
+                    &trace_prepared,
+                    &host.npm_dir,
+                    &medium,
+                    &registry,
+                    sequence,
+                    true,
+                    &mut npm_patch_blake3,
+                )
+                .await?,
             );
         } else {
-            npm_patch_blake3 = Some(patch_blake3);
+            trace_samples.push(
+                run_attribution_medium_sample(
+                    &trace_prepared,
+                    &host.npm_dir,
+                    &medium,
+                    &registry,
+                    sequence,
+                    true,
+                    &mut npm_patch_blake3,
+                )
+                .await?,
+            );
+            control_samples.push(
+                run_attribution_medium_sample(
+                    &control_prepared,
+                    &host.npm_dir,
+                    &medium,
+                    &registry,
+                    sequence,
+                    false,
+                    &mut npm_patch_blake3,
+                )
+                .await?,
+            );
         }
-        let seed = wasm_npm_sample(
-            &mut instance,
-            &seed_ci_args(&registry.base),
-            "ci",
-            "seed",
-            sequence,
-            Some(&medium),
-            &registry,
-        )
-        .await?;
-        ensure!(
-            seed["success"] == true,
-            "Wasm medium npm ci cache seed failed: {seed}"
-        );
-        fs::remove_dir_all(instance.temp_dir_path().join("workspace/node_modules"))?;
-        let mut warm_args = warm_ci_args(&registry.base);
-        warm_args.push("--timing".to_string());
-        samples.push(
-            wasm_npm_sample(
-                &mut instance,
-                &warm_args,
-                "ci",
-                "warm-tarball",
-                sequence,
-                Some(&medium),
-                &registry,
-            )
-            .await?,
-        );
     }
     registry.server.abort();
 
@@ -2061,10 +2076,22 @@ async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
         "target": target_name(),
         "node": "22.14.0",
         "npm": "10.9.2",
-        "componentFeature": feature_combination.label(),
+        "components": {
+            "control": {
+                "feature": control_feature.label(),
+                "bytes": fs::metadata(control_compiled.wasm_path())?.len(),
+                "blake3": hash_file(control_compiled.wasm_path())?,
+            },
+            "trace": {
+                "feature": trace_feature.label(),
+                "bytes": fs::metadata(trace_compiled.wasm_path())?.len(),
+                "blake3": hash_file(trace_compiled.wasm_path())?,
+            },
+        },
         "npmPatchBlake3": npm_patch_blake3,
         "fixture": release_fixture_value(&medium, &registry, false)?,
-        "samples": samples,
+        "controlSamples": control_samples,
+        "traceSamples": trace_samples,
     });
     let formatted = serde_json::to_string_pretty(&report)?;
     if let Ok(path) = std::env::var("NPM_METADATA_REPORT") {
@@ -2072,6 +2099,62 @@ async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
     }
     println!("{formatted}");
     Ok(())
+}
+
+async fn run_attribution_medium_sample(
+    prepared: &PreparedComponent,
+    npm_dir: &Utf8Path,
+    medium: &ReleaseFixture,
+    registry: &ReleaseRegistry,
+    sequence: usize,
+    trace: bool,
+    npm_patch_blake3: &mut Option<String>,
+) -> anyhow::Result<Value> {
+    let mut instance = release_instance(prepared, npm_dir, Some(medium), &registry.base).await?;
+    if trace {
+        let patch_blake3 = patch_attribution_npm(instance.temp_dir_path())?;
+        if let Some(previous) = npm_patch_blake3.as_ref() {
+            ensure!(
+                previous == &patch_blake3,
+                "attribution npm patch is unstable"
+            );
+        } else {
+            *npm_patch_blake3 = Some(patch_blake3);
+        }
+    }
+    let seed = wasm_npm_sample(
+        &mut instance,
+        &seed_ci_args(&registry.base),
+        "ci",
+        if trace { "trace-seed" } else { "control-seed" },
+        sequence,
+        Some(medium),
+        registry,
+    )
+    .await?;
+    ensure!(
+        seed["success"] == true,
+        "Wasm medium npm ci cache seed failed: {seed}"
+    );
+    fs::remove_dir_all(instance.temp_dir_path().join("workspace/node_modules"))?;
+    let mut warm_args = warm_ci_args(&registry.base);
+    if trace {
+        warm_args.push("--timing".to_string());
+    }
+    wasm_npm_sample(
+        &mut instance,
+        &warm_args,
+        "ci",
+        if trace {
+            "trace-warm-tarball"
+        } else {
+            "control-warm-tarball"
+        },
+        sequence,
+        Some(medium),
+        registry,
+    )
+    .await
 }
 
 fn patch_attribution_npm(root: &Utf8Path) -> anyhow::Result<String> {
