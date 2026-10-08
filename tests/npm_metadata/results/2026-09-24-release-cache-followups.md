@@ -67,9 +67,8 @@ HTTP log counts, exit status, metadata output, install identities, and unchanged
 lockfiles reconciled. The repository report validator accepted the pair against
 the retained source inputs.
 
-Retained raw reports:
-[P2](2026-09-24-release-p2-macos-aarch64.json) and
-[P3](2026-09-24-release-p3-macos-aarch64.json).
+The v2 raw pair was superseded by the v3 small-and-medium evidence on
+2026-10-05 and removed; this reviewed aggregate remains the historical record.
 
 ## Native filesystem attribution
 

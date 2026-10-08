@@ -8,7 +8,8 @@ import {
     hrtime_ns,
     memory_usage as _native_memory_usage,
     has_typescript_runtime,
-    typescript_runtime_mode
+    typescript_runtime_mode,
+    await_runtime_idle
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
@@ -58,6 +59,13 @@ function _makeError(code, message) {
 }
 
 var process = new EventEmitter();
+
+Object.defineProperty(process, '_awaitRuntimeIdle', {
+    value: await_runtime_idle,
+    writable: false,
+    enumerable: false,
+    configurable: false,
+});
 
 const _argv = get_args();
 const _env = get_env();

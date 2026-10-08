@@ -703,6 +703,34 @@ async fn drain_and_idle(js_state: &JsState) {
     }
 }
 
+/// Resolves the internal `process._awaitRuntimeIdle()` promise from a component-executor task,
+/// outside rquickjs's scheduler. This allows the ordinary export liveness boundary to drain every
+/// other referenced task without the waiter keeping that boundary alive itself.
+pub(crate) fn spawn_runtime_idle_waiter(
+    resolve: Persistent<Function<'static>>,
+    reject: Persistent<Function<'static>>,
+) {
+    spawn_local(async move {
+        let js_state = get_js_state();
+        drain_and_idle(js_state).await;
+        async_with!(js_state.ctx => |ctx| {
+            let resolve = resolve
+                .restore(&ctx)
+                .expect("failed to restore runtime-idle resolve function");
+            let reject = reject
+                .restore(&ctx)
+                .expect("failed to restore runtime-idle reject function");
+            drop(reject);
+            resolve
+                .call::<_, ()>(((),))
+                .expect("failed to resolve runtime-idle promise");
+            run_process_turn_checkpoint(&ctx)
+                .expect("failed to run process checkpoint after runtime-idle wait");
+        })
+        .await;
+    });
+}
+
 async fn run_turn_checkpoint(js_state: &JsState) -> bool {
     async_with!(js_state.ctx => |ctx| {
         run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {

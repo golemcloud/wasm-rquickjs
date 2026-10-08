@@ -48,3 +48,16 @@ export async function useNextTick() {
     });
     console.log("end");
 }
+
+export async function awaitRuntimeIdle() {
+    console.log("before idle");
+    setTimeout(() => {
+        console.log("referenced timer");
+    }, 25);
+    const ignored = setInterval(() => {
+        console.log("unexpected unreferenced timer");
+    }, 1000);
+    ignored.unref();
+    await process._awaitRuntimeIdle();
+    console.log("after idle");
+}

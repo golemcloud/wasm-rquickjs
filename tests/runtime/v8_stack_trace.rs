@@ -29,6 +29,36 @@ async fn v8_stack_trace_capture_exists(
 }
 
 #[test]
+async fn v8_stack_trace_prepared_cache_does_not_retain_errors(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-prepared-stack-cache-does-not-retain-errors",
+        &[],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn v8_stack_trace_prepared_cache_does_not_retain_custom_cycles(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-prepared-stack-cache-does-not-retain-custom-cycles",
+        &[],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn v8_stack_trace_capture_basic(
     #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {
