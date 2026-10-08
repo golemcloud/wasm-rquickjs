@@ -104,6 +104,44 @@ its filesystem bridge cannot apply `chmod`. The report therefore exposes this
 known execution-fidelity limitation instead of claiming byte-and-mode identity;
 the benchmark itself never executes installed bins.
 
+### 2026-10-08 medium extraction attribution
+
+GOL-737 rebaselined the medium P2 workload on exact production source
+`4ad0cea7c3843b6cb98e183891a2b8fd081e0824`. One uninstrumented sample took
+9,755.564 ms versus 949.499 ms on the host, down from the retained 22,694.225 ms
+P2 result above. The 8,806.065 ms host-adjusted gap set a preregistered
+material-owner threshold of 2,201.516 ms. This was an attribution experiment, not an
+optimization comparison; the current-main improvement spans other merged work.
+
+A temporary profiling build then alternated five control and five trace samples.
+Control median was 9,534.061 ms (range 9,439.172--9,952.776 ms), while trace
+median was 9,944.005 ms (range 9,689.515--10,136.046 ms). The 4.30% trace
+perturbation remained below the 10% gate. All ten installs succeeded without
+overflow or HTTP, preserved the lockfile, and produced the same 10,070-file
+installed tree. Control and trace memory were stable at 179,109,888 and
+181,141,504 bytes respectively.
+
+npm's `reify:unpack` envelope was 8,266 ms at the trace median, or 83.1% of
+trace wall time. Each trace observed 10,123 opens, 10,239 writes, 10,098 closes,
+10,372 `lstat` calls, 703 `mkdir` calls, and 153 `stat` calls. Every operation's
+success/not-found/error outcomes reconciled to its call count; writes totaled
+33,839,228--33,839,230 bytes, and module-probe negative-cache invalidation never
+fired during the extraction path.
+
+Deterministic 1-in-64 sampling placed the median native-operation total at
+2,393 ms and the enclosing JavaScript callback boundaries at 6,709 ms. The
+largest envelopes were `lstat` callbacks at 3,508 ms and close callbacks at
+1,335 ms, but they aggregate required per-file callback work rather than name a
+single replaceable runtime owner. Within `lstat`, constructing the 10,090
+expected not-found errors accounted for about 508 ms. A temporary direct
+no-throw delivery prototype improved one adjacent trace by roughly 0.6 seconds,
+well below the 2.202-second owner threshold, and was reverted.
+
+No narrow, semantics-preserving runtime owner cleared the gate. The stop rule
+therefore ended the experiment after P2 without creating an optimization issue
+or running P3. The diagnostic code, npm patch, and raw trace report were removed;
+their aggregate result is retained here.
+
 ### Superseded 2026-09-24 small-fixture anchor
 
 The removed v2 raw pair measured source `831632c61e49eedb69b635f25f75f5bf5c89f6b3`.
