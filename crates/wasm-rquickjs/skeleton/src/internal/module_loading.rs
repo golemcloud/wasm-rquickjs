@@ -353,11 +353,28 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
       __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0;
     if (!registeredLoadersActive) {
       try {
-        var resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), originalSpecifier);
-        cacheIdentityKey = parsedOptions.typeValue === 'json'
-          ? 'import-attr:json:' + resolvedIdentity
-          : resolvedIdentity;
-        validationPreparedKey = resolvedIdentity + key.slice(originalSpecifier.length);
+        var resolvedIdentity;
+        if (originalSpecifier.startsWith('.') || originalSpecifier.startsWith('/')) {
+          resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), originalSpecifier);
+        } else {
+          resolvedIdentity = typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
+            ? __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_builtin(originalSpecifier)
+            : undefined;
+          if (
+            resolvedIdentity === undefined &&
+            typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_dynamic_import_cache_resolve_package === 'function'
+          ) {
+            resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_dynamic_import_cache_resolve_package(String(baseUrl), originalSpecifier);
+          }
+        }
+        if (resolvedIdentity === undefined || resolvedIdentity === null) {
+          cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
+        } else {
+          cacheIdentityKey = parsedOptions.typeValue === 'json'
+            ? 'import-attr:json:' + resolvedIdentity
+            : resolvedIdentity;
+          validationPreparedKey = resolvedIdentity + key.slice(originalSpecifier.length);
+        }
       } catch (_) {
         cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
       }
@@ -6761,6 +6778,40 @@ fn import_meta_resolve_package(
     }
 }
 
+fn dynamic_import_cache_resolve_package(
+    ctx: Ctx<'_>,
+    base_url: String,
+    specifier: String,
+) -> rquickjs::Result<Option<String>> {
+    let base = if let Some(path) = FileUrlResolver::file_url_to_path(&base_url) {
+        path
+    } else {
+        base_url
+    };
+    let base = FileUrlResolver::file_url_package_resolution_base(base);
+    let resolver = NodeModulesResolver;
+    let conditions = NodeModulesResolver::conditions_from_global(
+        &ctx,
+        NodePackageResolveMode::EsmImport.condition_mode(),
+    );
+    let result = try_resolve_package_with_conditions(
+        &ctx,
+        &resolver,
+        &base,
+        &specifier,
+        &conditions,
+        NodePackageResolveMode::EsmImport,
+        false,
+    )?;
+    match result {
+        Ok(Some(resolved)) => {
+            let resolved = esm_package_identity_path(&ctx, &resolved);
+            Ok(Some(path_to_file_url(&resolved)))
+        }
+        Ok(None) | Err(_) => Ok(None),
+    }
+}
+
 fn import_meta_resolve_path(base_url: String, specifier: String) -> Option<String> {
     if !(specifier.starts_with('.') || specifier.starts_with('/')) {
         return None;
@@ -12162,6 +12213,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create import.meta path resolver"),
         )
         .expect("Failed to initialize import.meta path resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_dynamic_import_cache_resolve_package",
+            Function::new(ctx.clone(), dynamic_import_cache_resolve_package)
+                .expect("Failed to create dynamic import cache package resolver"),
+        )
+        .expect("Failed to initialize dynamic import cache package resolver");
 
         set_non_replaceable_global(
             &global,
