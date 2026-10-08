@@ -1308,7 +1308,7 @@ export async function httpPipelineBackpressureProfile() {
     if (!activeDrain) {
         return JSON.stringify({ valid: false, activeDrain: false });
     }
-    const profile = await runHttpPipelineBackpressureScenario(true, 256);
+    const profile = await runHttpPipelineBackpressureScenario(true, 64);
     profile.activeDrain = true;
     profile.valid = validateHttpPipelineBackpressureProfile(profile);
     return JSON.stringify(profile);
