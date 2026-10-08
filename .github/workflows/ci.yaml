@@ -43,6 +43,10 @@ jobs:
         with:
           submodules: true
       - uses: ./.github/actions/setup
+      - name: Install component license audit tool
+        run: cargo install --force --locked --features cli --version 0.9.2 cargo-about
+      - name: Check generated component licenses
+        run: tools/check-component-licenses.sh --check
       - name: Enable Golem wasmtime fork
         run: bash .github/scripts/enable-wasmtime-fork.sh
       - name: Check formatting
