@@ -390,7 +390,8 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
   var realmMatch = /(?:[?&])__wasm_rquickjs_loader_realm=([^&#]*)/.exec(String(baseUrl));
   var cacheKey = cacheIdentityKey + (realmMatch ? '\0loader-realm=' + realmMatch[1] : '');
   var parentKey = String(baseUrl);
-  var parentVisitKey = parentKey + '\0' + completedKey;
+  var parentVisitKey = parentKey + '\0' + originalSpecifier + '\0import-type=' +
+    (parsedOptions.typeValue === undefined ? '' : parsedOptions.typeValue);
   if (cache[cacheKey] !== undefined) {
     var cached = cache[cacheKey];
     if (cached.parents[parentVisitKey] !== undefined) {

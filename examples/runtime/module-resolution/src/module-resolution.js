@@ -1460,6 +1460,27 @@ export const testEsmDataUrlImportAttributes = async () => {
             importJsonNamespaceFromParent('file-missing', identityFileUrl),
             'ERR_MODULE_NOT_FOUND',
         );
+        fs.mkdirSync('/dynamic-relative-visit/nested', { recursive: true });
+        fs.writeFileSync('/dynamic-relative-visit/target.mjs', 'export const value = "relative-visit";');
+        fs.writeFileSync(
+            '/dynamic-relative-visit/main.mjs',
+            [
+                'import fs from "node:fs";',
+                'const first = await import("./target.mjs");',
+                'fs.unlinkSync("/dynamic-relative-visit/target.mjs");',
+                'let rejectionCode;',
+                'try {',
+                '  await import("./nested/../target.mjs");',
+                '} catch (error) {',
+                '  rejectionCode = error && error.code;',
+                '}',
+                'export default { value: first.value, rejectionCode };',
+            ].join('\n'),
+        );
+        assert.deepStrictEqual(
+            (await import('/dynamic-relative-visit/main.mjs')).default,
+            { value: 'relative-visit', rejectionCode: 'ERR_MODULE_NOT_FOUND' },
+        );
         fs.mkdirSync('/dynamic-json-relative-app', { recursive: true });
         fs.writeFileSync('/dynamic-json-relative-app/data.json', '{"relative":true}');
         fs.writeFileSync(
