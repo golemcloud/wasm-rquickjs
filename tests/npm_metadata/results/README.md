@@ -147,9 +147,10 @@ instrumentation did not separate runtime wrapper and `Stats` work from npm/tar
 callback work.
 
 One temporary direct no-throw delivery trace was roughly 0.6 seconds faster than
-an adjacent trace. That is within the paired sample spread and consistent with
-the roughly 0.5-second error-construction estimate, so the single sample was not
-treated as speedup evidence and the prototype was reverted.
+an adjacent trace. That is comparable to the roughly 0.45--0.51-second per-mode
+sample ranges and consistent with the roughly 0.5-second error-construction
+estimate, so the single sample was not treated as speedup evidence and the
+prototype was reverted.
 
 No owner above the gate was isolated at this instrumentation granularity. The
 stop rule therefore ended the experiment after P2 without creating an
