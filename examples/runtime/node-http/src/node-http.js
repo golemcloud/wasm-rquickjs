@@ -2333,8 +2333,7 @@ export async function httpExpectContinueFlow() {
         'POST /override HTTP/1.1\r\n' +
         'Host: localhost\r\n' +
         'Expect: 100-continue\r\n' +
-        'Content-Length: 4\r\n' +
-        'Connection: close\r\n\r\nbody' +
+        'Content-Length: 4\r\n\r\nbody' +
         'GET /after HTTP/1.1\r\n' +
         'Host: localhost\r\n' +
         'Connection: close\r\n\r\n',
@@ -2351,6 +2350,42 @@ export async function httpExpectContinueFlow() {
         !override.wire.includes('\r\n\r\nafter')) {
         console.log(JSON.stringify({ phase: 'expect-connection-override',
             override, overrideRequests, overrideCheckContinue }));
+        return false;
+    }
+
+    const requestCloseRequests = [];
+    let requestCloseChecks = 0;
+    const requestCloseServer = http.createServer((req, res) => {
+        requestCloseRequests.push(req.url);
+        res.end('unexpected');
+    });
+    requestCloseServer.on('checkContinue', (req, res) => {
+        requestCloseChecks++;
+        req.resume();
+        res.setHeader('Connection', 'keep-alive');
+        res.statusCode = 417;
+        res.end('closed');
+    });
+    const requestClose = await exchange(
+        requestCloseServer,
+        'POST /closed HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\nbody' +
+        'GET /after HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    if (requestClose.timedOut || requestClose.error ||
+        requestCloseChecks !== 1 || requestCloseRequests.length !== 0 ||
+        requestClose.wire.includes('100 Continue') ||
+        !requestClose.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+        !requestClose.wire.includes('Connection: keep-alive') ||
+        !requestClose.wire.includes('\r\n\r\nclosed') ||
+        requestClose.wire.includes('HTTP/1.1 200 OK')) {
+        console.log(JSON.stringify({ phase: 'expect-request-close',
+            requestClose, requestCloseRequests, requestCloseChecks }));
         return false;
     }
 

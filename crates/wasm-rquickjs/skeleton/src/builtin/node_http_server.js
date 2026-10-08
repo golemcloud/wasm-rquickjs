@@ -1192,6 +1192,7 @@ function createConnectionParser(server, socket) {
         readableEnded: false,
         closeAfterResponse: false,
         requestsServed: 0,
+        acceptingRequests: true,
         detached: false,
         parsing: false,
         closing: false,
@@ -1522,6 +1523,13 @@ function createConnectionParser(server, socket) {
             while (progress) {
                 progress = false;
 
+                if (state.closing) break;
+
+                if (!state.acceptingRequests &&
+                    (state.state === IDLE || state.state === HEADERS)) {
+                    break;
+                }
+
                 if (state.state === IDLE || state.state === HEADERS) {
                     updateInputBackpressure();
                     if (state.inputPaused) break;
@@ -1676,6 +1684,7 @@ function createConnectionParser(server, socket) {
                     res.on('finish', function onFinish() {
                         context.responseFinished = true;
                         context.shouldKeepAliveAfterResponse =
+                            (res._keepAlive || res._acceptOverflowRequest) &&
                             !isDroppedRequest &&
                             !res._last &&
                             !server._closeRequested;
@@ -1691,6 +1700,12 @@ function createConnectionParser(server, socket) {
                     const cl = req.headers['content-length'];
                     const te = req.headers['transfer-encoding'];
                     let requestHasNoBody = false;
+
+                    // A response header can override its own connection value,
+                    // but it cannot reopen a parser closed by the request.
+                    if (!connKeepAlive) {
+                        state.acceptingRequests = false;
+                    }
 
                     if (te) {
                         if (!_isValidChunkedTE(te)) {
