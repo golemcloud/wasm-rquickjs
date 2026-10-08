@@ -1094,7 +1094,16 @@ function _validateLinkHeaderValue(value) {
         return _validateLinkHeaderFormat(value);
     }
     if (Array.isArray(value)) {
-        return value.map((item) => _validateLinkHeaderFormat(item)).join(', ');
+        let result = '';
+        for (let i = 0; i < value.length; i++) {
+            const link = value[i];
+            _validateLinkHeaderFormat(link);
+            result += link;
+            if (i !== value.length - 1) {
+                result += ', ';
+            }
+        }
+        return result;
     }
     throw new ERR_INVALID_ARG_VALUE(
         'hints', value,
@@ -1667,7 +1676,6 @@ function createConnectionParser(server, socket) {
                     res.on('finish', function onFinish() {
                         context.responseFinished = true;
                         context.shouldKeepAliveAfterResponse =
-                            (res._keepAlive || res._acceptOverflowRequest) &&
                             !isDroppedRequest &&
                             !res._last &&
                             !server._closeRequested;

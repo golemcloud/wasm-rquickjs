@@ -2273,34 +2273,46 @@ export async function httpExpectContinueFlow() {
         return false;
     }
 
-    let unansweredRequests = 0;
-    let unansweredCheckContinue = 0;
-    let unansweredEnd = 0;
-    const unansweredServer = http.createServer(() => unansweredRequests++);
-    unansweredServer.on('checkContinue', (req, res) => {
-        unansweredCheckContinue++;
-        req.on('end', () => unansweredEnd++);
-        req.resume();
-        res.statusCode = 417;
-        res.end('rejected');
-    });
-    unansweredServer.maxRequestsPerSocket = 1;
-    const unanswered = await exchange(
-        unansweredServer,
-        'POST /rejected HTTP/1.1\r\n' +
-        'Host: localhost\r\n' +
-        'Expect: 100-continue\r\n' +
-        'Content-Length: 4\r\n\r\nbody',
-    );
-    if (unanswered.timedOut || unanswered.error || unansweredRequests !== 0 ||
-        unansweredCheckContinue !== 1 || unansweredEnd !== 1 ||
-        unanswered.wire.includes('100 Continue') ||
-        !unanswered.wire.includes('HTTP/1.1 417 Expectation Failed') ||
-        !unanswered.wire.includes('Connection: close') ||
-        !unanswered.wire.includes('\r\n\r\nrejected')) {
-        console.log(JSON.stringify({ phase: 'unanswered-continue', unanswered,
-            unansweredRequests, unansweredCheckContinue, unansweredEnd }));
-        return false;
+    const rejectWithoutContinue = async (maxRequestsPerSocket) => {
+        let requests = 0;
+        let checks = 0;
+        let ends = 0;
+        const server = http.createServer(() => requests++);
+        server.on('checkContinue', (req, res) => {
+            checks++;
+            req.on('end', () => ends++);
+            req.resume();
+            res.statusCode = 417;
+            res.end('rejected');
+        });
+        if (maxRequestsPerSocket !== undefined) {
+            server.maxRequestsPerSocket = maxRequestsPerSocket;
+        }
+        const result = await exchange(
+            server,
+            'POST /rejected HTTP/1.1\r\n' +
+            'Host: localhost\r\n' +
+            'Expect: 100-continue\r\n' +
+            'Content-Length: 4\r\n\r\nbody',
+        );
+        return { result, requests, checks, ends };
+    };
+    for (const [caseName, maxRequestsPerSocket] of [
+        ['ordinary', undefined],
+        ['request-limit-boundary', 1],
+    ]) {
+        const rejected = await rejectWithoutContinue(maxRequestsPerSocket);
+        const result = rejected.result;
+        if (result.timedOut || result.error || rejected.requests !== 0 ||
+            rejected.checks !== 1 || rejected.ends !== 1 ||
+            result.wire.includes('100 Continue') ||
+            !result.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+            !result.wire.includes('Connection: close') ||
+            !result.wire.includes('\r\n\r\nrejected')) {
+            console.log(JSON.stringify({ phase: 'unanswered-continue-' + caseName,
+                maxRequestsPerSocket, rejected }));
+            return false;
+        }
     }
 
     const overrideRequests = [];
@@ -2321,7 +2333,8 @@ export async function httpExpectContinueFlow() {
         'POST /override HTTP/1.1\r\n' +
         'Host: localhost\r\n' +
         'Expect: 100-continue\r\n' +
-        'Content-Length: 4\r\n\r\nbody' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\nbody' +
         'GET /after HTTP/1.1\r\n' +
         'Host: localhost\r\n' +
         'Connection: close\r\n\r\n',
@@ -2431,6 +2444,7 @@ export async function httpExpectContinueFlow() {
     let skippedHintCallbacks = 0;
     let earlyHintCallbacks = 0;
     let earlyHintCallbackError;
+    let sparseLinkErrorCode;
     const earlyHintsServer = http.createServer((_req, res) => {
         res.writeEarlyHints({ test: 'missing-link' }, () => skippedHintCallbacks++);
         res.writeEarlyHints(
@@ -2456,6 +2470,14 @@ export async function httpExpectContinueFlow() {
             earlyHintCallbacks++;
             earlyHintCallbackError ||= error;
         });
+        try {
+            const sparseLinks = [];
+            sparseLinks.length = 2;
+            sparseLinks[1] = '</sparse.js>; rel=preload';
+            res.writeEarlyHints({ link: sparseLinks });
+        } catch (error) {
+            sparseLinkErrorCode = error.code;
+        }
         res.end('hints');
     });
     const earlyHints = await exchange(
@@ -2473,6 +2495,7 @@ export async function httpExpectContinueFlow() {
         'Link: </coerced.js>; rel=preload\r\n\r\n';
     if (earlyHints.timedOut || earlyHints.error || skippedHintCallbacks !== 0 ||
         earlyHintCallbacks !== 2 || earlyHintCallbackError !== null ||
+        sparseLinkErrorCode !== 'ERR_INVALID_ARG_VALUE' ||
         earlyHints.wire.split('HTTP/1.1 103 Early Hints').length !== 3 ||
         !earlyHints.wire.includes(expectedEarlyHints) ||
         earlyHints.wire.includes('missing-link') ||
@@ -2480,7 +2503,7 @@ export async function httpExpectContinueFlow() {
         !earlyHints.wire.includes('\r\n\r\nhints')) {
         console.log(JSON.stringify({ phase: 'early-hints', earlyHints,
             skippedHintCallbacks, earlyHintCallbacks,
-            earlyHintCallbackError }));
+            earlyHintCallbackError, sparseLinkErrorCode }));
         return false;
     }
 
