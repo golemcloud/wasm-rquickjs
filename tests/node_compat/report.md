@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3175/4388 (72.4%)
+**Primary compatibility (CI-enforced):** 3176/4388 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3175 | 72.4% | 55.2% | 46.2% |
-| 🧩 known gap | 1213 | 27.6% | 21.1% | 17.6% |
+| ✅ passing (runnable) | 3176 | 72.4% | 55.2% | 46.2% |
+| 🧩 known gap | 1212 | 27.6% | 21.1% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3175/5750 (55.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3176/5750 (55.2%)**.
 
 ## Inventory by Module
 
@@ -52,7 +52,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 236 | 279 | 301 | 2 | 0 | 80 | 45.8% | 28.9% |
+| http | 898 | 237 | 278 | 301 | 2 | 0 | 80 | 46.0% | 29.0% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 122 | 32 | 7 | 1 | 0 | 12 | 79.2% | 75.3% |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1213)
+### known gap (1212)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -944,7 +944,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Resolver.cancel() for callback-based in-flight queries is not implemented | 1 | `parallel/test-dns-channel-cancel.js` |
 | Resolver.cancel() for promise-based in-flight queries is not implemented | 1 | `parallel/test-dns-channel-cancel-promise.js` |
 | ServerResponse.addTrailers()/IncomingMessage.trailers behavior is incomplete | 1 | `parallel/test-http-set-trailers.js` |
-| ServerResponse.end() repeated-call error/callback behavior is not Node-compatible | 1 | `parallel/test-http-outgoing-end-multiple.js` |
 | ServerResponse.getHeaders() returns a plain object instead of a null-prototype object | 1 | `parallel/test-http-set-header-chain.js` |
 | ServerResponse.writableLength byte accounting is not Node-compatible | 1 | `parallel/test-http-outgoing-properties.js#block_02_block_02` |
 | ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws) | 1 | `parallel/test-http-early-hints-invalid-argument.js` |
