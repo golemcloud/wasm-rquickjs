@@ -8760,6 +8760,47 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.strictEqual(await bareBuiltinScript.runInThisContext(), publicFsNamespace);
 
+        for (const specifier of ['test', 'sqlite']) {
+            await assert.rejects(
+                new vm.Script(`import(${JSON.stringify(specifier)})`, {
+                    filename: '/vm-default-loader-app/subdir/node-only-builtin.js',
+                    importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+                }).runInThisContext(),
+                { code: 'ERR_MODULE_NOT_FOUND' },
+            );
+        }
+
+        await assert.rejects(
+            new vm.Script('import("__wasm_rquickjs_builtin/public-facade/node:fs")', {
+                filename: '/vm-default-loader-app/subdir/private-facade.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }).runInThisContext(),
+            { code: 'ERR_MODULE_NOT_FOUND' },
+        );
+
+        const { mock } = await import('node:test');
+        const mockedExistsSync = () => 'mocked-exists-sync';
+        const fsMock = mock.module('node:fs', {
+            namedExports: { existsSync: mockedExistsSync },
+        });
+        try {
+            for (const specifier of ['node:fs', 'fs']) {
+                const mockedBuiltinScript = new vm.Script(`import(${JSON.stringify(specifier)})`, {
+                    filename: '/vm-default-loader-app/subdir/mocked-builtin.js',
+                    importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+                });
+                const mockedNamespace = await mockedBuiltinScript.runInThisContext();
+                assert.strictEqual(mockedNamespace.existsSync, mockedExistsSync);
+            }
+        } finally {
+            fsMock.restore();
+        }
+        const restoredBuiltinScript = new vm.Script('import("node:fs")', {
+            filename: '/vm-default-loader-app/subdir/restored-builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(await restoredBuiltinScript.runInThisContext(), publicFsNamespace);
+
         const jsonScript = new vm.Script('import("./data.json", { with: { type: "json" } })', {
             filename: '/vm-default-loader-app/subdir/json.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
@@ -8767,8 +8808,14 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.deepStrictEqual((await jsonScript.runInThisContext()).default, { value: 'from-json' });
 
         const { register } = await import('node:module');
+        const publicPathNamespace = await import('node:path');
+        globalThis.__vmDefaultLoaderBuiltinHookCalls = 0;
         const hookSource = [
             'export function resolve(specifier, context, next) {',
+            '  if (specifier === "node:path") {',
+            '    globalThis.__vmDefaultLoaderBuiltinHookCalls++;',
+            '    return next(specifier, context);',
+            '  }',
             '  if (specifier === "virtual:vm-default-loader-hook") {',
             '    if (context.parentURL !== "file:///vm-default-loader-app/subdir/hooked.js") {',
             '      throw new Error("unexpected vm default-loader parentURL: " + context.parentURL);',
@@ -8787,6 +8834,13 @@ export const testVmMainContextDefaultLoader = async () => {
             (await hookedScript.runInThisContext()).default,
             { value: 'from-subdir' }
         );
+        const hookedBuiltinScript = new vm.Script('import("node:path")', {
+            filename: '/vm-default-loader-app/subdir/hooked-builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(await hookedBuiltinScript.runInThisContext(), publicPathNamespace);
+        assert.strictEqual(globalThis.__vmDefaultLoaderBuiltinHookCalls, 1);
+        delete globalThis.__vmDefaultLoaderBuiltinHookCalls;
 
         const fileUrlScript = new vm.Script('import("./message.mjs")', {
             filename: pathToFileURL('/vm-default-loader-app/space dir/index.js').href + '?cache=1',
@@ -8851,9 +8905,18 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         await assert.rejects(compiledMissing(), { code: 'ERR_MODULE_NOT_FOUND' });
 
+        const lateCwdScript = new vm.Script('import("./message.mjs")', {
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        const lateCwdFunction = vm.compileFunction('return import("./message.mjs")', [], {
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
         const originalCwd = process.cwd();
         try {
             process.chdir('/vm-default-loader-app');
+            assert.deepStrictEqual((await lateCwdScript.runInThisContext()).default, { value: 'from-cwd' });
+            assert.deepStrictEqual((await lateCwdFunction()).default, { value: 'from-cwd' });
+
             const relativeFilenameScript = new vm.Script('import("./message.mjs")', {
                 filename: 'subdir/relative.js',
                 importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,

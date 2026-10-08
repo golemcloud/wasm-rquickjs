@@ -4449,6 +4449,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
+        if (mode !== 'static-raw') {
+            cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result);
+        }
         const loadedHasSource = registeredLoaderHasSource(result);
         const loadedFormat = result.format;
         if (mode === 'static-raw') {
@@ -4692,6 +4695,21 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
         }
         return staticRegisteredLoaderReturn(loaded);
+    }
+
+    function cacheDynamicRegisteredLoaderResult(parentUrl, specifier, attrs, loaded) {
+        if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
+            wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
+        }
+        const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
+        const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
+        if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+            cache[key] = normalizedRegisteredLoaderCacheResult(
+                loaded,
+                staticRegisteredLoaderReturn(loaded),
+                undefined,
+            );
+        }
     }
 
     function staticRegisteredLoaderSourceForUrl(url) {

@@ -1,6 +1,7 @@
 import {
     eval_in_new_context as evalInNewContext,
     eval_with_filename as evalWithFilename,
+    schemeless_syncable_builtin_names as schemelessSyncableBuiltinNames,
     syncable_builtin_names as syncableBuiltinNames,
 } from '__wasm_rquickjs_builtin/vm_native';
 import * as pathModule from 'node:path';
@@ -30,9 +31,9 @@ const publicBuiltinFacadePrefix = '__wasm_rquickjs_builtin/public-facade/';
 const publicBuiltinFacadeSpecifiers = Object.create(null);
 for (const name of syncableBuiltinNames()) {
     publicBuiltinFacadeSpecifiers[name] = publicBuiltinFacadePrefix + name;
-    if (name !== 'node:sqlite' && name !== 'node:test') {
-        publicBuiltinFacadeSpecifiers[name.slice(5)] = publicBuiltinFacadePrefix + name;
-    }
+}
+for (const name of schemelessSyncableBuiltinNames()) {
+    publicBuiltinFacadeSpecifiers[name.slice(5)] = publicBuiltinFacadePrefix + name;
 }
 let defaultLoaderImportHelperCounter = 1;
 let sandboxDescriptorsHelperCounter = 1;
@@ -61,7 +62,11 @@ function defaultLoaderParentURL(filename) {
     }
 }
 
-function publicBuiltinFacadeSpecifier(specifier) {
+function publicBuiltinFacadeSpecifier(specifier, parentURL) {
+    if (typeof globalThis.__wasm_rquickjs_has_import_mock === 'function'
+        && globalThis.__wasm_rquickjs_has_import_mock(specifier, parentURL)) {
+        return specifier;
+    }
     return publicBuiltinFacadeSpecifiers[specifier] || specifier;
 }
 
@@ -70,12 +75,13 @@ function defaultLoaderImportFunction(filename, specifier, options) {
     if (isPrivateBuiltinSpecifier(specifier)) {
         return rejectPrivateBuiltinImport(specifier);
     }
+    const parentURL = defaultLoaderParentURL(filename);
     return globalThis.__wasm_rquickjs_import_attr_dynamic_import(
-        defaultLoaderParentURL(filename),
+        parentURL,
         specifier,
         options,
         true,
-        (resolved) => import(publicBuiltinFacadeSpecifier(resolved)),
+        (resolved) => import(publicBuiltinFacadeSpecifier(resolved, parentURL)),
     );
 }
 
@@ -2356,10 +2362,7 @@ function referrerFilenameFromOptions(options) {
     if (typeof options.filename === 'string' && options.filename.length > 0) {
         return options.filename;
     }
-    if (globalThis.process && typeof globalThis.process.cwd === 'function') {
-        return globalThis.process.cwd() + '/';
-    }
-    return '/';
+    return 'evalmachine.<anonymous>';
 }
 
 function ensureDefaultLoaderImportBinding(helperName) {
