@@ -7611,6 +7611,7 @@ export const testVmMainContextDefaultLoader = async () => {
 
         fs.mkdirSync('/vm-default-loader-app/subdir', { recursive: true });
         fs.mkdirSync('/vm-default-loader-app/other', { recursive: true });
+        fs.mkdirSync('/vm-default-loader-app/missing', { recursive: true });
         fs.mkdirSync('/vm-default-loader-app/space dir', { recursive: true });
         fs.writeFileSync('/vm-default-loader-app/subdir/message.mjs', [
             'export const value = "from-subdir";',
@@ -8634,6 +8635,31 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.deepStrictEqual((await script.runInThisContext()).default, { value: 'from-subdir' });
 
+        const queryCacheDirectory = '/vm-default-loader-app/query-cache';
+        const queryCacheModule = queryCacheDirectory + '/message.mjs';
+        const queryCacheReferrer = pathToFileURL(queryCacheDirectory + '/index.js').href;
+        fs.mkdirSync(queryCacheDirectory, { recursive: true });
+        fs.writeFileSync(queryCacheModule, 'export const identity = {};');
+        const firstQueryNamespace = await new vm.Script('import("./message.mjs")', {
+            filename: queryCacheReferrer + '?first',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        }).runInThisContext();
+        fs.unlinkSync(queryCacheModule);
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")', {
+                filename: queryCacheReferrer + '?missing',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }).runInThisContext(),
+            { code: 'ERR_MODULE_NOT_FOUND' },
+        );
+        fs.writeFileSync(queryCacheModule, 'export const identity = {};');
+        const secondQueryNamespace = await new vm.Script('import("./message.mjs")', {
+            filename: queryCacheReferrer + '?second',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        }).runInThisContext();
+        assert.strictEqual(secondQueryNamespace, firstQueryNamespace);
+        assert.strictEqual(secondQueryNamespace.identity, firstQueryNamespace.identity);
+
         const mutableOptions = {
             filename: '/vm-default-loader-app/subdir/mutable.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
@@ -8885,7 +8911,29 @@ export const testVmMainContextDefaultLoader = async () => {
         await assert.rejects(contextScript.runInContext(context));
         const originalContextCwd = process.cwd();
         try {
+            let scriptCallbackCalls = 0;
+            const indirectEvalScript = new vm.Script(
+                'Promise.resolve("import(\\"./message.mjs\\")").then(eval)',
+                {
+                    importModuleDynamically() {
+                        scriptCallbackCalls++;
+                        throw new Error('script loader callback must not handle indirect eval');
+                    },
+                },
+            );
+            process.chdir('/vm-default-loader-app/missing');
+            await assert.rejects(
+                indirectEvalScript.runInContext(context),
+                { code: 'ERR_MODULE_NOT_FOUND' },
+            );
+            assert.strictEqual(scriptCallbackCalls, 0);
             process.chdir('/vm-default-loader-app/subdir');
+            const indirectEvalResult = await indirectEvalScript.runInContext(context);
+            assert.strictEqual(
+                JSON.stringify(indirectEvalResult.default || indirectEvalResult),
+                '{"value":"from-subdir"}',
+            );
+            assert.strictEqual(scriptCallbackCalls, 0);
             const contextEvalScript = new vm.Script('Promise.resolve("import(\\"./message.mjs\\")").then(eval)');
             const contextEvalResult = await contextEvalScript.runInContext(context);
             assert.strictEqual(JSON.stringify(contextEvalResult.default || contextEvalResult), '{"value":"from-subdir"}');

@@ -345,8 +345,9 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     cache = Object.create(null);
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
   }
-  if (cache[completedKey] !== undefined) {
-    var cached = cache[completedKey];
+  var cacheKey = String(baseUrl) + '\0' + completedKey;
+  if (cache[cacheKey] !== undefined) {
+    var cached = cache[cacheKey];
     if (cached.preparedKey !== key) {
       discardGeneratedRewriteToken();
     }
@@ -363,13 +364,13 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
   }
   var promise = importFn(prepared);
   var entry = { promise: promise, preparedKey: key };
-  cache[completedKey] = entry;
+  cache[cacheKey] = entry;
   try {
     var result = await promise;
     discardGeneratedRewriteToken();
     return result;
   } catch (error) {
-    if (cache[completedKey] === entry) delete cache[completedKey];
+    if (cache[cacheKey] === entry) delete cache[cacheKey];
     discardGeneratedRewriteToken();
     throw error;
   } finally {
