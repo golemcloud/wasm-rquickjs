@@ -1328,14 +1328,15 @@ export const testEsmDataUrlImportAttributes = async () => {
             '/dynamic-warning-root/node_modules/dynamic-warning-pkg/index.js',
             'export const value = "warning-package";',
         );
-        for (const parent of ['a', 'b']) {
+        for (const parent of ['a', 'b', 'c']) {
             fs.mkdirSync(`/dynamic-warning-root/${parent}`, { recursive: true });
             fs.writeFileSync(
                 `/dynamic-warning-root/${parent}/main.mjs`,
                 [
+                    ...(parent === 'c' ? ['const subpath = await import("dynamic-warning-pkg/index.js");'] : []),
                     'const first = await import("dynamic-warning-pkg");',
                     'const second = await import("dynamic-warning-pkg");',
-                    'export default { same: first === second, value: first.value };',
+                    `export default { same: ${parent === 'c' ? 'subpath === first && ' : ''}first === second, value: first.value };`,
                 ].join('\n'),
             );
         }
@@ -1347,7 +1348,7 @@ export const testEsmDataUrlImportAttributes = async () => {
         };
         process.on('warning', onDynamicPackageWarning);
         try {
-            for (const parent of ['a', 'b']) {
+            for (const parent of ['a', 'b', 'c']) {
                 assert.deepStrictEqual(
                     (await import(`/dynamic-warning-root/${parent}/main.mjs`)).default,
                     { same: true, value: 'warning-package' },
@@ -1357,9 +1358,12 @@ export const testEsmDataUrlImportAttributes = async () => {
         } finally {
             process.removeListener('warning', onDynamicPackageWarning);
         }
-        assert.strictEqual(dynamicPackageWarnings.length, 2);
-        assert.ok(dynamicPackageWarnings.some((warning) => warning.message.includes('/dynamic-warning-root/a/main.mjs')));
-        assert.ok(dynamicPackageWarnings.some((warning) => warning.message.includes('/dynamic-warning-root/b/main.mjs')));
+        assert.strictEqual(dynamicPackageWarnings.length, 3);
+        for (const parent of ['a', 'b', 'c']) {
+            assert.ok(dynamicPackageWarnings.some(
+                (warning) => warning.message.includes(`/dynamic-warning-root/${parent}/main.mjs`),
+            ));
+        }
 
         for (const [parent, value] of [['a', 'nested-a'], ['b', 'nested-b']]) {
             const root = `/dynamic-parent-${parent}`;

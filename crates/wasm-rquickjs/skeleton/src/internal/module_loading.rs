@@ -385,35 +385,41 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     }
   }
   // Keep one module identity per resolved key and loader realm while
-  // re-entering the importer once per parent so resolution still observes
-  // filesystem changes.
+  // re-entering the importer once per resolve request and parent so resolution
+  // still observes filesystem changes and package-warning semantics.
   var realmMatch = /(?:[?&])__wasm_rquickjs_loader_realm=([^&#]*)/.exec(String(baseUrl));
   var cacheKey = cacheIdentityKey + (realmMatch ? '\0loader-realm=' + realmMatch[1] : '');
   var parentKey = String(baseUrl);
+  var parentVisitKey = parentKey + '\0' + completedKey;
   if (cache[cacheKey] !== undefined) {
     var cached = cache[cacheKey];
-    if (cached.parents[parentKey] !== undefined) {
+    if (cached.parents[parentVisitKey] !== undefined) {
       if (cached.preparedKey !== key) {
         discardGeneratedRewriteToken();
       }
-      return cached.parents[parentKey];
+      return cached.parents[parentVisitKey];
     }
-    if (
-      packageIdentityResolved &&
-      typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package === 'function'
-    ) {
-      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package(String(baseUrl), originalSpecifier);
+    try {
+      if (
+        packageIdentityResolved &&
+        typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package === 'function'
+      ) {
+        __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package(String(baseUrl), originalSpecifier);
+      }
+    } catch (error) {
+      discardGeneratedRewriteToken();
+      throw error;
     }
     var validationPromise = Promise.resolve(importFn(cached.preparedKey)).then(function() {
       return cached.promise;
     });
-    cached.parents[parentKey] = validationPromise;
+    cached.parents[parentVisitKey] = validationPromise;
     try {
       var validated = await validationPromise;
       discardGeneratedRewriteToken();
       return validated;
     } catch (error) {
-      if (cached.parents[parentKey] === validationPromise) delete cached.parents[parentKey];
+      if (cached.parents[parentVisitKey] === validationPromise) delete cached.parents[parentVisitKey];
       discardGeneratedRewriteToken();
       throw error;
     }
@@ -429,7 +435,7 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
   }
   var promise = importFn(prepared);
   var parents = Object.create(null);
-  parents[parentKey] = promise;
+  parents[parentVisitKey] = promise;
   var entry = { promise: promise, preparedKey: validationPreparedKey, parents: parents };
   cache[cacheKey] = entry;
   try {
