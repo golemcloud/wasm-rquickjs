@@ -33,14 +33,6 @@ export function getSystemErrorDescription(message) {
 
 export function createSystemError(errObj) {
     if (!errObj) return null;
-    const profileLstatError = globalThis.__wasm_rquickjs_gol737_profile_lstat_error;
-    let profileStarted;
-    if (typeof profileLstatError === 'function' && errObj.code === 'ENOENT' && errObj.syscall === 'lstat') {
-        createSystemError.lstatErrorSequence = (createSystemError.lstatErrorSequence || 0) + 1;
-        if (createSystemError.lstatErrorSequence % 64 === 0) {
-            profileStarted = process.hrtime.bigint();
-        }
-    }
     let msg = typeof errObj.message === 'string' ? errObj.message : 'unknown error';
     if (errObj.code && errObj.syscall) {
         msg = errObj.code + ': ' + getSystemErrorDescription(errObj.message) + ', ' + errObj.syscall;
@@ -53,9 +45,6 @@ export function createSystemError(errObj) {
     err.syscall = errObj.syscall;
     if (errObj.path !== undefined) err.path = errObj.path;
     if (errObj.dest !== undefined) err.dest = errObj.dest;
-    if (profileStarted !== undefined) {
-        profileLstatError(Number(process.hrtime.bigint() - profileStarted));
-    }
     return err;
 }
 

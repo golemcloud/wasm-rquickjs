@@ -30,125 +30,6 @@ pub(crate) struct ExecutionProfile {
     last_phase: Cell<Instant>,
     phases: RefCell<BTreeMap<String, Duration>>,
     counters: RefCell<BTreeMap<String, u64>>,
-    fs_operations: RefCell<[FsOperationCounters; FsProfileOperation::COUNT]>,
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-#[derive(Clone, Copy)]
-#[repr(usize)]
-pub(crate) enum FsProfileOperation {
-    Open,
-    Close,
-    Write,
-    Stat,
-    Lstat,
-    Mkdir,
-    Chmod,
-    Utimes,
-    Symlink,
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-impl FsProfileOperation {
-    const COUNT: usize = 9;
-
-    pub(crate) fn from_index(index: usize) -> Self {
-        match index {
-            0 => Self::Open,
-            1 => Self::Close,
-            2 => Self::Write,
-            3 => Self::Stat,
-            4 => Self::Lstat,
-            5 => Self::Mkdir,
-            6 => Self::Chmod,
-            7 => Self::Utimes,
-            8 => Self::Symlink,
-            _ => unreachable!("invalid filesystem profile operation"),
-        }
-    }
-
-    fn label(self) -> &'static str {
-        match self {
-            Self::Open => "open",
-            Self::Close => "close",
-            Self::Write => "write",
-            Self::Stat => "stat",
-            Self::Lstat => "lstat",
-            Self::Mkdir => "mkdir",
-            Self::Chmod => "chmod",
-            Self::Utimes => "utimes",
-            Self::Symlink => "symlink",
-        }
-    }
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-#[derive(Clone, Copy, Default)]
-struct FsOperationCounters {
-    calls: u64,
-    success: u64,
-    not_found: u64,
-    errors: u64,
-    bytes: u64,
-    sampled_calls: u64,
-    sampled_nanoseconds: u64,
-    js_sampled_calls: u64,
-    js_sampled_nanoseconds: u64,
-    js_error_sampled_calls: u64,
-    js_error_sampled_nanoseconds: u64,
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-pub(crate) struct FsProfileGuard {
-    profile: Rc<ExecutionProfile>,
-    operation: FsProfileOperation,
-    started: Option<Instant>,
-    outcome: FsProfileOutcome,
-    bytes: u64,
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-#[derive(Clone, Copy)]
-enum FsProfileOutcome {
-    Error,
-    NotFound,
-    Success,
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-impl FsProfileGuard {
-    pub(crate) fn success(&mut self, bytes: usize) {
-        self.outcome = FsProfileOutcome::Success;
-        self.bytes = bytes as u64;
-    }
-
-    pub(crate) fn not_found(&mut self) {
-        self.outcome = FsProfileOutcome::NotFound;
-    }
-}
-
-#[cfg(feature = "typescript-compiler-profiling")]
-impl Drop for FsProfileGuard {
-    fn drop(&mut self) {
-        let mut operations = self.profile.fs_operations.borrow_mut();
-        let counters = &mut operations[self.operation as usize];
-        match self.outcome {
-            FsProfileOutcome::Error => counters.errors = counters.errors.saturating_add(1),
-            FsProfileOutcome::NotFound => {
-                counters.not_found = counters.not_found.saturating_add(1)
-            }
-            FsProfileOutcome::Success => {
-                counters.success = counters.success.saturating_add(1);
-                counters.bytes = counters.bytes.saturating_add(self.bytes);
-            }
-        }
-        if let Some(started) = self.started {
-            counters.sampled_calls = counters.sampled_calls.saturating_add(1);
-            counters.sampled_nanoseconds = counters
-                .sampled_nanoseconds
-                .saturating_add(started.elapsed().as_nanos().min(u64::MAX as u128) as u64);
-        }
-    }
 }
 
 #[cfg(feature = "typescript-compiler-profiling")]
@@ -159,7 +40,6 @@ impl ExecutionProfile {
             last_phase: Cell::new(Instant::now()),
             phases: RefCell::default(),
             counters: RefCell::default(),
-            fs_operations: RefCell::new([FsOperationCounters::default(); FsProfileOperation::COUNT]),
         }
     }
 
@@ -185,72 +65,9 @@ impl ExecutionProfile {
         *counter = counter.saturating_add(value);
     }
 
-    pub(crate) fn fs_operation(self: &Rc<Self>, operation: FsProfileOperation) -> FsProfileGuard {
-        let sampled = {
-            let mut operations = self.fs_operations.borrow_mut();
-            let counters = &mut operations[operation as usize];
-            counters.calls = counters.calls.saturating_add(1);
-            counters.calls % 64 == 0
-        };
-        FsProfileGuard {
-            profile: self.clone(),
-            operation,
-            started: sampled.then(Instant::now),
-            outcome: FsProfileOutcome::Error,
-            bytes: 0,
-        }
-    }
-
-    pub(crate) fn record_fs_js_boundary(
-        &self,
-        operation: FsProfileOperation,
-        elapsed_nanoseconds: u64,
-    ) {
-        let mut operations = self.fs_operations.borrow_mut();
-        let counters = &mut operations[operation as usize];
-        counters.js_sampled_calls = counters.js_sampled_calls.saturating_add(1);
-        counters.js_sampled_nanoseconds = counters
-            .js_sampled_nanoseconds
-            .saturating_add(elapsed_nanoseconds);
-    }
-
-    pub(crate) fn record_fs_js_lstat_error(&self, elapsed_nanoseconds: u64) {
-        let mut operations = self.fs_operations.borrow_mut();
-        let counters = &mut operations[FsProfileOperation::Lstat as usize];
-        counters.js_error_sampled_calls = counters.js_error_sampled_calls.saturating_add(1);
-        counters.js_error_sampled_nanoseconds = counters
-            .js_error_sampled_nanoseconds
-            .saturating_add(elapsed_nanoseconds);
-    }
-
     pub(crate) fn snapshot(&self) -> ExecutionProfileSnapshot {
         let phases = self.phases.borrow();
         let queue_delay = phases.get("queueDelay").copied().unwrap_or_default();
-        let mut counters = self.counters.borrow().clone();
-        for (index, operation) in self.fs_operations.borrow().iter().enumerate() {
-            if operation.calls == 0 {
-                continue;
-            }
-            let label = FsProfileOperation::from_index(index).label();
-            for (suffix, value) in [
-                ("calls", operation.calls),
-                ("success", operation.success),
-                ("notFound", operation.not_found),
-                ("errors", operation.errors),
-                ("bytes", operation.bytes),
-                ("sampledCalls", operation.sampled_calls),
-                ("sampledNanoseconds", operation.sampled_nanoseconds),
-                ("jsSampledCalls", operation.js_sampled_calls),
-                ("jsSampledNanoseconds", operation.js_sampled_nanoseconds),
-                ("jsErrorSampledCalls", operation.js_error_sampled_calls),
-                (
-                    "jsErrorSampledNanoseconds",
-                    operation.js_error_sampled_nanoseconds,
-                ),
-            ] {
-                counters.insert(format!("filesystemDiagnostic.{label}.{suffix}"), value);
-            }
-        }
         ExecutionProfileSnapshot {
             version: 1,
             phases_ms: phases
@@ -258,7 +75,7 @@ impl ExecutionProfile {
                 .map(|(name, duration)| (name.clone(), duration.as_secs_f64() * 1000.0))
                 .collect(),
             total_ms: (queue_delay + self.started.elapsed()).as_secs_f64() * 1000.0,
-            counters,
+            counters: self.counters.borrow().clone(),
         }
     }
 }

@@ -333,9 +333,6 @@ async fn main() -> anyhow::Result<()> {
         iterations > 0 && iterations <= 20,
         "iterations must be 1..=20"
     );
-    if std::env::var_os("NPM_METADATA_ATTRIBUTION_PROFILE").is_some() {
-        return run_attribution_profile(iterations).await;
-    }
     if std::env::var_os("NPM_METADATA_RELEASE_BASELINE").is_some() {
         let smoke = std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some();
         let minimum_iterations = if smoke { 1 } else { RELEASE_ITERATIONS };
@@ -1406,7 +1403,7 @@ fn finish_release_sample(
         .filter(|line| line.starts_with("npm http cache "))
         .count();
     let stdout = result["stdout"].as_str().unwrap_or_default();
-    let mut compact_result = json!({
+    let compact_result = json!({
         "exitCode": result["value"]["exitCode"],
         "overflowed": result["overflowed"],
         "runnerError": result.get("runnerError"),
@@ -1416,17 +1413,6 @@ fn finish_release_sample(
         "stderrBytes": stderr.len(),
         "stderrBlake3": blake3::hash(stderr.as_bytes()).to_hex().to_string(),
     });
-    if std::env::var_os("NPM_METADATA_ATTRIBUTION_PROFILE").is_some()
-        && let Some(profile) = result.get("profile")
-    {
-        compact_result["profile"] = profile.clone();
-        compact_result["diagnosticLines"] = json!(
-            stderr
-                .lines()
-                .filter(|line| line.starts_with("npm timing ") || line.starts_with("GOL737_"))
-                .collect::<Vec<_>>()
-        );
-    }
     let sample = json!({
         "sequence": sequence,
         "side": side,
@@ -1996,214 +1982,6 @@ async fn run_release_baseline(iterations: usize, smoke: bool) -> anyhow::Result<
     }
     println!("{formatted}");
     Ok(())
-}
-
-async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
-    let medium = load_release_fixture("medium-local-registry", "tests/npm_metadata/medium")?;
-    let host = resolve_host_npm()?;
-    let control_feature = FeatureCombination::Normal;
-    let control_compiled =
-        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, control_feature).await?;
-    let control_prepared = PreparedComponent::new(control_compiled.wasm_path())?;
-    let trace_feature = FeatureCombination::TypeScriptCompilerProfiling;
-    let trace_compiled =
-        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, trace_feature).await?;
-    let trace_prepared = PreparedComponent::new(trace_compiled.wasm_path())?;
-    let pack_dir = camino_tempfile::tempdir()?;
-    let registry = release_registry(pack_dir.path(), &[&medium]).await?;
-    let mut control_samples = Vec::with_capacity(iterations);
-    let mut trace_samples = Vec::with_capacity(iterations);
-    let mut npm_patch_blake3 = None;
-
-    for sequence in 0..iterations {
-        if sequence % 2 == 0 {
-            control_samples.push(
-                run_attribution_medium_sample(
-                    &control_prepared,
-                    &host.npm_dir,
-                    &medium,
-                    &registry,
-                    sequence,
-                    false,
-                    &mut npm_patch_blake3,
-                )
-                .await?,
-            );
-            trace_samples.push(
-                run_attribution_medium_sample(
-                    &trace_prepared,
-                    &host.npm_dir,
-                    &medium,
-                    &registry,
-                    sequence,
-                    true,
-                    &mut npm_patch_blake3,
-                )
-                .await?,
-            );
-        } else {
-            trace_samples.push(
-                run_attribution_medium_sample(
-                    &trace_prepared,
-                    &host.npm_dir,
-                    &medium,
-                    &registry,
-                    sequence,
-                    true,
-                    &mut npm_patch_blake3,
-                )
-                .await?,
-            );
-            control_samples.push(
-                run_attribution_medium_sample(
-                    &control_prepared,
-                    &host.npm_dir,
-                    &medium,
-                    &registry,
-                    sequence,
-                    false,
-                    &mut npm_patch_blake3,
-                )
-                .await?,
-            );
-        }
-    }
-    registry.server.abort();
-
-    let report = json!({
-        "schema": "npm-metadata-attribution-v1",
-        "revision": command(Command::new("git").args(["rev-parse", "HEAD"]))?,
-        "target": target_name(),
-        "node": "22.14.0",
-        "npm": "10.9.2",
-        "components": {
-            "control": {
-                "feature": control_feature.label(),
-                "bytes": fs::metadata(control_compiled.wasm_path())?.len(),
-                "blake3": hash_file(control_compiled.wasm_path())?,
-            },
-            "trace": {
-                "feature": trace_feature.label(),
-                "bytes": fs::metadata(trace_compiled.wasm_path())?.len(),
-                "blake3": hash_file(trace_compiled.wasm_path())?,
-            },
-        },
-        "npmPatchBlake3": npm_patch_blake3,
-        "fixture": release_fixture_value(&medium, &registry, false)?,
-        "controlSamples": control_samples,
-        "traceSamples": trace_samples,
-    });
-    let formatted = serde_json::to_string_pretty(&report)?;
-    if let Ok(path) = std::env::var("NPM_METADATA_REPORT") {
-        fs::write(path, format!("{formatted}\n")).context("write npm attribution report")?;
-    }
-    println!("{formatted}");
-    Ok(())
-}
-
-async fn run_attribution_medium_sample(
-    prepared: &PreparedComponent,
-    npm_dir: &Utf8Path,
-    medium: &ReleaseFixture,
-    registry: &ReleaseRegistry,
-    sequence: usize,
-    trace: bool,
-    npm_patch_blake3: &mut Option<String>,
-) -> anyhow::Result<Value> {
-    let mut instance = release_instance(prepared, npm_dir, Some(medium), &registry.base).await?;
-    if trace {
-        let patch_blake3 = patch_attribution_npm(instance.temp_dir_path())?;
-        if let Some(previous) = npm_patch_blake3.as_ref() {
-            ensure!(
-                previous == &patch_blake3,
-                "attribution npm patch is unstable"
-            );
-        } else {
-            *npm_patch_blake3 = Some(patch_blake3);
-        }
-    }
-    let seed = wasm_npm_sample(
-        &mut instance,
-        &seed_ci_args(&registry.base),
-        "ci",
-        if trace { "trace-seed" } else { "control-seed" },
-        sequence,
-        Some(medium),
-        registry,
-    )
-    .await?;
-    ensure!(
-        seed["success"] == true,
-        "Wasm medium npm ci cache seed failed: {seed}"
-    );
-    fs::remove_dir_all(instance.temp_dir_path().join("workspace/node_modules"))?;
-    let mut warm_args = warm_ci_args(&registry.base);
-    if trace {
-        warm_args.push("--timing".to_string());
-    }
-    wasm_npm_sample(
-        &mut instance,
-        &warm_args,
-        "ci",
-        if trace {
-            "trace-warm-tarball"
-        } else {
-            "control-warm-tarball"
-        },
-        sequence,
-        Some(medium),
-        registry,
-    )
-    .await
-}
-
-fn patch_attribution_npm(root: &Utf8Path) -> anyhow::Result<String> {
-    let path = root.join("tool/npm/node_modules/@npmcli/arborist/lib/arborist/reify.js");
-    let source = fs::read_to_string(&path)?;
-    let source = source.replacen(
-        "const promiseAllRejectLate = require('promise-all-reject-late')",
-        "const promiseAllRejectLate = require('promise-all-reject-late')\nconst gol737ExtractTimings = []",
-        1,
-    );
-    let source = source.replacen(
-        r#"      await pacote.extract(res, node.path, {
-        ...this.options,
-        resolved: node.resolved,
-        integrity: node.integrity,
-      })"#,
-        r#"      const gol737Started = process.hrtime.bigint()
-      try {
-        await pacote.extract(res, node.path, {
-          ...this.options,
-          resolved: node.resolved,
-          integrity: node.integrity,
-        })
-      } finally {
-        gol737ExtractTimings.push({
-          package: node.name,
-          milliseconds: Number(process.hrtime.bigint() - gol737Started) / 1e6,
-        })
-      }"#,
-        1,
-    );
-    let source = source.replacen(
-        "    return promiseAllRejectLate(unpacks).then(timeEnd)",
-        r#"    return promiseAllRejectLate(unpacks).then(() => {
-      const result = timeEnd()
-      gol737ExtractTimings.sort((a, b) => a.package.localeCompare(b.package))
-      process.stderr.write(`GOL737_EXTRACT ${JSON.stringify(gol737ExtractTimings)}\n`)
-      return result
-    })"#,
-        1,
-    );
-    ensure!(
-        source.contains("const gol737ExtractTimings = []")
-            && source.contains("GOL737_EXTRACT")
-            && source.matches("const gol737Started").count() == 1,
-        "failed to apply GOL-737 npm instrumentation"
-    );
-    fs::write(&path, &source)?;
-    Ok(blake3::hash(source.as_bytes()).to_hex().to_string())
 }
 
 fn millis(duration: Duration) -> f64 {

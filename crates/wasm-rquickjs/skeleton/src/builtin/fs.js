@@ -124,23 +124,6 @@ const O_SYNC = 1052672;
 const O_DSYNC = 4096;
 const O_NONBLOCK = 2048;
 
-const fsDiagnosticSequences = new Uint32Array(6);
-const fsDiagnosticEnabled = native.fs_profiling_enabled();
-function beginFsDiagnosticBoundary(operation) {
-    if (!fsDiagnosticEnabled) return undefined;
-    fsDiagnosticSequences[operation]++;
-    return fsDiagnosticSequences[operation] % 64 === 0 ? process.hrtime.bigint() : undefined;
-}
-function endFsDiagnosticBoundary(operation, started) {
-    if (started === undefined) return;
-    native.profile_fs_js_boundary(operation, Number(process.hrtime.bigint() - started));
-}
-if (fsDiagnosticEnabled) {
-    globalThis.__wasm_rquickjs_gol737_profile_lstat_error = elapsedNanoseconds => {
-        native.profile_fs_js_lstat_error(elapsedNanoseconds);
-    };
-}
-
 const S_IFMT = 0o170000;
 const S_IFREG = 0o100000;
 const S_IFDIR = 0o040000;
@@ -1860,7 +1843,6 @@ export let open = function open(path, flagsOrCallback, modeOrCallback, callback)
     mode = mode & ~process.umask();
     validateCallback(cb);
     queueMicrotask(() => {
-        const diagnosticStarted = beginFsDiagnosticBoundary(0);
         try {
             const result = native.fs_open(pathToString(path), flags, mode);
             if (result.error) {
@@ -1870,8 +1852,6 @@ export let open = function open(path, flagsOrCallback, modeOrCallback, callback)
             }
         } catch (err) {
             cb(err);
-        } finally {
-            endFsDiagnosticBoundary(0, diagnosticStarted);
         }
     });
 };
@@ -1888,14 +1868,11 @@ export let close = function close(fd, callback) {
     }
     const cb = callback;
     queueMicrotask(() => {
-        const diagnosticStarted = beginFsDiagnosticBoundary(1);
         try {
             closeSync(fd);
             cb(null);
         } catch (err) {
             cb(err);
-        } finally {
-            endFsDiagnosticBoundary(1, diagnosticStarted);
         }
     });
 };
@@ -2008,14 +1985,11 @@ export let write = function write(fd, bufferOrString, offsetOrPosition, lengthOr
         }
         validateCallback(cb);
         queueMicrotask(() => {
-            const diagnosticStarted = beginFsDiagnosticBoundary(2);
             try {
                 const written = writeSync(fd, bufferOrString, offsetOrPosition, lengthOrEncoding);
                 cb(null, written, bufferOrString);
             } catch (err) {
                 cb(err, 0, bufferOrString);
-            } finally {
-                endFsDiagnosticBoundary(2, diagnosticStarted);
             }
         });
         return;
@@ -2120,14 +2094,11 @@ export let write = function write(fd, bufferOrString, offsetOrPosition, lengthOr
 
     validateCallback(cb);
     queueMicrotask(() => {
-        const diagnosticStarted = beginFsDiagnosticBoundary(2);
         try {
             const written = writeSync(fd, bufferOrString, offset, length, position);
             cb(null, written, bufferOrString);
         } catch (err) {
             cb(err, 0, bufferOrString);
-        } finally {
-            endFsDiagnosticBoundary(2, diagnosticStarted);
         }
     });
 };
@@ -2159,14 +2130,11 @@ export let lstat = function lstat(path, optionsOrCallback, callback) {
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
-        const diagnosticStarted = beginFsDiagnosticBoundary(4);
         try {
             const result = lstatSync(path, optionsOrCallback);
             cb(null, result);
         } catch (err) {
             cb(err);
-        } finally {
-            endFsDiagnosticBoundary(4, diagnosticStarted);
         }
     });
 };
@@ -2698,16 +2666,11 @@ export let mkdir = function mkdir(path, optionsOrCallback, callback) {
     const firstCreatedPath = getFirstCreatedPath(pathString, recursive);
 
     queueMicrotask(() => {
-        const diagnosticStarted = beginFsDiagnosticBoundary(5);
-        try {
-            const error = native.fs_mkdir(pathString, recursive, mode);
-            if (error) {
-                cb(createSystemError(error));
-            } else {
-                cb(null, recursive ? firstCreatedPath : undefined);
-            }
-        } finally {
-            endFsDiagnosticBoundary(5, diagnosticStarted);
+        const error = native.fs_mkdir(pathString, recursive, mode);
+        if (error) {
+            cb(createSystemError(error));
+        } else {
+            cb(null, recursive ? firstCreatedPath : undefined);
         }
     });
 };
