@@ -1954,7 +1954,8 @@ function parseTrailerHeaders(block, complete) {
         }
         const colonIdx = line.indexOf(':');
         if (colonIdx === -1 && isPartialLine) {
-            if (partialLineEndsWithCarriageReturn) {
+            if (partialLineEndsWithCarriageReturn && line &&
+                _checkIsHttpToken(line)) {
                 return {
                     error: true,
                     type: 'trailer-error',

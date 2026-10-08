@@ -1504,6 +1504,7 @@ export async function httpRequestTrailerErrors() {
     let activeSocket;
     let currentCase;
     let lastParserError;
+    let validSplitTrailers;
     const requests = {};
     const lifecycles = {};
 
@@ -1529,6 +1530,14 @@ export async function httpRequestTrailerErrors() {
         req.on('close', () => lifecycle.close++);
         if (key === 'boundary-ok') {
             req.on('end', () => res.end('boundary-ok'));
+        } else if (key === 'valid-final-crlf-split') {
+            req.on('end', () => {
+                validSplitTrailers = req.complete === true &&
+                    req.trailers['x-split'] === 'value' &&
+                    req.trailersDistinct['x-split'].join(',') === 'value' &&
+                    req.rawTrailers.join(',') === 'X-Split,value';
+                res.end('valid-final-crlf-split');
+            });
         } else if (key === 'started-response') {
             res.write('prefix');
         }
@@ -1690,6 +1699,26 @@ export async function httpRequestTrailerErrors() {
     try {
         await new Promise((resolve) => server.listen(0, resolve));
 
+        const validSplitPrefix = Buffer.from(
+            'POST /valid-final-crlf-split HTTP/1.1\r\n' +
+            'Host: localhost\r\nConnection: close\r\n' +
+            'Transfer-Encoding: chunked\r\n\r\n' +
+            '0\r\nX-Split: value\r\n\r',
+            'latin1',
+        );
+        const validSplitSuffix = Buffer.from('\n', 'latin1');
+        let result = await runHandled(
+            'valid-final-crlf-split',
+            [validSplitPrefix, validSplitSuffix],
+        );
+        if (result.timedOut ||
+            !result.wire.includes('valid-final-crlf-split') ||
+            lastParserError !== undefined ||
+            validSplitTrailers !== true ||
+            !lifecycleIsComplete('valid-final-crlf-split')) {
+            failure = 'valid-final-crlf-split';
+        }
+
         const vtPayload = Buffer.from(
             'POST /bad-vt HTTP/1.1\r\n' +
             'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
@@ -1697,7 +1726,7 @@ export async function httpRequestTrailerErrors() {
             'GET /smuggled HTTP/1.1\r\nHost: localhost\r\n\r\n',
             'latin1',
         );
-        let result = await runHandled('vt', vtPayload);
+        result = await runHandled('vt', vtPayload);
         if (result.timedOut || result.wire !== '' ||
             requests.vt.join(',') !== '/bad-vt' ||
             !handledErrorIsValid(
@@ -1744,6 +1773,15 @@ export async function httpRequestTrailerErrors() {
                 reason: 'Invalid header token',
                 offset(payload) {
                     return payload.indexOf('foo\r\n') + 3;
+                },
+            },
+            {
+                key: 'invalid-name-before-cr',
+                suffix: 'fo o\r',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('fo o') + 2;
                 },
             },
             {
