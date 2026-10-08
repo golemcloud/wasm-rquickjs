@@ -40,6 +40,7 @@ const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
 const DEFAULT_WRITABLE_HIGH_WATER_MARK = 64 * 1024;
 const MAX_TRAILER_SIZE = 16 * 1024;
+const CONTINUE_EXPRESSION = /(?:^|\W)100-continue(?:$|\W)/i;
 
 // ===== Header helpers =====
 
@@ -138,8 +139,10 @@ function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs,
     this.httpVersion = httpVersion;
 
     const parts = httpVersion.split('.');
-    this.httpVersionMajor = parseInt(parts[0], 10) || 1;
-    this.httpVersionMinor = parseInt(parts[1], 10) || 1;
+    const major = parseInt(parts[0], 10);
+    const minor = parseInt(parts[1], 10);
+    this.httpVersionMajor = Number.isNaN(major) ? 1 : major;
+    this.httpVersionMinor = Number.isNaN(minor) ? 1 : minor;
 
     const parsed = parseHeaders(rawHeaderPairs, !!joinDuplicateHeaders);
     this.headers = parsed.headers;
@@ -256,6 +259,7 @@ function ServerResponse(req, options) {
 
     // Properties needed by stream.finished / end-of-stream detection
     this._sent100 = false;
+    this._expect_continue = false;
     this._closed = false;
     this._destroyed = false;
     this._errored = undefined;
@@ -629,8 +633,16 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
         String(value).split(',').map((token) => token.trim().toLowerCase()).filter(Boolean)
     );
     const userSaysClose = userConnectionTokens.includes('close');
-    const canKeepAlive = !!this._keepAlive;
-    const canPersistForOverflow = !!this._acceptOverflowRequest;
+    // Node closes a connection when an Expect: 100-continue request receives
+    // a final response before the interim 100. The client may still have a
+    // request body queued for that connection, so it is not safe to reuse.
+    const unansweredContinue = this._expect_continue && !this._sent100;
+    // An explicit non-close Connection header restores shouldKeepAlive in
+    // Node's header matcher, including after the unanswered-continue rule.
+    const canKeepAlive = userConnection !== undefined && !userSaysClose
+        ? true
+        : !!this._keepAlive && !unansweredContinue;
+    const canPersistForOverflow = !!this._acceptOverflowRequest && !unansweredContinue;
     const selfDelimited = !this._hasBody || this._sentContentLength || this._chunked;
     const chunkedWithoutTerminator = isNoBodyStatus && this._chunked;
 
@@ -1065,12 +1077,13 @@ ServerResponse.prototype.writeProcessing = function writeProcessing(callback) {
     this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'), callback);
 };
 
-const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;
+const LINK_HEADER_REGEX = /^(?:<[^>]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$/;
 
 function _validateLinkHeaderFormat(value) {
-    if (typeof value !== 'string' || !LINK_HEADER_REGEX.test(value)) {
+    if (value === undefined || !LINK_HEADER_REGEX.test(value)) {
         throw new ERR_INVALID_ARG_VALUE(
-            'hints.link', value, 'must have a valid format "<URI>; ...<attributes>"'
+            'hints', value,
+            'must be an array or string of format "</styles.css>; rel=preload; as=style"'
         );
     }
     return value;
@@ -1081,9 +1094,21 @@ function _validateLinkHeaderValue(value) {
         return _validateLinkHeaderFormat(value);
     }
     if (Array.isArray(value)) {
-        return value.map((item) => _validateLinkHeaderFormat(item)).join(', ');
+        let result = '';
+        for (let i = 0; i < value.length; i++) {
+            const link = value[i];
+            _validateLinkHeaderFormat(link);
+            result += link;
+            if (i !== value.length - 1) {
+                result += ', ';
+            }
+        }
+        return result;
     }
-    throw new ERR_INVALID_ARG_TYPE('hints.link', ['string', 'Array'], value);
+    throw new ERR_INVALID_ARG_VALUE(
+        'hints', value,
+        'must be an array or string of format "</styles.css>; rel=preload; as=style"'
+    );
 }
 
 ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
@@ -1091,35 +1116,25 @@ ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
         throw new ERR_INVALID_ARG_TYPE('hints', 'Object', hints);
     }
 
-    let head = 'HTTP/1.1 103 Early Hints\r\n';
-
-    const headers = {};
-    const keys = Object.keys(hints);
-    for (let i = 0; i < keys.length; i++) {
-        const key = keys[i];
-        if (key.toLowerCase() === 'link') {
-            const validated = _validateLinkHeaderValue(hints[key]);
-            if (validated.length > 0) {
-                headers[key] = validated;
-            }
-        } else {
-            headers[key] = hints[key];
-        }
-    }
-
-    const headerKeys = Object.keys(headers);
-    if (headerKeys.length === 0) {
-        if (typeof cb === 'function') cb();
+    if (hints.link === null || hints.link === undefined) {
         return;
     }
 
-    for (let i = 0; i < headerKeys.length; i++) {
-        const key = headerKeys[i];
-        head += key + ': ' + headers[key] + '\r\n';
+    const link = _validateLinkHeaderValue(hints.link);
+    if (link.length === 0) {
+        return;
+    }
+
+    let head = 'HTTP/1.1 103 Early Hints\r\n';
+    head += 'Link: ' + link + '\r\n';
+    for (const key of Object.keys(hints)) {
+        if (key !== 'link') {
+            head += key + ': ' + hints[key] + '\r\n';
+        }
     }
     head += '\r\n';
 
-    this._writeOutput(Buffer.from(head), cb);
+    this._writeOutput(Buffer.from(head, 'ascii'), cb);
 };
 
 ServerResponse.prototype.addTrailers = function addTrailers() {
@@ -1177,6 +1192,7 @@ function createConnectionParser(server, socket) {
         readableEnded: false,
         closeAfterResponse: false,
         requestsServed: 0,
+        acceptingRequests: true,
         detached: false,
         parsing: false,
         closing: false,
@@ -1507,6 +1523,13 @@ function createConnectionParser(server, socket) {
             while (progress) {
                 progress = false;
 
+                if (state.closing) break;
+
+                if (!state.acceptingRequests &&
+                    (state.state === IDLE || state.state === HEADERS)) {
+                    break;
+                }
+
                 if (state.state === IDLE || state.state === HEADERS) {
                     updateInputBackpressure();
                     if (state.inputPaused) break;
@@ -1678,6 +1701,12 @@ function createConnectionParser(server, socket) {
                     const te = req.headers['transfer-encoding'];
                     let requestHasNoBody = false;
 
+                    // A response header can override its own connection value,
+                    // but it cannot reopen a parser closed by the request.
+                    if (!connKeepAlive) {
+                        state.acceptingRequests = false;
+                    }
+
                     if (te) {
                         if (!_isValidChunkedTE(te)) {
                             server.emit(
@@ -1732,6 +1761,23 @@ function createConnectionParser(server, socket) {
                         // response, including its ordinary writeHead/end framing.
                         res.writeHead(503);
                         res.end();
+                    } else if (req.httpVersionMajor === 1 &&
+                        req.httpVersionMinor === 1 &&
+                        req.headers.expect !== undefined) {
+                        if (CONTINUE_EXPRESSION.test(req.headers.expect)) {
+                            res._expect_continue = true;
+                            if (server.listenerCount('checkContinue') > 0) {
+                                server.emit('checkContinue', req, res);
+                            } else {
+                                res.writeContinue();
+                                server.emit('request', req, res);
+                            }
+                        } else if (server.listenerCount('checkExpectation') > 0) {
+                            server.emit('checkExpectation', req, res);
+                        } else {
+                            res.writeHead(417);
+                            res.end();
+                        }
                     } else {
                         server.emit('request', req, res);
                     }
