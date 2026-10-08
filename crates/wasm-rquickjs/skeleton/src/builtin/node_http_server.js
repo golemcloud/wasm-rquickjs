@@ -66,7 +66,7 @@ const SERVER_NO_DUPLICATE_HEADERS = new Set([
 
 function parseHeaders(rawPairs, joinDuplicateHeaders) {
     const headers = {};
-    const headersDistinct = {};
+    const headersDistinct = Object.create(null);
     const rawHeaders = [];
     const hasOwn = (object, key) =>
         Object.prototype.hasOwnProperty.call(object, key);
@@ -77,14 +77,15 @@ function parseHeaders(rawPairs, joinDuplicateHeaders) {
         rawHeaders.push(name, value);
         const lower = name.toLowerCase();
 
-        // Node preserves __proto__ in rawHeaders/rawTrailers but does not expose
-        // it as a normalized property, which also prevents prototype mutation.
-        if (lower === '__proto__') continue;
-
         if (!hasOwn(headersDistinct, lower)) {
             headersDistinct[lower] = [];
         }
         headersDistinct[lower].push(value);
+
+        // Node keeps __proto__ in the null-prototype distinct map and in the raw
+        // pairs, but omits it from the ordinary normalized object so it cannot
+        // mutate that object's prototype.
+        if (lower === '__proto__') continue;
 
         if (lower === SET_COOKIE_HEADER) {
             if (hasOwn(headers, lower) && Array.isArray(headers[lower])) {
@@ -1238,8 +1239,10 @@ function createConnectionParser(server, socket) {
         error.reason = reason;
         if (includeRawPacket && state.rawPacket) {
             const bufferStart = state.bytesReceived - state.buffer.length;
-            error.bytesParsed =
-                bufferStart + bufferBytesParsed - state.rawPacketStart;
+            error.bytesParsed = Math.max(0, Math.min(
+                state.rawPacket.length,
+                bufferStart + bufferBytesParsed - state.rawPacketStart,
+            ));
             error.rawPacket = Buffer.from(state.rawPacket);
         } else {
             error.bytesParsed = 0;
@@ -1792,7 +1795,7 @@ function createConnectionParser(server, socket) {
                         return;
                     } else if (result && result.type === 'trailer-error') {
                         failParser(createParserError(
-                            'HPE_INVALID_HEADER_TOKEN',
+                            result.code || 'HPE_INVALID_HEADER_TOKEN',
                             result.reason,
                             result.bytesParsed,
                         ));
@@ -1915,6 +1918,7 @@ function parseChunked(state, joinDuplicateHeaders) {
             if (trailerResult.error) {
                 return {
                     type: trailerResult.type,
+                    code: trailerResult.code,
                     reason: trailerResult.reason,
                     bytesParsed: trailerResult.bytesParsed,
                 };
@@ -1975,11 +1979,16 @@ function parseTrailerHeaders(block, complete) {
             return { rawPairs };
         }
         if (colonIdx <= 0) {
+            let invalidIndex = 0;
+            while (invalidIndex < line.length &&
+                _checkIsHttpToken(line[invalidIndex])) {
+                invalidIndex++;
+            }
             return {
                 error: true,
                 type: 'trailer-error',
                 reason: 'Invalid header token',
-                bytesParsed,
+                bytesParsed: bytesParsed + invalidIndex,
             };
         }
         const name = line.substring(0, colonIdx);
@@ -1999,10 +2008,14 @@ function parseTrailerHeaders(block, complete) {
         const rawValue = line.substring(colonIdx + 1);
         if (_checkInvalidHeaderChar(rawValue)) {
             const invalidIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
+            const isBareLineFeed = rawValue.charCodeAt(invalidIndex) === 0x0a;
             return {
                 error: true,
                 type: 'trailer-error',
-                reason: 'Invalid header value char',
+                code: isBareLineFeed ? 'HPE_CR_EXPECTED' : undefined,
+                reason: isBareLineFeed
+                    ? 'Missing expected CR after header value'
+                    : 'Invalid header value char',
                 bytesParsed: bytesParsed + colonIdx + 1 + invalidIndex,
             };
         }

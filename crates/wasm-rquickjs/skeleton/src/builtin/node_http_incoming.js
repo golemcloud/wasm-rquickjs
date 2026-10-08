@@ -13,7 +13,7 @@ export function initializeIncomingMessage(message, socket) {
         _pendingTrailersDistinct: {
             configurable: true,
             writable: true,
-            value: {},
+            value: Object.create(null),
         },
     });
     Object.defineProperty(message, 'trailersDistinct', {
