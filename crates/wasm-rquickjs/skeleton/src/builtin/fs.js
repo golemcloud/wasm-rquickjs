@@ -126,13 +126,13 @@ const O_NONBLOCK = 2048;
 
 const fsDiagnosticSequences = new Uint32Array(6);
 function beginFsDiagnosticBoundary(operation) {
-    if (typeof native.profileFsJsBoundary !== 'function') return undefined;
+    if (typeof native.profile_fs_js_boundary !== 'function') return undefined;
     fsDiagnosticSequences[operation]++;
     return fsDiagnosticSequences[operation] % 64 === 0 ? process.hrtime.bigint() : undefined;
 }
 function endFsDiagnosticBoundary(operation, started) {
     if (started === undefined) return;
-    native.profileFsJsBoundary(operation, Number(process.hrtime.bigint() - started));
+    native.profile_fs_js_boundary(operation, Number(process.hrtime.bigint() - started));
 }
 
 const S_IFMT = 0o170000;
