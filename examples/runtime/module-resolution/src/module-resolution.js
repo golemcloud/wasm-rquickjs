@@ -1293,6 +1293,38 @@ export const testEsmDataUrlImportAttributes = async () => {
             'export default { file: fileJson.default.file, data: dataJson.default, optionsCount };',
         ].join('\n')));
         assert.deepStrictEqual(dynamicModule.default, { file: true, data: 4, optionsCount: 2 });
+
+        const importJsonNamespaceFromParent = async (parent, specifier) =>
+            (await import('data:text/javascript,' + encodeURIComponent([
+                `const namespace = await import(${JSON.stringify(specifier)}, { with: { type: "json" } });`,
+                'export default namespace;',
+            ].join('\n')) + '#' + parent)).default;
+        fs.writeFileSync('/dynamic-json-identity.json', '{"identity":"file"}');
+        const identityFileUrl = pathToFileURL('/dynamic-json-identity.json').href;
+        const fileIdentityA = await importJsonNamespaceFromParent('file-a', identityFileUrl);
+        const fileIdentityB = await importJsonNamespaceFromParent('file-b', identityFileUrl);
+        assert.strictEqual(fileIdentityB, fileIdentityA);
+        assert.strictEqual(fileIdentityB.default, fileIdentityA.default);
+
+        fs.writeFileSync('/dynamic-json-query-identity.json', '{"identity":"query"}');
+        const identityQueryUrl = pathToFileURL('/dynamic-json-query-identity.json').href + '?cache=1';
+        const queryIdentityA = await importJsonNamespaceFromParent('query-a', identityQueryUrl);
+        const queryIdentityB = await importJsonNamespaceFromParent('query-b', identityQueryUrl);
+        assert.strictEqual(queryIdentityB, queryIdentityA);
+        assert.strictEqual(queryIdentityB.default, queryIdentityA.default);
+
+        const identityDataUrl = 'data:application/json,%7B%22identity%22%3A%22data%22%7D';
+        const dataIdentityA = await importJsonNamespaceFromParent('data-a', identityDataUrl);
+        const dataIdentityB = await importJsonNamespaceFromParent('data-b', identityDataUrl);
+        assert.strictEqual(dataIdentityB, dataIdentityA);
+        assert.strictEqual(dataIdentityB.default, dataIdentityA.default);
+
+        fs.unlinkSync('/dynamic-json-identity.json');
+        await expectReject(
+            'new JSON parent should revalidate a removed file',
+            importJsonNamespaceFromParent('file-missing', identityFileUrl),
+            'ERR_MODULE_NOT_FOUND',
+        );
         fs.mkdirSync('/dynamic-json-relative-app', { recursive: true });
         fs.writeFileSync('/dynamic-json-relative-app/data.json', '{"relative":true}');
         fs.writeFileSync(

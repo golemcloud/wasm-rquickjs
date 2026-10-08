@@ -435,7 +435,7 @@ function normalizeStackFrameFormatting(stack) {
     const normalizedLines = [];
     for (let i = 0; i < lines.length; i++) {
         let line = lines[i].replace(
-            /__wasm_rquickjs_builtin\/(?:sync-implementation|async-implementation)\/(?=node:)/g,
+            /__wasm_rquickjs_builtin\/sync-implementation\/(?=node:)/g,
             '',
         );
         if (/^\s*at\s+apply\s+\(native\)\s*$/.test(line)) {

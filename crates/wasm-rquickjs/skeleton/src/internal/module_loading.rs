@@ -345,13 +345,30 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     cache = Object.create(null);
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
   }
-  var cacheKey = String(baseUrl) + '\0' + completedKey;
-  if (cache[cacheKey] !== undefined) {
-    var cached = cache[cacheKey];
-    if (cached.preparedKey !== key) {
-      discardGeneratedRewriteToken();
+  // Keep one module identity per completed key while re-entering the importer
+  // once per parent so resolution still observes filesystem changes.
+  var parentKey = String(baseUrl);
+  if (cache[completedKey] !== undefined) {
+    var cached = cache[completedKey];
+    if (cached.parents[parentKey] !== undefined) {
+      if (cached.preparedKey !== key) {
+        discardGeneratedRewriteToken();
+      }
+      return cached.parents[parentKey];
     }
-    return cached.promise;
+    var validationPromise = Promise.resolve(importFn(cached.preparedKey)).then(function() {
+      return cached.promise;
+    });
+    cached.parents[parentKey] = validationPromise;
+    try {
+      var validated = await validationPromise;
+      discardGeneratedRewriteToken();
+      return validated;
+    } catch (error) {
+      if (cached.parents[parentKey] === validationPromise) delete cached.parents[parentKey];
+      discardGeneratedRewriteToken();
+      throw error;
+    }
   }
   if (
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
@@ -363,14 +380,16 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared, originalSpecifier, baseUrl, parsedOptions);
   }
   var promise = importFn(prepared);
-  var entry = { promise: promise, preparedKey: key };
-  cache[cacheKey] = entry;
+  var parents = Object.create(null);
+  parents[parentKey] = promise;
+  var entry = { promise: promise, preparedKey: key, parents: parents };
+  cache[completedKey] = entry;
   try {
     var result = await promise;
     discardGeneratedRewriteToken();
     return result;
   } catch (error) {
-    if (cache[cacheKey] === entry) delete cache[cacheKey];
+    if (cache[completedKey] === entry) delete cache[completedKey];
     discardGeneratedRewriteToken();
     throw error;
   } finally {
