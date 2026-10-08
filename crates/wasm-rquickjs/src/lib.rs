@@ -2,7 +2,9 @@ use crate::conversions::generate_conversions;
 use crate::exports::generate_export_impls;
 use crate::imports::generate_import_modules;
 use crate::javascript::escape_js_ident;
-use crate::skeleton::{copy_skeleton_lock, copy_skeleton_sources, generate_cargo_toml};
+use crate::skeleton::{
+    copy_component_licenses, copy_skeleton_lock, copy_skeleton_sources, generate_cargo_toml,
+};
 use crate::wit::{add_get_script_import, add_wizer_init_export};
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
@@ -78,7 +80,7 @@ mod wit;
 
 pub use inject::{SLOT_END_MAGIC, SLOT_MAGIC, create_marker_file, inject_js_into_component};
 #[cfg(feature = "optimize")]
-pub use optimize::optimize_component;
+pub use optimize::{OptimizeOptions, optimize_component, optimize_component_with_options};
 
 /// Write `contents` to `path` only if the file doesn't exist or its current content differs.
 /// This preserves file timestamps when content hasn't changed, avoiding unnecessary recompilation.
@@ -202,6 +204,11 @@ pub fn generate_wrapper_crate_with_target(
     // Copying the skeleton's Cargo.lock for faster dependency resolution
     copy_skeleton_lock(context.output, &context.world_name)
         .context("Failed to copy skeleton Cargo.lock")?;
+
+    // The generated crate carries the reviewed attribution material for its exact WASI target.
+    // Distributors should ship this sidecar with the compiled component.
+    copy_component_licenses(context.output, target)
+        .context("Failed to copy component third-party licenses")?;
 
     // Copying the skeleton files
     copy_skeleton_sources(context.output).context("Failed to copy skeleton sources")?;
