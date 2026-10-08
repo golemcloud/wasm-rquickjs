@@ -1928,7 +1928,7 @@ function parseChunked(state, joinDuplicateHeaders) {
             );
             const req = state.current.req;
             Object.assign(req.trailers, parsed.headers);
-            req.trailersDistinct = parsed.headersDistinct;
+            req._pendingTrailersDistinct = parsed.headersDistinct;
             req.rawTrailers = parsed.rawHeaders;
             return 'done';
         }
@@ -1963,7 +1963,7 @@ function parseTrailerHeaders(block, complete) {
                     bytesParsed: bytesParsed + invalidIndex,
                 };
             }
-            if (headerBytes + line.length > MAX_TRAILER_SIZE) {
+            if (headerBytes + line.length >= MAX_TRAILER_SIZE) {
                 return {
                     error: true,
                     type: 'trailer-overflow',
@@ -2006,8 +2006,10 @@ function parseTrailerHeaders(block, complete) {
                 bytesParsed: bytesParsed + colonIdx + 1 + invalidIndex,
             };
         }
-        const lineHeaderBytes = name.length + rawValue.length;
-        if (headerBytes + lineHeaderBytes > MAX_TRAILER_SIZE) {
+        const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
+        const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
+        const lineHeaderBytes = name.length + valueWithoutLeadingWhitespace.length;
+        if (headerBytes + lineHeaderBytes >= MAX_TRAILER_SIZE) {
             const acceptedValueBytes = Math.max(
                 0,
                 MAX_TRAILER_SIZE - headerBytes - name.length,
@@ -2016,10 +2018,12 @@ function parseTrailerHeaders(block, complete) {
                 error: true,
                 type: 'trailer-overflow',
                 reason: 'Header overflow',
-                bytesParsed: bytesParsed + colonIdx + 1 + acceptedValueBytes,
+                bytesParsed:
+                    bytesParsed + colonIdx + 1 +
+                    leadingWhitespaceBytes + acceptedValueBytes,
             };
         }
-        const value = rawValue.replace(/^[\t ]+|[\t ]+$/g, '');
+        const value = valueWithoutLeadingWhitespace.replace(/[\t ]+$/g, '');
         rawPairs.push(name, value);
         headerBytes += lineHeaderBytes;
         bytesParsed += line.length + CRLF.length;

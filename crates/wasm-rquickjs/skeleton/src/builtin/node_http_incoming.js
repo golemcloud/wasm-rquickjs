@@ -26,7 +26,7 @@ export function initializeIncomingMessage(message, socket) {
             return this._trailersDistinct;
         },
         set(value) {
-            this._pendingTrailersDistinct = value;
+            this._trailersDistinct = value;
         },
     });
     message.rawTrailers = [];

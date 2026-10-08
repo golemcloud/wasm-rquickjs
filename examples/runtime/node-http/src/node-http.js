@@ -1142,9 +1142,13 @@ export async function httpRequestTrailers() {
             validUrls.push(req.url);
             if (req.url === '/empty') {
                 req.on('end', () => {
+                    const parsedDistinct = req.trailersDistinct;
+                    const assignedDistinct = { assigned: ['value'] };
+                    req.trailersDistinct = assignedDistinct;
                     emptyTrailersValid = req.complete &&
                         Object.keys(req.trailers).length === 0 &&
-                        Object.keys(req.trailersDistinct).length === 0 &&
+                        Object.keys(parsedDistinct).length === 0 &&
+                        req.trailersDistinct === assignedDistinct &&
                         req.rawTrailers.length === 0;
                     res.end('empty');
                 });
@@ -1165,7 +1169,7 @@ export async function httpRequestTrailers() {
                     populatedTrailersValid = fieldsEmptyBeforeEnd &&
                         req.complete &&
                         req.trailers === trailers &&
-                        body === 'abc' &&
+                        body === pipelineBody + 'abc' &&
                         trailers['x-mixed'] === 'one' &&
                         trailers['x-dupe'] === 'first, second' &&
                         trailers.cookie === 'a=1; b=2' &&
@@ -1251,6 +1255,7 @@ export async function httpRequestTrailers() {
         };
         const timeout = setTimeout(() => finish(false), 10000);
 
+        const pipelineBody = 'p'.repeat(17 * 1024);
         server.listen(0, () => {
             socket = net.connect({ port: server.address().port });
             socket.on('connect', () => {
@@ -1264,8 +1269,9 @@ export async function httpRequestTrailers() {
                             const request = Buffer.from(
                                 '\nPOST /trailers HTTP/1.1\r\n' +
                                 'Host: localhost\r\n' +
-                                'X-Pipeline-Padding: ' + 'p'.repeat(17 * 1024) + '\r\n' +
                                 'Transfer-Encoding: chunked\r\n\r\n' +
+                                pipelineBody.length.toString(16) + '\r\n' +
+                                pipelineBody + '\r\n' +
                                 '3\r\nabc\r\n' +
                                 '0\r\n' +
                                 'X-Mixed: one\r\n' +
