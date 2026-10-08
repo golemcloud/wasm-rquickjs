@@ -764,6 +764,8 @@ fn read_file_with_encoding_impl(
 #[rquickjs::module(rename_vars = "camelCase")]
 pub mod native_module {
 
+    #[cfg(feature = "typescript-compiler-profiling")]
+    use crate::internal::runtime_services::{FsProfileGuard, FsProfileOperation};
     use rquickjs::prelude::List;
     use rquickjs::{Array, Ctx, Object, TypedArray, Value};
     use std::path::Path;
@@ -799,6 +801,36 @@ pub mod native_module {
             .execution_profile();
         if let Some(profile) = profile {
             profile.add(&format!("filesystem.{operation}.entries"), entries as u64);
+        }
+    }
+
+    #[cfg(feature = "typescript-compiler-profiling")]
+    fn profile_fs_operation(
+        ctx: &Ctx<'_>,
+        operation: FsProfileOperation,
+    ) -> Option<FsProfileGuard> {
+        ctx.userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .execution_profile()
+            .map(|profile| profile.fs_operation(operation))
+    }
+
+    #[cfg(feature = "typescript-compiler-profiling")]
+    fn profile_fs_success(profile: &mut Option<FsProfileGuard>, bytes: usize) {
+        if let Some(profile) = profile {
+            profile.success(bytes);
+        }
+    }
+
+    #[cfg(feature = "typescript-compiler-profiling")]
+    fn profile_fs_not_found(
+        profile: &mut Option<FsProfileGuard>,
+        error: &std::io::Error,
+    ) {
+        if error.kind() == std::io::ErrorKind::NotFound
+            && let Some(profile) = profile
+        {
+            profile.not_found();
         }
     }
 
@@ -1057,6 +1089,8 @@ pub mod native_module {
         use std::fs::OpenOptions;
         use std::io::{Seek, SeekFrom};
 
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Open);
         let result = Object::new(ctx.clone()).unwrap();
 
         if crate::internal::is_wizer_active() {
@@ -1093,7 +1127,10 @@ pub mod native_module {
         match opts.open(&fs_path) {
             Ok(mut file) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "open", Some("success"), 0);
+                {
+                    profile_fs(&ctx, "open", Some("success"), 0);
+                    profile_fs_success(&mut diagnostic_profile, 0);
+                }
                 // If O_APPEND, seek to end
                 if flags & 1024 != 0 {
                     let _ = file.seek(SeekFrom::End(0));
@@ -1113,7 +1150,10 @@ pub mod native_module {
             }
             Err(err) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "open", Some(fs_error_outcome(&err)), 0);
+                {
+                    profile_fs(&ctx, "open", Some(fs_error_outcome(&err)), 0);
+                    profile_fs_not_found(&mut diagnostic_profile, &err);
+                }
                 result
                     .set(
                         "error",
@@ -1127,10 +1167,15 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_close(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Close);
         let removed = super::with_fs_mut(&ctx, |fs| fs.files.remove(&fd));
         if removed.is_some() {
             #[cfg(feature = "typescript-compiler-profiling")]
-            profile_fs(&ctx, "close", Some("success"), 0);
+            {
+                profile_fs(&ctx, "close", Some("success"), 0);
+                profile_fs_success(&mut diagnostic_profile, 0);
+            }
             super::forget_fd_path(&ctx, fd);
             super::remove_mode_override_for_fd(&ctx, fd);
             None
@@ -1213,6 +1258,8 @@ pub mod native_module {
     ) -> Object<'js> {
         use std::io::{Seek, SeekFrom, Write};
 
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Write);
         let result = Object::new(ctx.clone()).unwrap();
 
         let Some(bytes) = buffer.as_bytes() else {
@@ -1253,6 +1300,8 @@ pub mod native_module {
                 }
                 match file.write_all(data) {
                     Ok(()) => {
+                        #[cfg(feature = "typescript-compiler-profiling")]
+                        profile_fs_success(&mut diagnostic_profile, data.len());
                         result.set("bytesWritten", data.len() as f64).unwrap();
                     }
                     Err(err) => {
@@ -1280,6 +1329,8 @@ pub mod native_module {
     ) -> Object<'js> {
         use std::io::{Seek, SeekFrom, Write};
 
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Write);
         let result = Object::new(ctx.clone()).unwrap();
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
@@ -1303,6 +1354,8 @@ pub mod native_module {
                 let bytes = data.as_bytes();
                 match file.write_all(bytes) {
                     Ok(()) => {
+                        #[cfg(feature = "typescript-compiler-profiling")]
+                        profile_fs_success(&mut diagnostic_profile, bytes.len());
                         result.set("bytesWritten", bytes.len() as f64).unwrap();
                     }
                     Err(err) => {
@@ -1377,9 +1430,13 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_stat(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Stat);
         let result = Object::new(ctx.clone()).unwrap();
 
         if super::is_dev_stdio_path(&path) {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile_fs_success(&mut diagnostic_profile, 0);
             let stat = super::stdio_stat_obj(&ctx);
             result.set("stat", stat).unwrap();
             return result;
@@ -1397,7 +1454,10 @@ pub mod native_module {
         match std::fs::metadata(&fs_path) {
             Ok(meta) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "stat", Some("success"), 0);
+                {
+                    profile_fs(&ctx, "stat", Some("success"), 0);
+                    profile_fs_success(&mut diagnostic_profile, 0);
+                }
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
                 if let Some(mode_override) = super::get_mode_override_for_path(&ctx, &fs_path) {
                     super::apply_mode_override_to_stat_obj(&stat_obj, mode_override);
@@ -1406,7 +1466,10 @@ pub mod native_module {
             }
             Err(err) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "stat", Some(fs_error_outcome(&err)), 0);
+                {
+                    profile_fs(&ctx, "stat", Some(fs_error_outcome(&err)), 0);
+                    profile_fs_not_found(&mut diagnostic_profile, &err);
+                }
                 result
                     .set(
                         "error",
@@ -1420,9 +1483,13 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_lstat(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Lstat);
         let result = Object::new(ctx.clone()).unwrap();
 
         if super::is_dev_stdio_path(&path) {
+            #[cfg(feature = "typescript-compiler-profiling")]
+            profile_fs_success(&mut diagnostic_profile, 0);
             let stat = super::stdio_stat_obj(&ctx);
             result.set("stat", stat).unwrap();
             return result;
@@ -1440,7 +1507,10 @@ pub mod native_module {
         match std::fs::symlink_metadata(&absolute_path) {
             Ok(meta) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "lstat", Some("success"), 0);
+                {
+                    profile_fs(&ctx, "lstat", Some("success"), 0);
+                    profile_fs_success(&mut diagnostic_profile, 0);
+                }
                 let stat_obj = super::metadata_to_obj(&ctx, &meta);
                 if let Some(mode_override) = super::get_mode_override_for_path(&ctx, &absolute_path)
                 {
@@ -1450,7 +1520,10 @@ pub mod native_module {
             }
             Err(err) => {
                 #[cfg(feature = "typescript-compiler-profiling")]
-                profile_fs(&ctx, "lstat", Some(fs_error_outcome(&err)), 0);
+                {
+                    profile_fs(&ctx, "lstat", Some(fs_error_outcome(&err)), 0);
+                    profile_fs_not_found(&mut diagnostic_profile, &err);
+                }
                 result
                     .set(
                         "error",
@@ -1713,6 +1786,8 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_symlink(ctx: Ctx<'_>, target: String, path: String) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Symlink);
         if crate::internal::is_wizer_active() {
             return Some(super::wizer_enoent_obj(&ctx, "symlink", Some(&path)));
         }
@@ -1720,16 +1795,22 @@ pub mod native_module {
         let fs_path = runtime_path(&ctx, &path);
         match super::symlink_at_path(&target, &fs_path) {
             Ok(()) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_success(&mut diagnostic_profile, 0);
                 super::invalidate_module_resolution_probes(&ctx);
                 None
             }
-            Err(err) => Some(super::make_fs_error_with_dest(
-                &ctx,
-                &err,
-                "symlink",
-                Some(&target),
-                Some(&path),
-            )),
+            Err(err) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_not_found(&mut diagnostic_profile, &err);
+                Some(super::make_fs_error_with_dest(
+                    &ctx,
+                    &err,
+                    "symlink",
+                    Some(&target),
+                    Some(&path),
+                ))
+            }
         }
     }
 
@@ -1768,25 +1849,37 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_chmod(ctx: Ctx<'_>, path: String, mode: u32) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Chmod);
         let fs_path = runtime_path(&ctx, &path);
         // chmod is not supported on WASI; verify path exists
         match std::fs::metadata(&fs_path) {
             Ok(_) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_success(&mut diagnostic_profile, 0);
                 super::set_mode_override_for_path(&ctx, &fs_path, mode);
                 None
             }
-            Err(err) => Some(super::make_fs_error(&ctx, &err, "chmod", Some(&path))),
+            Err(err) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_not_found(&mut diagnostic_profile, &err);
+                Some(super::make_fs_error(&ctx, &err, "chmod", Some(&path)))
+            }
         }
     }
 
     #[rquickjs::function]
     pub fn fs_fchmod(ctx: Ctx<'_>, fd: i32, mode: u32) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Chmod);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
         let mut table = services.fs.borrow_mut();
         match table.files.get_mut(&fd) {
             Some(_) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_success(&mut diagnostic_profile, 0);
                 // fchmod is not supported on WASI; emulate it in stat/fstat.
                 table
                     .fd_mode_overrides
@@ -1840,10 +1933,20 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Utimes);
         let fs_path = runtime_path(&ctx, &path);
         match super::set_path_times(&fs_path, atime_secs, mtime_secs, true) {
-            Ok(_) => None,
-            Err(err) => Some(super::make_fs_error(&ctx, &err, "utime", Some(&path))),
+            Ok(_) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_success(&mut diagnostic_profile, 0);
+                None
+            }
+            Err(err) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_not_found(&mut diagnostic_profile, &err);
+                Some(super::make_fs_error(&ctx, &err, "utime", Some(&path)))
+            }
         }
     }
 
@@ -1854,10 +1957,20 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Utimes);
         let fs_path = runtime_path(&ctx, &path);
         match super::set_path_times(&fs_path, atime_secs, mtime_secs, false) {
-            Ok(_) => None,
-            Err(err) => Some(super::make_fs_error(&ctx, &err, "lutime", Some(&path))),
+            Ok(_) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_success(&mut diagnostic_profile, 0);
+                None
+            }
+            Err(err) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_not_found(&mut diagnostic_profile, &err);
+                Some(super::make_fs_error(&ctx, &err, "lutime", Some(&path)))
+            }
         }
     }
 
@@ -1868,14 +1981,24 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Utimes);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
         let mut table = services.fs.borrow_mut();
         match table.files.get_mut(&fd) {
             Some(file) => match super::set_file_times(file, atime_secs, mtime_secs) {
-                Ok(_) => None,
-                Err(err) => Some(super::make_fs_error(&ctx, &err, "futime", None)),
+                Ok(_) => {
+                    #[cfg(feature = "typescript-compiler-profiling")]
+                    profile_fs_success(&mut diagnostic_profile, 0);
+                    None
+                }
+                Err(err) => {
+                    #[cfg(feature = "typescript-compiler-profiling")]
+                    profile_fs_not_found(&mut diagnostic_profile, &err);
+                    Some(super::make_fs_error(&ctx, &err, "futime", None))
+                }
             },
             None => Some(super::make_badf_error(&ctx, "futime")),
         }
@@ -1883,6 +2006,8 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_mkdir(ctx: Ctx<'_>, path: String, recursive: bool, mode: u32) -> Option<Object<'_>> {
+        #[cfg(feature = "typescript-compiler-profiling")]
+        let mut diagnostic_profile = profile_fs_operation(&ctx, FsProfileOperation::Mkdir);
         let fs_path = runtime_path(&ctx, &path);
         let p = Path::new(&fs_path);
         let mode = mode & 0o7777;
@@ -1897,13 +2022,19 @@ pub mod native_module {
 
         match result {
             Ok(_) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_success(&mut diagnostic_profile, 0);
                 if !recursive || !existed_before {
                     super::set_mode_override_for_path(&ctx, &fs_path, mode);
                 }
                 super::invalidate_module_resolution_probes(&ctx);
                 None
             }
-            Err(err) => Some(super::make_fs_error(&ctx, &err, "mkdir", Some(&path))),
+            Err(err) => {
+                #[cfg(feature = "typescript-compiler-profiling")]
+                profile_fs_not_found(&mut diagnostic_profile, &err);
+                Some(super::make_fs_error(&ctx, &err, "mkdir", Some(&path)))
+            }
         }
     }
 
