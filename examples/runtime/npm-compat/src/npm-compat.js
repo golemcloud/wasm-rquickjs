@@ -314,6 +314,60 @@ export async function probePrimitives() {
             const shellSync = spawnSync(process.execPath, ['-e', 'process.stdout.write("bad")'], {
                 shell: true,
             });
+            const assignedExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.exitCode = 7'],
+            );
+            const beforeExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("beforeExit", () => { process.exitCode = 9; })'],
+            );
+            const omittedExplicitExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.exitCode = 7; process.exit()'],
+            );
+            const exitListenerCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { process.exitCode = 9; }); process.exit(7)'],
+            );
+            const caughtExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'try { process.exit(2); } catch { process.exit(1); }'],
+            );
+            const caughtExitListenerCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { process.exitCode = 9; }); try { process.exit(7); } catch {}'],
+            );
+            const caughtExitThenThrow = spawnSync(
+                process.execPath,
+                ['-e', 'try { process.exit(2); } catch {} throw new Error("later");'],
+            );
+            const exitListenerThrows = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { throw new Error("exit-listener"); }); process.exit(7)'],
+            );
+            const swallowedExitListenerThrows = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { throw new Error("exit-listener-swallowed"); }); try { process.exit(7); } catch {}'],
+            );
+            const swallowedNullExitListenerThrows = spawnSync(
+                process.execPath,
+                ['-e', 'process.on("exit", () => { throw null; }); try { process.exit(7); } catch {}'],
+            );
+            process._runExit.call = () => {};
+            let hardenedRunExit;
+            try {
+                hardenedRunExit = spawnSync(
+                    process.execPath,
+                    ['-e', 'process.exit(6); process.exitCode = 0'],
+                );
+            } finally {
+                delete process._runExit.call;
+            }
+            const freshExitCode = spawnSync(
+                process.execPath,
+                ['-e', 'process.stdout.write("fresh")'],
+            );
             const shellAsync = await new Promise(resolve => {
                 const child = spawn(process.execPath, ['-e', 'process.stdout.write("bad")'], {
                     shell: true,
@@ -425,6 +479,7 @@ export async function probePrimitives() {
             const compressed = zlib.gzipSync('npm');
             return {
                 constantsCjs: typeof constants.COPYFILE_EXCL === 'number',
+                processExitName: process.exit.name,
                 heapSizeLimit: v8.getHeapStatistics().heap_size_limit,
                 bufferView: Buffer.isBuffer(view) && original[1] === 9,
                 bufferSpecies: species !== Buffer && species.prototype === Buffer.prototype &&
@@ -445,6 +500,28 @@ export async function probePrimitives() {
                     shellAsync.code === -38 && shellAsync.error &&
                     shellAsync.error.code === 'ENOSYS' &&
                     shellAsync.events.join(',') === 'error,close',
+                childExitStatus: {
+                    assigned: assignedExitCode.status,
+                    beforeExit: beforeExitCode.status,
+                    omittedExplicit: omittedExplicitExitCode.status,
+                    exitListener: exitListenerCode.status,
+                    caughtExit: caughtExitCode.status,
+                    caughtExitListener: caughtExitListenerCode.status,
+                    caughtExitThenThrow: caughtExitThenThrow.status,
+                    exitListenerThrows: exitListenerThrows.status,
+                    swallowedExitListenerThrows: swallowedExitListenerThrows.status,
+                    swallowedNullExitListenerThrows: swallowedNullExitListenerThrows.status,
+                    hardenedRunExit: hardenedRunExit.status,
+                    fresh: freshExitCode.status,
+                },
+                childExitDiagnostics: {
+                    suppressesPostExitError: caughtExitThenThrow.stderr.toString() === '',
+                    reportsExitListenerError: exitListenerThrows.stderr.toString().includes('Error: exit-listener'),
+                    reportsSwallowedExitListenerError:
+                        swallowedExitListenerThrows.stderr.toString().includes('Error: exit-listener-swallowed'),
+                    reportsSwallowedNullExitListenerError:
+                        swallowedNullExitListenerThrows.stderr.toString().includes('null'),
+                },
                 execFailuresOmitExit: [execFailure, execFileFailure].every(failure =>
                     failure.callbackError && failure.callbackError.code === 'ENOSYS' &&
                     failure.emittedError && failure.emittedError.code === 'ENOSYS' &&
