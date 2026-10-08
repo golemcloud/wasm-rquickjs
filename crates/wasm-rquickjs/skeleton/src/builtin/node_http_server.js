@@ -40,6 +40,7 @@ const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
 const DEFAULT_WRITABLE_HIGH_WATER_MARK = 64 * 1024;
 const MAX_TRAILER_SIZE = 16 * 1024;
+const CONTINUE_EXPRESSION = /(?:^|\W)100-continue(?:$|\W)/i;
 
 // ===== Header helpers =====
 
@@ -138,8 +139,10 @@ function ServerIncomingMessage(socket, method, url, httpVersion, rawHeaderPairs,
     this.httpVersion = httpVersion;
 
     const parts = httpVersion.split('.');
-    this.httpVersionMajor = parseInt(parts[0], 10) || 1;
-    this.httpVersionMinor = parseInt(parts[1], 10) || 1;
+    const major = parseInt(parts[0], 10);
+    const minor = parseInt(parts[1], 10);
+    this.httpVersionMajor = Number.isNaN(major) ? 1 : major;
+    this.httpVersionMinor = Number.isNaN(minor) ? 1 : minor;
 
     const parsed = parseHeaders(rawHeaderPairs, !!joinDuplicateHeaders);
     this.headers = parsed.headers;
@@ -256,6 +259,7 @@ function ServerResponse(req, options) {
 
     // Properties needed by stream.finished / end-of-stream detection
     this._sent100 = false;
+    this._expect_continue = false;
     this._closed = false;
     this._destroyed = false;
     this._errored = undefined;
@@ -1065,7 +1069,7 @@ ServerResponse.prototype.writeProcessing = function writeProcessing(callback) {
     this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'), callback);
 };
 
-const LINK_HEADER_REGEX = /^<[^>]*>(\s*;\s*[^;]+)*$/;
+const LINK_HEADER_REGEX = /^(?:<[^>]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$/;
 
 function _validateLinkHeaderFormat(value) {
     if (typeof value !== 'string' || !LINK_HEADER_REGEX.test(value)) {
@@ -1083,7 +1087,10 @@ function _validateLinkHeaderValue(value) {
     if (Array.isArray(value)) {
         return value.map((item) => _validateLinkHeaderFormat(item)).join(', ');
     }
-    throw new ERR_INVALID_ARG_TYPE('hints.link', ['string', 'Array'], value);
+    throw new ERR_INVALID_ARG_VALUE(
+        'hints.link', value,
+        'must be an array or string of format "</styles.css>; rel=preload; as=style"'
+    );
 }
 
 ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
@@ -1732,6 +1739,23 @@ function createConnectionParser(server, socket) {
                         // response, including its ordinary writeHead/end framing.
                         res.writeHead(503);
                         res.end();
+                    } else if (req.httpVersionMajor === 1 &&
+                        req.httpVersionMinor === 1 &&
+                        req.headers.expect !== undefined) {
+                        if (CONTINUE_EXPRESSION.test(req.headers.expect)) {
+                            res._expect_continue = true;
+                            if (server.listenerCount('checkContinue') > 0) {
+                                server.emit('checkContinue', req, res);
+                            } else {
+                                res.writeContinue();
+                                server.emit('request', req, res);
+                            }
+                        } else if (server.listenerCount('checkExpectation') > 0) {
+                            server.emit('checkExpectation', req, res);
+                        } else {
+                            res.writeHead(417);
+                            res.end();
+                        }
                     } else {
                         server.emit('request', req, res);
                     }

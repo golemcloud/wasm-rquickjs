@@ -2125,6 +2125,232 @@ export async function httpPipelinedResponseOrder() {
     });
 }
 
+export async function httpExpectContinueFlow() {
+    const listen = (server) => new Promise((resolve) => server.listen(0, resolve));
+    const close = async (server) => {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+    };
+    const exchange = async (server, initialRequest, onWire) => {
+        await listen(server);
+        let socket;
+        try {
+            return await new Promise((resolve) => {
+                let settled = false;
+                let wire = '';
+                const finish = (result) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeout);
+                    if (socket) socket.destroy();
+                    resolve(result);
+                };
+                const timeout = setTimeout(() => finish({ timedOut: true, wire }), 2000);
+                socket = net.connect({ port: server.address().port });
+                socket.on('connect', () => socket.write(initialRequest));
+                socket.on('data', (chunk) => {
+                    wire += chunk.toString('latin1');
+                    if (onWire) onWire(wire, socket);
+                });
+                socket.on('error', (error) => finish({ error: error.message, wire }));
+                socket.on('end', () => finish({ wire }));
+                socket.on('close', () => finish({ wire }));
+            });
+        } finally {
+            await close(server);
+        }
+    };
+
+    let autoRequests = 0;
+    let autoBody = '';
+    let autoExpect;
+    let autoSent100;
+    let autoEnd = 0;
+    let autoClose = 0;
+    const autoServer = http.createServer((req, res) => {
+        autoRequests++;
+        autoExpect = res._expect_continue;
+        autoSent100 = res._sent100;
+        req.on('data', (chunk) => {
+            autoBody += chunk.toString();
+        });
+        req.on('end', () => {
+            autoEnd++;
+            res.end('auto');
+        });
+        req.on('close', () => autoClose++);
+    });
+    let autoBodySent = false;
+    const auto = await exchange(
+        autoServer,
+        'POST /auto HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: other, 100-Continue\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\n',
+        (wire, socket) => {
+            if (!autoBodySent && wire.includes('HTTP/1.1 100 Continue\r\n\r\n')) {
+                autoBodySent = true;
+                socket.write('body');
+            }
+        },
+    );
+    const autoContinue = auto.wire.indexOf('HTTP/1.1 100 Continue');
+    const autoFinal = auto.wire.indexOf('HTTP/1.1 200 OK');
+    if (auto.timedOut || auto.error || autoRequests !== 1 ||
+        autoExpect !== true || autoSent100 !== true ||
+        autoBody !== 'body' || autoEnd !== 1 || autoClose !== 1 ||
+        autoContinue === -1 || autoFinal <= autoContinue ||
+        !auto.wire.includes('\r\n\r\nauto')) {
+        console.log(JSON.stringify({ phase: 'automatic', auto, autoRequests,
+            autoExpect, autoSent100, autoBody, autoEnd, autoClose }));
+        return false;
+    }
+
+    let explicitRequests = 0;
+    let checkContinue = 0;
+    let explicitBody = '';
+    let explicitBefore;
+    let explicitAfter;
+    let explicitExpect;
+    let continueCallbacks = 0;
+    let continueCallbackError;
+    const explicitServer = http.createServer(() => explicitRequests++);
+    explicitServer.on('checkContinue', (req, res) => {
+        checkContinue++;
+        explicitExpect = res._expect_continue;
+        explicitBefore = res._sent100;
+        res.writeContinue((error) => {
+            continueCallbacks++;
+            continueCallbackError = error;
+        });
+        explicitAfter = res._sent100;
+        req.on('data', (chunk) => {
+            explicitBody += chunk.toString();
+        });
+        req.on('end', () => res.end('explicit'));
+    });
+    let explicitBodySent = false;
+    const explicit = await exchange(
+        explicitServer,
+        'POST /explicit HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\n',
+        (wire, socket) => {
+            if (!explicitBodySent && wire.includes('HTTP/1.1 100 Continue\r\n\r\n')) {
+                explicitBodySent = true;
+                socket.write('data');
+            }
+        },
+    );
+    const explicitContinue = explicit.wire.indexOf('HTTP/1.1 100 Continue');
+    const explicitFinal = explicit.wire.indexOf('HTTP/1.1 200 OK');
+    if (explicit.timedOut || explicit.error || explicitRequests !== 0 ||
+        checkContinue !== 1 || explicitExpect !== true ||
+        explicitBefore !== false || explicitAfter !== true ||
+        continueCallbacks !== 1 || continueCallbackError !== null ||
+        explicitBody !== 'data' || explicitContinue === -1 ||
+        explicitFinal <= explicitContinue ||
+        !explicit.wire.includes('\r\n\r\nexplicit')) {
+        console.log(JSON.stringify({ phase: 'explicit', explicit,
+            explicitRequests, checkContinue, explicitExpect, explicitBefore,
+            explicitAfter, continueCallbacks, continueCallbackError,
+            explicitBody }));
+        return false;
+    }
+
+    const defaultRequests = [];
+    const defaultServer = http.createServer((req, res) => {
+        defaultRequests.push(req.url);
+        res.end('next');
+    });
+    const defaultResult = await exchange(
+        defaultServer,
+        'POST /unsupported HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: meoww\r\n' +
+        'Content-Length: 4\r\n\r\n' +
+        'body' +
+        'GET /next HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    const expectationFailed = defaultResult.wire.indexOf(
+        'HTTP/1.1 417 Expectation Failed',
+    );
+    const nextResponse = defaultResult.wire.indexOf(
+        'HTTP/1.1 200 OK',
+        expectationFailed + 1,
+    );
+    if (defaultResult.timedOut || defaultResult.error ||
+        defaultRequests.join(',') !== '/next' ||
+        expectationFailed === -1 || nextResponse <= expectationFailed ||
+        !defaultResult.wire.includes('\r\n\r\nnext')) {
+        console.log(JSON.stringify({ phase: 'default-expectation',
+            defaultResult, defaultRequests }));
+        return false;
+    }
+
+    let expectationRequests = 0;
+    let checkExpectation = 0;
+    let expectationComplete;
+    const expectationServer = http.createServer(() => expectationRequests++);
+    expectationServer.on('checkExpectation', (req, res) => {
+        checkExpectation++;
+        req.on('end', () => {
+            expectationComplete = req.complete;
+            res.statusCode = 417;
+            res.end('custom');
+        });
+        req.resume();
+    });
+    const expectation = await exchange(
+        expectationServer,
+        'POST /custom HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: custom\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\ndata',
+    );
+    if (expectation.timedOut || expectation.error || expectationRequests !== 0 ||
+        checkExpectation !== 1 || expectationComplete !== true ||
+        !expectation.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+        !expectation.wire.includes('\r\n\r\ncustom')) {
+        console.log(JSON.stringify({ phase: 'custom-expectation', expectation,
+            expectationRequests, checkExpectation, expectationComplete }));
+        return false;
+    }
+
+    let legacyRequests = 0;
+    let legacyCheckContinue = 0;
+    let legacyCheckExpectation = 0;
+    const legacyServer = http.createServer((_req, res) => {
+        legacyRequests++;
+        res.end('legacy');
+    });
+    legacyServer.on('checkContinue', () => legacyCheckContinue++);
+    legacyServer.on('checkExpectation', () => legacyCheckExpectation++);
+    const legacy = await exchange(
+        legacyServer,
+        'GET /legacy HTTP/1.0\r\n' +
+        'Expect: custom\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    if (legacy.timedOut || legacy.error || legacyRequests !== 1 ||
+        legacyCheckContinue !== 0 || legacyCheckExpectation !== 0 ||
+        legacy.wire.includes('100 Continue') ||
+        legacy.wire.includes('417 Expectation Failed') ||
+        !legacy.wire.includes('\r\n\r\nlegacy')) {
+        console.log(JSON.stringify({ phase: 'http-1.0', legacy, legacyRequests,
+            legacyCheckContinue, legacyCheckExpectation }));
+        return false;
+    }
+
+    return true;
+}
+
 export async function httpHalfOpenPipelinedRequests() {
     return new Promise((resolve) => {
         let settled = false;

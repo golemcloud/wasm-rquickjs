@@ -15,6 +15,7 @@ world node-http {
   export http-request-trailers: func() -> bool;
   export http-request-trailer-errors: func() -> bool;
   export http-pipelined-response-order: func() -> bool;
+  export http-expect-continue-flow: func() -> bool;
   export http-half-open-pipelined-requests: func() -> bool;
   export http-pipelined-close-lifecycle: func() -> bool;
   export http-pipelined-connection-close: func() -> bool;

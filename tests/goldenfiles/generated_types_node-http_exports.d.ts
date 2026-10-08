@@ -13,6 +13,7 @@ declare module 'node-http' {
   export function httpRequestTrailers(): Promise<boolean>;
   export function httpRequestTrailerErrors(): Promise<boolean>;
   export function httpPipelinedResponseOrder(): Promise<boolean>;
+  export function httpExpectContinueFlow(): Promise<boolean>;
   export function httpHalfOpenPipelinedRequests(): Promise<boolean>;
   export function httpPipelinedCloseLifecycle(): Promise<boolean>;
   export function httpPipelinedConnectionClose(): Promise<boolean>;
