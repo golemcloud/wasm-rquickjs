@@ -1,0 +1,5 @@
+package quickjs:zlib;
+
+world zlib {
+  export test-byte-transfer: func() -> bool;
+}
