@@ -2284,6 +2284,7 @@ export async function httpExpectContinueFlow() {
         res.statusCode = 417;
         res.end('rejected');
     });
+    unansweredServer.maxRequestsPerSocket = 1;
     const unanswered = await exchange(
         unansweredServer,
         'POST /rejected HTTP/1.1\r\n' +
@@ -2299,6 +2300,44 @@ export async function httpExpectContinueFlow() {
         !unanswered.wire.includes('\r\n\r\nrejected')) {
         console.log(JSON.stringify({ phase: 'unanswered-continue', unanswered,
             unansweredRequests, unansweredCheckContinue, unansweredEnd }));
+        return false;
+    }
+
+    const overrideRequests = [];
+    let overrideCheckContinue = 0;
+    const overrideServer = http.createServer((req, res) => {
+        overrideRequests.push(req.url);
+        res.end('after');
+    });
+    overrideServer.on('checkContinue', (req, res) => {
+        overrideCheckContinue++;
+        req.resume();
+        res.setHeader('Connection', 'keep-alive');
+        res.statusCode = 417;
+        res.end('override');
+    });
+    const override = await exchange(
+        overrideServer,
+        'POST /override HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n\r\nbody' +
+        'GET /after HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    const overrideFailed = override.wire.indexOf('HTTP/1.1 417 Expectation Failed');
+    const overrideAfter = override.wire.indexOf('HTTP/1.1 200 OK', overrideFailed + 1);
+    if (override.timedOut || override.error || overrideCheckContinue !== 1 ||
+        overrideRequests.join(',') !== '/after' ||
+        override.wire.includes('100 Continue') || overrideFailed === -1 ||
+        overrideAfter <= overrideFailed ||
+        !override.wire.slice(overrideFailed, overrideAfter)
+            .includes('Connection: keep-alive') ||
+        !override.wire.includes('\r\n\r\noverride') ||
+        !override.wire.includes('\r\n\r\nafter')) {
+        console.log(JSON.stringify({ phase: 'expect-connection-override',
+            override, overrideRequests, overrideCheckContinue }));
         return false;
     }
 
@@ -2407,6 +2446,16 @@ export async function httpExpectContinueFlow() {
             earlyHintCallbacks++;
             earlyHintCallbackError = error;
         });
+        res.writeEarlyHints({
+            link: [{
+                toString() {
+                    return '</coerced.js>; rel=preload';
+                },
+            }],
+        }, (error) => {
+            earlyHintCallbacks++;
+            earlyHintCallbackError ||= error;
+        });
         res.end('hints');
     });
     const earlyHints = await exchange(
@@ -2415,12 +2464,17 @@ export async function httpExpectContinueFlow() {
         'Host: localhost\r\n' +
         'Connection: close\r\n\r\n',
     );
+    const expectedEarlyHints =
+        'HTTP/1.1 103 Early Hints\r\n' +
+        'Link: </lower.js>; rel=preload\r\n' +
+        'Link: </upper.js>; rel=preload\r\n' +
+        'test: included\r\n\r\n' +
+        'HTTP/1.1 103 Early Hints\r\n' +
+        'Link: </coerced.js>; rel=preload\r\n\r\n';
     if (earlyHints.timedOut || earlyHints.error || skippedHintCallbacks !== 0 ||
-        earlyHintCallbacks !== 1 || earlyHintCallbackError !== null ||
-        earlyHints.wire.split('HTTP/1.1 103 Early Hints').length !== 2 ||
-        !earlyHints.wire.includes('Link: </lower.js>; rel=preload\r\n') ||
-        !earlyHints.wire.includes('Link: </upper.js>; rel=preload\r\n') ||
-        !earlyHints.wire.includes('test: included\r\n') ||
+        earlyHintCallbacks !== 2 || earlyHintCallbackError !== null ||
+        earlyHints.wire.split('HTTP/1.1 103 Early Hints').length !== 3 ||
+        !earlyHints.wire.includes(expectedEarlyHints) ||
         earlyHints.wire.includes('missing-link') ||
         earlyHints.wire.includes('undefined-link') ||
         !earlyHints.wire.includes('\r\n\r\nhints')) {
