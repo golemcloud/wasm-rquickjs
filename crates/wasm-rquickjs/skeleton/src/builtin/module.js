@@ -4698,17 +4698,28 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function cacheDynamicRegisteredLoaderResult(parentUrl, specifier, attrs, loaded) {
+        if (loaded && loaded.format === 'json') return;
+        if (
+            typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_has_import_mock === 'function' &&
+            wasmRquickjsModuleGlobalThis.__wasm_rquickjs_has_import_mock(specifier, parentUrl)
+        ) {
+            return;
+        }
         if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
-        const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
+        const key = staticRegisteredLoaderCacheKey(normalizeLoaderResolvedUrl(String(parentUrl)), specifier, attrs);
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
         if (!Object.prototype.hasOwnProperty.call(cache, key)) {
-            cache[key] = normalizedRegisteredLoaderCacheResult(
-                loaded,
-                staticRegisteredLoaderReturn(loaded),
-                undefined,
-            );
+            try {
+                cache[key] = normalizedRegisteredLoaderCacheResult(
+                    loaded,
+                    staticRegisteredLoaderReturn(loaded),
+                    undefined,
+                );
+            } catch (error) {
+                cache[key] = normalizedRegisteredLoaderCacheResult(loaded, undefined, error);
+            }
         }
     }
 
