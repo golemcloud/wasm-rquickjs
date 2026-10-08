@@ -858,6 +858,21 @@ pub mod native_module {
     }
 
     #[cfg(feature = "typescript-compiler-profiling")]
+    #[rquickjs::function]
+    pub fn profile_fs_js_lstat_error(ctx: Ctx<'_>, elapsed_nanoseconds: f64) {
+        if !elapsed_nanoseconds.is_finite() || elapsed_nanoseconds < 0.0 {
+            return;
+        }
+        if let Some(profile) = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .execution_profile()
+        {
+            profile.record_fs_js_lstat_error(elapsed_nanoseconds as u64);
+        }
+    }
+
+    #[cfg(feature = "typescript-compiler-profiling")]
     fn fs_error_outcome(error: &std::io::Error) -> &'static str {
         if error.kind() == std::io::ErrorKind::NotFound {
             "notFound"

@@ -134,6 +134,11 @@ function endFsDiagnosticBoundary(operation, started) {
     if (started === undefined) return;
     native.profile_fs_js_boundary(operation, Number(process.hrtime.bigint() - started));
 }
+if (typeof native.profile_fs_js_lstat_error === 'function') {
+    globalThis.__wasm_rquickjs_gol737_profile_lstat_error = elapsedNanoseconds => {
+        native.profile_fs_js_lstat_error(elapsedNanoseconds);
+    };
+}
 
 const S_IFMT = 0o170000;
 const S_IFREG = 0o100000;
