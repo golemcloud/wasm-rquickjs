@@ -347,6 +347,7 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
   }
   var cacheIdentityKey = completedKey;
   var validationPreparedKey = key;
+  var packageIdentityResolved = false;
   if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(key)) {
     var registeredLoadersActive =
       __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
@@ -365,6 +366,7 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
             typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_dynamic_import_cache_resolve_package === 'function'
           ) {
             resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_dynamic_import_cache_resolve_package(String(baseUrl), originalSpecifier);
+            packageIdentityResolved = resolvedIdentity !== undefined && resolvedIdentity !== null;
           }
         }
         if (resolvedIdentity === undefined || resolvedIdentity === null) {
@@ -395,6 +397,12 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
         discardGeneratedRewriteToken();
       }
       return cached.parents[parentKey];
+    }
+    if (
+      packageIdentityResolved &&
+      typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package === 'function'
+    ) {
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package(String(baseUrl), originalSpecifier);
     }
     var validationPromise = Promise.resolve(importFn(cached.preparedKey)).then(function() {
       return cached.promise;

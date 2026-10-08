@@ -1319,23 +1319,26 @@ export const testEsmDataUrlImportAttributes = async () => {
         assert.strictEqual(dataIdentityB, dataIdentityA);
         assert.strictEqual(dataIdentityB.default, dataIdentityA.default);
 
-        fs.mkdirSync('/dynamic-warning-parent/node_modules/dynamic-warning-pkg', { recursive: true });
+        fs.mkdirSync('/dynamic-warning-root/node_modules/dynamic-warning-pkg', { recursive: true });
         fs.writeFileSync(
-            '/dynamic-warning-parent/node_modules/dynamic-warning-pkg/package.json',
+            '/dynamic-warning-root/node_modules/dynamic-warning-pkg/package.json',
             JSON.stringify({ type: 'module' }),
         );
         fs.writeFileSync(
-            '/dynamic-warning-parent/node_modules/dynamic-warning-pkg/index.js',
+            '/dynamic-warning-root/node_modules/dynamic-warning-pkg/index.js',
             'export const value = "warning-package";',
         );
-        fs.writeFileSync(
-            '/dynamic-warning-parent/main.mjs',
-            [
-                'const first = await import("dynamic-warning-pkg");',
-                'const second = await import("dynamic-warning-pkg");',
-                'export default { same: first === second, value: first.value };',
-            ].join('\n'),
-        );
+        for (const parent of ['a', 'b']) {
+            fs.mkdirSync(`/dynamic-warning-root/${parent}`, { recursive: true });
+            fs.writeFileSync(
+                `/dynamic-warning-root/${parent}/main.mjs`,
+                [
+                    'const first = await import("dynamic-warning-pkg");',
+                    'const second = await import("dynamic-warning-pkg");',
+                    'export default { same: first === second, value: first.value };',
+                ].join('\n'),
+            );
+        }
         const dynamicPackageWarnings = [];
         const onDynamicPackageWarning = (warning) => {
             if (warning.code === 'DEP0151' && warning.message.includes('dynamic-warning-pkg')) {
@@ -1344,15 +1347,19 @@ export const testEsmDataUrlImportAttributes = async () => {
         };
         process.on('warning', onDynamicPackageWarning);
         try {
-            assert.deepStrictEqual(
-                (await import('/dynamic-warning-parent/main.mjs')).default,
-                { same: true, value: 'warning-package' },
-            );
+            for (const parent of ['a', 'b']) {
+                assert.deepStrictEqual(
+                    (await import(`/dynamic-warning-root/${parent}/main.mjs`)).default,
+                    { same: true, value: 'warning-package' },
+                );
+            }
             await new Promise((resolve) => process.nextTick(resolve));
         } finally {
             process.removeListener('warning', onDynamicPackageWarning);
         }
-        assert.strictEqual(dynamicPackageWarnings.length, 1);
+        assert.strictEqual(dynamicPackageWarnings.length, 2);
+        assert.ok(dynamicPackageWarnings.some((warning) => warning.message.includes('/dynamic-warning-root/a/main.mjs')));
+        assert.ok(dynamicPackageWarnings.some((warning) => warning.message.includes('/dynamic-warning-root/b/main.mjs')));
 
         for (const [parent, value] of [['a', 'nested-a'], ['b', 'nested-b']]) {
             const root = `/dynamic-parent-${parent}`;
