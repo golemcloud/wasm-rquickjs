@@ -1319,7 +1319,74 @@ export const testEsmDataUrlImportAttributes = async () => {
         assert.strictEqual(dataIdentityB, dataIdentityA);
         assert.strictEqual(dataIdentityB.default, dataIdentityA.default);
 
+        for (const [parent, value] of [['a', 'nested-a'], ['b', 'nested-b']]) {
+            const root = `/dynamic-parent-${parent}`;
+            fs.mkdirSync(`${root}/node_modules/dep`, { recursive: true });
+            fs.writeFileSync(
+                `${root}/node_modules/dep/package.json`,
+                JSON.stringify({ type: 'module', exports: './index.mjs' }),
+            );
+            fs.writeFileSync(
+                `${root}/node_modules/dep/index.mjs`,
+                `globalThis.__dynamicParentEval${parent.toUpperCase()} = ` +
+                    `(globalThis.__dynamicParentEval${parent.toUpperCase()} || 0) + 1; ` +
+                    `export const value = ${JSON.stringify(value)};`,
+            );
+            fs.writeFileSync(
+                `${root}/main.mjs`,
+                'export default await import("dep");',
+            );
+        }
+        const nestedBareA = (await import('/dynamic-parent-a/main.mjs')).default;
+        const nestedBareB = (await import('/dynamic-parent-b/main.mjs')).default;
+        assert.strictEqual(nestedBareA.value, 'nested-a');
+        assert.strictEqual(nestedBareB.value, 'nested-b');
+        assert.notStrictEqual(nestedBareB, nestedBareA);
+        assert.strictEqual(globalThis.__dynamicParentEvalA, 1);
+        assert.strictEqual(globalThis.__dynamicParentEvalB, 1);
+        delete globalThis.__dynamicParentEvalA;
+        delete globalThis.__dynamicParentEvalB;
+
+        for (const [parent, value] of [['a', 'imports-a'], ['b', 'imports-b']]) {
+            const root = `/dynamic-imports-${parent}`;
+            fs.mkdirSync(root, { recursive: true });
+            fs.writeFileSync(
+                `${root}/package.json`,
+                JSON.stringify({ type: 'module', imports: { '#util': './util.mjs' } }),
+            );
+            fs.writeFileSync(`${root}/util.mjs`, `export const value = ${JSON.stringify(value)};`);
+            fs.writeFileSync(`${root}/main.mjs`, 'export default await import("#util");');
+        }
+        const packageImportA = (await import('/dynamic-imports-a/main.mjs')).default;
+        const packageImportB = (await import('/dynamic-imports-b/main.mjs')).default;
+        assert.strictEqual(packageImportA.value, 'imports-a');
+        assert.strictEqual(packageImportB.value, 'imports-b');
+        assert.notStrictEqual(packageImportB, packageImportA);
+
+        fs.mkdirSync('/dynamic-shared-json/node_modules/json-pkg', { recursive: true });
+        fs.mkdirSync('/dynamic-shared-json/a', { recursive: true });
+        fs.mkdirSync('/dynamic-shared-json/b', { recursive: true });
+        fs.writeFileSync(
+            '/dynamic-shared-json/node_modules/json-pkg/package.json',
+            JSON.stringify({ exports: './data.json' }),
+        );
+        fs.writeFileSync(
+            '/dynamic-shared-json/node_modules/json-pkg/data.json',
+            '{"identity":"bare-json"}',
+        );
+        for (const parent of ['a', 'b']) {
+            fs.writeFileSync(
+                `/dynamic-shared-json/${parent}/main.mjs`,
+                'export default await import("json-pkg", { with: { type: "json" } });',
+            );
+        }
+        const bareJsonA = (await import('/dynamic-shared-json/a/main.mjs')).default;
+        const bareJsonB = (await import('/dynamic-shared-json/b/main.mjs')).default;
+        assert.strictEqual(bareJsonB, bareJsonA);
+        assert.strictEqual(bareJsonB.default, bareJsonA.default);
+
         fs.unlinkSync('/dynamic-json-identity.json');
+        fs.unlinkSync('/dynamic-json-query-identity.json');
         await expectReject(
             'new JSON parent should revalidate a removed file',
             importJsonNamespaceFromParent('file-missing', identityFileUrl),
