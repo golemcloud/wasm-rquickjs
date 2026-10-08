@@ -834,9 +834,12 @@ pub mod native_module {
         }
     }
 
-    #[cfg(feature = "typescript-compiler-profiling")]
     #[rquickjs::function]
     pub fn profile_fs_js_boundary(ctx: Ctx<'_>, operation: usize, elapsed_nanoseconds: f64) {
+        #[cfg(not(feature = "typescript-compiler-profiling"))]
+        let _ = (&ctx, operation, elapsed_nanoseconds);
+        #[cfg(feature = "typescript-compiler-profiling")]
+        {
         let operation = match operation {
             0 => FsProfileOperation::Open,
             1 => FsProfileOperation::Close,
@@ -855,11 +858,15 @@ pub mod native_module {
         {
             profile.record_fs_js_boundary(operation, elapsed_nanoseconds as u64);
         }
+        }
     }
 
-    #[cfg(feature = "typescript-compiler-profiling")]
     #[rquickjs::function]
     pub fn profile_fs_js_lstat_error(ctx: Ctx<'_>, elapsed_nanoseconds: f64) {
+        #[cfg(not(feature = "typescript-compiler-profiling"))]
+        let _ = (&ctx, elapsed_nanoseconds);
+        #[cfg(feature = "typescript-compiler-profiling")]
+        {
         if !elapsed_nanoseconds.is_finite() || elapsed_nanoseconds < 0.0 {
             return;
         }
@@ -870,6 +877,12 @@ pub mod native_module {
         {
             profile.record_fs_js_lstat_error(elapsed_nanoseconds as u64);
         }
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn fs_profiling_enabled() -> bool {
+        cfg!(feature = "typescript-compiler-profiling")
     }
 
     #[cfg(feature = "typescript-compiler-profiling")]

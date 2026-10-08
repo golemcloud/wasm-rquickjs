@@ -125,8 +125,9 @@ const O_DSYNC = 4096;
 const O_NONBLOCK = 2048;
 
 const fsDiagnosticSequences = new Uint32Array(6);
+const fsDiagnosticEnabled = native.fs_profiling_enabled();
 function beginFsDiagnosticBoundary(operation) {
-    if (typeof native.profile_fs_js_boundary !== 'function') return undefined;
+    if (!fsDiagnosticEnabled) return undefined;
     fsDiagnosticSequences[operation]++;
     return fsDiagnosticSequences[operation] % 64 === 0 ? process.hrtime.bigint() : undefined;
 }
@@ -134,7 +135,7 @@ function endFsDiagnosticBoundary(operation, started) {
     if (started === undefined) return;
     native.profile_fs_js_boundary(operation, Number(process.hrtime.bigint() - started));
 }
-if (typeof native.profile_fs_js_lstat_error === 'function') {
+if (fsDiagnosticEnabled) {
     globalThis.__wasm_rquickjs_gol737_profile_lstat_error = elapsedNanoseconds => {
         native.profile_fs_js_lstat_error(elapsedNanoseconds);
     };
