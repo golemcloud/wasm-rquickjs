@@ -1,8 +1,9 @@
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 // The bulk of this module performs filesystem I/O through `std::fs`, which is backed by the
-// WASI filesystem on the `wasm32-wasip2` target for both generation paths. Symlink creation and
-// the `utimes`/`lutimes` family use the host `wasi:filesystem` bindings directly. The *Preview 2*
+// WASI filesystem on the `wasm32-wasip2` target for both generation paths. Recursive removal,
+// symlink creation and the `utimes`/`lutimes` family use the host `wasi:filesystem` bindings
+// directly. The *Preview 2*
 // bindings are used on both generation paths: symlink creation is synchronous, while Preview 3
 // replaced `set-times-at` with an async component-model call. Driving that call to
 // completion from inside a synchronous native function (which runs inside JS execution, i.e.
@@ -86,6 +87,16 @@ fn wasi_fs_error_to_io(e: &wasi_fs_types::ErrorCode) -> std::io::Error {
             std::io::Error::from_raw_os_error(8) // EBADF on WASI
         }
         ErrorCode::Invalid => std::io::Error::new(std::io::ErrorKind::InvalidInput, e.to_string()),
+        ErrorCode::ReadOnly => {
+            std::io::Error::new(std::io::ErrorKind::ReadOnlyFilesystem, e.to_string())
+        }
+        ErrorCode::NotEmpty => {
+            std::io::Error::new(std::io::ErrorKind::DirectoryNotEmpty, e.to_string())
+        }
+        ErrorCode::IsDirectory => {
+            std::io::Error::new(std::io::ErrorKind::IsADirectory, e.to_string())
+        }
+        ErrorCode::Busy => std::io::Error::new(std::io::ErrorKind::ResourceBusy, e.to_string()),
         _ => std::io::Error::other(e.to_string()),
     }
 }
@@ -155,6 +166,77 @@ fn set_path_times(
             "no matching preopened directory",
         ))
     }
+}
+
+fn remove_directory_tree(ctx: &rquickjs::Ctx<'_>, path: &str) -> std::io::Result<()> {
+    use wasi_fs_types::{
+        Descriptor, DescriptorFlags, DescriptorType, ErrorCode, OpenFlags, PathFlags,
+    };
+
+    fn remove_at(
+        ctx: &rquickjs::Ctx<'_>,
+        parent: &Descriptor,
+        name: &str,
+        path: &str,
+    ) -> Result<(), ErrorCode> {
+        if parent.stat_at(PathFlags::empty(), name)?.type_ != DescriptorType::Directory {
+            parent.unlink_file_at(name)?;
+            remove_mode_override_for_path(ctx, path);
+            return Ok(());
+        }
+        match parent.open_at(
+            PathFlags::empty(),
+            name,
+            OpenFlags::DIRECTORY,
+            DescriptorFlags::READ | DescriptorFlags::MUTATE_DIRECTORY,
+        ) {
+            Ok(directory) => {
+                // Enumeration resources must be closed before the first mutation.
+                let entries = {
+                    let stream = directory.read_directory()?;
+                    let mut entries = Vec::new();
+                    while let Some(entry) = stream.read_directory_entry()? {
+                        entries.push(entry.name);
+                    }
+                    entries
+                };
+                for entry in entries {
+                    remove_at(ctx, &directory, &entry, &format!("{path}/{entry}"))?;
+                }
+                drop(directory);
+                parent.remove_directory_at(name)?;
+            }
+            // A leaf or a directory replaced by a symlink is unlinked, never followed.
+            Err(ErrorCode::NotDirectory | ErrorCode::Loop) => parent.unlink_file_at(name)?,
+            Err(error) => return Err(error),
+        }
+        remove_mode_override_for_path(ctx, path);
+        Ok(())
+    }
+
+    let dirs = wasi_fs_preopens::get_directories();
+    let target = std::path::Path::new(path);
+    let parent_path = target.parent().and_then(|p| p.to_str());
+    let name = target.file_name().and_then(|p| p.to_str());
+    // Resolve the parent, not the target: an exact preopen can only be removed
+    // through another preopen that grants access to its parent. Never empty a
+    // preopen (or the root) if there is no capability to remove it afterwards.
+    let Some((parent_path, name)) = parent_path.zip(name) else {
+        return Err(wasi_fs_error_to_io(&ErrorCode::Busy));
+    };
+    let Some((index, relative)) = resolve_preopen_relative(&dirs, parent_path) else {
+        return Err(wasi_fs_error_to_io(&ErrorCode::NotPermitted));
+    };
+    let parent = dirs[index]
+        .0
+        .open_at(
+            PathFlags::SYMLINK_FOLLOW,
+            if relative.is_empty() { "." } else { &relative },
+            OpenFlags::DIRECTORY,
+            DescriptorFlags::READ | DescriptorFlags::MUTATE_DIRECTORY,
+        )
+        .map_err(|e| wasi_fs_error_to_io(&e))?;
+    remove_at(ctx, &parent, name, path).map_err(|e| wasi_fs_error_to_io(&e))
 }
 
 fn symlink_at_path(target: &str, path: &str) -> std::io::Result<()> {
@@ -517,6 +599,9 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
         std::io::ErrorKind::InvalidInput => ("EINVAL", -22, "invalid argument"),
         std::io::ErrorKind::NotADirectory => ("ENOTDIR", -20, "not a directory"),
         std::io::ErrorKind::IsADirectory => ("EISDIR", -21, "illegal operation on a directory"),
+        std::io::ErrorKind::ReadOnlyFilesystem => ("EROFS", -30, "read-only file system"),
+        std::io::ErrorKind::DirectoryNotEmpty => ("ENOTEMPTY", -39, "directory not empty"),
+        std::io::ErrorKind::ResourceBusy => ("EBUSY", -16, "resource busy or locked"),
         _ => {
             let err_text = err.to_string().to_lowercase();
             if err_text.contains("too many levels of symbolic links") || err_text.contains("eloop")
@@ -548,6 +633,8 @@ fn map_error_code(err: &std::io::Error) -> (&'static str, i32, &'static str) {
                     20 => ("EEXIST", -17, "file already exists"),
                     54 => ("ENOTDIR", -20, "not a directory"),
                     55 => ("ENOTEMPTY", -39, "directory not empty"),
+                    69 => ("EROFS", -30, "read-only file system"),
+                    10 => ("EBUSY", -16, "resource busy or locked"),
                     8 => ("EBADF", -9, "bad file descriptor"),
                     52 => ("ENOSYS", -38, "function not implemented"),
                     63 | 1 => ("EPERM", -1, "operation not permitted"),
@@ -1928,7 +2015,7 @@ pub mod native_module {
             Ok(m) => {
                 if m.is_dir() {
                     let result = if recursive {
-                        std::fs::remove_dir_all(&fs_path)
+                        super::remove_directory_tree(&ctx, &fs_path)
                     } else {
                         std::fs::remove_dir(&fs_path)
                     };
@@ -2078,3 +2165,23 @@ pub const FS_PROMISES_JS: &str = include_str!("fs_promises.js");
 pub const REEXPORT_JS: &str = r#"export * from 'node:fs'; export { default } from 'node:fs';"#;
 pub const REEXPORT_PROMISES_JS: &str =
     r#"export * from 'node:fs/promises'; export { default } from 'node:fs/promises';"#;
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn wasi_deletion_errors() {
+        use super::wasi_fs_types::ErrorCode;
+        use super::{map_error_code, wasi_fs_error_to_io};
+        for (error, code, errno) in [
+            (ErrorCode::ReadOnly, "EROFS", -30),
+            (ErrorCode::NotEmpty, "ENOTEMPTY", -39),
+            (ErrorCode::IsDirectory, "EISDIR", -21),
+            (ErrorCode::Busy, "EBUSY", -16),
+            (ErrorCode::NoEntry, "ENOENT", -2),
+            (ErrorCode::Access, "EACCES", -13),
+        ] {
+            let mapped = map_error_code(&wasi_fs_error_to_io(&error));
+            assert_eq!((mapped.0, mapped.1), (code, errno));
+        }
+    }
+}

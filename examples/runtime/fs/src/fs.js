@@ -1,4 +1,4 @@
-import {closeSync, mkdir, mkdirSync, openSync, readFile, readFileSync, rename, renameSync, unlink, unlinkSync, writeFile, writeFileSync} from "node:fs";
+import {closeSync, mkdir, mkdirSync, openSync, readFile, readFileSync, rename, renameSync, unlink, unlinkSync, writeFile, writeFileSync, rmSync, symlinkSync, existsSync, lstatSync} from "node:fs";
 import {cwd, argv, env} from "node:process";
 import {env as env2} from "process"; // validating that node:process is also registered as 'process'
 import * as fsPromises from "node:fs/promises";
@@ -220,4 +220,57 @@ export const testUnlinkCallback = async () => {
             console.log("unlink callback succeeded");
         }
     });
+};
+
+export const testRecursiveRm = async () => {
+    const check = (condition, message) => { if (!condition) throw new Error(message); };
+    for (const [label, remove] of [
+        ["sync", async (path, options) => rmSync(path, options)],
+        ["promises", fsPromises.rm],
+    ]) {
+        const root = `/test/rm-${label}`;
+        const outside = `/test/outside-${label}`;
+        mkdirSync(outside);
+        writeFileSync(`${outside}/keep`, "outside data");
+        mkdirSync(`${root}/a/b`, {recursive: true});
+        writeFileSync(`${root}/a/b/leaf`, "nested");
+        writeFileSync(`${root}/sibling`, "sibling");
+        symlinkSync(`../../outside-${label}`, `${root}/a/link`);
+        symlinkSync(`missing-target`, `${root}/dangling`);
+        await remove(root, {recursive: true});
+        check(!existsSync(root), "nested tree remains");
+        check(readFileSync(`${outside}/keep`, "utf8") === "outside data", "descendant link followed");
+        symlinkSync(`outside-${label}`, root);
+        await remove(root, {recursive: true});
+        check(!existsSync(root), "top-level link remains");
+        check(readFileSync(`${outside}/keep`, "utf8") === "outside data", "top-level link followed");
+        mkdirSync(`${outside}/tree/nested`, {recursive: true});
+        writeFileSync(`${outside}/tree/nested/leaf`, "ancestor target");
+        const alias = `/test/alias-${label}`;
+        symlinkSync(`outside-${label}`, alias);
+        await remove(`${alias}/tree`, {recursive: true});
+        check(!existsSync(`${outside}/tree`), "ancestor symlink target tree remains");
+        check(lstatSync(alias).isSymbolicLink(), "ancestor symlink removed");
+        check(readFileSync(`${alias}/keep`, "utf8") === "outside data", "ancestor sibling removed");
+        await remove(`${root}/missing/nested`, {recursive: true, force: true});
+        try {
+            await remove(`${root}/missing/nested`, {recursive: true});
+            throw new Error("missing path accepted");
+        } catch (error) {
+            check(error.code === "ENOENT" && error.syscall === "lstat" && error.path === `${root}/missing/nested`, "missing error contract");
+        }
+        try {
+            await remove(outside);
+            throw new Error("nonempty directory accepted");
+        } catch (error) {
+            check(error.code === "ENOTEMPTY" && error.syscall === "rm" && error.path === outside, "nonempty error contract");
+        }
+    }
+    try {
+        rmSync("/", {recursive: true});
+        throw new Error("root removal accepted");
+    } catch (error) {
+        check(error.code === "EBUSY" && error.syscall === "rm", "root error contract");
+    }
+    check(readFileSync("/test/outside-sync/keep", "utf8") === "outside data", "root removal mutated data");
 };
