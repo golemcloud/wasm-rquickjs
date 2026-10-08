@@ -1420,6 +1420,12 @@ fn finish_release_sample(
         && let Some(profile) = result.get("profile")
     {
         compact_result["profile"] = profile.clone();
+        compact_result["diagnosticLines"] = json!(
+            stderr
+                .lines()
+                .filter(|line| line.starts_with("npm timing ") || line.starts_with("GOL737_"))
+                .collect::<Vec<_>>()
+        );
     }
     let sample = json!({
         "sequence": sequence,
@@ -2003,10 +2009,20 @@ async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
     let pack_dir = camino_tempfile::tempdir()?;
     let registry = release_registry(pack_dir.path(), &[&medium]).await?;
     let mut samples = Vec::with_capacity(iterations);
+    let mut npm_patch_blake3 = None;
 
     for sequence in 0..iterations {
         let mut instance =
             release_instance(&prepared, &host.npm_dir, Some(&medium), &registry.base).await?;
+        let patch_blake3 = patch_attribution_npm(instance.temp_dir_path())?;
+        if let Some(previous) = &npm_patch_blake3 {
+            ensure!(
+                previous == &patch_blake3,
+                "attribution npm patch is unstable"
+            );
+        } else {
+            npm_patch_blake3 = Some(patch_blake3);
+        }
         let seed = wasm_npm_sample(
             &mut instance,
             &seed_ci_args(&registry.base),
@@ -2022,10 +2038,12 @@ async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
             "Wasm medium npm ci cache seed failed: {seed}"
         );
         fs::remove_dir_all(instance.temp_dir_path().join("workspace/node_modules"))?;
+        let mut warm_args = warm_ci_args(&registry.base);
+        warm_args.push("--timing".to_string());
         samples.push(
             wasm_npm_sample(
                 &mut instance,
-                &warm_ci_args(&registry.base),
+                &warm_args,
                 "ci",
                 "warm-tarball",
                 sequence,
@@ -2044,6 +2062,7 @@ async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
         "node": "22.14.0",
         "npm": "10.9.2",
         "componentFeature": feature_combination.label(),
+        "npmPatchBlake3": npm_patch_blake3,
         "fixture": release_fixture_value(&medium, &registry, false)?,
         "samples": samples,
     });
@@ -2053,6 +2072,55 @@ async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
     }
     println!("{formatted}");
     Ok(())
+}
+
+fn patch_attribution_npm(root: &Utf8Path) -> anyhow::Result<String> {
+    let path = root.join("tool/npm/node_modules/@npmcli/arborist/lib/arborist/reify.js");
+    let source = fs::read_to_string(&path)?;
+    let source = source.replacen(
+        "const promiseAllRejectLate = require('promise-all-reject-late')",
+        "const promiseAllRejectLate = require('promise-all-reject-late')\nconst gol737ExtractTimings = []",
+        1,
+    );
+    let source = source.replacen(
+        r#"      await pacote.extract(res, node.path, {
+        ...this.options,
+        resolved: node.resolved,
+        integrity: node.integrity,
+      })"#,
+        r#"      const gol737Started = process.hrtime.bigint()
+      try {
+        await pacote.extract(res, node.path, {
+          ...this.options,
+          resolved: node.resolved,
+          integrity: node.integrity,
+        })
+      } finally {
+        gol737ExtractTimings.push({
+          package: node.name,
+          milliseconds: Number(process.hrtime.bigint() - gol737Started) / 1e6,
+        })
+      }"#,
+        1,
+    );
+    let source = source.replacen(
+        "    return promiseAllRejectLate(unpacks).then(timeEnd)",
+        r#"    return promiseAllRejectLate(unpacks).then(() => {
+      const result = timeEnd()
+      gol737ExtractTimings.sort((a, b) => a.package.localeCompare(b.package))
+      process.stderr.write(`GOL737_EXTRACT ${JSON.stringify(gol737ExtractTimings)}\n`)
+      return result
+    })"#,
+        1,
+    );
+    ensure!(
+        source.contains("const gol737ExtractTimings = []")
+            && source.contains("GOL737_EXTRACT")
+            && source.matches("const gol737Started").count() == 1,
+        "failed to apply GOL-737 npm instrumentation"
+    );
+    fs::write(&path, &source)?;
+    Ok(blake3::hash(source.as_bytes()).to_hex().to_string())
 }
 
 fn millis(duration: Duration) -> f64 {
