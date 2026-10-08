@@ -8750,6 +8750,28 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.strictEqual((await builtinScript.runInThisContext()).existsSync('/vm-default-loader-app'), true);
 
+        const { register } = await import('node:module');
+        const hookSource = [
+            'export function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:vm-default-loader-hook") {',
+            '    if (context.parentURL !== "file:///vm-default-loader-app/subdir/hooked.js") {',
+            '      throw new Error("unexpected vm default-loader parentURL: " + context.parentURL);',
+            '    }',
+            '    return { shortCircuit: true, format: "module", url: "file:///vm-default-loader-app/subdir/message.mjs" };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+        ].join('\n');
+        register('data:text/javascript,' + encodeURIComponent(hookSource));
+        const hookedScript = new vm.Script('import("virtual:vm-default-loader-hook")', {
+            filename: '/vm-default-loader-app/subdir/hooked.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual(
+            (await hookedScript.runInThisContext()).default,
+            { value: 'from-subdir' }
+        );
+
         const fileUrlScript = new vm.Script('import("./message.mjs")', {
             filename: pathToFileURL('/vm-default-loader-app/space dir/index.js').href + '?cache=1',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,

@@ -3,6 +3,7 @@ import {
     eval_with_filename as evalWithFilename,
 } from '__wasm_rquickjs_builtin/vm_native';
 import * as pathModule from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 
 let contextIdCounter = 1;
@@ -42,7 +43,16 @@ function defaultLoaderImportFunction(filename, specifier) {
     if (isPrivateBuiltinSpecifier(specifier)) {
         return rejectPrivateBuiltinImport(specifier);
     }
-    return import(resolveDefaultLoaderSpecifier(specifier, filename));
+    const parentURL = filename.startsWith('file://')
+        ? filename
+        : pathToFileURL(filename).href;
+    return globalThis.__wasm_rquickjs_import_attr_dynamic_import(
+        parentURL,
+        specifier,
+        undefined,
+        true,
+        (resolved) => import(resolved),
+    );
 }
 
 function missingDynamicImportFunction() {
@@ -2326,32 +2336,6 @@ function referrerFilenameFromOptions(options) {
         return globalThis.process.cwd() + '/';
     }
     return '/';
-}
-
-function referrerDirectory(filename) {
-    if (filename.startsWith('file://')) {
-        try {
-            filename = decodeURIComponent(new URL(filename).pathname);
-        } catch (_) {
-            return globalThis.process && typeof globalThis.process.cwd === 'function'
-                ? globalThis.process.cwd()
-                : '/';
-        }
-    }
-    if (filename.endsWith('/')) return filename.slice(0, -1) || '/';
-    if (!filename.startsWith('/')) {
-        return globalThis.process && typeof globalThis.process.cwd === 'function'
-            ? globalThis.process.cwd()
-            : '/';
-    }
-    return pathModule.dirname(filename);
-}
-
-function resolveDefaultLoaderSpecifier(specifier, filename) {
-    if (specifier.startsWith('./') || specifier.startsWith('../')) {
-        return pathModule.resolve(referrerDirectory(filename), specifier);
-    }
-    return specifier;
 }
 
 function ensureDefaultLoaderImportBinding(helperName) {
