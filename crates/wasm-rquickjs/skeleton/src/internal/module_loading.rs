@@ -24,6 +24,25 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const BUILTIN_FACADE_PRIMORDIALS_JS: &str = r#"
+(() => {
+  const global = globalThis;
+  const create = Object.create.bind(Object);
+  const defineProperty = Object.defineProperty.bind(Object);
+  const hasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+  const keys = Object.keys.bind(Object);
+  const install = (name, value) => defineProperty(global, name, {
+    value,
+    writable: false,
+    configurable: false,
+  });
+  install('__wasm_rquickjs_builtin_facade_object_create', (prototype) => create(prototype));
+  install('__wasm_rquickjs_builtin_facade_define_property', (target, key, descriptor) => defineProperty(target, key, descriptor));
+  install('__wasm_rquickjs_builtin_facade_has_own', (target, key) => hasOwn(target, key));
+  install('__wasm_rquickjs_builtin_facade_object_keys', (value) => keys(value));
+})();
+"#;
+
 pub(crate) const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_meta_resolve_global = globalThis;
 function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
   baseUrl = String(baseUrl);
@@ -3429,6 +3448,17 @@ fn static_registered_file_url_from_id(id: &str) -> Option<String> {
 
 impl Resolver for RegisteredLoaderResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        // Registered user hooks may observe public builtin requests, but the
+        // runtime-private implementation graph must remain loader-owned. A
+        // public facade imports its private implementation only after a user
+        // hook may have been registered, and forwarding that edge would let an
+        // async user hook break builtin initialization.
+        if PrivateBuiltinResolverGuard::is_private_builtin(base)
+            || PrivateBuiltinResolverGuard::is_private_builtin(name)
+        {
+            return Err(Error::new_resolving(base, name));
+        }
+
         let globals = ctx.globals();
         let Ok(resolve_fn) =
             globals.get::<_, Function>("__wasm_rquickjs_resolve_static_registered_loader")
@@ -11941,6 +11971,9 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
 
     async_with!(ctx => |ctx| {
         let global = ctx.globals();
+
+        ctx.eval::<(), _>(BUILTIN_FACADE_PRIMORDIALS_JS)
+            .expect("Failed to initialize builtin facade primordials");
 
         global.set("__wasm_rquickjs_mock_seq", 0i64)
             .expect("Failed to initialize mock sequence counter");

@@ -35,6 +35,7 @@ import {
 const objectPrototypeHasOwnProperty = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
 const objectDefineProperty = Object.defineProperty.bind(Object);
 const objectGetOwnPropertyDescriptor = Object.getOwnPropertyDescriptor.bind(Object);
+const objectKeys = Object.keys.bind(Object);
 const stringFromCodePoint = String.fromCodePoint.bind(String);
 const numberParseInt = Number.parseInt.bind(Number);
 const wasmRquickjsModuleGlobalThis = globalThis;
@@ -60,7 +61,7 @@ function cjsExport(ns) {
     if (!ns || ns.default === undefined) return ns;
     const def = ns.default;
     if (typeof def === 'function' || (typeof def === 'object' && def !== null)) {
-        const keys = Object.keys(ns);
+        const keys = objectKeys(ns);
         for (let i = 0; i < keys.length; i++) {
             const k = keys[i];
             if (k !== 'default' && !(k in def)) {

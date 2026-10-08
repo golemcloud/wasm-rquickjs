@@ -131,8 +131,10 @@ fn facade_source(name: &str, implementation: &str, exports_source: &str) -> Vec<
 
     let mut source = format!(
         "import __wasmRquickjsDefault, * as __wasmRquickjsNamespace from {implementation:?};\n\
-const __wasmRquickjsHasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty);\n\
-const __wasmRquickjsDefineProperty = Object.defineProperty.bind(Object);\n"
+const __wasmRquickjsHasOwn = globalThis.__wasm_rquickjs_builtin_facade_has_own;\n\
+const __wasmRquickjsCreate = globalThis.__wasm_rquickjs_builtin_facade_object_create;\n\
+const __wasmRquickjsDefineProperty = globalThis.__wasm_rquickjs_builtin_facade_define_property;\n\
+const __wasmRquickjsKeys = globalThis.__wasm_rquickjs_builtin_facade_object_keys;\n"
     );
     source.push_str(
         "if (typeof __wasmRquickjsDefault === 'function' ||\n\
@@ -166,33 +168,36 @@ const __wasmRquickjsDefineProperty = Object.defineProperty.bind(Object);\n"
     source.push_str(
         "const __wasmRquickjsRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports ||\n\
 __wasmRquickjsDefineProperty(globalThis, '__wasm_rquickjs_sync_builtin_esm_exports', {\n\
-  value: Object.create(null), writable: false, configurable: false,\n\
+  value: __wasmRquickjsCreate(null), writable: false, configurable: false,\n\
 }).__wasm_rquickjs_sync_builtin_esm_exports;\n\
-const __wasmRquickjsExportSet = Object.create(null);\n\
+const __wasmRquickjsExportSet = __wasmRquickjsCreate(null);\n\
 const __wasmRquickjsSyncOrder = [];\n\
-const __wasmRquickjsSeen = Object.create(null);\n",
+const __wasmRquickjsSeen = __wasmRquickjsCreate(null);\n",
     );
     for export_name in &export_names {
         writeln!(source, "__wasmRquickjsExportSet[{export_name:?}] = true;").unwrap();
     }
     source.push_str(
-        "for (const __wasmRquickjsKey of Object.keys(__wasmRquickjsDefault)) {\n\
+        "const __wasmRquickjsDefaultKeys = __wasmRquickjsKeys(__wasmRquickjsDefault);\n\
+for (let __wasmRquickjsIndex = 0; __wasmRquickjsIndex < __wasmRquickjsDefaultKeys.length; __wasmRquickjsIndex++) {\n\
+  const __wasmRquickjsKey = __wasmRquickjsDefaultKeys[__wasmRquickjsIndex];\n\
   if (__wasmRquickjsHasOwn(__wasmRquickjsExportSet, __wasmRquickjsKey)) {\n\
     __wasmRquickjsSeen[__wasmRquickjsKey] = true;\n\
-    __wasmRquickjsSyncOrder.push(__wasmRquickjsKey);\n\
+    __wasmRquickjsSyncOrder[__wasmRquickjsSyncOrder.length] = __wasmRquickjsKey;\n\
   }\n\
 }\n",
     );
     for export_name in &export_names {
         writeln!(
             source,
-            "if (!__wasmRquickjsSeen[{export_name:?}]) __wasmRquickjsSyncOrder.push({export_name:?});"
+            "if (!__wasmRquickjsSeen[{export_name:?}]) __wasmRquickjsSyncOrder[__wasmRquickjsSyncOrder.length] = {export_name:?};"
         )
         .unwrap();
     }
     source.push_str("const __wasmRquickjsSync = function(__wasmRquickjsCommonJs) {\n");
     source.push_str(
-        "  for (const __wasmRquickjsKey of __wasmRquickjsSyncOrder) {\n\
+        "  for (let __wasmRquickjsIndex = 0; __wasmRquickjsIndex < __wasmRquickjsSyncOrder.length; __wasmRquickjsIndex++) {\n\
+    const __wasmRquickjsKey = __wasmRquickjsSyncOrder[__wasmRquickjsIndex];\n\
     switch (__wasmRquickjsKey) {\n",
     );
     for (index, export_name) in export_names.iter().enumerate() {
@@ -309,5 +314,20 @@ mod tests {
             implementation_import("__wasm_rquickjs_builtin/console", "test"),
             None
         );
+    }
+
+    #[test]
+    fn generated_facades_use_runtime_owned_primordials_and_indexed_loops() {
+        let source = String::from_utf8(facade_source(
+            "node:sample",
+            "__implementation",
+            "export const value = 1; export default { value };",
+        ))
+        .unwrap();
+
+        assert!(source.contains("__wasm_rquickjs_builtin_facade_object_keys"));
+        assert!(!source.contains("Object.keys"));
+        assert!(!source.contains("for (const __wasmRquickjsKey of"));
+        assert!(!source.contains(".push("));
     }
 }

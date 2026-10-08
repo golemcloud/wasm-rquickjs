@@ -53,13 +53,26 @@ pub mod native_module {
         super::require_esm_impl(ctx, &filename)
     }
 
-    /// Load a public builtin on demand and return its namespace object.
+    /// Load a public builtin's private implementation on demand and return its
+    /// namespace object. CommonJS require must not traverse the public ESM
+    /// facade: doing so would expose runtime-owned implementation imports to
+    /// registered user loader hooks.
     #[rquickjs::function]
     pub fn require_builtin<'js>(ctx: Ctx<'js>, specifier: String) -> rquickjs::Result<Value<'js>> {
         if !specifier.starts_with("node:") {
             return Err(rquickjs::Error::Unknown);
         }
-        super::require_module_namespace_impl(ctx, &specifier, &specifier, "require-builtin")
+        let implementation = super::super::syncable_builtin_implementation_import(
+            "__wasm_rquickjs_builtin/module",
+            &specifier,
+        )
+        .ok_or(rquickjs::Error::Unknown)?;
+        super::require_module_namespace_impl(
+            ctx,
+            &specifier,
+            &implementation,
+            "require-builtin",
+        )
     }
 
     /// Return the canonical public builtin inventory used by the generated
