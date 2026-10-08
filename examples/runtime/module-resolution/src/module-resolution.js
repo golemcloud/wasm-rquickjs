@@ -7628,6 +7628,7 @@ export const testVmMainContextDefaultLoader = async () => {
             'export const value = "from-cwd";',
             'export default { value };',
         ].join('\n'));
+        fs.writeFileSync('/vm-default-loader-app/subdir/data.json', '{"value":"from-json"}');
 
         assert.strictEqual(typeof vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER, 'symbol');
         assert.strictEqual(typeof vm.Module, 'function');
@@ -8744,11 +8745,26 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.deepStrictEqual((await helperNameCollisionScript.runInThisContext()).default, { value: 'from-subdir' });
 
+        const publicFsNamespace = await import('node:fs');
         const builtinScript = new vm.Script('import("node:fs")', {
             filename: '/vm-default-loader-app/subdir/builtin.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
         });
-        assert.strictEqual((await builtinScript.runInThisContext()).existsSync('/vm-default-loader-app'), true);
+        const builtinNamespace = await builtinScript.runInThisContext();
+        assert.strictEqual(builtinNamespace, publicFsNamespace);
+        assert.strictEqual(builtinNamespace.existsSync('/vm-default-loader-app'), true);
+
+        const bareBuiltinScript = new vm.Script('import("fs")', {
+            filename: '/vm-default-loader-app/subdir/bare-builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(await bareBuiltinScript.runInThisContext(), publicFsNamespace);
+
+        const jsonScript = new vm.Script('import("./data.json", { with: { type: "json" } })', {
+            filename: '/vm-default-loader-app/subdir/json.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await jsonScript.runInThisContext()).default, { value: 'from-json' });
 
         const { register } = await import('node:module');
         const hookSource = [
@@ -8838,6 +8854,18 @@ export const testVmMainContextDefaultLoader = async () => {
         const originalCwd = process.cwd();
         try {
             process.chdir('/vm-default-loader-app');
+            const relativeFilenameScript = new vm.Script('import("./message.mjs")', {
+                filename: 'subdir/relative.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
+            assert.deepStrictEqual((await relativeFilenameScript.runInThisContext()).default, { value: 'from-cwd' });
+
+            const relativeFilenameFunction = vm.compileFunction('return import("./message.mjs")', [], {
+                filename: 'relative-function.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
+            assert.deepStrictEqual((await relativeFilenameFunction()).default, { value: 'from-cwd' });
+
             const cwdScript = new vm.Script('import("./message.mjs")', {
                 importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
             });

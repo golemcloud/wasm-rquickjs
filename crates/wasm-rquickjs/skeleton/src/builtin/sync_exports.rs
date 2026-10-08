@@ -90,6 +90,14 @@ pub(super) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str>
     })
 }
 
+pub(super) fn canonical_public_builtin_name(name: &str) -> Option<&'static str> {
+    SYNCABLE_BUILTIN_NAMES
+        .iter()
+        .copied()
+        .find(|canonical| *canonical == name)
+        .or_else(|| canonical_public_builtin_alias(name))
+}
+
 fn implementation_name(name: &str) -> String {
     format!("{IMPLEMENTATION_PREFIX}{name}")
 }
@@ -98,11 +106,7 @@ pub(super) fn implementation_import(base: &str, name: &str) -> Option<String> {
     if !base.starts_with(PRIVATE_BUILTIN_PREFIX) {
         return None;
     }
-    let canonical = SYNCABLE_BUILTIN_NAMES
-        .iter()
-        .copied()
-        .find(|canonical| *canonical == name)
-        .or_else(|| canonical_public_builtin_alias(name))?;
+    let canonical = canonical_public_builtin_name(name)?;
     Some(implementation_name(canonical))
 }
 

@@ -187,6 +187,10 @@ pub(crate) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str>
     sync_exports::canonical_public_builtin_alias(name)
 }
 
+pub(crate) fn canonical_public_builtin_name(name: &str) -> Option<&'static str> {
+    sync_exports::canonical_public_builtin_name(name)
+}
+
 pub(crate) fn syncable_builtin_implementation_import(base: &str, name: &str) -> Option<String> {
     sync_exports::implementation_import(base, name)
 }

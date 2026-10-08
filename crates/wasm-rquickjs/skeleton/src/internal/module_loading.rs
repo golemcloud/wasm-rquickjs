@@ -437,6 +437,8 @@ impl Resolver for DataUrlResolver {
 
 struct PublicBuiltinAliasResolver;
 
+const PUBLIC_BUILTIN_FACADE_PREFIX: &str = "__wasm_rquickjs_builtin/public-facade/";
+
 impl Resolver for PublicBuiltinAliasResolver {
     fn resolve<'js>(
         &mut self,
@@ -444,6 +446,11 @@ impl Resolver for PublicBuiltinAliasResolver {
         base: &str,
         name: &str,
     ) -> rquickjs::Result<String> {
+        if let Some(public_name) = name.strip_prefix(PUBLIC_BUILTIN_FACADE_PREFIX) {
+            return crate::builtin::canonical_public_builtin_name(public_name)
+                .map(str::to_string)
+                .ok_or_else(|| Error::new_resolving(base, name));
+        }
         if let Some(implementation) =
             crate::builtin::syncable_builtin_implementation_import(base, name)
         {

@@ -1,6 +1,7 @@
 import {
     eval_in_new_context as evalInNewContext,
     eval_with_filename as evalWithFilename,
+    syncable_builtin_names as syncableBuiltinNames,
 } from '__wasm_rquickjs_builtin/vm_native';
 import * as pathModule from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -25,6 +26,14 @@ const missingDynamicImportFlagHelper = '__wasm_rquickjs_vm_missing_dynamic_impor
 const sandboxDescriptorsHelper = '__wasm_rquickjs_vm_sandbox_descriptors__';
 const sandboxSymbolsHelper = '__wasm_rquickjs_vm_sandbox_symbols__';
 const sourceTextModuleExportCellsPlaceholder = '__wasm_rquickjs_vm_export_cells_placeholder__';
+const publicBuiltinFacadePrefix = '__wasm_rquickjs_builtin/public-facade/';
+const publicBuiltinFacadeSpecifiers = Object.create(null);
+for (const name of syncableBuiltinNames()) {
+    publicBuiltinFacadeSpecifiers[name] = publicBuiltinFacadePrefix + name;
+    if (name !== 'node:sqlite' && name !== 'node:test') {
+        publicBuiltinFacadeSpecifiers[name.slice(5)] = publicBuiltinFacadePrefix + name;
+    }
+}
 let defaultLoaderImportHelperCounter = 1;
 let sandboxDescriptorsHelperCounter = 1;
 let sandboxSymbolsHelperCounter = 1;
@@ -38,20 +47,35 @@ function rejectPrivateBuiltinImport(specifier) {
     return Promise.reject(err);
 }
 
-function defaultLoaderImportFunction(filename, specifier) {
+function defaultLoaderParentURL(filename) {
+    if (pathModule.isAbsolute(filename)) {
+        return pathToFileURL(filename).href;
+    }
+    try {
+        return new URL(filename).href;
+    } catch (_) {
+        const cwd = globalThis.process && typeof globalThis.process.cwd === 'function'
+            ? globalThis.process.cwd()
+            : '/';
+        return pathToFileURL(cwd.endsWith('/') ? cwd : cwd + '/').href;
+    }
+}
+
+function publicBuiltinFacadeSpecifier(specifier) {
+    return publicBuiltinFacadeSpecifiers[specifier] || specifier;
+}
+
+function defaultLoaderImportFunction(filename, specifier, options) {
     specifier = String(specifier);
     if (isPrivateBuiltinSpecifier(specifier)) {
         return rejectPrivateBuiltinImport(specifier);
     }
-    const parentURL = filename.startsWith('file://')
-        ? filename
-        : pathToFileURL(filename).href;
     return globalThis.__wasm_rquickjs_import_attr_dynamic_import(
-        parentURL,
+        defaultLoaderParentURL(filename),
         specifier,
-        undefined,
+        options,
         true,
-        (resolved) => import(resolved),
+        (resolved) => import(publicBuiltinFacadeSpecifier(resolved)),
     );
 }
 
