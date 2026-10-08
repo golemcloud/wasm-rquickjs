@@ -277,7 +277,14 @@ async function __wasm_rquickjs_import_attr_prepare_for_base_parsed(baseUrl, orig
     if (hooked !== undefined) return hooked;
   }
   var value = originalValue;
-  value = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
+  if (
+    value.startsWith('./') ||
+    value.startsWith('../') ||
+    value.startsWith('/') ||
+    value.startsWith('file://')
+  ) {
+    value = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), value);
+  }
   return __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, asyncSemanticErrors);
 }
 
@@ -338,11 +345,31 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     cache = Object.create(null);
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
   }
+  var cacheIdentityKey = completedKey;
+  var validationPreparedKey = key;
+  if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(key)) {
+    var registeredLoadersActive =
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0;
+    if (!registeredLoadersActive) {
+      try {
+        var resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), originalSpecifier);
+        cacheIdentityKey = parsedOptions.typeValue === 'json'
+          ? 'import-attr:json:' + resolvedIdentity
+          : resolvedIdentity;
+        validationPreparedKey = resolvedIdentity + key.slice(originalSpecifier.length);
+      } catch (_) {
+        cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
+      }
+    } else {
+      cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
+    }
+  }
   // Keep one module identity per resolved key and loader realm while
   // re-entering the importer once per parent so resolution still observes
   // filesystem changes.
   var realmMatch = /(?:[?&])__wasm_rquickjs_loader_realm=([^&#]*)/.exec(String(baseUrl));
-  var cacheKey = completedKey + (realmMatch ? '\0loader-realm=' + realmMatch[1] : '');
+  var cacheKey = cacheIdentityKey + (realmMatch ? '\0loader-realm=' + realmMatch[1] : '');
   var parentKey = String(baseUrl);
   if (cache[cacheKey] !== undefined) {
     var cached = cache[cacheKey];
@@ -378,7 +405,7 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
   var promise = importFn(prepared);
   var parents = Object.create(null);
   parents[parentKey] = promise;
-  var entry = { promise: promise, preparedKey: key, parents: parents };
+  var entry = { promise: promise, preparedKey: validationPreparedKey, parents: parents };
   cache[cacheKey] = entry;
   try {
     var result = await promise;

@@ -1385,6 +1385,28 @@ export const testEsmDataUrlImportAttributes = async () => {
         assert.strictEqual(bareJsonB, bareJsonA);
         assert.strictEqual(bareJsonB.default, bareJsonA.default);
 
+        fs.mkdirSync('/dynamic-mock-parent/node_modules/mock-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/dynamic-mock-parent/node_modules/mock-pkg/package.json',
+            JSON.stringify({ type: 'module', exports: './index.mjs' }),
+        );
+        fs.writeFileSync(
+            '/dynamic-mock-parent/node_modules/mock-pkg/index.mjs',
+            'export const value = "real";',
+        );
+        fs.writeFileSync('/dynamic-mock-parent/main.mjs', [
+            'import { mock } from "node:test";',
+            'const handle = mock.module("mock-pkg", { namedExports: { value: "mocked" } });',
+            'const mocked = await import("mock-pkg");',
+            'handle.restore();',
+            'const real = await import("mock-pkg");',
+            'export default { mocked: mocked.value, real: real.value };',
+        ].join('\n'));
+        assert.deepStrictEqual(
+            (await import('/dynamic-mock-parent/main.mjs')).default,
+            { mocked: 'mocked', real: 'real' },
+        );
+
         fs.unlinkSync('/dynamic-json-identity.json');
         fs.unlinkSync('/dynamic-json-query-identity.json');
         await expectReject(
@@ -4192,6 +4214,7 @@ export const testLoaderModuleSourceValidation = async () => {
             '  if (specifier === "virtual:cjs-undefined-source") return { shortCircuit: true, url: "file:///loader-module-source-app/undefined-source.cjs", format: "commonjs" };',
             '  if (specifier === "virtual:cjs-resolve-source-null") return { shortCircuit: true, url: "file:///loader-module-source-app/resolve-source-null.cjs", format: "commonjs", source: "exports.marker = \\"resolve-source\\";" };',
             '  if (specifier === "virtual:bad-cjs-source") return { shortCircuit: true, url: "virtual:bad-cjs-source", format: "commonjs" };',
+            '  if (specifier === "alias-dynamic-fs") return { shortCircuit: true, url: "node:fs", format: "builtin" };',
             '  return next(specifier, context);',
             '}',
             'function load(url, context, next) {',
@@ -4254,6 +4277,7 @@ export const testLoaderModuleSourceValidation = async () => {
             'assert.strictEqual((await import("virtual:cjs-inherited-null-source")).marker, "inherited-null-source");',
             'assert.strictEqual((await import("virtual:cjs-undefined-source")).marker, "undefined-source");',
             'assert.strictEqual((await import("virtual:cjs-resolve-source-null")).marker, "filesystem-source");',
+            'assert.strictEqual(typeof (await import("alias-dynamic-fs")).readFileSync, "function");',
             'await expectReject("load hook must return object", import("virtual:invalid-result"), "ERR_INVALID_RETURN_VALUE");',
             'await expectReject("resolve format type", import("virtual:bad-resolve-format"), "ERR_INVALID_RETURN_PROPERTY_VALUE");',
             'await expectReject("resolve url must be absolute", import("virtual:bad-url"), "ERR_INVALID_RETURN_PROPERTY_VALUE", /url.*resolve/);',
