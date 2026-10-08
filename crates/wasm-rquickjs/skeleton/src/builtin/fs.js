@@ -2155,13 +2155,8 @@ export let lstat = function lstat(path, optionsOrCallback, callback) {
     queueMicrotask(() => {
         const diagnosticStarted = beginFsDiagnosticBoundary(4);
         try {
-            const result = native.fs_lstat(pathToString(path));
-            if (result.error) {
-                cb(createSystemError(result.error));
-            } else {
-                const stats = new Stats(result.stat);
-                cb(null, (optionsOrCallback && optionsOrCallback.bigint) ? stats._toBigInt() : stats);
-            }
+            const result = lstatSync(path, optionsOrCallback);
+            cb(null, result);
         } catch (err) {
             cb(err);
         } finally {
