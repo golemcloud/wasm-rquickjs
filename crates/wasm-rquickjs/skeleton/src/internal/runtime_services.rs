@@ -52,7 +52,7 @@ pub(crate) enum FsProfileOperation {
 impl FsProfileOperation {
     const COUNT: usize = 9;
 
-    fn from_index(index: usize) -> Self {
+    pub(crate) fn from_index(index: usize) -> Self {
         match index {
             0 => Self::Open,
             1 => Self::Close,
@@ -92,6 +92,8 @@ struct FsOperationCounters {
     bytes: u64,
     sampled_calls: u64,
     sampled_nanoseconds: u64,
+    js_sampled_calls: u64,
+    js_sampled_nanoseconds: u64,
 }
 
 #[cfg(feature = "typescript-compiler-profiling")]
@@ -197,6 +199,19 @@ impl ExecutionProfile {
         }
     }
 
+    pub(crate) fn record_fs_js_boundary(
+        &self,
+        operation: FsProfileOperation,
+        elapsed_nanoseconds: u64,
+    ) {
+        let mut operations = self.fs_operations.borrow_mut();
+        let counters = &mut operations[operation as usize];
+        counters.js_sampled_calls = counters.js_sampled_calls.saturating_add(1);
+        counters.js_sampled_nanoseconds = counters
+            .js_sampled_nanoseconds
+            .saturating_add(elapsed_nanoseconds);
+    }
+
     pub(crate) fn snapshot(&self) -> ExecutionProfileSnapshot {
         let phases = self.phases.borrow();
         let queue_delay = phases.get("queueDelay").copied().unwrap_or_default();
@@ -214,6 +229,8 @@ impl ExecutionProfile {
                 ("bytes", operation.bytes),
                 ("sampledCalls", operation.sampled_calls),
                 ("sampledNanoseconds", operation.sampled_nanoseconds),
+                ("jsSampledCalls", operation.js_sampled_calls),
+                ("jsSampledNanoseconds", operation.js_sampled_nanoseconds),
             ] {
                 counters.insert(format!("filesystemDiagnostic.{label}.{suffix}"), value);
             }

@@ -835,6 +835,29 @@ pub mod native_module {
     }
 
     #[cfg(feature = "typescript-compiler-profiling")]
+    #[rquickjs::function]
+    pub fn profile_fs_js_boundary(ctx: Ctx<'_>, operation: usize, elapsed_nanoseconds: f64) {
+        let operation = match operation {
+            0 => FsProfileOperation::Open,
+            1 => FsProfileOperation::Close,
+            2 => FsProfileOperation::Write,
+            4 => FsProfileOperation::Lstat,
+            5 => FsProfileOperation::Mkdir,
+            _ => return,
+        };
+        if !elapsed_nanoseconds.is_finite() || elapsed_nanoseconds < 0.0 {
+            return;
+        }
+        if let Some(profile) = ctx
+            .userdata::<crate::internal::runtime_services::RuntimeServices>()
+            .expect("runtime services not initialized")
+            .execution_profile()
+        {
+            profile.record_fs_js_boundary(operation, elapsed_nanoseconds as u64);
+        }
+    }
+
+    #[cfg(feature = "typescript-compiler-profiling")]
     fn fs_error_outcome(error: &std::io::Error) -> &'static str {
         if error.kind() == std::io::ErrorKind::NotFound {
             "notFound"
