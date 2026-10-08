@@ -333,6 +333,9 @@ async fn main() -> anyhow::Result<()> {
         iterations > 0 && iterations <= 20,
         "iterations must be 1..=20"
     );
+    if std::env::var_os("NPM_METADATA_ATTRIBUTION_PROFILE").is_some() {
+        return run_attribution_profile(iterations).await;
+    }
     if std::env::var_os("NPM_METADATA_RELEASE_BASELINE").is_some() {
         let smoke = std::env::var_os("NPM_METADATA_RELEASE_SMOKE").is_some();
         let minimum_iterations = if smoke { 1 } else { RELEASE_ITERATIONS };
@@ -1403,7 +1406,7 @@ fn finish_release_sample(
         .filter(|line| line.starts_with("npm http cache "))
         .count();
     let stdout = result["stdout"].as_str().unwrap_or_default();
-    let compact_result = json!({
+    let mut compact_result = json!({
         "exitCode": result["value"]["exitCode"],
         "overflowed": result["overflowed"],
         "runnerError": result.get("runnerError"),
@@ -1413,6 +1416,11 @@ fn finish_release_sample(
         "stderrBytes": stderr.len(),
         "stderrBlake3": blake3::hash(stderr.as_bytes()).to_hex().to_string(),
     });
+    if std::env::var_os("NPM_METADATA_ATTRIBUTION_PROFILE").is_some()
+        && let Some(profile) = result.get("profile")
+    {
+        compact_result["profile"] = profile.clone();
+    }
     let sample = json!({
         "sequence": sequence,
         "side": side,
@@ -1979,6 +1987,69 @@ async fn run_release_baseline(iterations: usize, smoke: bool) -> anyhow::Result<
     let formatted = serde_json::to_string_pretty(&report)?;
     if let Ok(path) = std::env::var("NPM_METADATA_REPORT") {
         fs::write(path, format!("{formatted}\n")).context("write npm release report")?;
+    }
+    println!("{formatted}");
+    Ok(())
+}
+
+async fn run_attribution_profile(iterations: usize) -> anyhow::Result<()> {
+    let medium = load_release_fixture("medium-local-registry", "tests/npm_metadata/medium")?;
+    let host = resolve_host_npm()?;
+    let feature_combination = FeatureCombination::TypeScriptCompilerProfiling;
+    let compiled =
+        CompiledTest::new_with_features(Utf8Path::new(EXAMPLE_DIR), true, feature_combination)
+            .await?;
+    let prepared = PreparedComponent::new(compiled.wasm_path())?;
+    let pack_dir = camino_tempfile::tempdir()?;
+    let registry = release_registry(pack_dir.path(), &[&medium]).await?;
+    let mut samples = Vec::with_capacity(iterations);
+
+    for sequence in 0..iterations {
+        let mut instance =
+            release_instance(&prepared, &host.npm_dir, Some(&medium), &registry.base).await?;
+        let seed = wasm_npm_sample(
+            &mut instance,
+            &seed_ci_args(&registry.base),
+            "ci",
+            "seed",
+            sequence,
+            Some(&medium),
+            &registry,
+        )
+        .await?;
+        ensure!(
+            seed["success"] == true,
+            "Wasm medium npm ci cache seed failed: {seed}"
+        );
+        fs::remove_dir_all(instance.temp_dir_path().join("workspace/node_modules"))?;
+        samples.push(
+            wasm_npm_sample(
+                &mut instance,
+                &warm_ci_args(&registry.base),
+                "ci",
+                "warm-tarball",
+                sequence,
+                Some(&medium),
+                &registry,
+            )
+            .await?,
+        );
+    }
+    registry.server.abort();
+
+    let report = json!({
+        "schema": "npm-metadata-attribution-v1",
+        "revision": command(Command::new("git").args(["rev-parse", "HEAD"]))?,
+        "target": target_name(),
+        "node": "22.14.0",
+        "npm": "10.9.2",
+        "componentFeature": feature_combination.label(),
+        "fixture": release_fixture_value(&medium, &registry, false)?,
+        "samples": samples,
+    });
+    let formatted = serde_json::to_string_pretty(&report)?;
+    if let Ok(path) = std::env::var("NPM_METADATA_REPORT") {
+        fs::write(path, format!("{formatted}\n")).context("write npm attribution report")?;
     }
     println!("{formatted}");
     Ok(())
