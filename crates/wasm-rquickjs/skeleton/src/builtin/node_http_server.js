@@ -37,6 +37,7 @@ const IDLE = 3;
 
 const CRLF = Buffer.from('\r\n');
 const HEADER_END = Buffer.from('\r\n\r\n');
+const DEFAULT_WRITABLE_HIGH_WATER_MARK = 64 * 1024;
 
 // ===== Header helpers =====
 
@@ -228,6 +229,7 @@ function ServerResponse(req, options) {
     this.sendDate = true;
     this.headersSent = false;
     this.finished = false;
+    this._finishEmitted = false;
     this._writableEnded = false;
     this._headers = {};
     this._headerNames = {};
@@ -259,6 +261,8 @@ function ServerResponse(req, options) {
     this._outputError = undefined;
     this._outputAborted = false;
     this._outputBlocked = false;
+    this._needDrain = false;
+    this._onPendingOutput = () => {};
 
     // strictContentLength enforcement
     this.strictContentLength = false;
@@ -281,7 +285,9 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     socket._httpMessage = this;
     const pending = this._pendingOutput;
     this._pendingOutput = [];
-    this._flushPendingOutput(socket, pending);
+    const flushed = this._flushPendingOutput(socket, pending);
+    this._retirePendingOutput(pending);
+    if (flushed) this._maybeEmitDrain();
 };
 
 ServerResponse.prototype.detachSocket = function detachSocket(socket) {
@@ -323,11 +329,26 @@ Object.defineProperty(ServerResponse.prototype, 'writableObjectMode', {
 });
 
 Object.defineProperty(ServerResponse.prototype, 'writableHighWaterMark', {
-    get() { return this.socket ? this.socket.writableHighWaterMark : 16 * 1024; },
+    get() {
+        return this.socket
+            ? this.socket.writableHighWaterMark
+            : DEFAULT_WRITABLE_HIGH_WATER_MARK;
+    },
 });
 
 Object.defineProperty(ServerResponse.prototype, 'writableLength', {
-    get() { return this._outputSize; },
+    get() {
+        const activeLength = this.socket && !this._outputBlocked && !this._finishEmitted
+            ? this.socket.writableLength || 0
+            : 0;
+        return this._outputSize + activeLength;
+    },
+});
+
+Object.defineProperty(ServerResponse.prototype, 'writableNeedDrain', {
+    get() {
+        return !this._destroyed && !this.finished && this._needDrain;
+    },
 });
 
 ServerResponse.prototype._implicitHeader = function _implicitHeader() {
@@ -649,12 +670,13 @@ ServerResponse.prototype._buildHeaderString = function _buildHeaderString() {
 };
 
 ServerResponse.prototype._sendHeaders = function _sendHeaders() {
-    if (this._headersSentWire) return;
+    if (this._headersSentWire) return true;
     const head = this._buildHeaderString();
     this._headersSentWire = true;
     if (head) {
-        this._writeOutput(Buffer.from(head));
+        return this._writeOutput(Buffer.from(head));
     }
+    return true;
 };
 
 ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
@@ -707,7 +729,9 @@ ServerResponse.prototype._writeOutput = function _writeOutput(data, callback) {
         return false;
     }
     this._pendingOutput.push({ data, callback: onComplete });
-    return false;
+    this._outputSize += data.length;
+    this._onPendingOutput(data.length);
+    return this._outputSize < this.writableHighWaterMark;
 };
 
 ServerResponse.prototype._activateOutput = function _activateOutput() {
@@ -727,17 +751,35 @@ ServerResponse.prototype._activateOutput = function _activateOutput() {
         return;
     }
 
-    this._flushPendingOutput(this.socket, pending);
+    const flushed = this._flushPendingOutput(this.socket, pending);
+    this._retirePendingOutput(pending);
+    if (flushed) this._maybeEmitDrain();
 };
 
 ServerResponse.prototype._flushPendingOutput = function _flushPendingOutput(socket, pending) {
-    if (pending.length === 0) return;
+    if (pending.length === 0) return true;
 
+    let flushed = true;
     socket.cork();
     for (const entry of pending) {
-        socket.write(entry.data, entry.callback);
+        const result = socket.write(entry.data, entry.callback);
+        flushed = result && flushed;
     }
     socket.uncork();
+    return flushed;
+};
+
+ServerResponse.prototype._retirePendingOutput = function _retirePendingOutput(pending) {
+    let retiredBytes = 0;
+    for (const entry of pending) {
+        retiredBytes += entry.data.length;
+    }
+    if (retiredBytes === 0) return;
+    this._outputSize -= retiredBytes;
+    if (this._outputSize < 0) {
+        throw new Error('HTTP response pending-output accounting underflow');
+    }
+    this._onPendingOutput(-retiredBytes);
 };
 
 ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(error) {
@@ -746,9 +788,21 @@ ServerResponse.prototype._abortPendingOutput = function _abortPendingOutput(erro
     this._outputCompletionCallbacks = [];
     const pending = this._pendingOutput;
     this._pendingOutput = [];
+    this._retirePendingOutput(pending);
     for (const entry of pending) {
         entry.callback(error, false, false);
     }
+};
+
+ServerResponse.prototype._maybeEmitDrain = function _maybeEmitDrain() {
+    if (!this._needDrain || this._outputBlocked ||
+        this._writableEnded || this._destroyed || this._closed ||
+        this._outputSize >= this.writableHighWaterMark ||
+        (this.socket && this.socket.writableNeedDrain)) {
+        return;
+    }
+    this._needDrain = false;
+    this.emit('drain');
 };
 
 ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(callback) {
@@ -805,8 +859,9 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
         process.nextTick((socket) => socket.uncork(), this.socket);
     }
 
+    let result = true;
     if (!this._headersSentWire) {
-        this._sendHeaders();
+        result = this._sendHeaders();
     }
 
     if (!this._hasBody) {
@@ -824,8 +879,10 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     }
 
     if (chunk.length === 0) {
-        this._writeOutput(Buffer.alloc(0), cb);
-        return true;
+        const outputResult = this._writeOutput(Buffer.alloc(0), cb);
+        result = outputResult && result;
+        if (!result) this._needDrain = true;
+        return result;
     }
 
     if (this.strictContentLength && !this._chunked && this.hasHeader('content-length')) {
@@ -838,15 +895,17 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._chunked) {
         const hex = chunk.length.toString(16);
-        this._writeOutput(Buffer.from(hex + '\r\n'));
-        this._writeOutput(chunk);
-        this._writeOutput(CRLF, cb);
+        const headResult = this._writeOutput(Buffer.from(hex + '\r\n'));
+        const bodyResult = this._writeOutput(chunk);
+        const tailResult = this._writeOutput(CRLF, cb);
+        result = headResult && bodyResult && tailResult && result;
     } else {
-        this._writeOutput(chunk, cb);
+        const outputResult = this._writeOutput(chunk, cb);
+        result = outputResult && result;
     }
 
-    this._outputSize += chunk.length;
-    return this._outputSize < (16 * 1024);
+    if (!result) this._needDrain = true;
+    return result;
 };
 
 ServerResponse.prototype.end = function end(data, encoding, cb) {
@@ -943,6 +1002,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
             this.emit('error', error);
             return;
         }
+        this._finishEmitted = true;
         this.emit('finish');
     };
 
@@ -1100,6 +1160,8 @@ function createConnectionParser(server, socket) {
         socket: socket,
         current: null,
         responseQueue: [],
+        queuedOutputBytes: 0,
+        inputPaused: false,
         contentLength: 0,
         bodyReceived: 0,
         chunkState: null,
@@ -1110,6 +1172,42 @@ function createConnectionParser(server, socket) {
         parsing: false,
         closing: false,
     };
+
+    function updateInputBackpressure() {
+        if (state.detached || state.closing || socket.destroyed) return;
+        const highWaterMark = socket.writableHighWaterMark ||
+            DEFAULT_WRITABLE_HIGH_WATER_MARK;
+        const atHeaderBoundary = state.state === IDLE || state.state === HEADERS;
+        if (!state.inputPaused && atHeaderBoundary &&
+            (socket.writableNeedDrain || state.queuedOutputBytes >= highWaterMark)) {
+            state.inputPaused = true;
+            socket.pause();
+            return;
+        }
+        if (state.inputPaused &&
+            !socket.writableNeedDrain &&
+            state.queuedOutputBytes <= highWaterMark) {
+            state.inputPaused = false;
+            parseLoop();
+            if (!state.inputPaused && !state.detached && !state.closing) {
+                socket.resume();
+            }
+        }
+    }
+
+    function updateQueuedOutput(delta) {
+        state.queuedOutputBytes += delta;
+        if (state.queuedOutputBytes < 0) {
+            throw new Error('HTTP connection queued-output accounting underflow');
+        }
+        updateInputBackpressure();
+    }
+
+    function onSocketDrain() {
+        const context = state.responseQueue[0];
+        if (context) context.res._maybeEmitDrain();
+        updateInputBackpressure();
+    }
 
     function endConnection() {
         state.closing = true;
@@ -1138,7 +1236,7 @@ function createConnectionParser(server, socket) {
         socket.setTimeout(0);
 
         state.buffer = Buffer.concat([state.buffer, data]);
-        parseLoop();
+        if (!state.inputPaused) parseLoop();
 
         // Track active request inactivity via server.setTimeout().
         // Keep-alive idle timeout remains managed after responses finish.
@@ -1217,6 +1315,8 @@ function createConnectionParser(server, socket) {
         }
     });
 
+    socket.on('drain', onSocketDrain);
+
     socket.on('close', function onClose() {
         if (state.detached) return;
 
@@ -1272,6 +1372,9 @@ function createConnectionParser(server, socket) {
         }
 
         if (state.responseQueue.length > 0) {
+            // Keep response activation single-owned here. A blocked response's
+            // pending writes and finish callback cannot advance before its
+            // predecessor has been removed from the queue.
             state.responseQueue[0].res._activateOutput();
             return true;
         }
@@ -1313,6 +1416,11 @@ function createConnectionParser(server, socket) {
             let progress = true;
             while (progress) {
                 progress = false;
+
+                if (state.state === IDLE || state.state === HEADERS) {
+                    updateInputBackpressure();
+                    if (state.inputPaused) break;
+                }
 
                 if (state.state === IDLE || state.state === HEADERS) {
                     state.state = HEADERS;
@@ -1446,6 +1554,7 @@ function createConnectionParser(server, socket) {
                         requestNumber === maxRequestsPerSocket;
                     res._keepAliveTimeout = server.keepAliveTimeout;
                     res._keepAliveMaxRequests = maxRequestsPerSocket;
+                    res._onPendingOutput = updateQueuedOutput;
                     // The queue head can write immediately. Later responses remain
                     // blocked until every earlier response has completed.
                     res._outputBlocked = state.responseQueue.length > 0;
