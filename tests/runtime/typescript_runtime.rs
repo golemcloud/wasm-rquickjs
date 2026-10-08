@@ -343,10 +343,33 @@ async fn typescript_transform_runtime_is_immutable(
     assert_eq!(report["commonJsNodeModulesTypeScriptErrorName"], "Error");
     assert_eq!(report["executionInline"], 1);
     assert_eq!(report["largeInlineExecution"], 1);
+    assert_eq!(
+        report["cjsPublicCompileCalls"], 1,
+        "the public CommonJS compile hook must observe TypeScript exactly once"
+    );
+    assert_eq!(
+        report["cjsPublicCompileContract"], true,
+        "the public CommonJS compile hook must receive Node-compatible receiver and arguments"
+    );
+    assert_eq!(
+        report["coldCjsPublicLoadCalls"], 1,
+        "a cold ESM import of CommonJS TypeScript must use the public load hook"
+    );
+    assert_eq!(
+        report["coldCjsPublicCompileCalls"], 1,
+        "a cold ESM import of CommonJS TypeScript must use the public compile hook"
+    );
+    assert!(
+        report["coldImportedCjsRuntimeStack"]
+            .as_str()
+            .is_some_and(|stack| stack.contains("hook-rewritten-cjs-typescript-stack")),
+        "the rewritten TypeScript source was not transformed and executed after the public hook"
+    );
     for (field, file, line) in [
         ("esmRuntimeStack", "stack-esm.mts", 3),
         ("cjsRuntimeStack", "stack-cjs.cts", 3),
         ("importedCjsRuntimeStack", "stack-cjs.cts", 3),
+        ("coldImportedCjsRuntimeStack", "stack-cjs-import.cts", 3),
         ("executionEntryStack", "stack-entry.mts", 4),
         ("typeErrorRuntimeStack", "stack-errors.mts", 4),
         ("customErrorRuntimeStack", "stack-errors.mts", 7),
