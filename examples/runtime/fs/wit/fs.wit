@@ -18,4 +18,5 @@ world fs {
   export test-unlink-callback: func();
   export test-read-file-sync-fast-path: func() -> string;
   export test-recursive-rm: func();
+  export test-read-sync-bulk-copy: func() -> bool;
 }

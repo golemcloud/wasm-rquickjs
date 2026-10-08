@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { initializeIncomingMessage } from '__wasm_rquickjs_builtin/node_http_incoming';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_DESTROYED, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -778,15 +778,25 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
 
     if (this._writableEnded) {
         const error = new ERR_STREAM_WRITE_AFTER_END();
-        process.nextTick(() => {
-            if (typeof cb === 'function') cb(error);
-            this.emit('error', error);
-        });
+        const callback = typeof cb === 'function' ? cb : () => {};
+        if (this._destroyed) {
+            process.nextTick(() => callback(error));
+        } else {
+            process.nextTick(() => {
+                callback(error);
+                if (!this._destroyed) {
+                    this.emit('error', error);
+                }
+            });
+        }
         return false;
     }
 
     if (this._destroyed || this._closed) {
-        if (typeof cb === 'function') cb();
+        if (typeof cb === 'function') {
+            const error = new ERR_STREAM_DESTROYED('write');
+            process.nextTick(() => cb(error));
+        }
         return false;
     }
 
@@ -1077,6 +1087,7 @@ ServerResponse.prototype.uncork = function uncork() {
 
 function closeServerResponse(res) {
     if (res && !res._closed) {
+        res._destroyed = true;
         res._closed = true;
         res.emit('close');
     }

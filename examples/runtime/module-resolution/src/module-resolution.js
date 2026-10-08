@@ -2590,6 +2590,10 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
         fs.writeFileSync('/loader-cjs-source-app/tag-dep.cjs', 'module.exports = function tag() { return { reexported: 1 }; }; module.exports.reexported = 91;');
         fs.writeFileSync('/loader-cjs-source-app/aliased-dep.cjs', 'exports.aliasValue = 77;');
         fs.writeFileSync('/loader-cjs-source-app/source-less.loader', 'this is intentionally not JavaScript');
+        fs.writeFileSync(
+            '/loader-cjs-source-app/source-less.cjs',
+            'module.exports = { sourceLessCommonJs: true };',
+        );
         fs.writeFileSync('/loader-cjs-source-app/source-less.json', '{"sourceLessJson":true}');
         moduleBuiltin = await import('node:module');
         originalLoaderExtension = moduleBuiltin.default._extensions['.loader'];
@@ -2637,7 +2641,7 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
         fs.writeFileSync('/loader-cjs-source-app/node_modules/sync-loader-missing-pkg/default.cjs', 'exports.unused = true;');
         await import('data:text/javascript,' + encodeURIComponent([
             'import assert from "node:assert";',
-            'import { register } from "node:module";',
+            'import Module, { register } from "node:module";',
             'function resolve(specifier, context, next) {',
             '  if (specifier === "virtual:loader-cjs") {',
             '    return { shortCircuit: true, url: "virtual:loader-cjs", format: "commonjs" };',
@@ -2826,6 +2830,9 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  if (specifier === "alias-source-less-extension") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/source-less.loader", format: "commonjs" };',
             '  }',
+            '  if (specifier === "alias-source-less-commonjs") {',
+            '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/source-less.cjs", format: "commonjs" };',
+            '  }',
             '  if (specifier === "alias-source-less-json") {',
             '    return { shortCircuit: true, url: "file:///loader-cjs-source-app/source-less.json", format: "json" };',
             '  }',
@@ -2932,6 +2939,9 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '        "module.exports.sourceLessExtensionParent = sourceLessExtension.parentFilename;",',
             '        "module.exports.sourceLessExtensionSame = sourceLessExtension === require(\\"alias-source-less-extension\\");",',
             '        "module.exports.sourceLessExtensionResolved = require.resolve(\\"alias-source-less-extension\\");",',
+            '        "const sourceLessCommonJs = require(\\"alias-source-less-commonjs\\");",',
+            '        "module.exports.sourceLessCommonJs = sourceLessCommonJs.sourceLessCommonJs;",',
+            '        "module.exports.sourceLessCommonJsSame = sourceLessCommonJs === require(\\"alias-source-less-commonjs\\");",',
             '        "module.exports.sourceLessJson = require(\\"alias-source-less-json\\").sourceLessJson;",',
             '        "module.exports.sourceLessJsonResolved = require.resolve(\\"alias-source-less-json\\");",',
             '        "module.exports.aliasMissingFileUrlResolved = require.resolve(\\"alias-missing-file-url-from-next\\");",',
@@ -3547,7 +3557,25 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             '  return next(url, context);',
             '}',
             'register("data:text/javascript," + encodeURIComponent(sourceView + "; export " + resolve + "; export " + load));',
-            'const ns = await import("virtual:loader-cjs");',
+            'const sourceLessHookEvents = [];',
+            'const originalLoad = Module._load;',
+            'const originalCompile = Module.prototype._compile;',
+            'Module._load = function(request) {',
+            '  if (request === "/loader-cjs-source-app/source-less.cjs") sourceLessHookEvents.push("load");',
+            '  return originalLoad.apply(this, arguments);',
+            '};',
+            'Module.prototype._compile = function(content, filename) {',
+            '  if (filename === "/loader-cjs-source-app/source-less.cjs") sourceLessHookEvents.push("compile");',
+            '  return originalCompile.apply(this, arguments);',
+            '};',
+            'let ns;',
+            'try {',
+            '  ns = await import("virtual:loader-cjs");',
+            '} finally {',
+            '  Module._load = originalLoad;',
+            '  Module.prototype._compile = originalCompile;',
+            '}',
+            'assert.deepStrictEqual(sourceLessHookEvents, ["load", "compile", "load"]);',
             'assert.strictEqual(typeof ns.default.readFile, "function");',
             'assert.strictEqual(ns.readFile, ns.default.readFile);',
             'assert.strictEqual(ns.__fromLoader, true);',
@@ -3587,6 +3615,8 @@ export const testLoaderCommonjsSourceNamedExports = async () => {
             'assert.strictEqual(ns.sourceLessExtensionParent, "virtual:loader-cjs");',
             'assert.strictEqual(ns.sourceLessExtensionSame, true);',
             'assert.strictEqual(ns.sourceLessExtensionResolved, "/loader-cjs-source-app/source-less.loader");',
+            'assert.strictEqual(ns.sourceLessCommonJs, true);',
+            'assert.strictEqual(ns.sourceLessCommonJsSame, true);',
             'assert.strictEqual(ns.sourceLessJson, true);',
             'assert.strictEqual(ns.sourceLessJsonResolved, "/loader-cjs-source-app/source-less.json");',
             'assert.strictEqual(ns.aliasMissingFileUrlResolved, "virtual:missing-file-url-fallback");',
@@ -3961,7 +3991,32 @@ export const testLoaderCommonjsRequireApis = async () => {
         'import { register } from "node:module"; register(' + JSON.stringify(hookUrl) + ');'
     ));
 
-    const result = (await import('virtual:require-apis')).default;
+    const Module = (await import('node:module')).default;
+    const originalPrototypeRequire = Module.prototype.require;
+    const originalLoad = Module._load;
+    const originalCompile = Module.prototype._compile;
+    const publicHookCalls = { require: 0, load: 0, compile: 0 };
+    let result;
+    try {
+        Module.prototype.require = function() {
+            publicHookCalls.require += 1;
+            return originalPrototypeRequire.apply(this, arguments);
+        };
+        Module._load = function() {
+            publicHookCalls.load += 1;
+            return originalLoad.apply(this, arguments);
+        };
+        Module.prototype._compile = function() {
+            publicHookCalls.compile += 1;
+            return originalCompile.apply(this, arguments);
+        };
+        result = (await import('virtual:require-apis')).default;
+    } finally {
+        Module.prototype.require = originalPrototypeRequire;
+        Module._load = originalLoad;
+        Module.prototype._compile = originalCompile;
+    }
+    assert.deepStrictEqual(publicHookCalls, { require: 0, load: 0, compile: 0 });
     assert.strictEqual(result.cacheIsLive, true);
     assert.strictEqual(result.extensionsIsLive, true);
     assert.ok(Array.isArray(result.packagePaths));
@@ -9722,6 +9777,292 @@ export const testCjsNodeModuleLoadingCompat = async () => {
             delete moduleBuiltin.default.prototype.prototypeMarker;
         }
 
+        const Module = moduleBuiltin.default;
+        const hooksRoot = `${root}/public-hooks`;
+        fs.mkdirSync(hooksRoot, { recursive: true });
+        fs.writeFileSync(`${hooksRoot}/child.cjs`, 'module.exports = { value: "original" };');
+        fs.writeFileSync(`${hooksRoot}/implicit.js`, 'module.exports = { format: "implicit" };');
+        fs.writeFileSync(`${hooksRoot}/pass-through-esm.js`, 'export const value = 7;');
+        fs.writeFileSync(`${hooksRoot}/rewritten-esm.js`, 'module.exports = { value: "commonjs" };');
+        fs.writeFileSync(`${hooksRoot}/explicit-commonjs-format.js`, 'export default 10;');
+        fs.writeFileSync(`${hooksRoot}/explicit-module-format.js`, 'module.exports = { value: "commonjs" };');
+        fs.writeFileSync(`${hooksRoot}/runtime-syntax.js`, 'JSON.parse("{");');
+        fs.writeFileSync(`${hooksRoot}/runtime-normalization.js`, 'throw new Error("return not in a function");');
+        fs.mkdirSync(`${hooksRoot}/explicit-commonjs`, { recursive: true });
+        fs.writeFileSync(
+            `${hooksRoot}/explicit-commonjs/package.json`,
+            JSON.stringify({ type: 'commonjs' }),
+        );
+        fs.writeFileSync(
+            `${hooksRoot}/explicit-commonjs/entry.js`,
+            'module.exports = { format: "commonjs" };',
+        );
+        fs.writeFileSync(`${hooksRoot}/instance.cjs`, 'module.exports = { instance: true };');
+        fs.writeFileSync(
+            `${hooksRoot}/non-callable.cjs`,
+            'module.require = null; require("./child.cjs");',
+        );
+        fs.writeFileSync(`${hooksRoot}/retry.cjs`, 'module.exports = { retry: true };');
+        fs.writeFileSync(`${hooksRoot}/cycle-a.cjs`, [
+            'exports.phase = "a-start";',
+            'const b = require("./cycle-b.cjs");',
+            'exports.seen = b.seen;',
+            'exports.phase = "a-done";',
+        ].join('\n'));
+        fs.writeFileSync(`${hooksRoot}/cycle-b.cjs`, [
+            'exports.seen = require("./cycle-a.cjs").phase;',
+        ].join('\n'));
+        fs.writeFileSync(`${hooksRoot}/custom.hook`, 'module.exports = { custom: true };');
+        fs.writeFileSync(`${hooksRoot}/entry.cjs`, [
+            'const inheritedRequire = module.require;',
+            'module.require = function(request) {',
+            '  if (request === "./instance.cjs") globalThis.__cjsInstanceRequireCalls = (globalThis.__cjsInstanceRequireCalls || 0) + 1;',
+            '  return inheritedRequire.call(this, request);',
+            '};',
+            'exports.child = require("./child.cjs");',
+            'exports.childAgain = require("./child.cjs");',
+            'exports.implicit = require("./implicit.js");',
+            'exports.explicitCommonJs = require("./explicit-commonjs/entry.js");',
+            'exports.instance = require("./instance.cjs");',
+            'exports.virtual = require("virtual:public-hook");',
+            'try { require("virtual:public-hook-error"); } catch (error) { exports.virtualError = error.message; }',
+            'try { require("./retry.cjs"); } catch (error) { exports.retryError = error.message; }',
+            'exports.retry = require("./retry.cjs");',
+            'exports.cycle = require("./cycle-a.cjs");',
+            'exports.custom = require("./custom.hook");',
+            'exports.module = module;',
+        ].join('\n'));
+
+        const originalPrototypeRequire = Module.prototype.require;
+        const originalLoad = Module._load;
+        const originalCompile = Module.prototype._compile;
+        const originalHookExtension = require.extensions['.hook'];
+        const hookEvents = [];
+        const requireHookCalls = [];
+        const loadHookCalls = [];
+        const compileHookCalls = [];
+        const compileHookThrows = [];
+        const runtimeErrorsFromHook = Object.create(null);
+        let retryCompileCalls = 0;
+        try {
+            Module.prototype.require = function(request) {
+                if (typeof request === 'string' && (request.includes('public-hooks') || request.startsWith('./') || request.startsWith('virtual:public-hook'))) {
+                    hookEvents.push(`require:${request}`);
+                    requireHookCalls.push({
+                        request,
+                        receiver: this,
+                        receiverIsModule: this instanceof Module,
+                        argumentCount: arguments.length,
+                    });
+                }
+                return originalPrototypeRequire.apply(this, arguments);
+            };
+            Module._load = function(request, parent, isMain) {
+                if (typeof request === 'string' && (request.includes('public-hooks') || request.startsWith('./') || request.startsWith('virtual:public-hook'))) {
+                    hookEvents.push(`load:${request}`);
+                    loadHookCalls.push({
+                        request,
+                        receiverIsModuleConstructor: this === Module,
+                        parent,
+                        parentIsModule: parent instanceof Module,
+                        isMain,
+                        argumentCount: arguments.length,
+                    });
+                }
+                if (request === 'virtual:public-hook') return { intercepted: true };
+                if (request === 'virtual:public-hook-error') throw new Error('public hook load error');
+                return originalLoad.apply(this, arguments);
+            };
+            Module.prototype._compile = function(content, filename, format) {
+                if (typeof filename === 'string' && filename.startsWith(hooksRoot)) {
+                    hookEvents.push(`compile:${filename}`);
+                    compileHookCalls.push({
+                        filename,
+                        receiver: this,
+                        receiverIsModule: this instanceof Module,
+                        format,
+                        argumentCount: arguments.length,
+                    });
+                }
+                if (filename === `${hooksRoot}/retry.cjs` && retryCompileCalls++ === 0) {
+                    throw new Error('public hook compile error');
+                }
+                if (filename === `${hooksRoot}/child.cjs`) {
+                    content = String(content).replace('"original"', '"instrumented"');
+                }
+                if (filename === `${hooksRoot}/rewritten-esm.js`) {
+                    content = 'export default 9;';
+                }
+                if (filename === `${hooksRoot}/explicit-commonjs-format.js`) {
+                    format = 'commonjs';
+                }
+                if (filename === `${hooksRoot}/explicit-module-format.js`) {
+                    content = 'export default 11;';
+                    format = 'module';
+                }
+                try {
+                    return originalCompile.call(this, content, filename, format);
+                } catch (error) {
+                    if (filename === `${hooksRoot}/runtime-syntax.js` ||
+                        filename === `${hooksRoot}/runtime-normalization.js`) {
+                        runtimeErrorsFromHook[filename] = error;
+                    }
+                    compileHookThrows.push({ filename, name: error && error.name });
+                    throw error;
+                }
+            };
+            require.extensions['.hook'] = function(mod, filename) {
+                mod._compile(fs.readFileSync(filename, 'utf8'), filename);
+            };
+
+            assert.strictEqual(require.resolve(`${hooksRoot}/child.cjs`), `${hooksRoot}/child.cjs`);
+            assert.deepStrictEqual(hookEvents, []);
+
+            const hooked = require(`${hooksRoot}/entry.cjs`);
+            assert.deepStrictEqual(hooked.child, { value: 'instrumented' });
+            assert.strictEqual(hooked.child, hooked.childAgain);
+            assert.deepStrictEqual(hooked.implicit, { format: 'implicit' });
+            assert.deepStrictEqual(hooked.explicitCommonJs, { format: 'commonjs' });
+            assert.deepStrictEqual(hooked.instance, { instance: true });
+            assert.strictEqual(globalThis.__cjsInstanceRequireCalls, 1);
+            assert.throws(
+                () => require(`${hooksRoot}/non-callable.cjs`),
+                TypeError,
+            );
+            assert.deepStrictEqual(hooked.virtual, { intercepted: true });
+            assert.strictEqual(hooked.virtualError, 'public hook load error');
+            assert.strictEqual(hooked.retryError, 'public hook compile error');
+            assert.deepStrictEqual(hooked.retry, { retry: true });
+            assert.strictEqual(retryCompileCalls, 2);
+            assert.deepStrictEqual(hooked.cycle, { phase: 'a-done', seen: 'a-start' });
+            assert.deepStrictEqual(hooked.custom, { custom: true });
+            assert.strictEqual(require(`${hooksRoot}/pass-through-esm.js`).value, 7);
+            const rewrittenEsm = require(`${hooksRoot}/rewritten-esm.js`);
+            assert.strictEqual(rewrittenEsm.__esModule, true);
+            assert.strictEqual(rewrittenEsm.default, 9);
+            assert.throws(
+                () => require(`${hooksRoot}/explicit-commonjs-format.js`),
+                SyntaxError,
+            );
+            const explicitModule = require(`${hooksRoot}/explicit-module-format.js`);
+            assert.strictEqual(explicitModule.__esModule, true);
+            assert.strictEqual(explicitModule.default, 11);
+            let runtimeSyntaxError;
+            try {
+                require(`${hooksRoot}/runtime-syntax.js`);
+            } catch (error) {
+                runtimeSyntaxError = error;
+            }
+            assert(runtimeSyntaxError instanceof SyntaxError);
+            assert.strictEqual(
+                runtimeSyntaxError,
+                runtimeErrorsFromHook[`${hooksRoot}/runtime-syntax.js`],
+            );
+            let runtimeNormalizationError;
+            try {
+                require(`${hooksRoot}/runtime-normalization.js`);
+            } catch (error) {
+                runtimeNormalizationError = error;
+            }
+            assert(runtimeNormalizationError instanceof Error);
+            assert.strictEqual(runtimeNormalizationError.name, 'Error');
+            assert.strictEqual(runtimeNormalizationError.message, 'return not in a function');
+            assert.strictEqual(
+                runtimeNormalizationError,
+                runtimeErrorsFromHook[`${hooksRoot}/runtime-normalization.js`],
+            );
+            assert.deepStrictEqual(compileHookThrows, [
+                { filename: `${hooksRoot}/non-callable.cjs`, name: 'TypeError' },
+                { filename: `${hooksRoot}/explicit-commonjs-format.js`, name: 'SyntaxError' },
+                { filename: `${hooksRoot}/runtime-syntax.js`, name: 'SyntaxError' },
+                { filename: `${hooksRoot}/runtime-normalization.js`, name: 'Error' },
+            ]);
+            assert.strictEqual(
+                hooked.module.children.filter((child) => child.filename === `${hooksRoot}/retry.cjs`).length,
+                1,
+            );
+
+            assert.deepStrictEqual(
+                hookEvents.filter((event) => event === 'require:./child.cjs' ||
+                    event === 'load:./child.cjs' ||
+                    event === `compile:${hooksRoot}/child.cjs`),
+                [
+                    'require:./child.cjs',
+                    'load:./child.cjs',
+                    `compile:${hooksRoot}/child.cjs`,
+                    'require:./child.cjs',
+                    'load:./child.cjs',
+                ],
+            );
+            assert.strictEqual(
+                hookEvents.filter((event) => event === `compile:${hooksRoot}/cycle-a.cjs`).length,
+                1,
+            );
+            assert.strictEqual(
+                hookEvents.filter((event) => event === `compile:${hooksRoot}/cycle-b.cjs`).length,
+                1,
+            );
+            assert.strictEqual(
+                hookEvents.filter((event) => event === `compile:${hooksRoot}/custom.hook`).length,
+                1,
+            );
+            hookEvents.length = 0;
+            assert.strictEqual(require(`${hooksRoot}/entry.cjs`), hooked);
+            assert.deepStrictEqual(hookEvents, [
+                `require:${hooksRoot}/entry.cjs`,
+                `load:${hooksRoot}/entry.cjs`,
+            ]);
+            hookEvents.length = 0;
+            const explicitCreateRequire = createRequire(`${hooksRoot}/create-require-entry.cjs`);
+            assert.strictEqual(explicitCreateRequire(`${hooksRoot}/child.cjs`), hooked.child);
+            assert.deepStrictEqual(hookEvents, [
+                `require:${hooksRoot}/child.cjs`,
+                `load:${hooksRoot}/child.cjs`,
+            ]);
+            assert(requireHookCalls.every((call) => call.receiverIsModule && call.argumentCount === 1));
+            assert(loadHookCalls.every((call) =>
+                call.receiverIsModuleConstructor &&
+                call.parentIsModule &&
+                call.isMain === false &&
+                call.argumentCount === 3));
+            assert(compileHookCalls
+                .filter((call) => call.filename.endsWith('.cjs'))
+                .every((call) =>
+                    call.receiverIsModule &&
+                    call.receiver.filename === call.filename &&
+                    call.format === 'commonjs' &&
+                    call.argumentCount === 3));
+            const customCompileCall = compileHookCalls.find((call) => call.filename === `${hooksRoot}/custom.hook`);
+            assert.strictEqual(customCompileCall.receiverIsModule, true);
+            assert.strictEqual(customCompileCall.receiver.filename, customCompileCall.filename);
+            assert.strictEqual(customCompileCall.format, undefined);
+            assert.strictEqual(customCompileCall.argumentCount, 2);
+            const implicitCompileCall = compileHookCalls.find((call) => call.filename === `${hooksRoot}/implicit.js`);
+            assert.strictEqual(implicitCompileCall.format, undefined);
+            assert.strictEqual(implicitCompileCall.argumentCount, 3);
+            const explicitCommonJsCompileCall = compileHookCalls.find((call) =>
+                call.filename === `${hooksRoot}/explicit-commonjs/entry.js`);
+            assert.strictEqual(explicitCommonJsCompileCall.format, 'commonjs');
+            assert.strictEqual(explicitCommonJsCompileCall.argumentCount, 3);
+            const entryRequireCall = requireHookCalls.find((call) => call.request === `${hooksRoot}/entry.cjs`);
+            const entryLoadCall = loadHookCalls.find((call) => call.request === `${hooksRoot}/entry.cjs`);
+            assert.strictEqual(entryRequireCall.receiver.filename, `${root}/entry.cjs`);
+            assert.strictEqual(entryLoadCall.parent, entryRequireCall.receiver);
+            assert(requireHookCalls
+                .filter((call) => call.request === './child.cjs')
+                .every((call) => call.receiver === hooked.module));
+            assert(loadHookCalls
+                .filter((call) => call.request === './child.cjs')
+                .every((call) => call.parent === hooked.module));
+        } finally {
+            Module.prototype.require = originalPrototypeRequire;
+            Module._load = originalLoad;
+            Module.prototype._compile = originalCompile;
+            if (originalHookExtension === undefined) delete require.extensions['.hook'];
+            else require.extensions['.hook'] = originalHookExtension;
+            delete globalThis.__cjsInstanceRequireCalls;
+        }
+
         fs.mkdirSync(`${root}/missing-main-with-index`, { recursive: true });
         fs.writeFileSync(`${root}/missing-main-with-index/package.json`, JSON.stringify({ main: 'missing.js' }));
         fs.writeFileSync(`${root}/missing-main-with-index/index.js`, 'module.exports = { ok: true };');
@@ -9876,6 +10217,73 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         fs.mkdirSync(`${root}/dir-index-reg`, { recursive: true });
         fs.writeFileSync(`${root}/dir-index-reg/index.reg`, 'exports.value = "index.reg";');
         assert.strictEqual(require(`${root}/dir-index-reg`).value, 'index.reg');
+
+        const runMainFile = `${root}/public-run-main.cjs`;
+        fs.writeFileSync(runMainFile, [
+            'module.exports = {',
+            '  id: module.id,',
+            '  parent: module.parent,',
+            '  requireMain: require.main === module,',
+            '  processMain: process.mainModule === module,',
+            '};',
+        ].join('\n'));
+        const originalArgv = process.argv.slice();
+        const originalProcessMainModule = process.mainModule;
+        const originalRunMainPrototypeRequire = Module.prototype.require;
+        const originalRunMainLoad = Module._load;
+        const runMainRecord = Module.require.main;
+        const runMainRecordSnapshot = {
+            id: runMainRecord.id,
+            filename: runMainRecord.filename,
+            path: runMainRecord.path,
+            exports: runMainRecord.exports,
+            loaded: runMainRecord.loaded,
+            parent: runMainRecord.parent,
+            children: runMainRecord.children.slice(),
+            paths: runMainRecord.paths ? runMainRecord.paths.slice() : runMainRecord.paths,
+        };
+        let runMainPrototypeRequireCalls = 0;
+        const runMainLoadCalls = [];
+        try {
+            process.argv[1] = runMainFile;
+            Module.prototype.require = function() {
+                runMainPrototypeRequireCalls++;
+                return originalRunMainPrototypeRequire.apply(this, arguments);
+            };
+            Module._load = function(request, parent, isMain) {
+                runMainLoadCalls.push({
+                    request,
+                    receiverIsModuleConstructor: this === Module,
+                    parent,
+                    isMain,
+                    argumentCount: arguments.length,
+                });
+                return originalRunMainLoad.apply(this, arguments);
+            };
+            assert.strictEqual(Module.runMain(), undefined);
+            assert.strictEqual(runMainPrototypeRequireCalls, 0);
+            assert.deepStrictEqual(runMainLoadCalls, [{
+                request: runMainFile,
+                receiverIsModuleConstructor: true,
+                parent: null,
+                isMain: true,
+                argumentCount: 3,
+            }]);
+            assert.deepStrictEqual(Module._cache[runMainFile].exports, {
+                id: '.',
+                parent: null,
+                requireMain: true,
+                processMain: true,
+            });
+        } finally {
+            Module.prototype.require = originalRunMainPrototypeRequire;
+            Module._load = originalRunMainLoad;
+            delete Module._cache[runMainFile];
+            Object.assign(runMainRecord, runMainRecordSnapshot);
+            Module.require.main = runMainRecord;
+            process.argv = originalArgv;
+            process.mainModule = originalProcessMainModule;
+        }
 
         return true;
     } catch (error) {

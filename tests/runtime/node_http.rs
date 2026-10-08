@@ -190,6 +190,22 @@ async fn node_http_response_lifecycle(
 }
 
 #[test]
+async fn node_http_response_post_close_writes(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-response-post-close-writes",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_pipelined_response_order(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
