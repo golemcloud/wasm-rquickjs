@@ -77,7 +77,7 @@ impl ws_mock_p2::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
-        _reconstruction_policy: ws_mock_p2::golem::websocket::client::ReconstructionPolicy,
+        _reconstruction_policy: Option<ws_mock_p2::golem::websocket::client::ReconstructionPolicy>,
     ) -> wasmtime::Result<
         Result<Resource<WsMockConnection>, ws_mock_p2::golem::websocket::client::Error>,
     > {
@@ -156,7 +156,7 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
-        _reconstruction_policy: ws_mock_p3::golem::websocket::client::ReconstructionPolicy,
+        _reconstruction_policy: Option<ws_mock_p3::golem::websocket::client::ReconstructionPolicy>,
     ) -> wasmtime::Result<
         Result<Resource<WsMockConnection>, ws_mock_p3::golem::websocket::client::Error>,
     > {
