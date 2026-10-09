@@ -244,14 +244,14 @@ pub fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
     let contents = fs::read_to_string(&manifest)?;
     let remote_patch = concat!(
         "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
-        "branch = \"wasi-p3\" }"
+        "rev = \"2be5f1a95e542dea91bcf5817b2434724e180bab\" }"
     );
     let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
     let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
     let updated = contents.replace(remote_patch, &local_patch);
     anyhow::ensure!(
         updated != contents,
-        "generated Cargo.toml did not contain the expected golem-websocket branch patch"
+        "generated Cargo.toml did not contain the expected golem-websocket revision patch"
     );
     fs::write(manifest, updated)?;
     Ok(())
@@ -4572,6 +4572,7 @@ impl CompiledTest {
             None,
             target.generation_target(),
         )?;
+        use_local_golem_websocket(&wrapper_crate_root)?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
         let locked_build = truthy_env(TEST_LOCKED_BUILDS_ENV);
