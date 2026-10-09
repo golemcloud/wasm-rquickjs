@@ -1,4 +1,4 @@
-use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
+use crate::common::{CompiledTest, PreparedComponent, TestInstance, invoke_and_capture_output};
 use camino::Utf8Path;
 use rand::Rng;
 use std::slice;
@@ -30,7 +30,7 @@ impl HostMonotonicClock for RecordedClock {
 #[test]
 #[test_r::timeout("120s")]
 async fn hrtime_preserves_clock_samples_across_restoration(
-    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+    #[tagged_as("bigint_roundtrip")] prepared: &PreparedComponent,
 ) -> anyhow::Result<()> {
     let clock = RecordedClock {
         nanos: Arc::new(AtomicU64::new((1 << 53) - 1)),
@@ -38,7 +38,7 @@ async fn hrtime_preserves_clock_samples_across_restoration(
     };
     let mut builder = WasiCtx::builder();
     builder.monotonic_clock(clock.clone());
-    let mut instance = TestInstance::new_with_wasi(compiled.wasm_path(), builder).await?;
+    let mut instance = TestInstance::from_prepared_with_wasi(prepared, builder).await?;
     // Initialize the component dispatcher without touching process.hrtime.
     instance
         .invoke(None, "roundtrip-u64", &[Val::U64(0)])
@@ -63,7 +63,7 @@ async fn hrtime_preserves_clock_samples_across_restoration(
 
     let mut builder = WasiCtx::builder();
     builder.monotonic_clock(clock.clone());
-    let mut restored = TestInstance::new_with_wasi(compiled.wasm_path(), builder).await?;
+    let mut restored = TestInstance::from_prepared_with_wasi(prepared, builder).await?;
     restored
         .invoke(None, "restore-hrtime", &[Val::U64(snapshot)])
         .await?;
@@ -102,6 +102,13 @@ async fn hrtime_preserves_clock_samples_across_restoration(
         );
     }
     Ok(())
+}
+
+#[test_dep(tagged_as = "bigint_roundtrip", scope = PerWorker)]
+async fn prepared_bigint_roundtrip(
+    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+) -> PreparedComponent {
+    PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare bigint_roundtrip")
 }
 
 #[test_dep(tagged_as = "bigint_roundtrip", scope = Cloneable)]

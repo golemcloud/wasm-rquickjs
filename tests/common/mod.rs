@@ -3990,11 +3990,10 @@ impl TestInstance {
         Self::from_prepared(&prepared).await
     }
 
-    pub async fn new_with_wasi(
-        wasm_path: &Utf8Path,
+    pub async fn from_prepared_with_wasi(
+        prepared: &PreparedComponent,
         wasi: wasmtime_wasi::WasiCtxBuilder,
     ) -> anyhow::Result<Self> {
-        let prepared = PreparedComponent::new(wasm_path)?;
         Self::from_parts(
             &prepared.engine,
             &prepared.linker,
