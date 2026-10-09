@@ -77,6 +77,7 @@ impl ws_mock_p2::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
+        _reconstruction_policy: ws_mock_p2::golem::websocket::client::ReconstructionPolicy,
     ) -> wasmtime::Result<
         Result<Resource<WsMockConnection>, ws_mock_p2::golem::websocket::client::Error>,
     > {
@@ -155,6 +156,7 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
+        _reconstruction_policy: ws_mock_p3::golem::websocket::client::ReconstructionPolicy,
     ) -> wasmtime::Result<
         Result<Resource<WsMockConnection>, ws_mock_p3::golem::websocket::client::Error>,
     > {
@@ -235,6 +237,25 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnectionWithStore<Host
 
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
+
+/// Build generated test components against the bridge sources in this checkout.
+pub fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
+    let manifest = root.join("Cargo.toml");
+    let contents = fs::read_to_string(&manifest)?;
+    let remote_patch = concat!(
+        "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
+        "branch = \"wasi-p3\" }"
+    );
+    let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
+    let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
+    let updated = contents.replace(remote_patch, &local_patch);
+    anyhow::ensure!(
+        updated != contents,
+        "generated Cargo.toml did not contain the expected golem-websocket branch patch"
+    );
+    fs::write(manifest, updated)?;
+    Ok(())
+}
 
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
 const TEST_COMPONENT_PROFILE_ENV: &str = "WASM_RQUICKJS_TEST_COMPONENT_PROFILE";

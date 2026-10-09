@@ -1,12 +1,11 @@
 declare module 'golem:websocket/client@1.5.0' {
-  import * as wasiIo023Poll from 'wasi:io/poll@0.2.3';
   export class WebsocketConnection {
     /**
      * Connect to a WebSocket server at the given URL (ws:// or wss://)
      * Optional headers for auth, subprotocols, etc.
      * @throws Error
      */
-    static connect(url: string, headers: [string, string][] | undefined): WebsocketConnection;
+    static connect(url: string, headers: [string, string][] | undefined, reconstructionPolicy: ReconstructionPolicy | undefined): WebsocketConnection;
     /**
      * Send a message (text or binary)
      * @throws Error
@@ -24,16 +23,14 @@ declare module 'golem:websocket/client@1.5.0' {
      */
     receiveWithTimeout(timeoutMs: bigint): Message | undefined;
     /**
-     * Send a close frame with optional code and reason
+     * Send a close frame with optional code and reason. A reconstructed handle
+     * using report-connection-loss returns session-lost without reconnecting.
+     * Dropping the resource releases it locally without opening a connection.
      * @throws Error
      */
     close(code: number | undefined, reason: string | undefined): void;
-    /**
-     * Returns a pollable that resolves when a message is available to read
-     */
-    subscribe(): Pollable;
   }
-  export type Pollable = wasiIo023Poll.Pollable;
+  export type ReconstructionPolicy = "reconnect-automatically" | "report-connection-loss";
   export type CloseInfo = {
     code: number;
     reason: string;
@@ -62,6 +59,13 @@ declare module 'golem:websocket/client@1.5.0' {
   {
     tag: 'other'
     val: string
+  } |
+  /**
+   * The physical session did not survive runtime reconstruction.
+   * An earlier send may still have reached the remote server.
+   */
+  {
+    tag: 'session-lost'
   };
   /**
    * A WebSocket message — text or binary
