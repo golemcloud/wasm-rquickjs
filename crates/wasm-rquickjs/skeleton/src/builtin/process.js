@@ -791,19 +791,19 @@ process.hrtime = function hrtime(time) {
             err.code = 'ERR_OUT_OF_RANGE';
             throw err;
         }
-        let sec = Math.floor(ns / 1e9) - time[0];
-        let nsec = (ns % 1e9) - time[1];
+        let sec = Number(ns / 1_000_000_000n) - time[0];
+        let nsec = Number(ns % 1_000_000_000n) - time[1];
         if (nsec < 0) {
             sec -= 1;
             nsec += 1e9;
         }
         return [sec, nsec];
     }
-    return [Math.floor(ns / 1e9), ns % 1e9];
+    return [Number(ns / 1_000_000_000n), Number(ns % 1_000_000_000n)];
 };
 
 process.hrtime.bigint = function bigint() {
-    return BigInt(hrtime_ns());
+    return hrtime_ns();
 };
 
 process.abort = () => {
