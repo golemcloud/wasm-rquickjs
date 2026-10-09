@@ -6166,10 +6166,16 @@ fn randomize_typed_array<V>(array: TypedArray<V>) {
 
 // JS functions for the crypto implementation
 pub const WEB_CRYPTO_JS: &str = include_str!("web-crypto.js");
+pub const NODE_CRYPTO_EXPORTS_JS: &str = WEB_CRYPTO_JS;
 
 // Re-export for aliases
-pub const REEXPORT_JS: &str = r#"import * as _crypto from '__wasm_rquickjs_builtin/web_crypto'; export * from '__wasm_rquickjs_builtin/web_crypto'; export default _crypto;"#;
-
+pub const REEXPORT_JS: &str = r#"
+import * as _crypto from '__wasm_rquickjs_builtin/web_crypto';
+const _default = {};
+for (const name of Object.keys(_crypto)) _default[name] = _crypto[name];
+export * from '__wasm_rquickjs_builtin/web_crypto';
+export default _default;
+"#;
 // JS code wiring the crypto module into the global context
 pub const WIRE_JS: &str = r#"
         import { webcrypto as __wasm_rquickjs_webcrypto, randomBytes as __wasm_rquickjs_random_bytes } from '__wasm_rquickjs_builtin/web_crypto';

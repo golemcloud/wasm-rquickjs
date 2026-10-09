@@ -1293,6 +1293,194 @@ export const testEsmDataUrlImportAttributes = async () => {
             'export default { file: fileJson.default.file, data: dataJson.default, optionsCount };',
         ].join('\n')));
         assert.deepStrictEqual(dynamicModule.default, { file: true, data: 4, optionsCount: 2 });
+
+        const importJsonNamespaceFromParent = async (parent, specifier) =>
+            (await import('data:text/javascript,' + encodeURIComponent([
+                `const namespace = await import(${JSON.stringify(specifier)}, { with: { type: "json" } });`,
+                'export default namespace;',
+            ].join('\n')) + '#' + parent)).default;
+        fs.writeFileSync('/dynamic-json-identity.json', '{"identity":"file"}');
+        const identityFileUrl = pathToFileURL('/dynamic-json-identity.json').href;
+        const fileIdentityA = await importJsonNamespaceFromParent('file-a', identityFileUrl);
+        const fileIdentityB = await importJsonNamespaceFromParent('file-b', identityFileUrl);
+        assert.strictEqual(fileIdentityB, fileIdentityA);
+        assert.strictEqual(fileIdentityB.default, fileIdentityA.default);
+
+        fs.writeFileSync('/dynamic-json-query-identity.json', '{"identity":"query"}');
+        const identityQueryUrl = pathToFileURL('/dynamic-json-query-identity.json').href + '?cache=1';
+        const queryIdentityA = await importJsonNamespaceFromParent('query-a', identityQueryUrl);
+        const queryIdentityB = await importJsonNamespaceFromParent('query-b', identityQueryUrl);
+        assert.strictEqual(queryIdentityB, queryIdentityA);
+        assert.strictEqual(queryIdentityB.default, queryIdentityA.default);
+
+        const identityDataUrl = 'data:application/json,%7B%22identity%22%3A%22data%22%7D';
+        const dataIdentityA = await importJsonNamespaceFromParent('data-a', identityDataUrl);
+        const dataIdentityB = await importJsonNamespaceFromParent('data-b', identityDataUrl);
+        assert.strictEqual(dataIdentityB, dataIdentityA);
+        assert.strictEqual(dataIdentityB.default, dataIdentityA.default);
+
+        fs.mkdirSync('/dynamic-warning-root/node_modules/dynamic-warning-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/dynamic-warning-root/node_modules/dynamic-warning-pkg/package.json',
+            JSON.stringify({ type: 'module' }),
+        );
+        fs.writeFileSync(
+            '/dynamic-warning-root/node_modules/dynamic-warning-pkg/index.js',
+            'export const value = "warning-package";',
+        );
+        for (const parent of ['a', 'b', 'c']) {
+            fs.mkdirSync(`/dynamic-warning-root/${parent}`, { recursive: true });
+            fs.writeFileSync(
+                `/dynamic-warning-root/${parent}/main.mjs`,
+                [
+                    ...(parent === 'c' ? ['const subpath = await import("dynamic-warning-pkg/index.js");'] : []),
+                    'const first = await import("dynamic-warning-pkg");',
+                    'const second = await import("dynamic-warning-pkg");',
+                    `export default { same: ${parent === 'c' ? 'subpath === first && ' : ''}first === second, value: first.value };`,
+                ].join('\n'),
+            );
+        }
+        const dynamicPackageWarnings = [];
+        const onDynamicPackageWarning = (warning) => {
+            if (warning.code === 'DEP0151' && warning.message.includes('dynamic-warning-pkg')) {
+                dynamicPackageWarnings.push(warning);
+            }
+        };
+        process.on('warning', onDynamicPackageWarning);
+        try {
+            for (const parent of ['a', 'b', 'c']) {
+                assert.deepStrictEqual(
+                    (await import(`/dynamic-warning-root/${parent}/main.mjs`)).default,
+                    { same: true, value: 'warning-package' },
+                );
+            }
+            await new Promise((resolve) => process.nextTick(resolve));
+        } finally {
+            process.removeListener('warning', onDynamicPackageWarning);
+        }
+        assert.strictEqual(dynamicPackageWarnings.length, 3);
+        for (const parent of ['a', 'b', 'c']) {
+            assert.ok(dynamicPackageWarnings.some(
+                (warning) => warning.message.includes(`/dynamic-warning-root/${parent}/main.mjs`),
+            ));
+        }
+
+        for (const [parent, value] of [['a', 'nested-a'], ['b', 'nested-b']]) {
+            const root = `/dynamic-parent-${parent}`;
+            fs.mkdirSync(`${root}/node_modules/dep`, { recursive: true });
+            fs.writeFileSync(
+                `${root}/node_modules/dep/package.json`,
+                JSON.stringify({ type: 'module', exports: './index.mjs' }),
+            );
+            fs.writeFileSync(
+                `${root}/node_modules/dep/index.mjs`,
+                `globalThis.__dynamicParentEval${parent.toUpperCase()} = ` +
+                    `(globalThis.__dynamicParentEval${parent.toUpperCase()} || 0) + 1; ` +
+                    `export const value = ${JSON.stringify(value)};`,
+            );
+            fs.writeFileSync(
+                `${root}/main.mjs`,
+                'export default await import("dep");',
+            );
+        }
+        const nestedBareA = (await import('/dynamic-parent-a/main.mjs')).default;
+        const nestedBareB = (await import('/dynamic-parent-b/main.mjs')).default;
+        assert.strictEqual(nestedBareA.value, 'nested-a');
+        assert.strictEqual(nestedBareB.value, 'nested-b');
+        assert.notStrictEqual(nestedBareB, nestedBareA);
+        assert.strictEqual(globalThis.__dynamicParentEvalA, 1);
+        assert.strictEqual(globalThis.__dynamicParentEvalB, 1);
+        delete globalThis.__dynamicParentEvalA;
+        delete globalThis.__dynamicParentEvalB;
+
+        for (const [parent, value] of [['a', 'imports-a'], ['b', 'imports-b']]) {
+            const root = `/dynamic-imports-${parent}`;
+            fs.mkdirSync(root, { recursive: true });
+            fs.writeFileSync(
+                `${root}/package.json`,
+                JSON.stringify({ type: 'module', imports: { '#util': './util.mjs' } }),
+            );
+            fs.writeFileSync(`${root}/util.mjs`, `export const value = ${JSON.stringify(value)};`);
+            fs.writeFileSync(`${root}/main.mjs`, 'export default await import("#util");');
+        }
+        const packageImportA = (await import('/dynamic-imports-a/main.mjs')).default;
+        const packageImportB = (await import('/dynamic-imports-b/main.mjs')).default;
+        assert.strictEqual(packageImportA.value, 'imports-a');
+        assert.strictEqual(packageImportB.value, 'imports-b');
+        assert.notStrictEqual(packageImportB, packageImportA);
+
+        fs.mkdirSync('/dynamic-shared-json/node_modules/json-pkg', { recursive: true });
+        fs.mkdirSync('/dynamic-shared-json/a', { recursive: true });
+        fs.mkdirSync('/dynamic-shared-json/b', { recursive: true });
+        fs.writeFileSync(
+            '/dynamic-shared-json/node_modules/json-pkg/package.json',
+            JSON.stringify({ exports: './data.json' }),
+        );
+        fs.writeFileSync(
+            '/dynamic-shared-json/node_modules/json-pkg/data.json',
+            '{"identity":"bare-json"}',
+        );
+        for (const parent of ['a', 'b']) {
+            fs.writeFileSync(
+                `/dynamic-shared-json/${parent}/main.mjs`,
+                'export default await import("json-pkg", { with: { type: "json" } });',
+            );
+        }
+        const bareJsonA = (await import('/dynamic-shared-json/a/main.mjs')).default;
+        const bareJsonB = (await import('/dynamic-shared-json/b/main.mjs')).default;
+        assert.strictEqual(bareJsonB, bareJsonA);
+        assert.strictEqual(bareJsonB.default, bareJsonA.default);
+
+        fs.mkdirSync('/dynamic-mock-parent/node_modules/mock-pkg', { recursive: true });
+        fs.writeFileSync(
+            '/dynamic-mock-parent/node_modules/mock-pkg/package.json',
+            JSON.stringify({ type: 'module', exports: './index.mjs' }),
+        );
+        fs.writeFileSync(
+            '/dynamic-mock-parent/node_modules/mock-pkg/index.mjs',
+            'export const value = "real";',
+        );
+        fs.writeFileSync('/dynamic-mock-parent/main.mjs', [
+            'import { mock } from "node:test";',
+            'const handle = mock.module("mock-pkg", { namedExports: { value: "mocked" } });',
+            'const mocked = await import("mock-pkg");',
+            'handle.restore();',
+            'const real = await import("mock-pkg");',
+            'export default { mocked: mocked.value, real: real.value };',
+        ].join('\n'));
+        assert.deepStrictEqual(
+            (await import('/dynamic-mock-parent/main.mjs')).default,
+            { mocked: 'mocked', real: 'real' },
+        );
+
+        fs.unlinkSync('/dynamic-json-identity.json');
+        fs.unlinkSync('/dynamic-json-query-identity.json');
+        await expectReject(
+            'new JSON parent should revalidate a removed file',
+            importJsonNamespaceFromParent('file-missing', identityFileUrl),
+            'ERR_MODULE_NOT_FOUND',
+        );
+        fs.mkdirSync('/dynamic-relative-visit/nested', { recursive: true });
+        fs.writeFileSync('/dynamic-relative-visit/target.mjs', 'export const value = "relative-visit";');
+        fs.writeFileSync(
+            '/dynamic-relative-visit/main.mjs',
+            [
+                'import fs from "node:fs";',
+                'const first = await import("./target.mjs");',
+                'fs.unlinkSync("/dynamic-relative-visit/target.mjs");',
+                'let rejectionCode;',
+                'try {',
+                '  await import("./nested/../target.mjs");',
+                '} catch (error) {',
+                '  rejectionCode = error && error.code;',
+                '}',
+                'export default { value: first.value, rejectionCode };',
+            ].join('\n'),
+        );
+        assert.deepStrictEqual(
+            (await import('/dynamic-relative-visit/main.mjs')).default,
+            { value: 'relative-visit', rejectionCode: 'ERR_MODULE_NOT_FOUND' },
+        );
         fs.mkdirSync('/dynamic-json-relative-app', { recursive: true });
         fs.writeFileSync('/dynamic-json-relative-app/data.json', '{"relative":true}');
         fs.writeFileSync(
@@ -4093,6 +4281,7 @@ export const testLoaderModuleSourceValidation = async () => {
             '  if (specifier === "virtual:cjs-undefined-source") return { shortCircuit: true, url: "file:///loader-module-source-app/undefined-source.cjs", format: "commonjs" };',
             '  if (specifier === "virtual:cjs-resolve-source-null") return { shortCircuit: true, url: "file:///loader-module-source-app/resolve-source-null.cjs", format: "commonjs", source: "exports.marker = \\"resolve-source\\";" };',
             '  if (specifier === "virtual:bad-cjs-source") return { shortCircuit: true, url: "virtual:bad-cjs-source", format: "commonjs" };',
+            '  if (specifier === "alias-dynamic-fs") return { shortCircuit: true, url: "node:fs", format: "builtin" };',
             '  return next(specifier, context);',
             '}',
             'function load(url, context, next) {',
@@ -4155,6 +4344,7 @@ export const testLoaderModuleSourceValidation = async () => {
             'assert.strictEqual((await import("virtual:cjs-inherited-null-source")).marker, "inherited-null-source");',
             'assert.strictEqual((await import("virtual:cjs-undefined-source")).marker, "undefined-source");',
             'assert.strictEqual((await import("virtual:cjs-resolve-source-null")).marker, "filesystem-source");',
+            'assert.strictEqual(typeof (await import("alias-dynamic-fs")).readFileSync, "function");',
             'await expectReject("load hook must return object", import("virtual:invalid-result"), "ERR_INVALID_RETURN_VALUE");',
             'await expectReject("resolve format type", import("virtual:bad-resolve-format"), "ERR_INVALID_RETURN_PROPERTY_VALUE");',
             'await expectReject("resolve url must be absolute", import("virtual:bad-url"), "ERR_INVALID_RETURN_PROPERTY_VALUE", /url.*resolve/);',
@@ -4175,11 +4365,264 @@ export const testLoaderModuleSourceValidation = async () => {
 export const testSyncBuiltinEsmExports = async () => {
     try {
         const module = await import('node:module');
+        const syncRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        assert(syncRegistry);
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
+            false,
+        );
+        module.syncBuiltinESMExports();
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
+            false,
+        );
+
         const fsModule = await import('node:fs');
         const eventsModule = await import('node:events');
         const processModule = await import('node:process');
         const utilModule = await import('node:util');
         const vmModule = await import('node:vm');
+        const bareVmModule = await import('vm');
+        const osModule = await import('node:os');
+        const bareOsModule = await import('os');
+        const pathModule = await import('node:path');
+        const pathPosixModule = await import('node:path/posix');
+        const barePathPosixModule = await import('path/posix');
+        const pathWin32Module = await import('node:path/win32');
+        const barePathWin32Module = await import('path/win32');
+        const streamWebModule = await import('node:stream/web');
+        const bareStreamWebModule = await import('stream/web');
+        const httpCommonModule = await import('node:_http_common');
+        const bareHttpCommonModule = await import('_http_common');
+        const httpAgentModule = await import('node:_http_agent');
+        const bareHttpAgentModule = await import('_http_agent');
+        const inspectorModule = await import('node:inspector');
+        const bareInspectorModule = await import('inspector');
+        const bufferModule = await import('node:buffer');
+        const timersModule = await import('node:timers');
+        const cryptoModule = await import('node:crypto');
+        const bareCryptoModule = await import('crypto');
+        const consoleModule = await import('node:console');
+        const urlModule = await import('node:url');
+        const bareUrlModule = await import('url');
+
+        for (const [canonicalNamespace, bareNamespace] of [
+            [osModule, bareOsModule],
+            [vmModule, bareVmModule],
+            [pathPosixModule, barePathPosixModule],
+            [pathWin32Module, barePathWin32Module],
+            [streamWebModule, bareStreamWebModule],
+            [httpCommonModule, bareHttpCommonModule],
+            [httpAgentModule, bareHttpAgentModule],
+            [inspectorModule, bareInspectorModule],
+            [cryptoModule, bareCryptoModule],
+            [urlModule, bareUrlModule],
+        ]) {
+            assert.strictEqual(bareNamespace, canonicalNamespace);
+        }
+
+        const require = module.createRequire(import.meta.url);
+        assert.strictEqual(consoleModule.default, globalThis.console);
+        assert.strictEqual(require('node:console'), globalThis.console);
+        assert.strictEqual(require('console'), globalThis.console);
+        const originalConsoleLog = globalThis.console.log;
+        const replacementConsoleLog = function replacementConsoleLog() {};
+        globalThis.console.log = replacementConsoleLog;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(consoleModule.log, replacementConsoleLog);
+        globalThis.console.log = originalConsoleLog;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(consoleModule.log, originalConsoleLog);
+
+        assert.strictEqual(module.isBuiltin('test'), false);
+        assert.strictEqual(module.isBuiltin('node:test'), true);
+        assert.throws(() => require('test'), { code: 'MODULE_NOT_FOUND' });
+
+        const esmFirstOs = osModule.default;
+        const esmFirstHostnameDescriptor = Object.getOwnPropertyDescriptor(esmFirstOs, 'hostname');
+        assert(esmFirstHostnameDescriptor && esmFirstHostnameDescriptor.configurable);
+        delete esmFirstOs.hostname;
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(esmFirstOs, 'hostname'), false);
+
+        const os = require('node:os');
+        assert.strictEqual(os, esmFirstOs);
+        assert.strictEqual(Object.prototype.hasOwnProperty.call(os, 'hostname'), false);
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, undefined);
+        assert.strictEqual(bareOsModule.hostname, undefined);
+        assert.strictEqual(os, require('os'));
+        assert.strictEqual(os, osModule.default);
+        assert.strictEqual(os, bareOsModule.default);
+        assert.strictEqual(osModule.hostname, bareOsModule.hostname);
+        Object.defineProperty(os, 'hostname', esmFirstHostnameDescriptor);
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, esmFirstHostnameDescriptor.value);
+        assert.strictEqual(bareOsModule.hostname, esmFirstHostnameDescriptor.value);
+        assert.strictEqual(require('node:crypto'), cryptoModule.default);
+        assert.strictEqual(require('crypto'), cryptoModule.default);
+        assert.strictEqual(bareCryptoModule.default, cryptoModule.default);
+        const sqliteModule = await import('node:sqlite');
+        const sqlite = require('node:sqlite');
+        assert.strictEqual(
+            Object.prototype.hasOwnProperty.call(syncRegistry, 'node:sqlite'),
+            true,
+        );
+        assert.throws(() => require('sqlite'), { code: 'MODULE_NOT_FOUND' });
+        const originalSqliteConstants = sqlite.constants;
+        const replacementSqliteConstants = {};
+        sqlite.constants = replacementSqliteConstants;
+        module.syncBuiltinESMExports();
+        assert.strictEqual(sqliteModule.constants, originalSqliteConstants);
+        sqlite.constants = originalSqliteConstants;
+
+        const osSyncDescriptor = Object.getOwnPropertyDescriptor(syncRegistry, 'node:os');
+        assert(osSyncDescriptor);
+        assert.strictEqual(osSyncDescriptor.writable, false);
+        assert.strictEqual(osSyncDescriptor.configurable, false);
+
+        const syncNamedExport = (specifier, namespace, name, replacement) => {
+            const commonJs = require(specifier);
+            const originalDescriptor = Object.getOwnPropertyDescriptor(commonJs, name);
+            assert(originalDescriptor && originalDescriptor.configurable);
+            commonJs[name] = replacement;
+            module.syncBuiltinESMExports();
+            assert.strictEqual(namespace[name], replacement);
+            Object.defineProperty(commonJs, name, originalDescriptor);
+            module.syncBuiltinESMExports();
+            assert.strictEqual(namespace[name], originalDescriptor.value);
+        };
+
+        syncNamedExport('node:path', pathModule, 'join', function replacementJoin() {});
+        syncNamedExport('node:buffer', bufferModule, 'SlowBuffer', function replacementSlowBuffer() {});
+        syncNamedExport('node:timers', timersModule, 'enroll', function replacementEnroll() {});
+        syncNamedExport('node:util', utilModule, 'promisify', function replacementPromisify() {});
+        syncNamedExport('node:crypto', cryptoModule, 'randomUUID', function replacementRandomUUID() {});
+
+        const syncAliasedNamedExport = (
+            canonicalSpecifier,
+            bareSpecifier,
+            canonicalNamespace,
+            bareNamespace,
+            name,
+            replacement,
+        ) => {
+            const commonJs = require(canonicalSpecifier);
+            assert.strictEqual(require(bareSpecifier), commonJs);
+            assert.strictEqual(canonicalNamespace.default, commonJs);
+            assert.strictEqual(bareNamespace.default, commonJs);
+            const originalDescriptor = Object.getOwnPropertyDescriptor(commonJs, name);
+            assert(originalDescriptor && originalDescriptor.configurable);
+            Object.defineProperty(commonJs, name, {
+                value: replacement,
+                writable: true,
+                configurable: true,
+                enumerable: originalDescriptor.enumerable,
+            });
+            module.syncBuiltinESMExports();
+            assert.strictEqual(canonicalNamespace[name], replacement);
+            assert.strictEqual(bareNamespace[name], replacement);
+            Object.defineProperty(commonJs, name, originalDescriptor);
+            module.syncBuiltinESMExports();
+            assert.strictEqual(canonicalNamespace[name], commonJs[name]);
+            assert.strictEqual(bareNamespace[name], commonJs[name]);
+        };
+
+        syncAliasedNamedExport(
+            'node:vm', 'vm', vmModule, bareVmModule, 'Script', function replacementScript() {},
+        );
+        syncAliasedNamedExport(
+            'node:stream/web', 'stream/web', streamWebModule, bareStreamWebModule,
+            'ReadableStream', function replacementReadableStream() {},
+        );
+        syncAliasedNamedExport(
+            'node:path/posix', 'path/posix', pathPosixModule, barePathPosixModule,
+            'resolve', function replacementPosixResolve() {},
+        );
+        syncAliasedNamedExport(
+            'node:path/win32', 'path/win32', pathWin32Module, barePathWin32Module,
+            'resolve', function replacementWin32Resolve() {},
+        );
+        syncAliasedNamedExport(
+            'node:_http_common', '_http_common', httpCommonModule, bareHttpCommonModule,
+            'HTTPParser', function replacementHTTPParser() {},
+        );
+        syncAliasedNamedExport(
+            'node:_http_agent', '_http_agent', httpAgentModule, bareHttpAgentModule,
+            'Agent', function replacementAgent() {},
+        );
+        syncAliasedNamedExport(
+            'node:inspector', 'inspector', inspectorModule, bareInspectorModule,
+            'url', function replacementInspectorUrl() {},
+        );
+        syncAliasedNamedExport(
+            'node:url', 'url', urlModule, bareUrlModule,
+            'domainToASCII', function replacementDomainToASCII() {},
+        );
+        syncAliasedNamedExport(
+            'node:url', 'url', urlModule, bareUrlModule,
+            'domainToUnicode', function replacementDomainToUnicode() {},
+        );
+
+        const originalHostnameDescriptor = Object.getOwnPropertyDescriptor(os, 'hostname');
+        let hostnameGetterReads = 0;
+        const getterHostname = function getterHostname() {};
+        Object.defineProperty(os, 'hostname', {
+            configurable: true,
+            enumerable: originalHostnameDescriptor.enumerable,
+            get() {
+                hostnameGetterReads++;
+                return getterHostname;
+            },
+        });
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, getterHostname);
+        assert.strictEqual(bareOsModule.hostname, getterHostname);
+        assert.strictEqual(hostnameGetterReads, 1);
+
+        const originalOsPrototype = Object.getPrototypeOf(os);
+        const inheritedHostname = function inheritedHostname() {};
+        const inheritedOsPrototype = Object.create(originalOsPrototype);
+        inheritedOsPrototype.hostname = inheritedHostname;
+        delete os.hostname;
+        Object.setPrototypeOf(os, inheritedOsPrototype);
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, undefined);
+        assert.strictEqual(bareOsModule.hostname, undefined);
+        Object.setPrototypeOf(os, originalOsPrototype);
+        Object.defineProperty(os, 'hostname', originalHostnameDescriptor);
+
+        const orderedGetterNames = Object.keys(os).filter((name) => {
+            const descriptor = Object.getOwnPropertyDescriptor(os, name);
+            return name in osModule && descriptor && descriptor.configurable &&
+                Object.prototype.hasOwnProperty.call(descriptor, 'value');
+        }).slice(0, 2);
+        assert.strictEqual(orderedGetterNames.length, 2);
+        const orderedGetterDescriptors = orderedGetterNames.map(
+            (name) => Object.getOwnPropertyDescriptor(os, name),
+        );
+        const getterReadOrder = [];
+        orderedGetterNames.forEach((name, index) => {
+            Object.defineProperty(os, name, {
+                configurable: true,
+                enumerable: orderedGetterDescriptors[index].enumerable,
+                get() {
+                    getterReadOrder.push(name);
+                    return orderedGetterDescriptors[index].value;
+                },
+            });
+        });
+        module.syncBuiltinESMExports();
+        assert.deepStrictEqual(getterReadOrder, orderedGetterNames);
+        orderedGetterNames.forEach((name, index) => {
+            Object.defineProperty(os, name, orderedGetterDescriptors[index]);
+        });
+
+        os.__wasmRquickjsNewExport = true;
+        module.syncBuiltinESMExports();
+        module.syncBuiltinESMExports();
+        assert.strictEqual(osModule.hostname, originalHostnameDescriptor.value);
+        assert.strictEqual('__wasmRquickjsNewExport' in osModule, false);
+        delete os.__wasmRquickjsNewExport;
 
         const fs = fsModule.default;
         assert.strictEqual(processModule.report, processModule.default.report);
@@ -4314,14 +4757,19 @@ export const testSyncBuiltinEsmExports = async () => {
         moduleDefault.createRequire = originalCreateRequire;
         originalSyncBuiltinESMExports();
 
-        try {
-            await import('__wasm_rquickjs_builtin/vm_native');
-            throw new Error('private builtin import should not resolve from user modules');
-        } catch (error) {
-            assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND');
+        for (const privateBuiltin of [
+            '__wasm_rquickjs_builtin/vm_native',
+            '__wasm_rquickjs_builtin/sync-implementation/node:os',
+        ]) {
+            try {
+                await import(privateBuiltin);
+                throw new Error('private builtin import should not resolve from user modules');
+            } catch (error) {
+                assert.strictEqual(error.code, 'ERR_MODULE_NOT_FOUND');
+            }
+            assert.throws(() => import.meta.resolve(privateBuiltin), { code: 'ERR_MODULE_NOT_FOUND' });
+            assert.throws(() => module.createRequire(import.meta.url)(privateBuiltin), { code: 'MODULE_NOT_FOUND' });
         }
-        assert.throws(() => import.meta.resolve('__wasm_rquickjs_builtin/vm_native'), { code: 'ERR_MODULE_NOT_FOUND' });
-        assert.throws(() => module.createRequire(import.meta.url)('__wasm_rquickjs_builtin/vm_native'), { code: 'MODULE_NOT_FOUND' });
 
         async function expectPrivateBuiltinRejected(label, promise) {
             try {
@@ -4363,6 +4811,58 @@ export const testSyncBuiltinEsmExports = async () => {
         return true;
     } catch (error) {
         console.error(error);
+        throw error;
+    }
+};
+
+export const testBuiltinFirstImport = async (specifier) => {
+    try {
+        let namespace;
+        if (specifier === 'node:console') {
+            const consoleObject = globalThis.console;
+            const logDescriptor = Object.getOwnPropertyDescriptor(consoleObject, 'log');
+            const warnDescriptor = Object.getOwnPropertyDescriptor(consoleObject, 'warn');
+            const replacementLog = function replacementLog() {};
+            const replacementWarn = function replacementWarn() {};
+            let warnReads = 0;
+            Object.defineProperty(consoleObject, 'log', {
+                value: replacementLog,
+                writable: true,
+                configurable: true,
+                enumerable: logDescriptor.enumerable,
+            });
+            Object.defineProperty(consoleObject, 'warn', {
+                get() {
+                    warnReads += 1;
+                    return replacementWarn;
+                },
+                configurable: true,
+                enumerable: warnDescriptor.enumerable,
+            });
+            try {
+                namespace = await import(specifier);
+                assert.strictEqual(namespace.log, replacementLog);
+                assert.strictEqual(namespace.warn, replacementWarn);
+                assert.strictEqual(warnReads, 1);
+            } finally {
+                Object.defineProperty(consoleObject, 'log', logDescriptor);
+                Object.defineProperty(consoleObject, 'warn', warnDescriptor);
+            }
+        } else {
+            namespace = await import(specifier);
+        }
+        if (specifier === 'node:crypto') {
+            const digest = namespace.createHash('sha256')
+                .update('first builtin import')
+                .digest('hex');
+            assert.strictEqual(digest.length, 64);
+        }
+        const module = await import('node:module');
+        const require = module.createRequire(import.meta.url);
+        assert.strictEqual(require(specifier), namespace.default);
+        return true;
+    } catch (error) {
+        console.error(`builtin-first-import ${specifier}:`, error);
         throw error;
     }
 };
@@ -7301,6 +7801,7 @@ export const testVmMainContextDefaultLoader = async () => {
 
         fs.mkdirSync('/vm-default-loader-app/subdir', { recursive: true });
         fs.mkdirSync('/vm-default-loader-app/other', { recursive: true });
+        fs.mkdirSync('/vm-default-loader-app/missing', { recursive: true });
         fs.mkdirSync('/vm-default-loader-app/space dir', { recursive: true });
         fs.writeFileSync('/vm-default-loader-app/subdir/message.mjs', [
             'export const value = "from-subdir";',
@@ -7318,6 +7819,7 @@ export const testVmMainContextDefaultLoader = async () => {
             'export const value = "from-cwd";',
             'export default { value };',
         ].join('\n'));
+        fs.writeFileSync('/vm-default-loader-app/subdir/data.json', '{"value":"from-json"}');
 
         assert.strictEqual(typeof vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER, 'symbol');
         assert.strictEqual(typeof vm.Module, 'function');
@@ -8323,6 +8825,31 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.deepStrictEqual((await script.runInThisContext()).default, { value: 'from-subdir' });
 
+        const queryCacheDirectory = '/vm-default-loader-app/query-cache';
+        const queryCacheModule = queryCacheDirectory + '/message.mjs';
+        const queryCacheReferrer = pathToFileURL(queryCacheDirectory + '/index.js').href;
+        fs.mkdirSync(queryCacheDirectory, { recursive: true });
+        fs.writeFileSync(queryCacheModule, 'export const identity = {};');
+        const firstQueryNamespace = await new vm.Script('import("./message.mjs")', {
+            filename: queryCacheReferrer + '?first',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        }).runInThisContext();
+        fs.unlinkSync(queryCacheModule);
+        await assert.rejects(
+            new vm.Script('import("./message.mjs")', {
+                filename: queryCacheReferrer + '?missing',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }).runInThisContext(),
+            { code: 'ERR_MODULE_NOT_FOUND' },
+        );
+        fs.writeFileSync(queryCacheModule, 'export const identity = {};');
+        const secondQueryNamespace = await new vm.Script('import("./message.mjs")', {
+            filename: queryCacheReferrer + '?second',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        }).runInThisContext();
+        assert.strictEqual(secondQueryNamespace, firstQueryNamespace);
+        assert.strictEqual(secondQueryNamespace.identity, firstQueryNamespace.identity);
+
         const mutableOptions = {
             filename: '/vm-default-loader-app/subdir/mutable.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
@@ -8434,11 +8961,102 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         assert.deepStrictEqual((await helperNameCollisionScript.runInThisContext()).default, { value: 'from-subdir' });
 
+        const publicFsNamespace = await import('node:fs');
         const builtinScript = new vm.Script('import("node:fs")', {
             filename: '/vm-default-loader-app/subdir/builtin.js',
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
         });
-        assert.strictEqual((await builtinScript.runInThisContext()).existsSync('/vm-default-loader-app'), true);
+        const builtinNamespace = await builtinScript.runInThisContext();
+        assert.strictEqual(builtinNamespace, publicFsNamespace);
+        assert.strictEqual(builtinNamespace.existsSync('/vm-default-loader-app'), true);
+
+        const bareBuiltinScript = new vm.Script('import("fs")', {
+            filename: '/vm-default-loader-app/subdir/bare-builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(await bareBuiltinScript.runInThisContext(), publicFsNamespace);
+
+        for (const specifier of ['test', 'sqlite']) {
+            await assert.rejects(
+                new vm.Script(`import(${JSON.stringify(specifier)})`, {
+                    filename: '/vm-default-loader-app/subdir/node-only-builtin.js',
+                    importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+                }).runInThisContext(),
+                { code: 'ERR_MODULE_NOT_FOUND' },
+            );
+        }
+
+        await assert.rejects(
+            new vm.Script('import("__wasm_rquickjs_builtin/public-facade/node:fs")', {
+                filename: '/vm-default-loader-app/subdir/private-facade.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }).runInThisContext(),
+            { code: 'ERR_MODULE_NOT_FOUND' },
+        );
+
+        const { mock } = await import('node:test');
+        const mockedExistsSync = () => 'mocked-exists-sync';
+        const fsMock = mock.module('node:fs', {
+            namedExports: { existsSync: mockedExistsSync },
+        });
+        try {
+            for (const specifier of ['node:fs', 'fs']) {
+                const mockedBuiltinScript = new vm.Script(`import(${JSON.stringify(specifier)})`, {
+                    filename: '/vm-default-loader-app/subdir/mocked-builtin.js',
+                    importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+                });
+                const mockedNamespace = await mockedBuiltinScript.runInThisContext();
+                assert.strictEqual(mockedNamespace.existsSync, mockedExistsSync);
+            }
+        } finally {
+            fsMock.restore();
+        }
+        const restoredBuiltinScript = new vm.Script('import("node:fs")', {
+            filename: '/vm-default-loader-app/subdir/restored-builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(await restoredBuiltinScript.runInThisContext(), publicFsNamespace);
+
+        const jsonScript = new vm.Script('import("./data.json", { with: { type: "json" } })', {
+            filename: '/vm-default-loader-app/subdir/json.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual((await jsonScript.runInThisContext()).default, { value: 'from-json' });
+
+        const { register } = await import('node:module');
+        const publicPathNamespace = await import('node:path');
+        globalThis.__vmDefaultLoaderBuiltinHookCalls = 0;
+        const hookSource = [
+            'export function resolve(specifier, context, next) {',
+            '  if (specifier === "node:path") {',
+            '    globalThis.__vmDefaultLoaderBuiltinHookCalls++;',
+            '    return next(specifier, context);',
+            '  }',
+            '  if (specifier === "virtual:vm-default-loader-hook") {',
+            '    if (context.parentURL !== "file:///vm-default-loader-app/subdir/hooked.js") {',
+            '      throw new Error("unexpected vm default-loader parentURL: " + context.parentURL);',
+            '    }',
+            '    return { shortCircuit: true, format: "module", url: "file:///vm-default-loader-app/subdir/message.mjs" };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+        ].join('\n');
+        register('data:text/javascript,' + encodeURIComponent(hookSource));
+        const hookedScript = new vm.Script('import("virtual:vm-default-loader-hook")', {
+            filename: '/vm-default-loader-app/subdir/hooked.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.deepStrictEqual(
+            (await hookedScript.runInThisContext()).default,
+            { value: 'from-subdir' }
+        );
+        const hookedBuiltinScript = new vm.Script('import("node:path")', {
+            filename: '/vm-default-loader-app/subdir/hooked-builtin.js',
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        assert.strictEqual(await hookedBuiltinScript.runInThisContext(), publicPathNamespace);
+        assert.strictEqual(globalThis.__vmDefaultLoaderBuiltinHookCalls, 1);
+        delete globalThis.__vmDefaultLoaderBuiltinHookCalls;
 
         const fileUrlScript = new vm.Script('import("./message.mjs")', {
             filename: pathToFileURL('/vm-default-loader-app/space dir/index.js').href + '?cache=1',
@@ -8483,7 +9101,29 @@ export const testVmMainContextDefaultLoader = async () => {
         await assert.rejects(contextScript.runInContext(context));
         const originalContextCwd = process.cwd();
         try {
+            let scriptCallbackCalls = 0;
+            const indirectEvalScript = new vm.Script(
+                'Promise.resolve("import(\\"./message.mjs\\")").then(eval)',
+                {
+                    importModuleDynamically() {
+                        scriptCallbackCalls++;
+                        throw new Error('script loader callback must not handle indirect eval');
+                    },
+                },
+            );
+            process.chdir('/vm-default-loader-app/missing');
+            await assert.rejects(
+                indirectEvalScript.runInContext(context),
+                { code: 'ERR_MODULE_NOT_FOUND' },
+            );
+            assert.strictEqual(scriptCallbackCalls, 0);
             process.chdir('/vm-default-loader-app/subdir');
+            const indirectEvalResult = await indirectEvalScript.runInContext(context);
+            assert.strictEqual(
+                JSON.stringify(indirectEvalResult.default || indirectEvalResult),
+                '{"value":"from-subdir"}',
+            );
+            assert.strictEqual(scriptCallbackCalls, 0);
             const contextEvalScript = new vm.Script('Promise.resolve("import(\\"./message.mjs\\")").then(eval)');
             const contextEvalResult = await contextEvalScript.runInContext(context);
             assert.strictEqual(JSON.stringify(contextEvalResult.default || contextEvalResult), '{"value":"from-subdir"}');
@@ -8503,9 +9143,30 @@ export const testVmMainContextDefaultLoader = async () => {
         });
         await assert.rejects(compiledMissing(), { code: 'ERR_MODULE_NOT_FOUND' });
 
+        const lateCwdScript = new vm.Script('import("./message.mjs")', {
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
+        const lateCwdFunction = vm.compileFunction('return import("./message.mjs")', [], {
+            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        });
         const originalCwd = process.cwd();
         try {
             process.chdir('/vm-default-loader-app');
+            assert.deepStrictEqual((await lateCwdScript.runInThisContext()).default, { value: 'from-cwd' });
+            assert.deepStrictEqual((await lateCwdFunction()).default, { value: 'from-cwd' });
+
+            const relativeFilenameScript = new vm.Script('import("./message.mjs")', {
+                filename: 'subdir/relative.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
+            assert.deepStrictEqual((await relativeFilenameScript.runInThisContext()).default, { value: 'from-cwd' });
+
+            const relativeFilenameFunction = vm.compileFunction('return import("./message.mjs")', [], {
+                filename: 'relative-function.js',
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
+            assert.deepStrictEqual((await relativeFilenameFunction()).default, { value: 'from-cwd' });
+
             const cwdScript = new vm.Script('import("./message.mjs")', {
                 importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
             });

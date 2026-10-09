@@ -1,8 +1,11 @@
 import {
     eval_in_new_context as evalInNewContext,
     eval_with_filename as evalWithFilename,
+    schemeless_syncable_builtin_names as schemelessSyncableBuiltinNames,
+    syncable_builtin_names as syncableBuiltinNames,
 } from '__wasm_rquickjs_builtin/vm_native';
 import * as pathModule from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 
 let contextIdCounter = 1;
@@ -24,6 +27,14 @@ const missingDynamicImportFlagHelper = '__wasm_rquickjs_vm_missing_dynamic_impor
 const sandboxDescriptorsHelper = '__wasm_rquickjs_vm_sandbox_descriptors__';
 const sandboxSymbolsHelper = '__wasm_rquickjs_vm_sandbox_symbols__';
 const sourceTextModuleExportCellsPlaceholder = '__wasm_rquickjs_vm_export_cells_placeholder__';
+const publicBuiltinFacadePrefix = '__wasm_rquickjs_builtin/public-facade/';
+const publicBuiltinFacadeSpecifiers = Object.create(null);
+for (const name of syncableBuiltinNames()) {
+    publicBuiltinFacadeSpecifiers[name] = publicBuiltinFacadePrefix + name;
+}
+for (const name of schemelessSyncableBuiltinNames()) {
+    publicBuiltinFacadeSpecifiers[name.slice(5)] = publicBuiltinFacadePrefix + name;
+}
 let defaultLoaderImportHelperCounter = 1;
 let sandboxDescriptorsHelperCounter = 1;
 let sandboxSymbolsHelperCounter = 1;
@@ -37,12 +48,41 @@ function rejectPrivateBuiltinImport(specifier) {
     return Promise.reject(err);
 }
 
-function defaultLoaderImportFunction(filename, specifier) {
+function defaultLoaderParentURL(filename) {
+    if (pathModule.isAbsolute(filename)) {
+        return pathToFileURL(filename).href;
+    }
+    try {
+        return new URL(filename).href;
+    } catch (_) {
+        const cwd = globalThis.process && typeof globalThis.process.cwd === 'function'
+            ? globalThis.process.cwd()
+            : '/';
+        return pathToFileURL(cwd.endsWith('/') ? cwd : cwd + '/').href;
+    }
+}
+
+function publicBuiltinFacadeSpecifier(specifier, parentURL) {
+    if (typeof globalThis.__wasm_rquickjs_has_import_mock === 'function'
+        && globalThis.__wasm_rquickjs_has_import_mock(specifier, parentURL)) {
+        return specifier;
+    }
+    return publicBuiltinFacadeSpecifiers[specifier] || specifier;
+}
+
+function defaultLoaderImportFunction(filename, specifier, options) {
     specifier = String(specifier);
     if (isPrivateBuiltinSpecifier(specifier)) {
         return rejectPrivateBuiltinImport(specifier);
     }
-    return import(resolveDefaultLoaderSpecifier(specifier, filename));
+    const parentURL = defaultLoaderParentURL(filename);
+    return globalThis.__wasm_rquickjs_import_attr_dynamic_import(
+        parentURL,
+        specifier,
+        options,
+        true,
+        (resolved) => import(publicBuiltinFacadeSpecifier(resolved, parentURL)),
+    );
 }
 
 function missingDynamicImportFunction() {
@@ -2322,36 +2362,7 @@ function referrerFilenameFromOptions(options) {
     if (typeof options.filename === 'string' && options.filename.length > 0) {
         return options.filename;
     }
-    if (globalThis.process && typeof globalThis.process.cwd === 'function') {
-        return globalThis.process.cwd() + '/';
-    }
-    return '/';
-}
-
-function referrerDirectory(filename) {
-    if (filename.startsWith('file://')) {
-        try {
-            filename = decodeURIComponent(new URL(filename).pathname);
-        } catch (_) {
-            return globalThis.process && typeof globalThis.process.cwd === 'function'
-                ? globalThis.process.cwd()
-                : '/';
-        }
-    }
-    if (filename.endsWith('/')) return filename.slice(0, -1) || '/';
-    if (!filename.startsWith('/')) {
-        return globalThis.process && typeof globalThis.process.cwd === 'function'
-            ? globalThis.process.cwd()
-            : '/';
-    }
-    return pathModule.dirname(filename);
-}
-
-function resolveDefaultLoaderSpecifier(specifier, filename) {
-    if (specifier.startsWith('./') || specifier.startsWith('../')) {
-        return pathModule.resolve(referrerDirectory(filename), specifier);
-    }
-    return specifier;
+    return 'evalmachine.<anonymous>';
 }
 
 function ensureDefaultLoaderImportBinding(helperName) {

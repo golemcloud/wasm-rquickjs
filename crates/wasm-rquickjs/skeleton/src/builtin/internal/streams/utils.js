@@ -2,7 +2,18 @@
 // Copyright Joyent and Node contributors. All rights reserved. MIT license.
 // deno-lint-ignore-file
 
+import { Buffer } from "buffer";
+
 const kIsDisturbed = Symbol("kIsDisturbed");
+const kIsDuplex = Symbol("kIsDuplex");
+
+function uint8ArrayToBuffer(chunk) {
+    return Buffer.from(
+        chunk.buffer,
+        chunk.byteOffset,
+        chunk.byteLength,
+    );
+}
 
 function isReadableNodeStream(obj, strict = false) {
     return !!(
@@ -265,6 +276,7 @@ export default {
     isDuplexNodeStream,
     isFinished,
     isIterable,
+    kIsDuplex,
     isReadable,
     isReadableNodeStream,
     isReadableStream,
@@ -280,6 +292,7 @@ export default {
     isWritableFinished,
     isServerRequest,
     isServerResponse,
+    uint8ArrayToBuffer,
     willEmitClose,
 };
 export {
@@ -305,6 +318,8 @@ export {
     isWritableFinished,
     isWritableNodeStream,
     isWritableStream,
+    kIsDuplex,
     kIsDisturbed,
+    uint8ArrayToBuffer,
     willEmitClose,
 };

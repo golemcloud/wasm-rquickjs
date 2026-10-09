@@ -20,43 +20,14 @@ import {
     ERR_STREAM_PREMATURE_CLOSE,
     AbortError,
 } from "__wasm_rquickjs_builtin/internal/errors";
-import { isDestroyed, isWritable, isWritableEnded } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDestroyed, isWritable, isWritableEnded, kIsDuplex, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { validateObject, validateBoolean } from "__wasm_rquickjs_builtin/internal/validators";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
-import Readable from "__wasm_rquickjs_builtin/internal/streams/readable";
 import { nextTick } from "node:process";
 
-function _uint8ArrayToBuffer(chunk) {
-    return Buffer.from(
-        chunk.buffer,
-        chunk.byteOffset,
-        chunk.byteLength,
-    );
-}
-
 const { errorOrDestroy } = destroyImpl;
-
-// This function prevents a circular dependency with Duplex
-// This checks if the passed stream is an instance of a Readable stream
-// and one of its prototypes is named Duplex
-function isDuplexStream(maybe_duplex) {
-    const isReadable = Readable.prototype.isPrototypeOf(maybe_duplex);
-
-    let prototype = maybe_duplex;
-    let isDuplex = false;
-    while (prototype?.constructor && prototype.constructor.name !== "Object") {
-        if (prototype.constructor.name === "Duplex") {
-            isDuplex = true;
-            break;
-        }
-        prototype = Object.getPrototypeOf(prototype);
-    }
-
-    return isReadable && isDuplex;
-}
-
 
 function nop() { }
 
@@ -68,9 +39,7 @@ function WritableState(options, stream, isDuplex) {
     // However, some cases require setting options to different
     // values for the readable and the writable sides of the duplex stream,
     // e.g. options.readableObjectMode vs. options.writableObjectMode, etc.
-    if (typeof isDuplex !== "boolean") {
-        isDuplex = isDuplexStream(stream);
-    }
+    isDuplex = isDuplex === true;
 
     // Object stream flag to indicate whether or not this stream
     // contains buffers or objects.
@@ -209,7 +178,9 @@ Object.defineProperty(WritableState.prototype, "bufferedRequestCount", {
     },
 });
 
-function Writable(options) {
+function Writable(options, duplexMarker) {
+    const isDuplex = duplexMarker === kIsDuplex;
+
     // Writable ctor is applied to Duplexes, too.
     // `realHasInstance` is necessary because using plain `instanceof`
     // would return false, as no `_writableState` property is attached.
@@ -217,10 +188,6 @@ function Writable(options) {
     // Trying to use the custom `instanceof` for Writable here will also break the
     // Node.js LazyTransform implementation, which has a non-trivial getter for
     // `_writableState` that would lead to infinite recursion.
-
-    // Checking for a Stream.Duplex instance is faster here instead of inside
-    // the WritableState constructor, at least with V8 6.5.
-    const isDuplex = isDuplexStream(this);
 
     if (
         !isDuplex && !Function.prototype[Symbol.hasInstance].call(Writable, this)
@@ -332,7 +299,7 @@ function _write(stream, chunk, encoding, cb) {
         } else if (chunk instanceof Buffer) {
             encoding = "buffer";
         } else if (ArrayBuffer.isView(chunk)) {
-            chunk = Buffer.from(chunk.buffer, chunk.byteOffset, chunk.byteLength);
+            chunk = uint8ArrayToBuffer(chunk);
             encoding = "buffer";
         } else {
             throw new ERR_INVALID_ARG_TYPE(

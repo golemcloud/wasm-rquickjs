@@ -25,7 +25,7 @@ import BufferList from "__wasm_rquickjs_builtin/internal/streams/buffer_list";
 import destroyImpl from "__wasm_rquickjs_builtin/internal/streams/destroy";
 import EventEmitter from "events";
 import { nextTick } from "node:process";
-import { isDestroyed, isReadable } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDestroyed, isReadable, kIsDuplex, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import eos from "__wasm_rquickjs_builtin/internal/streams/end-of-stream";
 
 let debug = debuglog("stream", (fn) => {
@@ -44,9 +44,7 @@ function ReadableState(options, stream, isDuplex) {
     // However, some cases require setting options to different
     // values for the readable and the writable sides of the duplex stream.
     // These options can be provided separately as readableXXX and writableXXX.
-    if (typeof isDuplex !== "boolean") {
-        isDuplex = stream instanceof Stream.Duplex;
-    }
+    isDuplex = isDuplex === true;
 
     // Object stream flag. Used to make read(n) ignore n and to
     // make all the buffer merging and length checks go away.
@@ -146,10 +144,12 @@ function ReadableState(options, stream, isDuplex) {
 }
 
 
-function Readable(options) {
+function Readable(options, duplexMarker) {
     if (!(this instanceof Readable)) {
         return new Readable(options);
     }
+
+    const isDuplex = duplexMarker === kIsDuplex;
 
     // Pre-initialize _events with well-known event slots to preserve
     // property insertion order (matching Node.js v22 behavior).
@@ -162,10 +162,6 @@ function Readable(options) {
         this._events.readable = undefined;
         this._eventsCount = 0;
     }
-
-    // Checking for a Stream.Duplex instance is faster here instead of inside
-    // the ReadableState constructor, at least with V8 6.5.
-    const isDuplex = this instanceof Stream.Duplex;
 
     this._readableState = new ReadableState(options, this, isDuplex);
 
@@ -243,7 +239,7 @@ function readableAddChunk(stream, chunk, encoding, addToFront) {
         } else if (chunk instanceof Buffer) {
             encoding = "";
         } else if (ArrayBuffer.isView(chunk)) {
-            chunk = Stream._uint8ArrayToBuffer(chunk);
+            chunk = uint8ArrayToBuffer(chunk);
             encoding = "";
         } else if (chunk != null) {
             err = new ERR_INVALID_ARG_TYPE(

@@ -16,6 +16,7 @@ import {
     isDuplexNodeStream,
     isDestroyed,
     isIterable,
+    kIsDuplex,
     isNodeStream,
     isReadable,
     isReadableNodeStream,
@@ -51,8 +52,8 @@ function Duplex(options) {
         this._eventsCount = 0;
     }
 
-    Readable.call(this, options);
-    Writable.call(this, options);
+    Readable.call(this, options, kIsDuplex);
+    Writable.call(this, options, kIsDuplex);
     this.allowHalfOpen = true;
 
     if (options) {

@@ -1,0 +1,5 @@
+package quickjs:module-name-collisions;
+
+world module-name-collisions {
+  export test-module-name-collisions: func() -> bool;
+}
