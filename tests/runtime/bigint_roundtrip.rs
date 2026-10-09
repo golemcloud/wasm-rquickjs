@@ -1,9 +1,115 @@
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{CompiledTest, PreparedComponent, TestInstance, invoke_and_capture_output};
 use camino::Utf8Path;
 use rand::Rng;
 use std::slice;
+use std::sync::{
+    Arc,
+    atomic::{AtomicU64, Ordering},
+};
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
+use wasmtime_wasi::{HostMonotonicClock, WasiCtx};
+
+#[derive(Clone)]
+struct RecordedClock {
+    nanos: Arc<AtomicU64>,
+    calls: Arc<AtomicU64>,
+}
+
+impl HostMonotonicClock for RecordedClock {
+    fn resolution(&self) -> u64 {
+        1
+    }
+
+    fn now(&self) -> u64 {
+        self.calls.fetch_add(1, Ordering::SeqCst);
+        self.nanos.load(Ordering::SeqCst)
+    }
+}
+
+#[test]
+#[test_r::timeout("120s")]
+async fn hrtime_preserves_clock_samples_across_restoration(
+    #[tagged_as("bigint_roundtrip")] prepared: &PreparedComponent,
+) -> anyhow::Result<()> {
+    let clock = RecordedClock {
+        nanos: Arc::new(AtomicU64::new((1 << 53) - 1)),
+        calls: Arc::new(AtomicU64::new(0)),
+    };
+    let mut builder = WasiCtx::builder();
+    builder.monotonic_clock(clock.clone());
+    let mut instance = TestInstance::from_prepared_with_wasi(prepared, builder).await?;
+    // Initialize the component dispatcher without touching process.hrtime.
+    instance
+        .invoke(None, "roundtrip-u64", &[Val::U64(0)])
+        .await?;
+    let mut snapshot = 0;
+    for timestamp in [(1 << 53) - 1, (1 << 53) + 1] {
+        clock.nanos.store(timestamp, Ordering::SeqCst);
+        clock.calls.store(0, Ordering::SeqCst);
+        let result = instance.invoke(None, "sample-hrtime", &[]).await?;
+        assert_eq!(
+            clock.calls.load(Ordering::SeqCst),
+            1,
+            "each cold or warm hrtime call must consume one host sample"
+        );
+        assert_eq!(result, Some(Val::U64(timestamp)));
+        snapshot = timestamp;
+    }
+    clock.nanos.store(snapshot + 7, Ordering::SeqCst);
+    let expected = instance.invoke(None, "elapsed-hrtime", &[]).await?;
+    assert_eq!(expected, Some(Val::U64(7)));
+    drop(instance);
+
+    let mut builder = WasiCtx::builder();
+    builder.monotonic_clock(clock.clone());
+    let mut restored = TestInstance::from_prepared_with_wasi(prepared, builder).await?;
+    restored
+        .invoke(None, "restore-hrtime", &[Val::U64(snapshot)])
+        .await?;
+    clock.calls.store(0, Ordering::SeqCst);
+    assert_eq!(
+        restored.invoke(None, "elapsed-hrtime", &[]).await?,
+        expected
+    );
+    assert_eq!(clock.calls.load(Ordering::SeqCst), 1);
+
+    clock
+        .nanos
+        .store(1_791_286_838_000_000_006, Ordering::SeqCst);
+    assert_eq!(
+        restored
+            .invoke(
+                None,
+                "elapsed-hrtime-tuple",
+                &[Val::U64(1_791_286_837), Val::U32(999_999_999)]
+            )
+            .await?,
+        Some(Val::Tuple(vec![Val::S64(0), Val::U32(7)]))
+    );
+    for timestamp in [1_791_286_838_000_000_007, (1 << 63) + 1, u64::MAX] {
+        clock.nanos.store(timestamp, Ordering::SeqCst);
+        assert_eq!(
+            restored.invoke(None, "sample-hrtime", &[]).await?,
+            Some(Val::U64(timestamp))
+        );
+        assert_eq!(
+            restored.invoke(None, "sample-hrtime-tuple", &[]).await?,
+            Some(Val::Tuple(vec![
+                Val::U64(timestamp / 1_000_000_000),
+                Val::U32((timestamp % 1_000_000_000) as u32)
+            ]))
+        );
+    }
+    Ok(())
+}
+
+#[test_dep(tagged_as = "bigint_roundtrip", scope = PerWorker)]
+async fn prepared_bigint_roundtrip(
+    #[tagged_as("bigint_roundtrip")] compiled: &CompiledTest,
+) -> PreparedComponent {
+    PreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare bigint_roundtrip")
+}
 
 #[test_dep(tagged_as = "bigint_roundtrip", scope = Cloneable)]
 async fn compiled_bigint_roundtrip() -> CompiledTest {
