@@ -19,6 +19,47 @@ import {
   brotli_stream_close,
 } from '__wasm_rquickjs_builtin/zlib_native';
 
+const setPrototypeOf = Object.setPrototypeOf;
+const BufferPrototype = Buffer.prototype;
+const ErrorConstructor = Error;
+const isArrayBufferView = ArrayBuffer.isView;
+const stringStartsWith = Function.prototype.call.bind(String.prototype.startsWith);
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const getTypedArrayBuffer = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'buffer').get,
+);
+const getTypedArrayByteOffset = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteOffset').get,
+);
+const getTypedArrayByteLength = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(TypedArrayPrototype, 'byteLength').get,
+);
+const getDataViewBuffer = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(DataView.prototype, 'buffer').get,
+);
+const getDataViewByteOffset = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(DataView.prototype, 'byteOffset').get,
+);
+const getDataViewByteLength = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(DataView.prototype, 'byteLength').get,
+);
+const getArrayBufferDetached = Function.prototype.call.bind(
+  Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached').get,
+);
+
+function bufferFromNativeBytes(bytes) {
+  setPrototypeOf(bytes, BufferPrototype);
+  return bytes;
+}
+
+function isDetachedArrayBuffer(buffer) {
+  try {
+    return getArrayBufferDetached(buffer);
+  } catch {
+    return false;
+  }
+}
+
 // Capture buffer.kMaxLength at require('zlib') time, matching Node.js CJS behavior
 let _capturedKMaxLength = null;
 const _DEFAULT_KMAXLENGTH = 0x7fffffff;
@@ -275,8 +316,22 @@ export const codes = Object.freeze({
 // ===== Error helpers =====
 
 function makeError(code, message) {
-  const err = new Error(message);
+  const err = new ErrorConstructor(message);
   err.code = code;
+  return err;
+}
+
+function makeZlibError(message, errno) {
+  const err = new ErrorConstructor(message);
+  err.code = errno === Z_BUF_ERROR ? 'Z_BUF_ERROR' : 'Z_DATA_ERROR';
+  err.errno = errno;
+  return err;
+}
+
+function makeBrotliError(code, errno) {
+  const err = new ErrorConstructor('Decompression failed');
+  err.code = code;
+  err.errno = errno;
   return err;
 }
 
@@ -347,8 +402,23 @@ function toBuffer(input) {
   if (Buffer.isBuffer(input)) {
     return input;
   }
-  if (ArrayBuffer.isView(input)) {
-    return Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+  if (isArrayBufferView(input)) {
+    let buffer;
+    let byteOffset;
+    let byteLength;
+    try {
+      buffer = getTypedArrayBuffer(input);
+      byteOffset = getTypedArrayByteOffset(input);
+      byteLength = getTypedArrayByteLength(input);
+    } catch {
+      return Buffer.from(
+        getDataViewBuffer(input),
+        getDataViewByteOffset(input),
+        getDataViewByteLength(input),
+      );
+    }
+    if (isDetachedArrayBuffer(buffer)) return Buffer.alloc(0);
+    return Buffer.from(buffer, byteOffset, byteLength);
   }
   if (input instanceof ArrayBuffer) {
     return Buffer.from(input);
@@ -356,6 +426,19 @@ function toBuffer(input) {
   throw makeTypeError('ERR_INVALID_ARG_TYPE',
     'The "buffer" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
     invalidArgTypeHelper(input));
+}
+
+function toCrcBuffer(input) {
+  if (!Buffer.isBuffer(input) && isArrayBufferView(input)) {
+    try {
+      const buffer = getTypedArrayBuffer(input);
+      if (isDetachedArrayBuffer(buffer)) return Buffer.alloc(0);
+    } catch {
+      const buffer = getDataViewBuffer(input);
+      if (isDetachedArrayBuffer(buffer)) return Buffer.alloc(0);
+    }
+  }
+  return toBuffer(input);
 }
 
 function toUint8Array(buf) {
@@ -656,12 +739,12 @@ class ZlibBase extends Transform {
       }
       if (flushFlag === BROTLI_OPERATION_FINISH || flushFlag === Z_FINISH) {
         const result = brotli_stream_push(this._nativeHandle, new Uint8Array(0), 2);
-        return result ? Buffer.from(result) : Buffer.alloc(0);
+        return result ? bufferFromNativeBytes(result) : Buffer.alloc(0);
       }
       return Buffer.alloc(0);
     } else {
       const result = zlib_stream_push(this._nativeHandle, data, flushFlag);
-      return result ? Buffer.from(result) : Buffer.alloc(0);
+      return result ? bufferFromNativeBytes(result) : Buffer.alloc(0);
     }
   }
 
@@ -678,7 +761,6 @@ class ZlibBase extends Transform {
        'The "chunk" argument must be of type string or an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' +
        invalidArgTypeHelper(chunk));
    }
-
    const buf = toBuffer(chunk);
    const data = toUint8Array(buf);
    this._bytesWritten += data.length;
@@ -705,7 +787,7 @@ class ZlibBase extends Transform {
        return;
      }
      if (result.length > 0) {
-       this.push(Buffer.from(result));
+       this.push(bufferFromNativeBytes(result));
      }
      queueMicrotask(callback);
    } catch (err) {
@@ -732,7 +814,7 @@ class ZlibBase extends Transform {
         return;
       }
       if (result.length > 0) {
-        this.push(Buffer.from(result));
+        this.push(bufferFromNativeBytes(result));
       }
       this._closeHandle();
       callback();
@@ -915,7 +997,7 @@ class _BrotliDecompress extends ZlibBase {
         return;
       }
       if (result.length > 0) {
-        const ok = this.push(Buffer.from(result));
+        const ok = this.push(bufferFromNativeBytes(result));
         if (!ok) {
           this._brotliFlushCb = callback;
           return;
@@ -936,7 +1018,7 @@ class _BrotliDecompress extends ZlibBase {
           callback();
           return;
         }
-        const ok = this.push(Buffer.from(chunk));
+        const ok = this.push(bufferFromNativeBytes(chunk));
         if (!ok) {
           this._brotliFlushCb = callback;
           return;
@@ -1023,7 +1105,7 @@ function doSyncCompress(data, opts, windowBitsOverride, mode) {
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Compression failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (validated.info) {
     const EngineClass = windowBitsOverride >= 24 ? _Gzip :
                         windowBitsOverride < 0 ? _DeflateRaw : _Deflate;
@@ -1038,11 +1120,18 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
   const wb = windowBitsOverride !== undefined ? windowBitsOverride : validated.windowBits;
-  const result = zlib_decompress_sync(uint8, wb);
+  const [result, errorMessage, errno] = zlib_decompress_sync(
+    uint8,
+    wb,
+    validated.finishFlush,
+  );
+  if (errno !== 0) {
+    throw makeZlibError(errorMessage, errno);
+  }
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Decompression failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (output.length > maxLen) {
     throw makeRangeError('ERR_BUFFER_TOO_LARGE',
       `Cannot create a Buffer larger than ${maxLen} bytes`);
@@ -1094,7 +1183,7 @@ export function brotliCompressSync(data, opts) {
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Initialization failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (validated.info) {
     return { buffer: output, engine: new _BrotliCompress(opts) };
   }
@@ -1106,11 +1195,19 @@ export function brotliDecompressSync(data, opts) {
   const maxLen = validated.maxOutputLength !== undefined ? validated.maxOutputLength : _getKMaxLength();
   const buf = toBuffer(data);
   const uint8 = toUint8Array(buf);
-  const result = _brotli_decompress_sync(uint8);
+  const [result, errorMessage, errno] = _brotli_decompress_sync(
+    uint8,
+    validated.finishFlush,
+  );
+  if (errno !== 0) {
+    throw typeof errorMessage === 'string' && stringStartsWith(errorMessage, 'ERR_')
+      ? makeBrotliError(errorMessage, errno)
+      : makeZlibError(errorMessage, errno);
+  }
   if (result == null) {
     throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Brotli decompression failed');
   }
-  const output = Buffer.from(result);
+  const output = bufferFromNativeBytes(result);
   if (output.length > maxLen) {
     throw makeRangeError('ERR_BUFFER_TOO_LARGE',
       `Cannot create a Buffer larger than ${maxLen} bytes`);
@@ -1153,7 +1250,7 @@ export function brotliDecompress(data, opts, callback) { asyncConvenience(brotli
 // ===== CRC32 =====
 
 export function crc32(data, value) {
-  if (typeof data !== 'string' && !Buffer.isBuffer(data) && !ArrayBuffer.isView(data)) {
+  if (typeof data !== 'string' && !Buffer.isBuffer(data) && !isArrayBufferView(data)) {
     throw makeTypeError('ERR_INVALID_ARG_TYPE',
       'The "data" argument must be of type string or an instance of Buffer, TypedArray, or DataView. Received ' +
       (data === null ? 'null' : data === undefined ? 'undefined' : typeof data === 'function' ? 'function ' + (data.name || '') : typeof data === 'object' ? 'an instance of ' + (data.constructor ? data.constructor.name : 'Object') : 'type ' + typeof data + ' (' + data + ')'));
@@ -1166,7 +1263,7 @@ export function crc32(data, value) {
     }
   }
 
-  const buf = toBuffer(data);
+  const buf = toCrcBuffer(data);
   const uint8 = toUint8Array(buf);
   const initial = (value !== undefined) ? (value >>> 0) : 0;
   // Native returns i32; convert to unsigned u32

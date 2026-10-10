@@ -228,18 +228,71 @@ export async function run() {
              throw new Error('cjs-typescript-stack');
          };`,
     );
+    fs.writeFileSync(
+        '/typescript-transform-runtime/stack-cjs-import.cts',
+        `enum StackShift { Value }
+         exports.failColdImport = function failColdImport(): never {
+             throw new Error('cold-import-cjs-typescript-stack');
+         };`,
+    );
+    let cjsPublicCompileCalls = 0;
+    let cjsPublicCompileContract = true;
+    let coldCjsPublicLoadCalls = 0;
+    let coldCjsPublicCompileCalls = 0;
     let cjsRuntimeStack;
-    const cjsStackModule = require('/typescript-transform-runtime/stack-cjs.cts');
-    try {
-        cjsStackModule.failCjs();
-    } catch (error) {
-        cjsRuntimeStack = error.stack;
-    }
     let importedCjsRuntimeStack;
+    let coldImportedCjsRuntimeStack;
+    const originalCjsLoad = module._load;
+    const originalCjsCompile = module.prototype._compile;
+    module._load = function publicCjsLoad(request) {
+        if (request === '/typescript-transform-runtime/stack-cjs-import.cts') {
+            coldCjsPublicLoadCalls++;
+        }
+        return originalCjsLoad.apply(this, arguments);
+    };
+    module.prototype._compile = function publicCjsCompile(content, filename, format) {
+        if (filename === '/typescript-transform-runtime/stack-cjs.cts') {
+            cjsPublicCompileCalls++;
+            cjsPublicCompileContract = cjsPublicCompileContract &&
+                this instanceof module &&
+                arguments.length === 3 &&
+                format === 'commonjs-typescript' &&
+                String(content).includes('enum StackShift');
+        }
+        if (filename === '/typescript-transform-runtime/stack-cjs-import.cts') {
+            coldCjsPublicCompileCalls++;
+            cjsPublicCompileContract = cjsPublicCompileContract &&
+                this instanceof module &&
+                arguments.length === 3 &&
+                format === 'commonjs-typescript' &&
+                String(content).includes('enum StackShift');
+            content = String(content).replace(
+                'cold-import-cjs-typescript-stack',
+                'hook-rewritten-cjs-typescript-stack',
+            );
+        }
+        return originalCjsCompile.call(this, content, filename, format);
+    };
     try {
-        (await import('/typescript-transform-runtime/stack-cjs.cts')).default.failCjs();
-    } catch (error) {
-        importedCjsRuntimeStack = error.stack;
+        const cjsStackModule = require('/typescript-transform-runtime/stack-cjs.cts');
+        try {
+            cjsStackModule.failCjs();
+        } catch (error) {
+            cjsRuntimeStack = error.stack;
+        }
+        try {
+            (await import('/typescript-transform-runtime/stack-cjs.cts')).default.failCjs();
+        } catch (error) {
+            importedCjsRuntimeStack = error.stack;
+        }
+        try {
+            (await import('/typescript-transform-runtime/stack-cjs-import.cts')).default.failColdImport();
+        } catch (error) {
+            coldImportedCjsRuntimeStack = error.stack;
+        }
+    } finally {
+        module._load = originalCjsLoad;
+        module.prototype._compile = originalCjsCompile;
     }
     fs.writeFileSync(
         '/typescript-transform-runtime/stack-reexport-child.cts',
@@ -421,8 +474,13 @@ export async function run() {
         executionInline: executionInline.value,
         largeInlineExecution: largeInlineExecution.value,
         esmRuntimeStack,
+        cjsPublicCompileCalls,
+        cjsPublicCompileContract,
+        coldCjsPublicLoadCalls,
+        coldCjsPublicCompileCalls,
         cjsRuntimeStack,
         importedCjsRuntimeStack,
+        coldImportedCjsRuntimeStack,
         rewrittenCjsRuntimeStack,
         disabledRuntimeStack,
         executionEntryStack,

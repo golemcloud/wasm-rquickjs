@@ -4011,6 +4011,21 @@ impl TestInstance {
         Self::from_prepared(&prepared).await
     }
 
+    pub async fn from_prepared_with_wasi(
+        prepared: &PreparedComponent,
+        wasi: wasmtime_wasi::WasiCtxBuilder,
+    ) -> anyhow::Result<Self> {
+        Self::from_parts(
+            &prepared.engine,
+            &prepared.linker,
+            &prepared.component,
+            None,
+            false,
+            wasi,
+        )
+        .await
+    }
+
     pub async fn new_with_memory_tracking(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let prepared = if test_prepared_component_cache_enabled() {
             prepared_component_for_path(wasm_path)?
@@ -4023,6 +4038,7 @@ impl TestInstance {
             &prepared.component,
             None,
             true,
+            WasiCtx::builder(),
         )
         .await
     }
@@ -4034,6 +4050,7 @@ impl TestInstance {
             &prepared.component,
             None,
             false,
+            WasiCtx::builder(),
         )
         .await
     }
@@ -4047,6 +4064,7 @@ impl TestInstance {
             &prepared.component,
             None,
             true,
+            WasiCtx::builder(),
         )
         .await
     }
@@ -4058,6 +4076,7 @@ impl TestInstance {
             &prepared.component,
             Some(Arc::new(Mutex::new(Vec::new()))),
             false,
+            WasiCtx::builder(),
         )
         .await
     }
@@ -4068,6 +4087,7 @@ impl TestInstance {
         component: &Component,
         golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
         track_linear_memory: bool,
+        mut ctx_builder: wasmtime_wasi::WasiCtxBuilder,
     ) -> anyhow::Result<Self> {
         let stdout_file = NamedUtf8TempFile::new()?;
         let stderr_file = NamedUtf8TempFile::new()?;
@@ -4076,7 +4096,6 @@ impl TestInstance {
         fs::write(temp_dir.path().join("input.txt"), "test file contents")?;
         fs::create_dir(temp_dir.path().join("test"))?;
 
-        let mut ctx_builder = WasiCtx::builder();
         ctx_builder
             .stdout(OutputFile::new(stdout_file.reopen()?))
             .stderr(OutputFile::new(stderr_file.reopen()?))

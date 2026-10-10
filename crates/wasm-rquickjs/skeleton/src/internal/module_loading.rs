@@ -9783,8 +9783,13 @@ impl Loader for CjsCompatLoader {
                     .as_ref()
                     .is_some_and(|scope| scope.is_node_modules_package));
 
-        let source_path = module_source_filesystem_path(ctx, path);
-        let source = read_module_source_or_throw(ctx, path, &source_path)?;
+        let url = path_to_file_url(path);
+        let source = if let Some(source) = require_esm_source_override(ctx, &fs_abs_path, &url) {
+            source
+        } else {
+            let source_path = module_source_filesystem_path(ctx, path);
+            read_module_source_or_throw(ctx, path, &source_path)?
+        };
         #[cfg(feature = "typescript-runtime")]
         let original_source_for_cache = source.clone();
         #[cfg(feature = "typescript-runtime")]
@@ -9830,7 +9835,6 @@ impl Loader for CjsCompatLoader {
             source
         };
 
-        let url = path_to_file_url(path);
         let force_module = require_esm_forced_module(ctx, &fs_abs_path, &url);
 
         // .cjs files are always CommonJS; JS-like files outside a module package
@@ -10327,6 +10331,17 @@ fn require_esm_forced_module(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> b
     };
     registry.get::<_, bool>(filename).unwrap_or(false)
         || registry.get::<_, bool>(file_url).unwrap_or(false)
+}
+
+fn require_esm_source_override(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> Option<String> {
+    let globals = ctx.globals();
+    let registry = globals
+        .get::<_, Object>("__wasm_rquickjs_require_esm_source_override")
+        .ok()?;
+    registry
+        .get::<_, String>(filename)
+        .or_else(|_| registry.get::<_, String>(file_url))
+        .ok()
 }
 
 const LOADER_REALM_QUERY_PARAM: &str = "__wasm_rquickjs_loader_realm";

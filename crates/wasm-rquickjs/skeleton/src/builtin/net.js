@@ -1125,9 +1125,10 @@ Socket.prototype._write = function _write(chunk, encoding, callback) {
         let writeError;
         try {
             const timeoutCheckpoint = () => {
-                // P2 cannot run the ordinary JS timer while its native write is
-                // waiting for capacity. Rust consumes its matching deadline;
-                // progress or a listener can explicitly arm the next one.
+                // The ordinary JS timer and the native P2 checkpoint can become
+                // due together. Rust invokes this only after consuming the
+                // still-current native deadline; clearing here cancels the paired
+                // JS timer before a listener can explicitly arm the next one.
                 this._clearTimeout();
                 try {
                     this._onTimeout();
