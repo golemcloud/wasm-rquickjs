@@ -345,14 +345,14 @@ fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(&manifest)?;
     let remote_patch = concat!(
         "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
-        "rev = \"2be5f1a95e542dea91bcf5817b2434724e180bab\" }"
+        "branch = \"gol804-websocket-current-generator\" }"
     );
     let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
     let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
     let updated = contents.replace(remote_patch, &local_patch);
     assert_ne!(
         updated, contents,
-        "generated Cargo.toml did not contain the expected golem-websocket revision patch"
+        "generated Cargo.toml did not contain the expected golem-websocket branch patch"
     );
     std::fs::write(manifest, updated)?;
     Ok(())
