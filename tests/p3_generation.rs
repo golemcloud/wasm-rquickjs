@@ -345,7 +345,7 @@ fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(&manifest)?;
     let remote_patch = concat!(
         "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
-        "branch = \"wasi-p3\" }"
+        "branch = \"gol804-websocket-current-generator\" }"
     );
     let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
     let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
@@ -1587,14 +1587,24 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
             package bug:p3-websocket;
 
             world p3-websocket {
+              import golem:websocket/client@1.5.0;
               export run: async func() -> string;
             }
         "#},
         indoc! {r#"
+            import { WebsocketConnection } from 'golem:websocket/client@1.5.0';
+
             export async function run() {
-              return `${typeof WebSocket},${typeof WebSocketStream}`;
+              return `${typeof WebSocket},${typeof WebSocketStream},${typeof WebsocketConnection.connect}`;
             }
         "#},
+    )?;
+
+    let websocket_deps = temp.path().join("wit/deps/golem-websocket");
+    std::fs::create_dir_all(&websocket_deps)?;
+    std::fs::write(
+        websocket_deps.join("websocket.wit"),
+        include_str!("../crates/golem-websocket/wit-p3/deps/golem-websocket/websocket.wit"),
     )?;
 
     generate_p3(temp.path())?;

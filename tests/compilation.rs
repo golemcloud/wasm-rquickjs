@@ -1,6 +1,6 @@
 test_r::enable!();
 
-use crate::common::{FeatureCombination, collect_example_paths};
+use crate::common::{FeatureCombination, collect_example_paths, use_local_golem_websocket};
 use camino::Utf8Path;
 use std::process::Command;
 use test_r::core::{DynamicTestRegistration, TestProperties};
@@ -58,6 +58,7 @@ fn compilation_test(
         &wrapper_crate_root,
         None,
     )?;
+    use_local_golem_websocket(&wrapper_crate_root)?;
 
     println!("Compiling wrapper crate in {wrapper_crate_root}");
     let mut cmd = Command::new("cargo");

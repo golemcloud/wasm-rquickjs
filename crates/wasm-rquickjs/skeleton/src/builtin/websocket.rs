@@ -77,7 +77,7 @@ fn ws_connect_impl(
         )])
     };
 
-    match WebsocketConnection::connect(&url, headers.as_deref()) {
+    match WebsocketConnection::connect(&url, headers.as_deref(), None) {
         Ok(conn) => Ok(WsConnection {
             inner: RefCell::new(Some(Rc::new(conn))),
         }),
