@@ -1044,7 +1044,7 @@ dependencies = [
 [[package]]
 name = "golem-websocket"
 version = "0.0.3"
-source = "git+https://github.com/golemcloud/wasm-rquickjs?rev=2be5f1a95e542dea91bcf5817b2434724e180bab#2be5f1a95e542dea91bcf5817b2434724e180bab"
+source = "git+https://github.com/golemcloud/wasm-rquickjs?branch=gol804-websocket-current-generator#da9ee6aa8943533547090e58954db4f7fb124580"
 dependencies = [
  "wit-bindgen 0.58.0",
 ]
