@@ -213,4 +213,4 @@ golem-websocket = { version = "0.0.3", default-features = false, optional = true
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 # The bridge includes the target-specific receive signatures and reconstruction policy.
-golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", rev = "2be5f1a95e542dea91bcf5817b2434724e180bab" }
+golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", branch = "gol804-websocket-current-generator" }
