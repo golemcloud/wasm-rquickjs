@@ -24,6 +24,25 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
+const BUILTIN_FACADE_PRIMORDIALS_JS: &str = r#"
+(() => {
+  const global = globalThis;
+  const create = Object.create.bind(Object);
+  const defineProperty = Object.defineProperty.bind(Object);
+  const hasOwn = Function.prototype.call.bind(Object.prototype.hasOwnProperty);
+  const keys = Object.keys.bind(Object);
+  const install = (name, value) => defineProperty(global, name, {
+    value,
+    writable: false,
+    configurable: false,
+  });
+  install('__wasm_rquickjs_builtin_facade_object_create', (prototype) => create(prototype));
+  install('__wasm_rquickjs_builtin_facade_define_property', (target, key, descriptor) => defineProperty(target, key, descriptor));
+  install('__wasm_rquickjs_builtin_facade_has_own', (target, key) => hasOwn(target, key));
+  install('__wasm_rquickjs_builtin_facade_object_keys', (value) => keys(value));
+})();
+"#;
+
 pub(crate) const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_meta_resolve_global = globalThis;
 function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
   baseUrl = String(baseUrl);
@@ -326,12 +345,85 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     cache = Object.create(null);
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_attr_inflight = cache;
   }
-  if (cache[completedKey] !== undefined) {
-    var cached = cache[completedKey];
-    if (cached.preparedKey !== key) {
-      discardGeneratedRewriteToken();
+  var cacheIdentityKey = completedKey;
+  var validationPreparedKey = key;
+  var packageIdentityResolved = false;
+  if (!/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(key)) {
+    var registeredLoadersActive =
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
+      __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0;
+    if (!registeredLoadersActive) {
+      try {
+        var resolvedIdentity;
+        if (originalSpecifier.startsWith('.') || originalSpecifier.startsWith('/')) {
+          resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve(String(baseUrl), originalSpecifier);
+        } else {
+          resolvedIdentity = typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
+            ? __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_builtin(originalSpecifier)
+            : undefined;
+          if (
+            resolvedIdentity === undefined &&
+            typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_dynamic_import_cache_resolve_package === 'function'
+          ) {
+            resolvedIdentity = __wasm_rquickjs_import_attr_global.__wasm_rquickjs_dynamic_import_cache_resolve_package(String(baseUrl), originalSpecifier);
+            packageIdentityResolved = resolvedIdentity !== undefined && resolvedIdentity !== null;
+          }
+        }
+        if (resolvedIdentity === undefined || resolvedIdentity === null) {
+          cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
+        } else {
+          cacheIdentityKey = parsedOptions.typeValue === 'json'
+            ? 'import-attr:json:' + resolvedIdentity
+            : resolvedIdentity;
+          validationPreparedKey = resolvedIdentity + key.slice(originalSpecifier.length);
+        }
+      } catch (_) {
+        cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
+      }
+    } else {
+      cacheIdentityKey = String(baseUrl) + '\0' + completedKey;
     }
-    return cached.promise;
+  }
+  // Keep one module identity per resolved key and loader realm while
+  // re-entering the importer once per resolve request and parent so resolution
+  // still observes filesystem changes and package-warning semantics.
+  var realmMatch = /(?:[?&])__wasm_rquickjs_loader_realm=([^&#]*)/.exec(String(baseUrl));
+  var cacheKey = cacheIdentityKey + (realmMatch ? '\0loader-realm=' + realmMatch[1] : '');
+  var parentKey = String(baseUrl);
+  var parentVisitKey = parentKey + '\0' + originalSpecifier + '\0import-type=' +
+    (parsedOptions.typeValue === undefined ? '' : parsedOptions.typeValue);
+  if (cache[cacheKey] !== undefined) {
+    var cached = cache[cacheKey];
+    if (cached.parents[parentVisitKey] !== undefined) {
+      if (cached.preparedKey !== key) {
+        discardGeneratedRewriteToken();
+      }
+      return cached.parents[parentVisitKey];
+    }
+    try {
+      if (
+        packageIdentityResolved &&
+        typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package === 'function'
+      ) {
+        __wasm_rquickjs_import_attr_global.__wasm_rquickjs_import_meta_resolve_package(String(baseUrl), originalSpecifier);
+      }
+    } catch (error) {
+      discardGeneratedRewriteToken();
+      throw error;
+    }
+    var validationPromise = Promise.resolve(importFn(cached.preparedKey)).then(function() {
+      return cached.promise;
+    });
+    cached.parents[parentVisitKey] = validationPromise;
+    try {
+      var validated = await validationPromise;
+      discardGeneratedRewriteToken();
+      return validated;
+    } catch (error) {
+      if (cached.parents[parentVisitKey] === validationPromise) delete cached.parents[parentVisitKey];
+      discardGeneratedRewriteToken();
+      throw error;
+    }
   }
   if (
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
@@ -343,14 +435,16 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     await __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph(prepared, originalSpecifier, baseUrl, parsedOptions);
   }
   var promise = importFn(prepared);
-  var entry = { promise: promise, preparedKey: key };
-  cache[completedKey] = entry;
+  var parents = Object.create(null);
+  parents[parentVisitKey] = promise;
+  var entry = { promise: promise, preparedKey: validationPreparedKey, parents: parents };
+  cache[cacheKey] = entry;
   try {
     var result = await promise;
     discardGeneratedRewriteToken();
     return result;
   } catch (error) {
-    if (cache[completedKey] === entry) delete cache[completedKey];
+    if (cache[cacheKey] === entry) delete cache[cacheKey];
     discardGeneratedRewriteToken();
     throw error;
   } finally {
@@ -416,6 +510,62 @@ impl Resolver for DataUrlResolver {
     }
 }
 
+struct PublicBuiltinAliasResolver;
+
+const PUBLIC_BUILTIN_FACADE_PREFIX: &str = "__wasm_rquickjs_builtin/public-facade/";
+
+impl Resolver for PublicBuiltinAliasResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if let Some(public_name) = name.strip_prefix(PUBLIC_BUILTIN_FACADE_PREFIX) {
+            return crate::builtin::canonical_public_builtin_name(public_name)
+                .map(str::to_string)
+                .ok_or_else(|| Error::new_resolving(base, name));
+        }
+        if let Some(implementation) =
+            crate::builtin::syncable_builtin_implementation_import(base, name)
+        {
+            return Ok(implementation);
+        }
+        crate::builtin::canonical_public_builtin_alias(name)
+            .map(str::to_string)
+            .ok_or_else(|| Error::new_resolving(base, name))
+    }
+}
+
+/// Resolves generated component modules before schemeless builtin aliases while
+/// keeping the `node:` and private namespaces owned by the runtime.
+struct EmbeddedModuleResolver;
+
+pub(crate) fn is_reserved_embedded_module_name(name: &str) -> bool {
+    name.starts_with("node:") || PrivateBuiltinResolverGuard::is_private_builtin(name)
+}
+
+impl Resolver for EmbeddedModuleResolver {
+    fn resolve<'js>(
+        &mut self,
+        _ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+    ) -> rquickjs::Result<String> {
+        if !PrivateBuiltinResolverGuard::is_private_builtin(base)
+            && !is_reserved_embedded_module_name(name)
+            && (name == crate::JS_EXPORT_MODULE_NAME
+                || crate::JS_ADDITIONAL_MODULES
+                    .iter()
+                    .any(|(module_name, _)| name == *module_name))
+        {
+            Ok(name.to_string())
+        } else {
+            Err(Error::new_resolving(base, name))
+        }
+    }
+}
+
 struct PrivateBuiltinResolverGuard;
 
 impl PrivateBuiltinResolverGuard {
@@ -424,11 +574,11 @@ impl PrivateBuiltinResolverGuard {
     }
 
     fn is_user_referrer(base: &str) -> bool {
-        base == crate::JS_EXPORT_MODULE_NAME
+        (base == crate::JS_EXPORT_MODULE_NAME && !is_reserved_embedded_module_name(base))
             || base == "<input>"
             || crate::JS_ADDITIONAL_MODULES
                 .iter()
-                .any(|(name, _)| base == *name)
+                .any(|(name, _)| base == *name && !is_reserved_embedded_module_name(name))
             || base.starts_with("data:")
             || base.starts_with("file:")
             || base.starts_with('/')
@@ -2933,6 +3083,82 @@ fn collect_cjs_global_binding_names_in_variable_declaration(
     names
 }
 
+fn collect_binding_names_in_variable_declaration(
+    source: &str,
+    start: usize,
+    end: usize,
+) -> Vec<String> {
+    let bytes = source.as_bytes();
+    let mut names = Vec::new();
+    let mut position = start;
+    let mut in_binding = true;
+    let mut paren = 0usize;
+    let mut brace = 0usize;
+    let mut bracket = 0usize;
+    while position < end && position < bytes.len() {
+        if in_binding
+            && bytes[position] == b'['
+            && let Some(close) = find_matching_bracket(source, position)
+            && close < end
+            && bytes.get(skip_ws_comments(source, close + 1)) == Some(&b':')
+        {
+            position = close + 1;
+            continue;
+        }
+        match bytes[position] {
+            b'\'' | b'"' | b'`' => {
+                position = skip_string_or_template(source, position);
+                continue;
+            }
+            b'/' if position + 1 < bytes.len() && bytes[position + 1] == b'/' => {
+                position += 2;
+                while position < end
+                    && position < bytes.len()
+                    && !matches!(bytes[position], b'\n' | b'\r')
+                {
+                    position += 1;
+                }
+                continue;
+            }
+            b'/' if position + 1 < bytes.len() && bytes[position + 1] == b'*' => {
+                position += 2;
+                while position + 1 < end
+                    && position + 1 < bytes.len()
+                    && !(bytes[position] == b'*' && bytes[position + 1] == b'/')
+                {
+                    position += 1;
+                }
+                position = (position + 2).min(end).min(bytes.len());
+                continue;
+            }
+            b'/' if is_regex_literal_start(source, position) => {
+                position = skip_regex_literal(source, position);
+                continue;
+            }
+            b'(' => paren += 1,
+            b')' => paren = paren.saturating_sub(1),
+            b'{' => brace += 1,
+            b'}' => brace = brace.saturating_sub(1),
+            b'[' => bracket += 1,
+            b']' => bracket = bracket.saturating_sub(1),
+            b'=' if paren == 0 && brace == 0 && bracket == 0 => in_binding = false,
+            b',' if paren == 0 && brace == 0 && bracket == 0 => in_binding = true,
+            _ => {}
+        }
+
+        if in_binding
+            && let Some((name, name_end)) = read_ident(source, position)
+            && cjs_global_identifier_is_binding_name(source, position, name_end)
+        {
+            add_unique(&mut names, name);
+            position = name_end;
+            continue;
+        }
+        position = next_char_boundary(source, position);
+    }
+    names
+}
+
 fn cjs_global_identifier_is_binding_name(source: &str, pos: usize, name_end: usize) -> bool {
     if object_pattern_property_key_without_binding(source, name_end) {
         return false;
@@ -3304,6 +3530,17 @@ fn static_registered_file_url_from_id(id: &str) -> Option<String> {
 
 impl Resolver for RegisteredLoaderResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        // Registered user hooks may observe public builtin requests, but the
+        // runtime-private implementation graph must remain loader-owned. A
+        // public facade imports its private implementation only after a user
+        // hook may have been registered, and forwarding that edge would let an
+        // async user hook break builtin initialization.
+        if PrivateBuiltinResolverGuard::is_private_builtin(base)
+            || PrivateBuiltinResolverGuard::is_private_builtin(name)
+        {
+            return Err(Error::new_resolving(base, name));
+        }
+
         let globals = ctx.globals();
         let Ok(resolve_fn) =
             globals.get::<_, Function>("__wasm_rquickjs_resolve_static_registered_loader")
@@ -6556,6 +6793,40 @@ fn import_meta_resolve_package(
     }
 }
 
+fn dynamic_import_cache_resolve_package(
+    ctx: Ctx<'_>,
+    base_url: String,
+    specifier: String,
+) -> rquickjs::Result<Option<String>> {
+    let base = if let Some(path) = FileUrlResolver::file_url_to_path(&base_url) {
+        path
+    } else {
+        base_url
+    };
+    let base = FileUrlResolver::file_url_package_resolution_base(base);
+    let resolver = NodeModulesResolver;
+    let conditions = NodeModulesResolver::conditions_from_global(
+        &ctx,
+        NodePackageResolveMode::EsmImport.condition_mode(),
+    );
+    let result = try_resolve_package_with_conditions(
+        &ctx,
+        &resolver,
+        &base,
+        &specifier,
+        &conditions,
+        NodePackageResolveMode::EsmImport,
+        false,
+    )?;
+    match result {
+        Ok(Some(resolved)) => {
+            let resolved = esm_package_identity_path(&ctx, &resolved);
+            Ok(Some(path_to_file_url(&resolved)))
+        }
+        Ok(None) | Err(_) => Ok(None),
+    }
+}
+
 fn import_meta_resolve_path(base_url: String, specifier: String) -> Option<String> {
     if !(specifier.starts_with('.') || specifier.starts_with('/')) {
         return None;
@@ -9130,9 +9401,7 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
     let statement_starts = statement_starts(source);
     let _ = scan_code_positions_with_brace_depth(source, true, |i, current, brace_depth| {
         let starts_export_target = matches!(current, b'e' | b'm');
-        if starts_export_target
-            && let Some((name, next)) = parse_export_member(source, i)
-        {
+        if starts_export_target && let Some((name, next)) = parse_export_member(source, i) {
             analysis.is_cjs = true;
             add_unique(&mut analysis.exports, name);
             return ControlFlow::Continue(Some(next));
@@ -9169,8 +9438,7 @@ fn analyze_cjs_exports(source: &str) -> CjsExportAnalysis {
             return ControlFlow::Continue(Some(next));
         }
         if current == b'm'
-            && let Some((exports, reexports, next)) =
-                parse_module_exports_object_literal(source, i)
+            && let Some((exports, reexports, next)) = parse_module_exports_object_literal(source, i)
         {
             analysis.is_cjs = true;
             analysis.reexports.clear();
@@ -10696,7 +10964,7 @@ struct StaticModuleEdge {
 fn module_statement_end(source: &str, start: usize) -> usize {
     let bytes = source.as_bytes();
     let mut i = start;
-    let (mut braces, mut parens) = (0usize, 0usize);
+    let (mut braces, mut parens, mut brackets) = (0usize, 0usize, 0usize);
     while i < bytes.len() {
         if let Some(next) = skip_non_code(source, i, true) {
             i = next;
@@ -10707,7 +10975,9 @@ fn module_statement_end(source: &str, start: usize) -> usize {
             b'}' => braces = braces.saturating_sub(1),
             b'(' => parens += 1,
             b')' => parens = parens.saturating_sub(1),
-            b';' | b'\n' | b'\r' if braces == 0 && parens == 0 => return i,
+            b'[' => brackets += 1,
+            b']' => brackets = brackets.saturating_sub(1),
+            b';' | b'\n' | b'\r' if braces == 0 && parens == 0 && brackets == 0 => return i,
             _ => {}
         }
         i = next_char_boundary(source, i);
@@ -10804,6 +11074,138 @@ fn collect_static_module_edges(source: &str) -> Vec<StaticModuleEdge> {
         ControlFlow::Continue(None)
     });
     edges
+}
+
+fn collect_named_export_clause(
+    source: &str,
+    open: usize,
+    names: &mut Vec<String>,
+) -> Option<usize> {
+    let bytes = source.as_bytes();
+    let close = find_matching_brace(source, open)?;
+    let mut cursor = open + 1;
+    while cursor < close {
+        cursor = skip_ws_comments(source, cursor);
+        if cursor >= close {
+            break;
+        }
+        let (local, next) = if matches!(bytes[cursor], b'\'' | b'"') {
+            read_js_string(source, cursor)?
+        } else {
+            read_ident(source, cursor)?
+        };
+        cursor = skip_ws_comments(source, next);
+        let exported = if let Some(as_end) = parse_ident_name(source, cursor, "as") {
+            cursor = skip_ws_comments(source, as_end);
+            let (exported, next) = if matches!(bytes[cursor], b'\'' | b'"') {
+                read_js_string(source, cursor)?
+            } else {
+                read_ident(source, cursor)?
+            };
+            cursor = next;
+            exported
+        } else {
+            local
+        };
+        if exported != "default" {
+            add_unique(names, exported);
+        }
+        cursor = skip_ws_comments(source, cursor);
+        if cursor < close && bytes[cursor] == b',' {
+            cursor += 1;
+        }
+    }
+    Some(close + 1)
+}
+
+pub(crate) fn collect_static_esm_export_names(source: &str) -> Vec<String> {
+    let bytes = source.as_bytes();
+    let mut names = Vec::new();
+    let _ = scan_code_positions(source, true, |position, _| {
+        let Some(export_end) = parse_free_ident_name(source, position, "export") else {
+            return ControlFlow::Continue(None);
+        };
+        let mut cursor = skip_ws_comments(source, export_end);
+        if parse_ident_name(source, cursor, "default").is_some() {
+            return ControlFlow::Continue(Some(cursor));
+        }
+        if bytes.get(cursor) == Some(&b'{') {
+            let Some(end) = collect_named_export_clause(source, cursor, &mut names) else {
+                return ControlFlow::Break(());
+            };
+            return ControlFlow::Continue(Some(end));
+        }
+        if bytes.get(cursor) == Some(&b'*') {
+            cursor = skip_ws_comments(source, cursor + 1);
+            if let Some(as_end) = parse_ident_name(source, cursor, "as") {
+                cursor = skip_ws_comments(source, as_end);
+                let parsed = if bytes
+                    .get(cursor)
+                    .is_some_and(|byte| matches!(*byte, b'\'' | b'"'))
+                {
+                    read_js_string(source, cursor)
+                } else {
+                    read_ident(source, cursor)
+                };
+                if let Some((name, end)) = parsed {
+                    add_unique(&mut names, name);
+                    return ControlFlow::Continue(Some(end));
+                }
+            }
+            return ControlFlow::Continue(Some(cursor));
+        }
+        if let Some(async_end) = parse_ident_name(source, cursor, "async") {
+            cursor = skip_ws_comments(source, async_end);
+        }
+        if let Some(keyword_end) = parse_variable_declaration_keyword(source, cursor)
+            && let Some(start) = parse_variable_declaration_binding_start(source, keyword_end)
+        {
+            let end = module_statement_end(source, start);
+            for name in collect_binding_names_in_variable_declaration(source, start, end) {
+                add_unique(&mut names, name);
+            }
+            return ControlFlow::Continue(Some(end));
+        }
+        if let Some(function_end) = parse_ident_name(source, cursor, "function") {
+            let mut name_start = skip_ws_comments(source, function_end);
+            if bytes.get(name_start) == Some(&b'*') {
+                name_start = skip_ws_comments(source, name_start + 1);
+            }
+            if let Some((name, _)) = read_ident(source, name_start) {
+                add_unique(&mut names, name);
+            }
+            return ControlFlow::Continue(Some(name_start));
+        }
+        if let Some(class_end) = parse_ident_name(source, cursor, "class") {
+            let name_start = skip_ws_comments(source, class_end);
+            if let Some((name, _)) = read_ident(source, name_start) {
+                add_unique(&mut names, name);
+            }
+            return ControlFlow::Continue(Some(name_start));
+        }
+        ControlFlow::Continue(Some(cursor))
+    });
+    names.sort();
+    names
+}
+
+pub(crate) fn has_static_esm_star_reexport(source: &str) -> bool {
+    scan_code_positions(source, true, |position, _| {
+        let Some(export_end) = parse_free_ident_name(source, position, "export") else {
+            return ControlFlow::Continue(None);
+        };
+        let mut cursor = skip_ws_comments(source, export_end);
+        if source.as_bytes().get(cursor) != Some(&b'*') {
+            return ControlFlow::Continue(Some(cursor));
+        }
+        cursor = skip_ws_comments(source, cursor + 1);
+        if parse_ident_name(source, cursor, "as").is_some() {
+            ControlFlow::Continue(Some(cursor))
+        } else {
+            ControlFlow::Break(())
+        }
+    })
+    .is_break()
 }
 
 fn collect_literal_call_specifiers(source: &str, names: &[String]) -> Vec<String> {
@@ -11619,11 +12021,8 @@ impl Loader for VirtualBuiltinModuleLoader {
 }
 
 pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncContext) {
-    let mut builtin_resolver = BuiltinResolver::default().with_module(crate::JS_EXPORT_MODULE_NAME);
-    for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-        builtin_resolver = builtin_resolver.with_module(name.to_string());
-    }
-    let builtin_resolver = crate::modules::add_native_module_resolvers(builtin_resolver);
+    let builtin_resolver =
+        crate::modules::add_native_module_resolvers(BuiltinResolver::default());
     let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
     let file_resolver = FileResolver::default()
@@ -11644,6 +12043,8 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             RegisteredLoaderResolver,
         ),
         (
+            EmbeddedModuleResolver,
+            PublicBuiltinAliasResolver,
             builtin_resolver,
             NodeBuiltinNamespaceGuard,
             NodeModulesResolver,
@@ -11652,11 +12053,17 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         (CjsEvalResolver, file_resolver, NodeModuleErrorResolver),
     );
 
-    let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default().with_module(
-        crate::JS_EXPORT_MODULE_NAME,
-        virtual_builtin_module_source(crate::js_export_module()),
-    );
+    let mut virtual_builtin_loader = VirtualBuiltinModuleLoader::default();
+    if !is_reserved_embedded_module_name(crate::JS_EXPORT_MODULE_NAME) {
+        virtual_builtin_loader = virtual_builtin_loader.with_module(
+            crate::JS_EXPORT_MODULE_NAME,
+            virtual_builtin_module_source(crate::js_export_module()),
+        );
+    }
     for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
+        if is_reserved_embedded_module_name(name) {
+            continue;
+        }
         virtual_builtin_loader = virtual_builtin_loader.with_module(
             name.to_string(),
             virtual_builtin_module_source(&(get_module)()),
@@ -11680,6 +12087,9 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
 
     async_with!(ctx => |ctx| {
         let global = ctx.globals();
+
+        ctx.eval::<(), _>(BUILTIN_FACADE_PRIMORDIALS_JS)
+            .expect("Failed to initialize builtin facade primordials");
 
         global.set("__wasm_rquickjs_mock_seq", 0i64)
             .expect("Failed to initialize mock sequence counter");
@@ -11818,6 +12228,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                 .expect("Failed to create import.meta path resolver"),
         )
         .expect("Failed to initialize import.meta path resolver");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_dynamic_import_cache_resolve_package",
+            Function::new(ctx.clone(), dynamic_import_cache_resolve_package)
+                .expect("Failed to create dynamic import cache package resolver"),
+        )
+        .expect("Failed to initialize dynamic import cache package resolver");
 
         set_non_replaceable_global(
             &global,
@@ -12252,6 +12670,53 @@ impl Loader for JsonFileLoader {
 #[cfg(test)]
 mod cjs_export_analyzer_tests {
     use super::*;
+
+    #[test]
+    fn collects_static_esm_exports_for_builtin_facades() {
+        let source = r#"
+            const hidden = "export const fake = 1";
+            export const first = 1, secondVariable = 2;
+            export const semicolonless = 3
+            export function afterSemicolonless() {}
+            export const { destructured, property: renamed } = value;
+            export let [arrayBinding, ...arrayRest] = values;
+            export async function* second() {}
+            export class Third {}
+            const local = 4;
+            export { local, local as alias, local as default };
+            export * as namespace from 'other';
+            export * as 'quoted-namespace' from 'other';
+            export default { first };
+        "#;
+        assert_eq!(
+            collect_static_esm_export_names(source),
+            [
+                "Third",
+                "afterSemicolonless",
+                "alias",
+                "arrayBinding",
+                "arrayRest",
+                "destructured",
+                "first",
+                "local",
+                "namespace",
+                "quoted-namespace",
+                "renamed",
+                "second",
+                "secondVariable",
+                "semicolonless",
+            ]
+        );
+        assert!(!has_static_esm_star_reexport(source));
+    }
+
+    #[test]
+    fn identifies_only_unresolved_static_star_reexports() {
+        assert!(has_static_esm_star_reexport("export * from 'other';"));
+        assert!(!has_static_esm_star_reexport(
+            "const text = \"export * from 'ignored'\"; export * as namespace from 'other';"
+        ));
+    }
 
     #[test]
     fn cjs_compat_format_policy_preserves_fixed_format_precedence() {
