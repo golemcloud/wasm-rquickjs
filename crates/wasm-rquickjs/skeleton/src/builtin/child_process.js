@@ -703,12 +703,16 @@ function runInline(command, args, options) {
     const oldStderrWrite = process.stderr && process.stderr.write;
     const oldEmitWarning = process.emitWarning;
     const oldExit = process.exit;
+    const runExit = process._runExit;
     const runtimeRequire = moduleExports.require;
     const oldModuleCache = moduleExports._cache;
     const oldRuntimeRequireCache = runtimeRequire.cache;
     const oldPathCache = moduleExports._pathCache;
     const oldModuleWrapper = moduleExports.wrapper;
     let firstExitCode = null;
+    let firstExitError = null;
+    let hasFirstExitError = false;
+    let firstExitErrorReported = false;
     const hadSimpleSourceMaps = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_simple_source_maps');
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
     const hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
@@ -724,6 +728,13 @@ function runInline(command, args, options) {
     let inlineBufferProbe = null;
     const checkSyntaxMode = execArgv.indexOf('-c') !== -1 || execArgv.indexOf('--check') !== -1;
     let currentScriptPath = null;
+
+    function reportFirstExitError() {
+        if (hasFirstExitError && !firstExitErrorReported) {
+            capturedStderr += formatErrorForStderr(firstExitError);
+            firstExitErrorReported = true;
+        }
+    }
 
     try {
         process.argv = [String(command)].concat(invocationArgs);
@@ -743,15 +754,24 @@ function runInline(command, args, options) {
         process._events = Object.create(null);
         process._eventsCount = 0;
         process._exiting = false;
+        process.exitCode = undefined;
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
         globalThis.__wasm_rquickjs_sync_callbacks = true;
 
         process.exit = function exit(code) {
-            if (firstExitCode === null) {
-                firstExitCode = code !== undefined ? code : 0;
+            try {
+                return runExit(code);
+            } catch (err) {
+                if (firstExitCode === null && process._exiting) {
+                    firstExitCode = Number(process.exitCode || 0);
+                    if (!err || !err.__isProcessExit) {
+                        firstExitError = err;
+                        hasFirstExitError = true;
+                    }
+                }
+                throw err;
             }
-            return oldExit.call(this, code);
         };
 
         if (hasFipsStartupFlag(execArgv)) {
@@ -1007,12 +1027,19 @@ function runInline(command, args, options) {
                 runtimeRequire(scriptPath);
             }
         }
-        if (typeof process._runExitHandlers === 'function' && firstExitCode === null) {
-            process._runExitHandlers(status);
+        if (firstExitCode !== null) {
+            status = firstExitCode;
+            reportFirstExitError();
+        } else if (typeof process._runExitHandlers === 'function') {
+            process._runExitHandlers();
+            status = Number(process.exitCode || 0);
         }
     } catch (err) {
-        if (err && err.__isProcessExit) {
-            status = firstExitCode !== null ? firstExitCode : (typeof err.code === 'number' ? err.code : 0);
+        if (firstExitCode !== null) {
+            status = firstExitCode;
+            reportFirstExitError();
+        } else if (err && err.__isProcessExit) {
+            status = Number(err.code || 0);
         } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
             status = 9;
             capturedStderr += String(command) + ': ' + err.message + '\n';
