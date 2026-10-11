@@ -28,9 +28,11 @@
 //! chunk-by-chunk (not read to completion eagerly).
 
 use super::http_body::ResponseBody;
+use futures::future::{AbortHandle, Abortable};
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
+use std::cell::RefCell;
 use std::future::Future;
 use std::pin::Pin;
 #[cfg(feature = "net-write-profiling")]
@@ -388,9 +390,15 @@ impl NodeHttpClientRequest {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct NodeHttpIncomingResponse {
     #[qjs(skip_trace)]
-    body: ResponseBody,
+    body: RefCell<IncomingBody>,
     headers: Vec<Vec<String>>,
     status: u16,
+}
+
+struct IncomingBody {
+    source: Option<ResponseBody>,
+    active_abort: Option<AbortHandle>,
+    discarded: bool,
 }
 
 impl Default for NodeHttpIncomingResponse {
@@ -404,7 +412,11 @@ impl NodeHttpIncomingResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {
         NodeHttpIncomingResponse {
-            body: ResponseBody::empty(),
+            body: RefCell::new(IncomingBody {
+                source: Some(ResponseBody::empty()),
+                active_abort: None,
+                discarded: false,
+            }),
             headers: Vec::new(),
             status: 0,
         }
@@ -413,7 +425,11 @@ impl NodeHttpIncomingResponse {
     #[qjs(skip)]
     pub(crate) fn from_raw_response(raw: RawResponse) -> Self {
         NodeHttpIncomingResponse {
-            body: ResponseBody::new(raw.response),
+            body: RefCell::new(IncomingBody {
+                source: Some(ResponseBody::new(raw.response)),
+                active_abort: None,
+                discarded: false,
+            }),
             headers: raw.headers,
             status: raw.status,
         }
@@ -429,16 +445,53 @@ impl NodeHttpIncomingResponse {
         self.headers.clone()
     }
 
-    pub fn discard_body(&mut self) {
-        // Dropping the response / stream reader / result future discards the body without reading.
-        self.body.discard();
+    pub fn discard_body(&self) {
+        let mut state = self.body.borrow_mut();
+        state.discarded = true;
+        state.source.take();
+        if let Some(abort) = state.active_abort.take() {
+            abort.abort();
+        }
     }
 
     pub async fn read_body_chunk<'js>(
-        &mut self,
+        &self,
         ctx: Ctx<'js>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, bool)>> {
-        match self.body.read_chunk().await {
+        let (mut source, registration) = {
+            let mut state = self.body.borrow_mut();
+            if state.discarded {
+                return Ok(List((None, true)));
+            }
+            let source = state.source.take().ok_or_else(|| {
+                Exception::throw_message(&ctx, "Response body read is already pending")
+            })?;
+            let (abort, registration) = AbortHandle::new_pair();
+            state.active_abort = Some(abort);
+            (source, registration)
+        };
+        // Own the body in the cancellable future, not behind a class/RefCell borrow. Cancelling
+        // drops the pending stream read before the body resources, and JS joins this operation.
+        let read = async move {
+            let outcome = source.read_chunk().await;
+            (source, outcome)
+        };
+        let outcome = Abortable::new(read, registration).await;
+        let mut state = self.body.borrow_mut();
+        state.active_abort = None;
+        let Ok((source, outcome)) = outcome else {
+            return Ok(List((None, true)));
+        };
+        if state.discarded {
+            return Ok(List((None, true)));
+        }
+        if outcome.is_ok() {
+            state.source = Some(source);
+        } else {
+            state.discarded = true;
+        }
+        drop(state);
+        match outcome {
             Ok(Some(bytes)) => {
                 let chunk = TypedArray::new_copy(ctx.clone(), bytes).map_err(|_| {
                     Exception::throw_message(
