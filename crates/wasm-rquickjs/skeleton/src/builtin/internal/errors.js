@@ -2,7 +2,6 @@ import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
 import {
     nativeWeakMapDelete,
     nativeWeakMapGet,
-    nativeWeakMapHas,
     nativeWeakMapSet,
 } from "__wasm_rquickjs_builtin/internal/weak_collections";
 
@@ -81,7 +80,9 @@ function _remapSourceMappedStack(stackString) {
 }
 
 function _formatNativeCallSites(error, callSites) {
-    if (!Array.isArray(callSites)) return '';
+    if (!Array.isArray(callSites)) {
+        return { value: '', headerLength: 0, materialized: false };
+    }
     let header;
     try {
         header = nativeErrorToString.call(error);
@@ -121,11 +122,21 @@ function _formatNativeCallSites(error, callSites) {
         }
         lines.push(`    at ${text}`);
     }
-    return lines.join('\n');
+    return {
+        value: lines.join('\n'),
+        headerLength: header.length,
+        materialized: false,
+    };
+}
+
+function _prepareSourceMappedStackState(error, callSites) {
+    const state = _formatNativeCallSites(error, callSites);
+    state.value = _remapSourceMappedStack(state.value);
+    return state;
 }
 
 function _prepareSourceMappedStack(error, callSites) {
-    return _remapSourceMappedStack(_formatNativeCallSites(error, callSites));
+    return _prepareSourceMappedStackState(error, callSites).value;
 }
 
 const nativeCallSiteCaptures = new WeakMap();
@@ -242,25 +253,62 @@ const nativeErrorCaptureStackTrace = NativeError.captureStackTrace;
 const initialPublicPrepareStackTrace = NativeError.prepareStackTrace;
 const preparedNativeStacks = new WeakMap();
 
-export function isPreparedNativeStack(error, stack) {
-    return error !== null &&
-        (typeof error === 'object' || typeof error === 'function') &&
-        nativeWeakMapGet(preparedNativeStacks, error) === stack;
+function _refreshNativeStackHeader(error, stack, headerLength) {
+    if (typeof stack !== 'string') return stack;
+    const currentHeader = nativeErrorToString.call(error);
+    if (typeof currentHeader !== 'string') return stack;
+    return currentHeader + stack.slice(headerLength);
+}
+
+const preparedNativeStackDescriptor = {
+    get: _getPreparedNativeStack,
+    set: _setPreparedNativeStack,
+    configurable: true,
+    enumerable: false,
+};
+
+function _cachePreparedNativeStack(error, state) {
+    if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
+        return;
+    }
+    nativeWeakMapSet(preparedNativeStacks, error, state);
+    try {
+        Object.defineProperty(error, 'stack', preparedNativeStackDescriptor);
+    } catch {
+        // QuickJS retains its eager stack value if the accessor cannot be
+        // installed, for example on an already non-configurable property.
+    }
+}
+
+function _getPreparedNativeStack() {
+    const state = nativeWeakMapGet(preparedNativeStacks, this);
+    if (state === undefined) return undefined;
+    if (!state.materialized) {
+        state.value = _refreshNativeStackHeader(this, state.value, state.headerLength);
+        state.materialized = true;
+    }
+    return state.value;
+}
+
+function _setPreparedNativeStack(stack) {
+    const state = nativeWeakMapGet(preparedNativeStacks, this);
+    if (state === undefined) return;
+    state.value = stack;
+    state.materialized = true;
 }
 
 function _dispatchPrepareStackTrace(error, callSites) {
-    if (error && (typeof error === 'object' || typeof error === 'function') &&
-        nativeWeakMapHas(preparedNativeStacks, error)) {
-        return nativeWeakMapGet(preparedNativeStacks, error);
+    if (error && (typeof error === 'object' || typeof error === 'function')) {
+        const state = nativeWeakMapGet(preparedNativeStacks, error);
+        if (state !== undefined) return state.value;
     }
     const prepare = NativeError.prepareStackTrace;
-    const result = typeof prepare === 'function'
-        ? prepare(error, callSites.map(_toCompatibleCallSite))
-        : _prepareSourceMappedStack(error, callSites);
-    if (error && (typeof error === 'object' || typeof error === 'function')) {
-        nativeWeakMapSet(preparedNativeStacks, error, result);
+    if (typeof prepare === 'function') {
+        return prepare(error, callSites.map(_toCompatibleCallSite));
     }
-    return result;
+    const state = _prepareSourceMappedStackState(error, callSites);
+    _cachePreparedNativeStack(error, state);
+    return state.value;
 }
 
 if (nativeErrorPrepareStackTraceDescriptor &&

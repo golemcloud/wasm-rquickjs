@@ -318,7 +318,61 @@ export const testErrorInspectUsesCurrentName = () => {
     try {
         const error = new RangeError('foo');
         error.name = 404;
+        assert.match(error.stack, /^404: foo(?:\n|$)/);
         assert.match(inspect(error), /^404 \[RangeError\]: foo(?:\n|$)/);
+
+        const readBeforeRename = new RangeError('fixed');
+        const unreadDescriptor = Object.getOwnPropertyDescriptor(readBeforeRename, 'stack');
+        assert.strictEqual(typeof unreadDescriptor.get, 'function');
+        assert.strictEqual(unreadDescriptor.enumerable, false);
+        assert.strictEqual(unreadDescriptor.configurable, true);
+        assert.match(readBeforeRename.stack, /^RangeError: fixed(?:\n|$)/);
+        const materializedDescriptor = Object.getOwnPropertyDescriptor(readBeforeRename, 'stack');
+        assert.strictEqual(materializedDescriptor.get, unreadDescriptor.get);
+        assert.strictEqual(materializedDescriptor.set, unreadDescriptor.set);
+        assert.strictEqual('value' in materializedDescriptor, false);
+        readBeforeRename.name = 404;
+        assert.match(readBeforeRename.stack, /^RangeError: fixed(?:\n|$)/);
+        assert.match(inspect(readBeforeRename), /^RangeError: fixed(?:\n|$)/);
+
+        const messageBeforeRead = new Error('before');
+        messageBeforeRead.message = 'after';
+        assert.match(messageBeforeRead.stack, /^Error: after(?:\n|$)/);
+        const messageAfterRead = new Error('before');
+        assert.match(messageAfterRead.stack, /^Error: before(?:\n|$)/);
+        messageAfterRead.message = 'after';
+        assert.match(messageAfterRead.stack, /^Error: before(?:\n|$)/);
+
+        const frameLikeMessage = new Error('before\n    at message');
+        frameLikeMessage.message = 'after\n    at message';
+        assert.match(frameLikeMessage.stack, /^Error: after\n    at message\n    at /);
+
+        const originalStackTraceLimit = Error.stackTraceLimit;
+        try {
+            Error.stackTraceLimit = 0;
+            const noFrames = new Error('no-frames');
+            noFrames.name = 'Renamed';
+            assert.strictEqual(noFrames.stack, 'Renamed: no-frames');
+            noFrames.name = 'AfterRead';
+            assert.strictEqual(noFrames.stack, 'Renamed: no-frames');
+        } finally {
+            Error.stackTraceLimit = originalStackTraceLimit;
+        }
+
+        const sealedError = new Error('sealed');
+        sealedError.name = 'Initial';
+        Object.seal(sealedError);
+        sealedError.name = 'BeforeRead';
+        const sealedStack = sealedError.stack;
+        assert.match(sealedStack, /^BeforeRead: sealed(?:\n|$)/);
+        sealedError.name = 'AfterRead';
+        assert.strictEqual(sealedError.stack, sealedStack);
+
+        const symbolName = new Error('symbol-name');
+        symbolName.name = Symbol('invalid');
+        assert.throws(() => symbolName.stack, TypeError);
+        symbolName.name = 'Recovered';
+        assert.match(symbolName.stack, /^Recovered: symbol-name(?:\n|$)/);
 
         const manualStackError = new RangeError('foo');
         manualStackError.stack = 'RangeError: foo\n    at manual (x.js:1:2)';
@@ -383,7 +437,12 @@ export const testPrepareStackTraceDescriptors = () => {
         Error.prepareStackTrace = customPrepare;
         Object.defineProperty(Error, 'prepareStackTrace', { enumerable: false });
         assert.strictEqual(Error.prepareStackTrace, customPrepare);
-        assert.strictEqual(new Error('partial-descriptor').stack, 'custom-prepare');
+        const customPrepared = new Error('partial-descriptor');
+        assert.strictEqual(customPrepared.stack, 'custom-prepare');
+        assert.strictEqual(
+            Object.getOwnPropertyDescriptor(customPrepared, 'stack').value,
+            'custom-prepare',
+        );
 
         let getterCalls = 0;
         Object.defineProperty(Error, 'prepareStackTrace', {
