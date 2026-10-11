@@ -816,6 +816,41 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
     .await
 }
 
+pub(crate) async fn initialize_exported_resource_id_map(
+    ctx: &AsyncContext,
+    map_name: &str,
+) -> Result<(), String> {
+    async_with!(ctx => |ctx| {
+        Module::evaluate(
+            ctx.clone(),
+            "__wasm_rquickjs_init_resource_ids",
+            format!(
+                r#"
+                import {{ createPrivateWeakMap }} from "__wasm_rquickjs_builtin/internal/weak_collections";
+                globalThis[{map_name:?}] = createPrivateWeakMap();
+                "#,
+            ),
+        )
+        .catch(&ctx)
+        .map_err(|error| {
+            format!(
+                "Failed to evaluate exported resource identity initialization:\n{}",
+                super::format_caught_error(error)
+            )
+        })?
+        .finish::<()>()
+        .catch(&ctx)
+        .map_err(|error| {
+            format!(
+                "Failed to finish exported resource identity initialization:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        Ok::<(), String>(())
+    })
+    .await
+}
+
 // RuntimeServices contains no JavaScript-lifetime-bound values.
 unsafe impl<'js> JsLifetime<'js> for RuntimeServices {
     type Changed<'to> = RuntimeServices;

@@ -2,9 +2,10 @@
 // Registers internal subscribers that create Golem spans for TracingChannel operations
 import { start_span, set_span_attribute, finish_span } from '__wasm_rquickjs_builtin/diagnostics_channel_native';
 import { channel } from 'node:diagnostics_channel';
+import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 // Internal registry to correlate context objects with span handles
-const _contextSpans = new WeakMap();
+const _contextSpans = createPrivateWeakMap();
 
 // Deduplication set to prevent multiple subscriber installs for the same channel
 const _wired = new Set();

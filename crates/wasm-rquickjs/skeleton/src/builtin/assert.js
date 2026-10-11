@@ -1,6 +1,7 @@
 import { inspect, innerDeepEqual } from 'node:util';
 import fs from 'node:fs';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
+import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 const inspectDiffOptions = {
     depth: 1000,
@@ -1505,7 +1506,7 @@ function partialDeepStrictEqual(actual, expected, message) {
 }
 
 function createPartialDeepMemo() {
-    return { weakMemo: new WeakMap(), pairsA: null, pairsB: null };
+    return { weakMemo: createPrivateWeakMap(), pairsA: null, pairsB: null };
 }
 
 function partialMemoHas(memo, actual, expected) {
@@ -1516,7 +1517,7 @@ function partialMemoHas(memo, actual, expected) {
 function partialMemoAdd(memo, actual, expected) {
     let expectedSet = memo.weakMemo.get(actual);
     if (expectedSet === undefined) {
-        expectedSet = new WeakSet();
+        expectedSet = createPrivateWeakSet();
         memo.weakMemo.set(actual, expectedSet);
     }
     expectedSet.add(expected);

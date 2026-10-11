@@ -2,6 +2,9 @@
 // the public prototypes. Runtime-private caches use these primordials directly,
 // while public collection inspection layers bookkeeping around them.
 const call = Function.prototype.call;
+const defineProperties = Object.defineProperties;
+const NativeWeakMap = WeakMap;
+const NativeWeakSet = WeakSet;
 
 export const nativeWeakMapDelete = call.bind(WeakMap.prototype.delete);
 export const nativeWeakMapGet = call.bind(WeakMap.prototype.get);
@@ -13,3 +16,28 @@ export const nativeWeakSetHas = call.bind(WeakSet.prototype.has);
 
 export const NativeWeakRef = WeakRef;
 export const nativeWeakRefDeref = call.bind(WeakRef.prototype.deref);
+
+const privateWeakMapMethods = {
+    delete: { value: function del(key) { return nativeWeakMapDelete(this, key); } },
+    get: { value: function get(key) { return nativeWeakMapGet(this, key); } },
+    has: { value: function has(key) { return nativeWeakMapHas(this, key); } },
+    set: { value: function set(key, value) { return nativeWeakMapSet(this, key, value); } },
+};
+
+const privateWeakSetMethods = {
+    add: { value: function add(value) { return nativeWeakSetAdd(this, value); } },
+    delete: { value: function del(value) { return nativeWeakSetDelete(this, value); } },
+    has: { value: function has(value) { return nativeWeakSetHas(this, value); } },
+};
+
+// Own methods keep runtime-private collections on the captured native path even
+// after the public prototypes gain inspection bookkeeping or are changed by
+// user code. The properties are non-enumerable, non-writable, and
+// non-configurable by default.
+export function createPrivateWeakMap() {
+    return defineProperties(new NativeWeakMap(), privateWeakMapMethods);
+}
+
+export function createPrivateWeakSet() {
+    return defineProperties(new NativeWeakSet(), privateWeakSetMethods);
+}

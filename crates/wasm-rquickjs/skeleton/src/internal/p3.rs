@@ -25,7 +25,7 @@ use wit_bindgen_p3::rt::async_support::{
 
 use super::runtime_services::{
     OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
-    run_process_turn_checkpoint,
+    initialize_exported_resource_id_map, run_process_turn_checkpoint,
 };
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
@@ -95,14 +95,6 @@ impl JsState {
             ctx.globals()
                 .set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()).expect("Failed to create the resource table object"))
                 .expect("Failed to initialize the exported resource table");
-            ctx.globals()
-                .set(
-                    RESOURCE_ID_MAP_NAME,
-                    ctx.eval::<Object, _>("new WeakMap()")
-                        .expect("Failed to create resource ID map"),
-                )
-                .expect("Failed to initialize the exported resource ID map");
-
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
             // `get_async_iterator` normalizes any (async or sync) iterable passed from JS into an
@@ -236,6 +228,9 @@ impl JsState {
         })
         .await;
         initialize_builtin_wiring(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        initialize_exported_resource_id_map(&self.ctx, RESOURCE_ID_MAP_NAME)
             .await
             .unwrap_or_else(|error| panic!("{error}"));
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an

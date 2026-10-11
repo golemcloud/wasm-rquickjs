@@ -6,6 +6,79 @@ import { inspect } from 'node:util';
 
 const require = createRequire(import.meta.url);
 
+export const testPrivateWeakCollectionsBypassPublicPrototypes = () => {
+    const privateResourceIds = globalThis.__wasm_rquickjs_resource_ids;
+    assert.ok(privateResourceIds instanceof WeakMap);
+    for (const method of ['delete', 'get', 'has', 'set']) {
+        const descriptor = Object.getOwnPropertyDescriptor(privateResourceIds, method);
+        assert.strictEqual(typeof descriptor?.value, 'function');
+        assert.strictEqual(descriptor.enumerable, false);
+        assert.strictEqual(descriptor.configurable, false);
+        assert.strictEqual(descriptor.writable, false);
+    }
+
+    const weakMapMethods = {
+        delete: WeakMap.prototype.delete,
+        get: WeakMap.prototype.get,
+        has: WeakMap.prototype.has,
+        set: WeakMap.prototype.set,
+    };
+    const weakSetMethods = {
+        add: WeakSet.prototype.add,
+        delete: WeakSet.prototype.delete,
+        has: WeakSet.prototype.has,
+    };
+    const prototypeCalls = [];
+    const key = {};
+
+    for (const [name, method] of Object.entries(weakMapMethods)) {
+        WeakMap.prototype[name] = function (...args) {
+            prototypeCalls.push(`WeakMap.${name}`);
+            return Reflect.apply(method, this, args);
+        };
+    }
+    for (const [name, method] of Object.entries(weakSetMethods)) {
+        WeakSet.prototype[name] = function (...args) {
+            prototypeCalls.push(`WeakSet.${name}`);
+            return Reflect.apply(method, this, args);
+        };
+    }
+
+    try {
+        privateResourceIds.set(key, { marker: 'private-resource-id' });
+        assert.strictEqual(privateResourceIds.has(key), true);
+        assert.deepStrictEqual(privateResourceIds.get(key), { marker: 'private-resource-id' });
+
+        const event = new Event('private-cache-test');
+        assert.strictEqual(event.isTrusted, false);
+
+        const decoder = new TextDecoder();
+        assert.strictEqual(decoder.decode(new Uint8Array([65])), 'A');
+        assert.match(inspect(new TextEncoderStream()), /TextEncoderStream/);
+        assert.match(inspect(new TextDecoderStream()), /TextDecoderStream/);
+
+        const cyclicActual = {};
+        const cyclicExpected = {};
+        cyclicActual.self = cyclicActual;
+        cyclicExpected.self = cyclicExpected;
+        assert.deepStrictEqual(cyclicActual, cyclicExpected);
+
+        const url = new URL('https://example.com/?value=1');
+        assert.strictEqual(url.searchParams.get('value'), '1');
+    } finally {
+        Object.assign(WeakMap.prototype, weakMapMethods);
+        Object.assign(WeakSet.prototype, weakSetMethods);
+    }
+
+    assert.deepStrictEqual(prototypeCalls, []);
+    assert.doesNotMatch(
+        inspect(privateResourceIds, { showHidden: true }),
+        /private-resource-id/,
+    );
+    assert.strictEqual(privateResourceIds.delete(key), true);
+    return true;
+};
+
 // Test 1: Error.captureStackTrace exists as a function
 export const testCaptureStackTraceExists = () => {
     try {

@@ -23,6 +23,7 @@
 import * as types from "__wasm_rquickjs_builtin/internal/util/types";
 import { validateObject, validateString } from "__wasm_rquickjs_builtin/internal/validators";
 import * as codes from "__wasm_rquickjs_builtin/internal/errors";
+import { createPrivateWeakMap, createPrivateWeakSet } from "__wasm_rquickjs_builtin/internal/weak_collections";
 
 import {
     ALL_PROPERTIES,
@@ -308,8 +309,8 @@ export function inspect(value, opts) {
     return formatValue(ctx, value, 0);
 }
 const customInspectSymbol = Symbol.for("nodejs.util.inspect.custom");
-const cachedErrorName = new WeakMap();
-const manuallyOverriddenErrorStack = new WeakSet();
+const cachedErrorName = createPrivateWeakMap();
+const manuallyOverriddenErrorStack = createPrivateWeakSet();
 const nativeErrorConstructorNames = new Set([
     "Error",
     "EvalError",
