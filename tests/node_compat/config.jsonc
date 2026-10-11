@@ -480,10 +480,7 @@
         "block_94_block_94": { "category": "runnable" },
         "block_95_block_95": { "category": "runnable" },
         "block_96_block_96": { "category": "runnable" },
-        "block_97_block_97": {
-          "category": "known-gap",
-          "reason": "QuickJS stack frame formatting differs for Error objects whose name is a non-string object"
-        },
+        "block_97_block_97": { "category": "runnable" },
         "block_98_block_98": { "category": "runnable" }
       }
     },
