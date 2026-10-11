@@ -3,6 +3,29 @@ use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
+#[test]
+async fn fs_recursive_rm(#[tagged_as("fs")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    instance.invoke(None, "test-recursive-rm", &[]).await?;
+    for label in ["sync", "promises"] {
+        assert!(
+            !instance
+                .temp_dir_path()
+                .join(format!("test/rm-{label}"))
+                .exists()
+        );
+        assert_eq!(
+            std::fs::read_to_string(
+                instance
+                    .temp_dir_path()
+                    .join(format!("test/outside-{label}/keep"))
+            )?,
+            "outside data"
+        );
+    }
+    Ok(())
+}
+
 #[test_dep(tagged_as = "fs", scope = Cloneable)]
 async fn compiled_fs() -> CompiledTest {
     let path = Utf8Path::new("examples/runtime/fs");

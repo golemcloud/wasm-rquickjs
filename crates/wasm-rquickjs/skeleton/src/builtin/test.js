@@ -35,7 +35,12 @@ const testAssertionsModule = {
 // --- Suite context ---
 
 function SuiteContext(name, parent, filePath) {
-    this.name = name;
+    Object.defineProperty(this, 'name', {
+        configurable: true,
+        enumerable: true,
+        value: name,
+        writable: true,
+    });
     this.parent = parent;
     this.filePath = filePath || (parent ? parent.filePath : undefined);
     this.tests = [];
@@ -73,7 +78,12 @@ SuiteContext.prototype.collectAfterEach = function () {
 // --- Test context (t) ---
 
 function TestContext(name, parent, filePath) {
-    this.name = name;
+    Object.defineProperty(this, 'name', {
+        configurable: true,
+        enumerable: true,
+        value: name,
+        writable: true,
+    });
     this.signal = { aborted: false };
     this.filePath = filePath || (parent ? parent.filePath : undefined);
     this._parent = parent;

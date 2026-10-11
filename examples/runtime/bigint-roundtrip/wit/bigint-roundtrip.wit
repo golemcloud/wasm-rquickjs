@@ -3,4 +3,9 @@ package quickjs:bigint-roundtrip;
 world bigint-roundtrip {
   export roundtrip-u64: func(v: u64) -> u64;
   export roundtrip-s64: func(v: s64) -> s64;
+  export sample-hrtime: func() -> u64;
+  export restore-hrtime: func(value: u64);
+  export elapsed-hrtime: func() -> u64;
+  export sample-hrtime-tuple: func() -> tuple<u64, u32>;
+  export elapsed-hrtime-tuple: func(seconds: u64, nanos: u32) -> tuple<s64, u32>;
 }

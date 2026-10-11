@@ -1,4 +1,4 @@
-use crate::GeneratorContext;
+use crate::{GenerationTarget, GeneratorContext};
 use anyhow::anyhow;
 use camino::Utf8Path;
 #[cfg(feature = "external-skeleton")]
@@ -14,6 +14,25 @@ use toml_edit::{Array, DocumentMut, value};
 /// default and what the generated `src/lib.rs` looks like.
 #[cfg(not(feature = "external-skeleton"))]
 static SKELETON: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/skeleton");
+
+const COMPONENT_LICENSES_P2: &[u8] =
+    include_bytes!("../licenses/THIRD_PARTY_COMPONENT_LICENSES_P2.txt");
+const COMPONENT_LICENSES_P3: &[u8] =
+    include_bytes!("../licenses/THIRD_PARTY_COMPONENT_LICENSES_P3.txt");
+
+/// Copies the reviewed dependency attribution for the selected component target.
+///
+/// This file is deliberately a sidecar rather than a custom Wasm section: it does not affect
+/// component bytes, and downstream distributors can combine it with their own application
+/// notices while keeping the audited dependency closure visible.
+pub fn copy_component_licenses(output: &Utf8Path, target: GenerationTarget) -> anyhow::Result<()> {
+    let contents = match target {
+        GenerationTarget::WasiP2 => COMPONENT_LICENSES_P2,
+        GenerationTarget::WasiP3 => COMPONENT_LICENSES_P3,
+    };
+    crate::write_if_changed(output.join("THIRD_PARTY_COMPONENT_LICENSES.txt"), contents)?;
+    Ok(())
+}
 
 #[cfg(feature = "external-skeleton")]
 fn skeleton_root() -> Utf8PathBuf {
@@ -54,8 +73,10 @@ fn skeleton_cargo_toml() -> anyhow::Result<Cow<'static, str>> {
 ///
 /// Changes applied to the skeleton toml file:
 /// - Changing the package name to `crate_name` (which is the name of the chosen WIT world).
-/// - For the Preview 3 target, replacing the default feature set with `["p3"]` so the crate
-///   compiles the async runtime spine instead of the Preview 2 path.
+/// - Removing skeleton-only publication and license metadata; the generated crate embeds
+///   user-owned JavaScript, so its package policy must be chosen by that user.
+/// - For the Preview 3 target, replacing the default feature set with `["p3", "normal-p3"]` so
+///   the crate compiles the async runtime spine and standard capability tier.
 pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
     // Loading the skeleton Cargo.toml file
     let cargo_toml = skeleton_cargo_toml()?;
@@ -78,8 +99,16 @@ pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()>
 
 /// Changes the crate's package name to the selected WIT world's name
 fn change_package_name(context: &GeneratorContext, doc: &mut DocumentMut) {
-    let crate_name = &context.world_name;
+    set_generated_package_metadata(&context.world_name, doc);
+}
+
+fn set_generated_package_metadata(crate_name: &str, doc: &mut DocumentMut) {
     doc["package"]["name"] = value(crate_name);
+    let package = doc["package"]
+        .as_table_mut()
+        .expect("validated Cargo manifest package must be a table");
+    package.remove("license");
+    package.remove("publish");
 }
 
 /// Replaces `[features] default` with `["p3", "normal-p3"]` for the Preview 3 target.
@@ -295,7 +324,54 @@ mod module_loader_architecture;
 
 #[cfg(test)]
 mod tests {
-    use super::generated_lock;
+    use super::{
+        COMPONENT_LICENSES_P2, COMPONENT_LICENSES_P3, copy_component_licenses, generated_lock,
+        set_generated_package_metadata,
+    };
+    use crate::GenerationTarget;
+    use camino_tempfile::Utf8TempDir;
+
+    #[test]
+    fn component_license_notices_name_their_target() {
+        let p2 = std::str::from_utf8(COMPONENT_LICENSES_P2).unwrap();
+        let p3 = std::str::from_utf8(COMPONENT_LICENSES_P3).unwrap();
+        assert!(p2.contains("WASI Preview 2"));
+        assert!(p3.contains("WASI Preview 3"));
+        assert_ne!(p2, p3);
+        assert!(!p2.contains("<year>"));
+        assert!(!p3.contains("<year>"));
+        assert!(!p2.contains("GB18030_2022_OVERRIDE_PUA"));
+        assert!(!p3.contains("GB18030_2022_OVERRIDE_PUA"));
+    }
+
+    #[test]
+    fn generated_package_does_not_inherit_skeleton_only_metadata() {
+        let mut manifest =
+            "[package]\nname = \"rquickjs-component\"\nlicense = \"Apache-2.0\"\npublish = false\n"
+                .parse::<toml_edit::DocumentMut>()
+                .unwrap();
+
+        set_generated_package_metadata("generated-world", &mut manifest);
+
+        assert_eq!(
+            manifest["package"]["name"].as_str(),
+            Some("generated-world")
+        );
+        assert!(manifest["package"].get("license").is_none());
+        assert!(manifest["package"].get("publish").is_none());
+    }
+
+    #[test]
+    fn copies_the_notice_for_the_selected_target() {
+        let output = Utf8TempDir::new().unwrap();
+        let path = output.path().join("THIRD_PARTY_COMPONENT_LICENSES.txt");
+
+        copy_component_licenses(output.path(), GenerationTarget::WasiP2).unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), COMPONENT_LICENSES_P2);
+
+        copy_component_licenses(output.path(), GenerationTarget::WasiP3).unwrap();
+        assert_eq!(std::fs::read(path).unwrap(), COMPONENT_LICENSES_P3);
+    }
 
     #[test]
     fn generated_lock_requires_exactly_one_skeleton_package() {
