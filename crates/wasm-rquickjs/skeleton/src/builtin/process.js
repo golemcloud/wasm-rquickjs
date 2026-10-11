@@ -185,6 +185,10 @@ Object.defineProperty(process, Symbol.for('__wasm_rquickjs_refresh_process_state
             if (!wasExtensible) Object.preventExtensions(env);
         }
 
+        const syncRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        const syncProcess = syncRegistry && syncRegistry['node:process'];
+        if (typeof syncProcess === 'function') syncProcess(process);
+
         return process.argv === argv
             && process.argv0 === argv0
             && process.env === env;

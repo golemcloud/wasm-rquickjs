@@ -23,6 +23,7 @@ declare module 'module-resolution' {
   export function testCjsPackageJsonParseCache(): Promise<boolean>;
   export function testCjsLoaderRealpathCache(): Promise<boolean>;
   export function testSyncBuiltinEsmExports(): Promise<boolean>;
+  export function testBuiltinFirstImport(specifier: string): Promise<boolean>;
   export function testEsmResolutionErrorUrls(): Promise<boolean>;
   export function testCjsDirectNamedExports(): Promise<boolean>;
   export function testEsmImportsSideEffectCommonJs(): Promise<boolean>;
