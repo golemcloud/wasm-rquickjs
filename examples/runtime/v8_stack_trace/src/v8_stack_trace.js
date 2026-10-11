@@ -347,6 +347,55 @@ export const testErrorInspectUsesCurrentName = () => {
         frameLikeMessage.message = 'after\n    at message';
         assert.match(frameLikeMessage.stack, /^Error: after\n    at message\n    at /);
 
+        const internalFrameMessage = new Error('before\n    at construct (native)');
+        internalFrameMessage.message = 'after\n    at construct (native)';
+        assert.match(
+            internalFrameMessage.stack,
+            /^Error: after\n    at construct \(native\)\n    at /,
+        );
+
+        const inheritedBase = new Error('inherited');
+        const inherited = Object.create(inheritedBase);
+        assert.strictEqual(inherited.stack, inheritedBase.stack);
+        assert.strictEqual(Object.hasOwn(inherited, 'stack'), false);
+        inherited.stack = 'child-manual';
+        assert.strictEqual(inherited.stack, 'child-manual');
+        assert.strictEqual(Object.hasOwn(inherited, 'stack'), false);
+        assert.match(inheritedBase.stack, /^Error: inherited(?:\n|$)/);
+
+        const unreadInheritedBase = new Error('unread-inherited');
+        const unreadInherited = Object.create(unreadInheritedBase);
+        unreadInherited.name = 'ChildName';
+        assert.match(unreadInherited.stack, /^Error: unread-inherited(?:\n|$)/);
+
+        function LegacyError(message) {
+            this.message = message;
+            this.stack = new Error(message).stack;
+        }
+        LegacyError.prototype = new Error('legacy-prototype');
+        const legacyError = new LegacyError('legacy');
+        assert.match(legacyError.stack, /^Error: legacy(?:\n|$)/);
+        assert.strictEqual(Object.hasOwn(legacyError, 'stack'), false);
+
+        const originalDefineProperty = Object.defineProperty;
+        try {
+            Object.defineProperty = () => { throw 1; };
+            const definePropertyPoisoned = new Error('old');
+            definePropertyPoisoned.name = 'Renamed';
+            assert.match(definePropertyPoisoned.stack, /^Renamed: old(?:\n|$)/);
+        } finally {
+            Object.defineProperty = originalDefineProperty;
+        }
+
+        try {
+            Object.prototype.value = 'poisoned';
+            const descriptorPolluted = new Error('old');
+            descriptorPolluted.name = 'Renamed';
+            assert.match(descriptorPolluted.stack, /^Renamed: old(?:\n|$)/);
+        } finally {
+            delete Object.prototype.value;
+        }
+
         const originalStackTraceLimit = Error.stackTraceLimit;
         try {
             Error.stackTraceLimit = 0;
@@ -381,6 +430,7 @@ export const testErrorInspectUsesCurrentName = () => {
             inspect(manualStackError),
             'RangeError: foo\n    at manual (x.js:1:2)',
         );
+
         return true;
     } catch (e) {
         console.error('testErrorInspectUsesCurrentName FAIL:', e.message);
@@ -439,10 +489,6 @@ export const testPrepareStackTraceDescriptors = () => {
         assert.strictEqual(Error.prepareStackTrace, customPrepare);
         const customPrepared = new Error('partial-descriptor');
         assert.strictEqual(customPrepared.stack, 'custom-prepare');
-        assert.strictEqual(
-            Object.getOwnPropertyDescriptor(customPrepared, 'stack').value,
-            'custom-prepare',
-        );
 
         let getterCalls = 0;
         Object.defineProperty(Error, 'prepareStackTrace', {

@@ -5,6 +5,10 @@ import {
     nativeWeakMapSet,
 } from "__wasm_rquickjs_builtin/internal/weak_collections";
 
+const nativeObjectDefineProperty = Object.defineProperty;
+const nativeObjectGetPrototypeOf = Object.getPrototypeOf;
+const nativeObjectCreate = Object.create;
+
 // ---------------------------------------------------------------------------
 // V8-compatible CallSite objects
 // ---------------------------------------------------------------------------
@@ -131,7 +135,8 @@ function _formatNativeCallSites(error, callSites) {
 
 function _prepareSourceMappedStackState(error, callSites) {
     const state = _formatNativeCallSites(error, callSites);
-    state.value = _remapSourceMappedStack(state.value);
+    state.value = state.value.slice(0, state.headerLength) +
+        _remapSourceMappedStack(state.value.slice(state.headerLength));
     return state;
 }
 
@@ -260,12 +265,11 @@ function _refreshNativeStackHeader(error, stack, headerLength) {
     return currentHeader + stack.slice(headerLength);
 }
 
-const preparedNativeStackDescriptor = {
-    get: _getPreparedNativeStack,
-    set: _setPreparedNativeStack,
-    configurable: true,
-    enumerable: false,
-};
+const preparedNativeStackDescriptor = nativeObjectCreate(null);
+preparedNativeStackDescriptor.get = _getPreparedNativeStack;
+preparedNativeStackDescriptor.set = _setPreparedNativeStack;
+preparedNativeStackDescriptor.configurable = true;
+preparedNativeStackDescriptor.enumerable = false;
 
 function _cachePreparedNativeStack(error, state) {
     if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
@@ -273,7 +277,7 @@ function _cachePreparedNativeStack(error, state) {
     }
     nativeWeakMapSet(preparedNativeStacks, error, state);
     try {
-        Object.defineProperty(error, 'stack', preparedNativeStackDescriptor);
+        nativeObjectDefineProperty(error, 'stack', preparedNativeStackDescriptor);
     } catch {
         // QuickJS retains its eager stack value if the accessor cannot be
         // installed, for example on an already non-configurable property.
@@ -281,20 +285,40 @@ function _cachePreparedNativeStack(error, state) {
 }
 
 function _getPreparedNativeStack() {
-    const state = nativeWeakMapGet(preparedNativeStacks, this);
-    if (state === undefined) return undefined;
-    if (!state.materialized) {
-        state.value = _refreshNativeStackHeader(this, state.value, state.headerLength);
-        state.materialized = true;
+    let owner = this;
+    while (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
+        const state = nativeWeakMapGet(preparedNativeStacks, owner);
+        if (state !== undefined) {
+            if (!state.materialized) {
+                state.value = _refreshNativeStackHeader(
+                    owner,
+                    state.value,
+                    state.headerLength,
+                );
+                state.materialized = true;
+            }
+            return state.value;
+        }
+        owner = nativeObjectGetPrototypeOf(owner);
     }
-    return state.value;
+    return undefined;
 }
 
 function _setPreparedNativeStack(stack) {
+    if (this === null || (typeof this !== 'object' && typeof this !== 'function')) {
+        return;
+    }
     const state = nativeWeakMapGet(preparedNativeStacks, this);
-    if (state === undefined) return;
-    state.value = stack;
-    state.materialized = true;
+    if (state === undefined) {
+        nativeWeakMapSet(preparedNativeStacks, this, {
+            value: stack,
+            headerLength: 0,
+            materialized: true,
+        });
+    } else {
+        state.value = stack;
+        state.materialized = true;
+    }
 }
 
 function _dispatchPrepareStackTrace(error, callSites) {
