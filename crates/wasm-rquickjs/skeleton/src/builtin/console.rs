@@ -85,6 +85,7 @@ pub mod native_module {
 
 // JS functions for the console implementation
 pub const CONSOLE_JS: &str = include_str!("console.js");
+pub const PUBLIC_IMPLEMENTATION_JS: &str = r#"export * from '__wasm_rquickjs_builtin/console'; export { default } from '__wasm_rquickjs_builtin/console';"#;
 pub const REEXPORT_JS: &str = r#"export * from 'node:console'; import { Console } from 'node:console'; const c = globalThis.console; c.Console = Console; export default c;"#;
 
 // JS code wiring the console module into the global context

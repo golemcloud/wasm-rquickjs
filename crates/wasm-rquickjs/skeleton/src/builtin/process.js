@@ -185,6 +185,10 @@ Object.defineProperty(process, Symbol.for('__wasm_rquickjs_refresh_process_state
             if (!wasExtensible) Object.preventExtensions(env);
         }
 
+        const syncRegistry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        const syncProcess = syncRegistry && syncRegistry['node:process'];
+        if (typeof syncProcess === 'function') syncProcess(process);
+
         return process.argv === argv
             && process.argv0 === argv0
             && process.env === env;
@@ -791,19 +795,19 @@ process.hrtime = function hrtime(time) {
             err.code = 'ERR_OUT_OF_RANGE';
             throw err;
         }
-        let sec = Math.floor(ns / 1e9) - time[0];
-        let nsec = (ns % 1e9) - time[1];
+        let sec = Number(ns / 1_000_000_000n) - time[0];
+        let nsec = Number(ns % 1_000_000_000n) - time[1];
         if (nsec < 0) {
             sec -= 1;
             nsec += 1e9;
         }
         return [sec, nsec];
     }
-    return [Math.floor(ns / 1e9), ns % 1e9];
+    return [Number(ns / 1_000_000_000n), Number(ns % 1_000_000_000n)];
 };
 
 process.hrtime.bigint = function bigint() {
-    return BigInt(hrtime_ns());
+    return hrtime_ns();
 };
 
 process.abort = () => {
@@ -935,7 +939,7 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     });
 };
 
-process.exit = function exit(code) {
+function runExit(code) {
     if (code !== undefined) {
         process.exitCode = code;
     }
@@ -944,7 +948,16 @@ process.exit = function exit(code) {
         process.emit('exit', process.exitCode || 0);
     }
     throw new ProcessExitError(process.exitCode || 0);
-};
+}
+
+Object.defineProperty(runExit, 'name', { value: 'exit', configurable: true });
+process.exit = runExit;
+Object.defineProperty(process, '_runExit', {
+    value: runExit,
+    writable: false,
+    configurable: false,
+    enumerable: false,
+});
 
 process._exiting = false;
 
