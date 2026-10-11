@@ -1,10 +1,9 @@
 // Native functions for the process implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::{Ctx, Persistent, Promise};
+    use rquickjs::{BigInt, Ctx, Persistent, Promise};
     use std::collections::HashMap;
     use std::path::Path;
-    use std::time::Instant;
 
     #[rquickjs::function]
     pub fn memory_usage(ctx: Ctx<'_>) -> Vec<i64> {
@@ -83,11 +82,14 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn hrtime_ns() -> u64 {
-        use std::sync::OnceLock;
-        static ORIGIN: OnceLock<Instant> = OnceLock::new();
-        let origin = ORIGIN.get_or_init(Instant::now);
-        origin.elapsed().as_nanos() as u64
+    pub fn hrtime_ns(ctx: Ctx<'_>) -> rquickjs::Result<BigInt<'_>> {
+        #[cfg(feature = "p2")]
+        let nanos = wasip2::clocks::monotonic_clock::now();
+
+        #[cfg(feature = "p3")]
+        let nanos = wasip3::clocks::monotonic_clock::now();
+
+        BigInt::from_u64(ctx, nanos)
     }
 
     #[rquickjs::function]
