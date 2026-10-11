@@ -99,7 +99,9 @@ async function checkPreparedStackCacheLifetime(customStack) {
         assert.strictEqual(plain.filter(ref => ref.deref() === undefined).length, 64,
             'GC positive control must collect plain cycles');
         assert.strictEqual(errors.filter(ref => ref.deref() === undefined).length, 64,
-            'private prepared-stack cache must not retain discarded errors');
+            customStack
+                ? 'custom prepared stack cycles must remain collectable'
+                : 'private prepared-stack cache must not retain discarded errors');
         assert.strictEqual(publicWeakEntries.filter(ref => ref.deref() === undefined).length, 64,
             'inspection bookkeeping must not retain public weak entries');
         assert.strictEqual(publicWeakMap.get(liveMapKey), currentMapValue);
@@ -361,7 +363,12 @@ export const testErrorInspectUsesCurrentName = () => {
         inherited.stack = 'child-manual';
         assert.strictEqual(inherited.stack, 'child-manual');
         assert.strictEqual(Object.hasOwn(inherited, 'stack'), false);
-        assert.match(inheritedBase.stack, /^Error: inherited(?:\n|$)/);
+        assert.strictEqual(inheritedBase.stack, 'child-manual');
+
+        const detachedStack = {};
+        Object.defineProperty(detachedStack, 'stack', unreadDescriptor);
+        detachedStack.stack = 'ignored';
+        assert.strictEqual(detachedStack.stack, undefined);
 
         const unreadInheritedBase = new Error('unread-inherited');
         const unreadInherited = Object.create(unreadInheritedBase);
@@ -373,9 +380,14 @@ export const testErrorInspectUsesCurrentName = () => {
             this.stack = new Error(message).stack;
         }
         LegacyError.prototype = new Error('legacy-prototype');
-        const legacyError = new LegacyError('legacy');
-        assert.match(legacyError.stack, /^Error: legacy(?:\n|$)/);
-        assert.strictEqual(Object.hasOwn(legacyError, 'stack'), false);
+        const firstLegacyError = new LegacyError('first-legacy');
+        assert.match(firstLegacyError.stack, /^Error: first-legacy(?:\n|$)/);
+        assert.strictEqual(Object.hasOwn(firstLegacyError, 'stack'), false);
+        const secondLegacyError = new LegacyError('second-legacy');
+        assert.match(firstLegacyError.stack, /^Error: second-legacy(?:\n|$)/);
+        assert.strictEqual(secondLegacyError.stack, firstLegacyError.stack);
+        assert.strictEqual(LegacyError.prototype.stack, firstLegacyError.stack);
+        assert.strictEqual(Object.hasOwn(secondLegacyError, 'stack'), false);
 
         const originalDefineProperty = Object.defineProperty;
         try {
@@ -395,6 +407,21 @@ export const testErrorInspectUsesCurrentName = () => {
         } finally {
             delete Object.prototype.value;
         }
+
+        const originalFunctionCall = Function.prototype.call;
+        const originalStringSlice = String.prototype.slice;
+        let intrinsicPoisonedStack;
+        try {
+            Function.prototype.call = () => { throw 1; };
+            String.prototype.slice = () => { throw 1; };
+            const intrinsicPoisoned = new Error('old');
+            intrinsicPoisoned.name = 'Renamed';
+            intrinsicPoisonedStack = intrinsicPoisoned.stack;
+        } finally {
+            Function.prototype.call = originalFunctionCall;
+            String.prototype.slice = originalStringSlice;
+        }
+        assert.match(intrinsicPoisonedStack, /^Renamed: old(?:\n|$)/);
 
         const originalStackTraceLimit = Error.stackTraceLimit;
         try {
@@ -489,6 +516,11 @@ export const testPrepareStackTraceDescriptors = () => {
         assert.strictEqual(Error.prepareStackTrace, customPrepare);
         const customPrepared = new Error('partial-descriptor');
         assert.strictEqual(customPrepared.stack, 'custom-prepare');
+        const customPreparedDescriptor = Object.getOwnPropertyDescriptor(customPrepared, 'stack');
+        assert.strictEqual(customPreparedDescriptor.value, 'custom-prepare');
+        assert.strictEqual(customPreparedDescriptor.writable, true);
+        assert.strictEqual(customPreparedDescriptor.enumerable, false);
+        assert.strictEqual(customPreparedDescriptor.configurable, true);
 
         let getterCalls = 0;
         Object.defineProperty(Error, 'prepareStackTrace', {

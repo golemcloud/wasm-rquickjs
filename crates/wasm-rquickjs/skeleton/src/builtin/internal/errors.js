@@ -8,6 +8,8 @@ import {
 const nativeObjectDefineProperty = Object.defineProperty;
 const nativeObjectGetPrototypeOf = Object.getPrototypeOf;
 const nativeObjectCreate = Object.create;
+const nativeReflectApply = Reflect.apply;
+const nativeStringSlice = String.prototype.slice;
 
 // ---------------------------------------------------------------------------
 // V8-compatible CallSite objects
@@ -78,7 +80,8 @@ function _remapSourceMappedStack(stackString) {
         const offset = line.lastIndexOf(location);
         if (offset === -1) continue;
         const mapped = `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}`;
-        lines[i] = line.slice(0, offset) + mapped + line.slice(offset + location.length);
+        lines[i] = nativeReflectApply(nativeStringSlice, line, [0, offset]) + mapped +
+            nativeReflectApply(nativeStringSlice, line, [offset + location.length]);
     }
     return lines.join('\n');
 }
@@ -89,7 +92,7 @@ function _formatNativeCallSites(error, callSites) {
     }
     let header;
     try {
-        header = nativeErrorToString.call(error);
+        header = nativeReflectApply(nativeErrorToString, error, []);
     } catch {
         header = 'Error';
     }
@@ -135,8 +138,10 @@ function _formatNativeCallSites(error, callSites) {
 
 function _prepareSourceMappedStackState(error, callSites) {
     const state = _formatNativeCallSites(error, callSites);
-    state.value = state.value.slice(0, state.headerLength) +
-        _remapSourceMappedStack(state.value.slice(state.headerLength));
+    state.value = nativeReflectApply(nativeStringSlice, state.value, [0, state.headerLength]) +
+        _remapSourceMappedStack(
+            nativeReflectApply(nativeStringSlice, state.value, [state.headerLength]),
+        );
     return state;
 }
 
@@ -260,9 +265,9 @@ const preparedNativeStacks = new WeakMap();
 
 function _refreshNativeStackHeader(error, stack, headerLength) {
     if (typeof stack !== 'string') return stack;
-    const currentHeader = nativeErrorToString.call(error);
+    const currentHeader = nativeReflectApply(nativeErrorToString, error, []);
     if (typeof currentHeader !== 'string') return stack;
-    return currentHeader + stack.slice(headerLength);
+    return currentHeader + nativeReflectApply(nativeStringSlice, stack, [headerLength]);
 }
 
 const preparedNativeStackDescriptor = nativeObjectCreate(null);
@@ -305,19 +310,15 @@ function _getPreparedNativeStack() {
 }
 
 function _setPreparedNativeStack(stack) {
-    if (this === null || (typeof this !== 'object' && typeof this !== 'function')) {
-        return;
-    }
-    const state = nativeWeakMapGet(preparedNativeStacks, this);
-    if (state === undefined) {
-        nativeWeakMapSet(preparedNativeStacks, this, {
-            value: stack,
-            headerLength: 0,
-            materialized: true,
-        });
-    } else {
-        state.value = stack;
-        state.materialized = true;
+    let owner = this;
+    while (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
+        const state = nativeWeakMapGet(preparedNativeStacks, owner);
+        if (state !== undefined) {
+            state.value = stack;
+            state.materialized = true;
+            return;
+        }
+        owner = nativeObjectGetPrototypeOf(owner);
     }
 }
 
@@ -349,10 +350,9 @@ if (nativeErrorPrepareStackTraceDescriptor &&
         configurable: true,
         enumerable: false,
     });
-    nativeErrorPrepareStackTraceDescriptor.set.call(
-        NativeError,
+    nativeReflectApply(nativeErrorPrepareStackTraceDescriptor.set, NativeError, [
         _dispatchPrepareStackTrace,
-    );
+    ]);
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stack_shim', {
@@ -376,18 +376,16 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
         nativeErrorPrepareStackTraceDescriptor &&
         typeof nativeErrorPrepareStackTraceDescriptor.set === 'function') {
         function captureCallSites(targetObject, constructorOpt) {
-            nativeErrorPrepareStackTraceDescriptor.set.call(
-                NativeError,
+            nativeReflectApply(nativeErrorPrepareStackTraceDescriptor.set, NativeError, [
                 _captureNativeCallSites,
-            );
+            ]);
             try {
                 nativeErrorCaptureStackTrace(targetObject, constructorOpt);
                 return _takeNativeCallSites(targetObject) ?? [];
             } finally {
-                nativeErrorPrepareStackTraceDescriptor.set.call(
-                    NativeError,
+                nativeReflectApply(nativeErrorPrepareStackTraceDescriptor.set, NativeError, [
                     _dispatchPrepareStackTrace,
-                );
+                ]);
             }
         }
 
