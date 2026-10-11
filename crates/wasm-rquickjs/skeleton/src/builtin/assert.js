@@ -434,7 +434,10 @@ function normalizeStackFrameFormatting(stack) {
     let lines = stack.split('\n');
     const normalizedLines = [];
     for (let i = 0; i < lines.length; i++) {
-        let line = lines[i];
+        let line = lines[i].replace(
+            /__wasm_rquickjs_builtin\/sync-implementation\/(?=node:)/g,
+            '',
+        );
         if (/^\s*at\s+apply\s+\(native\)\s*$/.test(line)) {
             continue;
         }
@@ -532,11 +535,17 @@ function resolveSourceForFrame(frame, currentModuleSource) {
     return undefined;
 }
 
+function isBuiltinStackFrameFileName(fileName) {
+    return typeof fileName === 'string' &&
+        (fileName.startsWith('node:') ||
+            fileName.startsWith('__wasm_rquickjs_builtin/'));
+}
+
 function shouldSkipStackFrame(frame, stackStartFnName) {
     if (!frame) {
         return true;
     }
-    if (frame.fileName === 'native' || frame.fileName.startsWith('node:')) {
+    if (frame.fileName === 'native' || isBuiltinStackFrameFileName(frame.fileName)) {
         return true;
     }
 
@@ -927,7 +936,7 @@ function getErrMessage(stackStartFn) {
         if (frame.fileName === 'native') {
             continue;
         }
-        if (typeof frame.fileName === 'string' && frame.fileName.startsWith('node:')) {
+        if (isBuiltinStackFrameFileName(frame.fileName)) {
             return undefined;
         }
         if (isEvalStackFrame(frame)) {

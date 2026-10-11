@@ -3,7 +3,7 @@
 
 import { addAbortSignal, addAbortSignalNoValidate } from "__wasm_rquickjs_builtin/internal/streams/add-abort-signal";
 import { destroyer } from "__wasm_rquickjs_builtin/internal/streams/destroy";
-import { isDisturbed, isErrored, isNodeStream, isWritable } from "__wasm_rquickjs_builtin/internal/streams/utils";
+import { isDisturbed, isErrored, isNodeStream, isWritable, uint8ArrayToBuffer } from "__wasm_rquickjs_builtin/internal/streams/utils";
 import { isUint8Array } from "__wasm_rquickjs_builtin/internal/util/types";
 import { pipeline } from "__wasm_rquickjs_builtin/internal/streams/pipeline";
 import { promisify } from "__wasm_rquickjs_builtin/internal/util";
@@ -19,18 +19,9 @@ import Writable from "__wasm_rquickjs_builtin/internal/streams/writable";
 import { getDefaultHighWaterMark, setDefaultHighWaterMark } from "__wasm_rquickjs_builtin/internal/streams/state";
 import { validateObject, validateAbortSignal } from "__wasm_rquickjs_builtin/internal/validators";
 import { ERR_INVALID_ARG_VALUE } from "__wasm_rquickjs_builtin/internal/errors";
-import { Buffer } from "buffer";
 import { nextTick } from "node:process";
 
 const { custom: customPromisify } = promisify;
-
-function _uint8ArrayToBuffer(chunk) {
-    return Buffer.from(
-        chunk.buffer,
-        chunk.byteOffset,
-        chunk.byteLength,
-    );
-}
 
 // Create wrapper functions to allow adding properties to imported functions
 function pipelineWrapper(...args) {
@@ -151,11 +142,11 @@ Object.defineProperty(Stream, "promises", {
 // Backwards-compat with node 0.4.x
 Stream.Stream = Stream;
 Stream._isUint8Array = isUint8Array;
-Stream._uint8ArrayToBuffer = _uint8ArrayToBuffer;
+Stream._uint8ArrayToBuffer = uint8ArrayToBuffer;
 
 export default Stream;
 export {
-    _uint8ArrayToBuffer,
+    uint8ArrayToBuffer as _uint8ArrayToBuffer,
     addAbortSignal,
     compose,
     destroyer as destroy,

@@ -25,6 +25,7 @@ world module-resolution {
   export test-cjs-package-json-parse-cache: func() -> bool;
   export test-cjs-loader-realpath-cache: func() -> bool;
   export test-sync-builtin-esm-exports: func() -> bool;
+  export test-builtin-first-import: func(specifier: string) -> bool;
   export test-esm-resolution-error-urls: func() -> bool;
   export test-cjs-direct-named-exports: func() -> bool;
   export test-esm-imports-side-effect-common-js: func() -> bool;
