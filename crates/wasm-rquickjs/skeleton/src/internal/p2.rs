@@ -124,6 +124,9 @@ impl JsState {
             .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
 
             for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
+              if crate::internal::module_loading::is_reserved_embedded_module_name(name) {
+                continue;
+              }
               Module::import(&ctx, name.to_string())
                  .catch(&ctx)
                  .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))

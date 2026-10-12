@@ -1,8 +1,106 @@
-use crate::common::test_server::start_test_server;
+use crate::common::test_server::{
+    ResponseBodyServerEvent, start_response_body_abort_test_server, start_test_server,
+};
 use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
+
+async fn response_cancellation(compiled: &CompiledTest, test_case: u8) -> anyhow::Result<()> {
+    let (port, _server, mut events) = start_response_body_abort_test_server().await;
+    let args = [Val::U16(port), Val::U8(test_case)];
+    let invocation = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-response-cancellation",
+        &args,
+    );
+    tokio::pin!(invocation);
+    // Initial Wasmtime compilation can be slow on a cold cache. Start the cancellation deadline
+    // only once the guest is actually receiving the response.
+    let mut started = Box::pin(async {
+        for expected in [
+            ResponseBodyServerEvent::Connected,
+            ResponseBodyServerEvent::HeadSent,
+        ] {
+            assert_eq!(events.recv().await, Some(expected));
+        }
+    });
+    let completed = tokio::select! {
+        result = &mut invocation => Some(result),
+        result = tokio::time::timeout(std::time::Duration::from_secs(180), &mut started) => {
+            result?;
+            None
+        },
+    };
+    let (result, output) = if let Some(result) = completed {
+        // A fast unread-body cancellation can finish while the arrival events are already queued.
+        tokio::time::timeout(std::time::Duration::from_secs(1), &mut started).await?;
+        result
+    } else {
+        tokio::time::timeout(std::time::Duration::from_secs(30), invocation)
+            .await
+            .unwrap_or_else(|_| {
+                panic!("response cancellation case {test_case} kept the invocation alive")
+            })
+    };
+    drop(started);
+    println!("{output}");
+    assert_eq!(result?, Some(Val::Bool(true)), "case {test_case}: {output}");
+    assert_eq!(events.try_recv()?, ResponseBodyServerEvent::Released);
+    Ok(())
+}
+
+#[test]
+async fn node_http_response_cancellation_destroy(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    response_cancellation(compiled, 0).await
+}
+
+#[test]
+async fn node_http_response_cancellation_abort_request(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    response_cancellation(compiled, 1).await
+}
+
+#[test]
+async fn node_http_response_cancellation_destroy_request(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    response_cancellation(compiled, 2).await
+}
+
+#[test]
+async fn node_http_response_cancellation_errors_and_unread(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    for test_case in [3, 4, 5, 9, 10, 11] {
+        response_cancellation(compiled, test_case).await?;
+    }
+    Ok(())
+}
+
+#[test]
+async fn node_http_response_cancellation_eof_and_transport_error(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    for test_case in [6, 7, 8, 12, 13, 17] {
+        response_cancellation(compiled, test_case).await?;
+    }
+    Ok(())
+}
+
+#[test]
+async fn node_http_response_cancellation_backpressure(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    for test_case in 14..=16 {
+        response_cancellation(compiled, test_case).await?;
+    }
+    Ok(())
+}
 
 #[test_dep(tagged_as = "node_http", scope = Cloneable)]
 async fn compiled_node_http() -> CompiledTest {
@@ -190,6 +288,22 @@ async fn node_http_response_lifecycle(
 }
 
 #[test]
+async fn node_http_response_repeated_end_callbacks(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-response-repeated-end-callbacks",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_response_post_close_writes(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -202,6 +316,50 @@ async fn node_http_response_post_close_writes(
     .await;
     println!("{output}");
     assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipeline_backpressure(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipeline-backpressure",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipeline_backpressure_profile(
+    #[tagged_as("node_http_profiling")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipeline-backpressure-profile",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    let Some(Val::String(profile)) = result? else {
+        anyhow::bail!("http-pipeline-backpressure-profile did not return a JSON string");
+    };
+    let profile: serde_json::Value = serde_json::from_str(&profile)?;
+    println!("{}", serde_json::to_string_pretty(&profile)?);
+    assert_eq!(profile["valid"], true);
+    assert!(profile["wallMs"].as_u64().is_some());
+    assert!(profile["memory"]["heapUsedHighWater"].as_u64().is_some());
+    assert!(
+        profile["writeProfile"]["js"]["nativeCrossings"]
+            .as_u64()
+            .is_some_and(|crossings| crossings > 0)
+    );
     Ok(())
 }
 

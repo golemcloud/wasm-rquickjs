@@ -4497,7 +4497,7 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
-        Self::compile_with_features(path, use_shared_target, feature_combination).await
+        Self::compile_with_features(path, use_shared_target, feature_combination, &[]).await
     }
 
     pub async fn new_with_features(
@@ -4505,8 +4505,28 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
-        let compiled =
-            Self::compile_with_features(path, use_shared_target, feature_combination).await?;
+        Self::new_with_features_and_additional_modules(
+            path,
+            use_shared_target,
+            feature_combination,
+            &[],
+        )
+        .await
+    }
+
+    pub async fn new_with_features_and_additional_modules(
+        path: &Utf8Path,
+        use_shared_target: bool,
+        feature_combination: FeatureCombination,
+        additional_modules: &[JsModuleSpec],
+    ) -> anyhow::Result<CompiledTest> {
+        let compiled = Self::compile_with_features(
+            path,
+            use_shared_target,
+            feature_combination,
+            additional_modules,
+        )
+        .await?;
         let compiled = if test_unoptimized_enabled() {
             compiled
         } else {
@@ -4529,6 +4549,7 @@ impl CompiledTest {
         path: &Utf8Path,
         use_shared_target: bool,
         feature_combination: FeatureCombination,
+        additional_modules: &[JsModuleSpec],
     ) -> anyhow::Result<CompiledTest> {
         drop_test_artifact_cache_once();
         let target = test_target();
@@ -4583,6 +4604,7 @@ impl CompiledTest {
                     }
                     .to_string(),
                 ),
+                ("additional_modules", format!("{additional_modules:?}")),
             ],
         );
 
@@ -4641,12 +4663,14 @@ impl CompiledTest {
             "Generating wrapper create for example '{name}' ({:?}) to {wrapper_crate_root}",
             target
         );
+        let mut js_modules = vec![JsModuleSpec {
+            name: name.to_string(),
+            mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
+        }];
+        js_modules.extend_from_slice(additional_modules);
         generate_wrapper_crate_with_target(
             &wit_dir,
-            &[JsModuleSpec {
-                name: name.to_string(),
-                mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
-            }],
+            &js_modules,
             &wrapper_crate_root,
             None,
             target.generation_target(),
