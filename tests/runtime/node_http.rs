@@ -206,6 +206,50 @@ async fn node_http_response_post_close_writes(
 }
 
 #[test]
+async fn node_http_pipeline_backpressure(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipeline-backpressure",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_pipeline_backpressure_profile(
+    #[tagged_as("node_http_profiling")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-pipeline-backpressure-profile",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    let Some(Val::String(profile)) = result? else {
+        anyhow::bail!("http-pipeline-backpressure-profile did not return a JSON string");
+    };
+    let profile: serde_json::Value = serde_json::from_str(&profile)?;
+    println!("{}", serde_json::to_string_pretty(&profile)?);
+    assert_eq!(profile["valid"], true);
+    assert!(profile["wallMs"].as_u64().is_some());
+    assert!(profile["memory"]["heapUsedHighWater"].as_u64().is_some());
+    assert!(
+        profile["writeProfile"]["js"]["nativeCrossings"]
+            .as_u64()
+            .is_some_and(|crossings| crossings > 0)
+    );
+    Ok(())
+}
+
+#[test]
 async fn node_http_pipelined_response_order(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
