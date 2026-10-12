@@ -10,12 +10,73 @@ const require = createRequire(import.meta.url);
 export const testCaptureStackTraceExists = () => {
     try {
         assert.strictEqual(typeof Error.captureStackTrace, 'function');
+        assert.strictEqual(typeof Error.prepareStackTrace, 'function');
         assert.strictEqual(typeof Error.stackTraceLimit, 'number');
         return true;
     } catch (e) {
         console.error('testCaptureStackTraceExists FAIL:', e.message);
         return false;
     }
+};
+
+export const benchmarkErrorStack = (path, iterations) => {
+    function throwAtDepth(depth, valueFactory) {
+        if (depth === 0) throw valueFactory();
+        return throwAtDepth(depth - 1, valueFactory);
+    }
+
+    let checksum = 0;
+    if (path === 'construction') {
+        for (let index = 0; index < iterations; index++) {
+            checksum += new Error('benchmark').message.length;
+        }
+    } else if (path === 'first-read') {
+        for (let index = 0; index < iterations; index++) {
+            checksum += new Error('benchmark').stack.length;
+        }
+    } else if (path === 'repeated-read') {
+        const error = new Error('benchmark');
+        error.stack;
+        for (let index = 0; index < iterations; index++) {
+            checksum += error.stack.length;
+        }
+    } else if (path === 'throw-catch') {
+        for (let index = 0; index < iterations; index++) {
+            try {
+                throwAtDepth(4, () => new Error('benchmark'));
+            } catch (error) {
+                checksum += error.message.length;
+            }
+        }
+    } else if (path === 'throw-plain') {
+        for (let index = 0; index < iterations; index++) {
+            try {
+                throwAtDepth(4, () => ({ message: 'benchmark' }));
+            } catch (error) {
+                checksum += error.message.length;
+            }
+        }
+    } else if (path === 'capture-first-read') {
+        for (let index = 0; index < iterations; index++) {
+            const target = {};
+            Error.captureStackTrace(target);
+            checksum += target.stack.length;
+        }
+    } else if (path === 'custom-first-read') {
+        const descriptor = Object.getOwnPropertyDescriptor(Error, 'prepareStackTrace');
+        try {
+            Error.prepareStackTrace = (_error, callSites) => `custom:${callSites.length}`;
+            for (let index = 0; index < iterations; index++) {
+                checksum += new Error('benchmark').stack.length;
+            }
+        } finally {
+            if (descriptor) Object.defineProperty(Error, 'prepareStackTrace', descriptor);
+            else delete Error.prepareStackTrace;
+        }
+    } else {
+        throw new RangeError(`unknown Error stack benchmark path: ${path}`);
+    }
+    return checksum >>> 0;
 };
 
 async function checkPreparedStackCacheLifetime(customStack) {
@@ -36,10 +97,10 @@ async function checkPreparedStackCacheLifetime(customStack) {
             ? []
             : Array.from({ length: 8 }, (_, i) => new Error(`unread-held-${i}`));
         function discardedErrors() {
-            return Array.from({ length: 64 }, () => {
+            return Array.from({ length: 64 }, (_, index) => {
                 const error = new Error('discarded');
                 error.self = error;
-                void error.stack;
+                if ((index & 1) === 0) void error.stack;
                 return new WeakRef(error);
             });
         }
@@ -153,6 +214,20 @@ export const testCaptureStackTraceBasic = () => {
         Error.captureStackTrace(obj);
         assert.strictEqual(typeof obj.stack, 'string');
         assert(obj.stack.length > 0, 'stack should be non-empty');
+        assert.throws(
+            () => Error.captureStackTrace(Object.freeze({})),
+            TypeError,
+        );
+        const existingStack = Object.preventExtensions(Object.defineProperty({}, 'stack', {
+            value: 'existing',
+            writable: true,
+            configurable: true,
+        }));
+        assert.throws(() => Error.captureStackTrace(existingStack), TypeError);
+        assert.throws(
+            () => Error.captureStackTrace(Object.preventExtensions(new Error('fixed'))),
+            TypeError,
+        );
         return true;
     } catch (e) {
         console.error('testCaptureStackTraceBasic FAIL:', e.message);
@@ -259,6 +334,68 @@ export const testLatePrepareStackTrace = () => {
         Error.captureStackTrace(lateTarget);
         Error.prepareStackTrace = () => 'late-prepare';
         assert.strictEqual(lateTarget.stack, 'late-prepare');
+
+        Error.prepareStackTrace = undefined;
+        const lateError = new Error('late-error');
+        let ordinaryCalls = 0;
+        Error.prepareStackTrace = function(error) {
+            ordinaryCalls++;
+            assert.strictEqual(this, Error);
+            return `late:${error.message}`;
+        };
+        assert.strictEqual(ordinaryCalls, 0);
+        assert.strictEqual(lateError.stack, 'late:late-error');
+        assert.strictEqual(ordinaryCalls, 1);
+
+        let recursiveCalls = 0;
+        Error.prepareStackTrace = error => {
+            recursiveCalls++;
+            return error.stack;
+        };
+        assert.match(new Error('recursive').stack, /^Error: recursive(?:\n|$)/);
+        assert.strictEqual(recursiveCalls, 1);
+
+        let crossErrorCalls = 0;
+        let nestedError;
+        Error.prepareStackTrace = error => {
+            crossErrorCalls++;
+            if (error.message === 'outer') {
+                nestedError = new Error('inner');
+                return `${nestedError.stack}!`;
+            }
+            return `unexpected:${error.message}`;
+        };
+        const crossErrorStack = new Error('outer').stack;
+        assert.match(crossErrorStack, /^Error: inner(?:\n|$)/);
+        assert.match(crossErrorStack, /!$/);
+        assert.strictEqual(crossErrorCalls, 1);
+        assert.strictEqual(nestedError.stack, crossErrorStack.slice(0, -1));
+
+        const intrinsicError = Error;
+        const replacementTarget = new intrinsicError('replacement-target');
+        function ReplacementError() {}
+        ReplacementError.prepareStackTrace = () => 'replacement-prepare';
+        globalThis.Error = ReplacementError;
+        try {
+            assert.strictEqual(replacementTarget.stack, 'replacement-prepare');
+        } finally {
+            globalThis.Error = intrinsicError;
+        }
+
+        Error.prepareStackTrace = () => 'intrinsic-fallback';
+        const fallbackTarget = new Error('fallback-target');
+        globalThis.Error = function ReplacementWithoutHook() {};
+        try {
+            assert.strictEqual(fallbackTarget.stack, 'intrinsic-fallback');
+        } finally {
+            globalThis.Error = intrinsicError;
+        }
+
+        Error.prepareStackTrace = error => {
+            error.stack = 'assigned-in-hook';
+            return error.stack;
+        };
+        assert.strictEqual(new Error('assigned').stack, 'assigned-in-hook');
 
         Error.prepareStackTrace = () => 'capture-time-prepare';
         const removedTarget = {};
@@ -409,19 +546,74 @@ export const testErrorInspectUsesCurrentName = () => {
         }
 
         const originalFunctionCall = Function.prototype.call;
+        const originalArrayIsArray = Array.isArray;
+        const originalArrayJoin = Array.prototype.join;
+        const originalArrayPush = Array.prototype.push;
+        const originalArraySplice = Array.prototype.splice;
+        const originalArrayConstructor = Array.prototype.constructor;
+        const originalArrayIndexOne = Object.getOwnPropertyDescriptor(Array.prototype, '1');
+        const originalRegExpExec = RegExp.prototype.exec;
+        const originalStringLastIndexOf = String.prototype.lastIndexOf;
         const originalStringSlice = String.prototype.slice;
+        const originalStringSplit = String.prototype.split;
+        const originalParseInt = globalThis.parseInt;
         let intrinsicPoisonedStack;
         try {
             Function.prototype.call = () => { throw 1; };
+            Array.isArray = () => { throw 1; };
+            Array.prototype.join = () => { throw 1; };
+            Array.prototype.push = () => { throw 1; };
+            Array.prototype.splice = () => { throw 1; };
+            Array.prototype.constructor = {
+                get [Symbol.species]() { throw 1; },
+            };
+            Object.defineProperty(Array.prototype, '1', {
+                get() { return undefined; },
+                set() { throw 1; },
+                configurable: true,
+            });
+            RegExp.prototype.exec = () => { throw 1; };
+            String.prototype.lastIndexOf = () => { throw 1; };
             String.prototype.slice = () => { throw 1; };
+            String.prototype.split = () => { throw 1; };
+            globalThis.parseInt = () => { throw 1; };
             const intrinsicPoisoned = new Error('old');
             intrinsicPoisoned.name = 'Renamed';
             intrinsicPoisonedStack = intrinsicPoisoned.stack;
         } finally {
             Function.prototype.call = originalFunctionCall;
+            Array.isArray = originalArrayIsArray;
+            Array.prototype.join = originalArrayJoin;
+            Array.prototype.push = originalArrayPush;
+            Array.prototype.splice = originalArraySplice;
+            Array.prototype.constructor = originalArrayConstructor;
+            if (originalArrayIndexOne) {
+                Object.defineProperty(Array.prototype, '1', originalArrayIndexOne);
+            } else {
+                delete Array.prototype[1];
+            }
+            RegExp.prototype.exec = originalRegExpExec;
+            String.prototype.lastIndexOf = originalStringLastIndexOf;
             String.prototype.slice = originalStringSlice;
+            String.prototype.split = originalStringSplit;
+            globalThis.parseInt = originalParseInt;
         }
         assert.match(intrinsicPoisonedStack, /^Renamed: old(?:\n|$)/);
+
+        const thrownWithStack = { stack: 'remote-stack', message: 'remote' };
+        try {
+            throw thrownWithStack;
+        } catch (error) {
+            assert.strictEqual(error.stack, 'remote-stack');
+            assert.strictEqual(Object.hasOwn(error, 'stack'), true);
+        }
+        const thrownWithoutStack = { code: 'plain' };
+        try {
+            throw thrownWithoutStack;
+        } catch (error) {
+            assert.strictEqual(error.stack, undefined);
+            assert.strictEqual(Object.hasOwn(error, 'stack'), false);
+        }
 
         const originalStackTraceLimit = Error.stackTraceLimit;
         try {
@@ -517,8 +709,9 @@ export const testPrepareStackTraceDescriptors = () => {
         const customPrepared = new Error('partial-descriptor');
         assert.strictEqual(customPrepared.stack, 'custom-prepare');
         const customPreparedDescriptor = Object.getOwnPropertyDescriptor(customPrepared, 'stack');
-        assert.strictEqual(customPreparedDescriptor.value, 'custom-prepare');
-        assert.strictEqual(customPreparedDescriptor.writable, true);
+        assert.strictEqual(typeof customPreparedDescriptor.get, 'function');
+        assert.strictEqual(typeof customPreparedDescriptor.set, 'function');
+        assert.strictEqual('value' in customPreparedDescriptor, false);
         assert.strictEqual(customPreparedDescriptor.enumerable, false);
         assert.strictEqual(customPreparedDescriptor.configurable, true);
 
@@ -531,7 +724,10 @@ export const testPrepareStackTraceDescriptors = () => {
             configurable: true,
         });
         assert.strictEqual(getterCalls, 0);
-        assert.strictEqual(new TypeError('accessor').stack, 'custom-prepare');
+        const accessorPrepared = new TypeError('accessor');
+        assert.strictEqual(getterCalls, 0);
+        assert.strictEqual(accessorPrepared.stack, 'custom-prepare');
+        assert.strictEqual(getterCalls, 2);
 
         let undefinedPrepareCalls = 0;
         Object.defineProperty(Error, 'prepareStackTrace', {
@@ -611,6 +807,46 @@ export const testPrepareStackTraceDescriptors = () => {
     } catch (e) {
         console.error('testPrepareStackTraceDescriptors FAIL:', e.message);
         return false;
+    }
+};
+
+// Node 22 returns undefined for both proxy reads below without invoking the
+// getPrototypeOf trap. QuickJS does not expose a trap-free way for JavaScript
+// to recover the private stack holder through a Proxy, so retain the exact
+// engine boundary until holder lookup can move into the native layer.
+export const testProxyStackHolderEngineBoundary = () => {
+    const originalPrepare = Error.prepareStackTrace;
+    try {
+        Error.prepareStackTrace = undefined;
+
+        const errorTarget = new Error('proxy-error');
+        let errorTrapCalls = 0;
+        const errorProxy = new Proxy(errorTarget, {
+            getPrototypeOf(target) {
+                errorTrapCalls++;
+                return Reflect.getPrototypeOf(target);
+            },
+        });
+        assert.strictEqual(errorProxy.stack, undefined);
+        assert.strictEqual(errorTrapCalls, 1);
+
+        const capturedTarget = {};
+        Error.captureStackTrace(capturedTarget);
+        let capturedTrapCalls = 0;
+        const capturedProxy = new Proxy(capturedTarget, {
+            getPrototypeOf(target) {
+                capturedTrapCalls++;
+                return Reflect.getPrototypeOf(target);
+            },
+        });
+        assert.strictEqual(capturedProxy.stack, undefined);
+        assert.strictEqual(capturedTrapCalls, 1);
+        return true;
+    } catch (e) {
+        console.error('testProxyStackHolderEngineBoundary FAIL:', e.message);
+        return false;
+    } finally {
+        Error.prepareStackTrace = originalPrepare;
     }
 };
 
