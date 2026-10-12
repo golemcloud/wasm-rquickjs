@@ -2014,7 +2014,30 @@ function parseTrailerHeaders(block, complete) {
                 bytesParsed: bytesParsed + invalidIndex,
             };
         }
+        const lowerName = name.toLowerCase();
         const rawValue = line.substring(colonIdx + 1);
+        const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
+        const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
+        if (lowerName === 'content-length') {
+            return {
+                error: true,
+                type: 'trailer-error',
+                code: 'HPE_INVALID_CONTENT_LENGTH',
+                reason: "Content-Length can't be present with Transfer-Encoding",
+                bytesParsed: bytesParsed + colonIdx + 1,
+            };
+        }
+        if (lowerName === 'transfer-encoding' &&
+            valueWithoutLeadingWhitespace.length > 0) {
+            return {
+                error: true,
+                type: 'trailer-error',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                bytesParsed:
+                    bytesParsed + colonIdx + 2 + leadingWhitespaceBytes,
+            };
+        }
         if (_checkInvalidHeaderChar(rawValue)) {
             const invalidIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
             const invalidByte = rawValue.charCodeAt(invalidIndex);
@@ -2038,8 +2061,6 @@ function parseTrailerHeaders(block, complete) {
                     (isBareCarriageReturn ? 1 : 0),
             };
         }
-        const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
-        const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
         const lineHeaderBytes = name.length + valueWithoutLeadingWhitespace.length;
         if (headerBytes + lineHeaderBytes >= MAX_TRAILER_SIZE) {
             const acceptedValueBytes = Math.max(

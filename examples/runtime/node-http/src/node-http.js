@@ -1829,6 +1829,30 @@ export async function httpRequestTrailerErrors() {
                     return payload.indexOf('\rY') + 1;
                 },
             },
+            {
+                key: 'content-length',
+                suffix: 'Content-Length: 1\r\n\r\n' +
+                    'GET /smuggled-content-length HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_CONTENT_LENGTH',
+                reason: "Content-Length can't be present with Transfer-Encoding",
+                offset(payload) {
+                    return payload.indexOf('Content-Length:') +
+                        'Content-Length:'.length;
+                },
+            },
+            {
+                key: 'transfer-encoding',
+                suffix: 'Transfer-Encoding: chunked\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                offset(payload) {
+                    return payload.lastIndexOf('Transfer-Encoding: chunked') +
+                        'Transfer-Encoding: c'.length;
+                },
+            },
         ]) {
             if (failure) break;
             const payload = Buffer.from(
@@ -1837,6 +1861,8 @@ export async function httpRequestTrailerErrors() {
             );
             result = await runHandled(invalidCase.key, payload);
             if (result.timedOut || result.wire !== '' ||
+                requests[invalidCase.key].join(',') !==
+                    '/' + invalidCase.key ||
                 !handledErrorIsValid(
                     invalidCase.code,
                     invalidCase.reason,
