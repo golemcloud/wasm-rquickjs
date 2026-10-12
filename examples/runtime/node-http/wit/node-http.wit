@@ -9,6 +9,7 @@ world node-http {
   export http-self-connect-post: func();
   export http-abort-isolation: func() -> bool;
   export http-response-lifecycle: func() -> bool;
+  export http-response-repeated-end-callbacks: func() -> bool;
   export http-response-post-close-writes: func() -> bool;
   export http-pipeline-backpressure: func() -> bool;
   export http-pipeline-backpressure-profile: func() -> string;
