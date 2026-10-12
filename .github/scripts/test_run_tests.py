@@ -163,20 +163,15 @@ class WrapperTests(unittest.TestCase):
 
 class ReportTests(unittest.TestCase):
     def test_partial_and_report_only_reruns_preserve_latest_lane_evidence(self):
-        import fnmatch
-        import re
-
         script = WRAPPER.with_name("prepare-test-reports.py")
-        workflow = (WRAPPER.parents[1] / "workflows/ci.yaml").read_text()
-        job = workflow.split("  test-reports:\n", 1)[1]
-        pattern = re.search(r"pattern: '([^']+)'", job).group(1)
         with tempfile.TemporaryDirectory() as directory:
             source, output = Path(directory) / "raw", Path(directory) / "rendered"
             evidence = {}
+            artifacts = []
             for lane, attempt, status in [("p2", 1, "failed"), ("p2", 2, "failed"),
                                           ("p2", 10, "passed"), ("p3", 1, "passed")]:
                 shard = source / f"{lane}-report-attempt{attempt}"
-                self.assertTrue(fnmatch.fnmatchcase(shard.name, pattern))
+                artifacts.append({"name": shard.name, "id": len(artifacts) + 1})
                 shard.mkdir(parents=True)
                 report = shard / "ctrf-test.json"
                 report.write_text(json.dumps({"results": {"tests": [{"name": KNOWN, "status": status}]}}))
@@ -193,6 +188,21 @@ class ReportTests(unittest.TestCase):
                              {f"p2 (attempt 10) / {KNOWN}", f"p3 (attempt 1) / {KNOWN}"})
             self.assertTrue(all(t["status"] == "passed" for t in tests))
             self.assertTrue(all(path.read_bytes() == data for path, data in evidence.items()))
+
+            # Superseded artifacts can fail to download; never request them.
+            # Paginated/mixed attempts must still retain lanes not rerun.
+            pages = [{"artifacts": artifacts[:2]}, {"artifacts": artifacts[2:] + [
+                {"name": "ci-test-reports-attempt99", "id": 99}]}]
+            for data, expected in [
+                (pages, "ids=3,4\nsingle-name=\n"),
+                ([{"artifacts": artifacts[-1:]}],
+                 "ids=4\nsingle-name=p3-report-attempt1\n"),
+                ([{"artifacts": []}], "ids=\nsingle-name=\n"),
+            ]:
+                result = subprocess.run([sys.executable, str(script), "--select-artifacts"],
+                                        input=json.dumps(data), capture_output=True, text=True)
+                self.assertEqual(result.returncode, 0, result.stderr)
+                self.assertEqual(result.stdout, expected)
 
 
 if __name__ == "__main__":

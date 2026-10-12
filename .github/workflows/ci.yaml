@@ -322,25 +322,37 @@ jobs:
     if: ${{ always() && !cancelled() }}
     needs: [test-other, test-runtime, test-node-compat, test-runtime-p3, test-node-compat-p3]
     runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      checks: write
+      pull-requests: write
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/download-artifact@v4
-        with:
-          # Partial and report-only reruns reuse the latest evidence per lane.
-          pattern: '*-report-attempt*'
-          path: test-reports
-          merge-multiple: false
-      - name: Preserve source name when downloading a single artifact
+      - name: Select latest evidence per lane before downloading
+        id: reports
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          gh api --paginate --slurp "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
+            | python3 .github/scripts/prepare-test-reports.py --select-artifacts >> "$GITHUB_OUTPUT"
+      - uses: actions/download-artifact@v4
+        if: steps.reports.outputs.ids != ''
+        with:
+          # Partial and report-only reruns reuse the latest evidence per lane.
+          artifact-ids: ${{ steps.reports.outputs.ids }}
+          github-token: ${{ github.token }}
+          path: test-reports
+          merge-multiple: false
+      - name: Preserve source name when downloading a single artifact
+        if: steps.reports.outputs.single-name != ''
+        env:
+          ARTIFACT_NAME: ${{ steps.reports.outputs.single-name }}
+        run: |
           if compgen -G 'test-reports/ctrf-*.json' > /dev/null; then
-            mapfile -t names < <(gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" \
-              --jq '.artifacts[].name | select(test("-report-attempt[0-9]+$"))')
-            [[ ${#names[@]} == 1 ]]
             mv test-reports single-test-report
             mkdir test-reports
-            mv single-test-report "test-reports/${names[0]}"
+            mv single-test-report "test-reports/${ARTIFACT_NAME}"
           fi
       - name: Preserve consolidated evidence
         uses: actions/upload-artifact@v4
