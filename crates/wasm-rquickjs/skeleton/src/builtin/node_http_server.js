@@ -2046,6 +2046,10 @@ function parseTrailerHeaders(block, complete) {
         const rawValue = line.substring(colonIdx + 1);
         const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
         const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
+        const invalidValueIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
+        const invalidValueByte = invalidValueIndex < 0
+            ? undefined
+            : rawValue.charCodeAt(invalidValueIndex);
         if (lowerName === 'content-length') {
             return {
                 error: true,
@@ -2057,6 +2061,21 @@ function parseTrailerHeaders(block, complete) {
         }
         if (lowerName === 'transfer-encoding' &&
             valueWithoutLeadingWhitespace.length > 0) {
+            if (invalidValueByte === 0x0d || invalidValueByte === 0x0a) {
+                const isBareCarriageReturn = invalidValueByte === 0x0d;
+                return {
+                    error: true,
+                    type: 'trailer-error',
+                    code: isBareCarriageReturn
+                        ? 'HPE_STRICT'
+                        : 'HPE_INVALID_HEADER_TOKEN',
+                    reason: isBareCarriageReturn
+                        ? 'Expected LF after CR'
+                        : 'Invalid header value char',
+                    bytesParsed:
+                        bytesParsed + colonIdx + 2 + invalidValueIndex,
+                };
+            }
             return {
                 error: true,
                 type: 'trailer-error',
@@ -2066,11 +2085,9 @@ function parseTrailerHeaders(block, complete) {
                     bytesParsed + colonIdx + 2 + leadingWhitespaceBytes,
             };
         }
-        if (_checkInvalidHeaderChar(rawValue)) {
-            const invalidIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
-            const invalidByte = rawValue.charCodeAt(invalidIndex);
-            const isBareLineFeed = invalidByte === 0x0a;
-            const isBareCarriageReturn = invalidByte === 0x0d;
+        if (invalidValueIndex >= 0) {
+            const isBareLineFeed = invalidValueByte === 0x0a;
+            const isBareCarriageReturn = invalidValueByte === 0x0d;
             return {
                 error: true,
                 type: 'trailer-error',
@@ -2085,7 +2102,7 @@ function parseTrailerHeaders(block, complete) {
                         ? 'Missing expected LF after header value'
                         : 'Invalid header value char',
                 bytesParsed:
-                    bytesParsed + colonIdx + 1 + invalidIndex +
+                    bytesParsed + colonIdx + 1 + invalidValueIndex +
                     (isBareCarriageReturn ? 1 : 0),
             };
         }

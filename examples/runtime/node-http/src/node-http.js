@@ -2040,6 +2040,24 @@ export async function httpRequestTrailerErrors() {
                         'Transfer-Encoding: c'.length;
                 },
             },
+            {
+                key: 'transfer-encoding-bare-cr',
+                suffix: 'Transfer-Encoding:\rX: okay\r\n\r\n',
+                code: 'HPE_STRICT',
+                reason: 'Expected LF after CR',
+                offset(payload) {
+                    return payload.indexOf('\rX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-bare-lf',
+                suffix: 'Transfer-Encoding:\nX: okay\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header value char',
+                offset(payload) {
+                    return payload.indexOf('\nX: okay') + 1;
+                },
+            },
         ]) {
             if (failure) break;
             const payload = Buffer.from(
