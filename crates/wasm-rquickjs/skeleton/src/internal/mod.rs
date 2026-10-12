@@ -26,6 +26,12 @@ compile_error!(
 
 pub(crate) mod module_loading;
 pub(crate) mod runtime_services;
+#[cfg(feature = "terminal-process")]
+pub(crate) mod terminal_bindings;
+#[cfg(feature = "terminal-process")]
+pub(crate) mod terminal_process;
+#[cfg(feature = "terminal-process")]
+pub(crate) mod terminal_runtime;
 #[cfg(feature = "typescript-runtime")]
 pub(crate) mod typescript;
 pub(crate) use module_loading::{

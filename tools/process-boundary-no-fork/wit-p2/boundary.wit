@@ -1,0 +1,6 @@
+package prototype:no-fork;
+world boundary {
+    export complete: func(case: u32) -> string;
+    export run: func(case: u32, guarded: bool) -> string;
+    export benchmark: func(workload: u32, mode: u32, size: u32) -> string;
+}
