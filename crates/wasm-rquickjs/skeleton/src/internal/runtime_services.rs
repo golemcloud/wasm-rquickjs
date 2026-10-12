@@ -14,6 +14,32 @@ use std::sync::atomic::AtomicUsize;
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::time::{Duration, Instant};
 
+#[derive(Default)]
+struct VariantCaseTagCache<'js> {
+    tags: RefCell<HashMap<&'static str, rquickjs::String<'js>>>,
+}
+
+// Only the lifetime of the cached JavaScript strings changes.
+unsafe impl<'js> JsLifetime<'js> for VariantCaseTagCache<'js> {
+    type Changed<'to> = VariantCaseTagCache<'to>;
+}
+
+pub fn variant_case_tag<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    name: &'static str,
+) -> rquickjs::Result<rquickjs::String<'js>> {
+    let cache = ctx
+        .userdata::<VariantCaseTagCache<'js>>()
+        .expect("variant tag cache not initialized");
+    if let Some(tag) = cache.tags.borrow().get(name) {
+        return Ok(tag.clone());
+    }
+
+    let tag = rquickjs::String::from_str(ctx.clone(), name)?;
+    cache.tags.borrow_mut().insert(name, tag.clone());
+    Ok(tag)
+}
+
 #[cfg(feature = "typescript-compiler-profiling")]
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -680,6 +706,8 @@ impl OwnedJsRuntime {
             };
             ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
+            ctx.store_userdata(VariantCaseTagCache::default())
+                .expect("Failed to initialize variant tag cache");
         })
         .await;
 

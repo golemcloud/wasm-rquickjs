@@ -93,3 +93,35 @@ export const test = async () => {
         console.log(`f15 is a Uint8Array with length: ${f15.length}`);
     }
 };
+
+export const nestedVariants = async (warmParent) => {
+    const { runJavaScript } = await import('wasm-rquickjs:execution');
+    if (warmParent) {
+        await types.f10({ tag: 'specific', val: 'parent' });
+    }
+    const results = [];
+    for (let i = 0; i < 3; i++) {
+        const result = await runJavaScript({
+            source: `
+                const types = await import('quickjs:types-in-exports/types');
+                const values = [];
+                for (const value of [
+                    { tag: 'specific', val: 'child-${i}' },
+                    { tag: 'none' },
+                    { tag: 'specific', val: 'again-${i}' },
+                ]) {
+                    values.push(await types.f10(value));
+                }
+                let error;
+                try {
+                    await types.f18({ tag: 'any' });
+                } catch (caught) {
+                    error = caught;
+                }
+                return { values, error };
+            `,
+        });
+        results.push(result.value);
+    }
+    return JSON.stringify(results);
+};

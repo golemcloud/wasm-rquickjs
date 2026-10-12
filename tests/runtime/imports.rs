@@ -217,3 +217,42 @@ async fn imports3(
 
     Ok(())
 }
+
+#[test]
+async fn imports3_nested_variants(
+    #[tagged_as("imports3")] compiled: &CompiledTest,
+    #[tagged_as("types_in_exports")] types_in_exports: &CompiledTest,
+) -> anyhow::Result<()> {
+    let composed = types_in_exports.plug_into(compiled)?;
+    for warm_parent in [true, false] {
+        let (result, _) = invoke_and_capture_output(
+            composed.wasm_path(),
+            None,
+            "nested-variants",
+            &[Val::Bool(warm_parent)],
+        )
+        .await;
+        let Some(Val::String(json)) = result? else {
+            anyhow::bail!("expected JSON string result");
+        };
+        let report: serde_json::Value = serde_json::from_str(&json)?;
+        let expected: Vec<_> = (0..3)
+            .map(|i| {
+                serde_json::json!({
+                    "values": [
+                        { "tag": "specific", "val": format!("child-{i}") },
+                        { "tag": "none" },
+                        { "tag": "specific", "val": format!("again-{i}") },
+                    ],
+                    "error": { "tag": "any" },
+                })
+            })
+            .collect();
+        assert_eq!(
+            report,
+            serde_json::json!(expected),
+            "warm_parent={warm_parent}"
+        );
+    }
+    Ok(())
+}

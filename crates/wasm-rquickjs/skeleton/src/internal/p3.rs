@@ -11,7 +11,7 @@ use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::promise::Promised;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Exception, Filter, FromJs,
-    Function, IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
+    Function, IntoJs, Module, Object, Persistent, Promise, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -48,7 +48,6 @@ pub struct JsState {
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
-    pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
     /// Ids of exported resource instances whose host handle has been dropped. Populated
     /// synchronously from the resource's `Drop` (which cannot `.await`) and drained at the start
     /// of the next JS entry point, where the corresponding entry is removed from the JS resource
@@ -76,7 +75,6 @@ impl JsState {
             rt,
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
-            variant_case_tag_cache: RefCell::new(HashMap::new()),
             pending_resource_drops: RefCell::new(Vec::new()),
             writer_lease: RuntimeWriterLease::new(),
         }
@@ -1583,23 +1581,6 @@ fn dump_cannot_find_export(
     keys.sort();
     panic_message.push_str(&format!("  {}\n", keys.join(", ")));
     panic_message
-}
-
-pub fn variant_case_tag<'js>(
-    ctx: &Ctx<'js>,
-    name: &'static str,
-) -> rquickjs::Result<JsString<'js>> {
-    let js_state = get_js_state();
-    if let Some(tag) = js_state.variant_case_tag_cache.borrow().get(name).cloned() {
-        return tag.restore(ctx);
-    }
-
-    let tag = JsString::from_str(ctx.clone(), name)?;
-    js_state
-        .variant_case_tag_cache
-        .borrow_mut()
-        .insert(name, Persistent::save(ctx, tag.clone()));
-    Ok(tag)
 }
 
 pub fn format_js_exception(exc: &Value) -> String {
