@@ -40,6 +40,8 @@ use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
 
+mod p3_build;
+
 mod export_bindings {
     use wasmtime::component::bindgen;
 
@@ -1059,7 +1061,10 @@ fn generate_and_build(
         GenerationTarget::WasiP3,
     )?;
 
-    let build = Command::new("cargo")
+    let cache = p3_build::BuildCache::new()?;
+    let mut build_cmd = Command::new("cargo");
+    cache.configure(&mut build_cmd);
+    let build = build_cmd
         .arg("build")
         .arg("--manifest-path")
         .arg(out.join("Cargo.toml"))
@@ -1076,7 +1081,9 @@ fn generate_and_build(
         String::from_utf8_lossy(&build.stderr)
     );
 
-    let metadata = Command::new("cargo")
+    let mut metadata_cmd = Command::new("cargo");
+    cache.configure(&mut metadata_cmd);
+    let metadata = metadata_cmd
         .arg("metadata")
         .arg("--no-deps")
         .arg("--format-version")
@@ -1090,10 +1097,14 @@ fn generate_and_build(
         .as_str()
         .ok_or_else(|| anyhow_msg("missing target_directory in cargo metadata"))?;
 
-    Ok(Utf8PathBuf::from(target_dir)
+    let wasm = Utf8PathBuf::from(target_dir)
         .join("wasm32-wasip2")
         .join("debug")
-        .join(format!("{wasm_name}.wasm")))
+        .join(format!("{wasm_name}.wasm"));
+    Ok(
+        Utf8PathBuf::from_path_buf(cache.finish(wasm.as_std_path(), out.as_std_path())?)
+            .expect("generated paths are UTF-8"),
+    )
 }
 
 // ---------------------------------------------------------------------------------------------

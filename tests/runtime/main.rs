@@ -57,12 +57,20 @@ mod xhr;
 mod zlib;
 
 // Tag suites into runtime groups for parallel CI matrix execution.
+// Balance fixture preparation as well as execution: immutable component caches
+// make most cases cheap, but each distinct generated fixture still needs a build.
 tag_suite!(crypto, group1);
+tag_suite!(example1, group1);
+tag_suite!(example2, group1);
+tag_suite!(bigint_roundtrip, group1);
 
 tag_suite!(fetch, group2);
+tag_suite!(imports, group2);
 
 tag_suite!(abort_controller, group3);
 tag_suite!(fs, group3);
+tag_suite!(variant_list_roundtrip, group3);
+tag_suite!(typescript_runtime, group3);
 
 tag_suite!(xhr, group4);
 tag_suite!(assert, group4);
@@ -96,9 +104,6 @@ tag_suite!(module_resolution, group7);
 tag_suite!(timeout, group7);
 tag_suite!(buffer, group7);
 tag_suite!(zlib, group7);
-tag_suite!(bigint_roundtrip, group7);
-tag_suite!(imports, group7);
-tag_suite!(variant_list_roundtrip, group7);
 
 tag_suite!(response_static, group8);
 tag_suite!(v8_stack_trace, group8);
@@ -106,9 +111,6 @@ tag_suite!(source_map, group8);
 tag_suite!(structured_clone, group8);
 tag_suite!(node_http, group8);
 tag_suite!(intl, group8);
-tag_suite!(example1, group8);
-tag_suite!(example2, group8);
-tag_suite!(typescript_runtime, group8);
 
 tag_suite!(node_modules_apps, group9);
 tag_suite!(npm_compat, group9);

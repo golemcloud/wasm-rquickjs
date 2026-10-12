@@ -10,11 +10,16 @@ inputs:
     description: "Patch the manifest before computing the Rust cache key"
     required: false
     default: "false"
+  component-cache-key:
+    description: "Optional lane/shard identity for generated Cargo build artifacts"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
     - name: Setup Rust
+      id: rust
       uses: dtolnay/rust-toolchain@stable
       with:
         targets: wasm32-wasip1, wasm32-wasip2
@@ -27,6 +32,21 @@ runs:
         prefix-key: v1-rust
         shared-key: ${{ inputs.cache-key }}
         cache-all-crates: true
+    # rust-cache cleans workspace binaries and does not include these nested
+    # Cargo targets. Never cache all of tmp/: fixtures and runtime state stay fresh.
+    - name: Cache generated Cargo artifacts
+      if: inputs.component-cache-key != ''
+      uses: useblacksmith/cache@v5
+      with:
+        path: |
+          tmp/rt-target
+          tmp/rt-target-p3
+          tmp/rt-target-internal-test-execution
+          tmp/rt-target-p3-internal-test-execution
+          target/p3-component-build
+        key: components-v1-${{ runner.os }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}-${{ github.sha }}
+        restore-keys: |
+          components-v1-${{ runner.os }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}-
     - name: Clear reports restored with build artifacts
       shell: bash
       run: rm -f target/ctrf-*.json

@@ -147,6 +147,7 @@ jobs:
         with:
           cache-key: p2
           wasmtime-fork: "true"
+          component-cache-key: p2-runtime-${{ matrix.group }}
       - uses: actions/setup-node@v4
         if: matrix.node_version
         with:
@@ -176,6 +177,7 @@ jobs:
         with:
           cache-key: p2
           wasmtime-fork: "true"
+          component-cache-key: p2-node-${{ matrix.shard }}
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
       - name: Module inventory contracts
@@ -192,6 +194,19 @@ jobs:
   test-p3:
     needs: [build]
     runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        suite: [generation, async-values]
+        # Temporary paired measurement; retain only the winning configuration.
+        artifact-cache: ["0", "1"]
+        include:
+          - suite: generation
+            test_args: --test p3_generation --test p3_exported_resource --test optimize
+          - suite: async-values
+            test_args: --test p3_async_values
+    env:
+      WASM_RQUICKJS_TEST_ARTIFACT_CACHE: ${{ matrix.artifact-cache }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -199,11 +214,13 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: p3
+          component-cache-key: p3-${{ matrix.suite }}-${{ matrix.artifact-cache }}
       # The WASI Preview 3 path does not use the Preview 2 `wasi:io/poll` pollable
       # behavior that the Golem wasmtime fork patches, so these tests run against
       # the stock crates.io wasmtime (no `enable-wasmtime-fork.sh`, no
       # `use-golem-wasmtime`). This also proves P3 works on unforked wasmtime.
       - name: Install wasmtime CLI
+        if: matrix.suite == 'generation'
         # `p3_generation` shells out to the `wasmtime` CLI to run generated P3
         # components. Pin it to the workspace wasmtime version (46.x) used by the
         # embedded-host P3 tests so both paths agree on the Component Model async ABI.
@@ -213,9 +230,7 @@ jobs:
       - name: WASI Preview 3 tests
         # These are ordinary libtest tests (default harness), so they do not take
         # the test-r `--format ctrf` reporter flags used by the other jobs.
-        run: cargo test --test p3_generation --test p3_exported_resource --test p3_async_values
-      - name: Optimizer copy budget contracts (stock Wasmtime)
-        run: cargo test --test optimize
+        run: /usr/bin/time -v cargo test ${{ matrix.test_args }}
 
   # The full runtime suite, run against the WASI Preview 3 generation path (async component
   # exports, Component Model async host) instead of Preview 2. Runs *every* runtime test — there is
@@ -242,6 +257,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: p3
+          component-cache-key: p3-runtime-${{ matrix.group }}
       - uses: actions/setup-node@v4
         if: matrix.node_version
         with:
@@ -279,6 +295,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: p3
+          component-cache-key: p3-node-${{ matrix.shard }}
       # Stock crates.io wasmtime — see the note in `test-runtime-p3`.
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
