@@ -113,6 +113,14 @@ pub mod native_module {
     /// driven by the same runtime boundary used after an exported function returns.
     #[rquickjs::function]
     pub fn await_runtime_idle<'js>(ctx: Ctx<'js>) -> rquickjs::Result<Promise<'js>> {
+        #[cfg(feature = "terminal-process")]
+        if crate::internal::terminal_runtime::control(&ctx).is_some_and(|control| control.running())
+        {
+            return Err(rquickjs::Exception::throw_message(
+                &ctx,
+                "a terminal process owns its event loop",
+            ));
+        }
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .expect("runtime services not initialized");
@@ -134,6 +142,33 @@ pub mod native_module {
 
 // JS functions for the process implementation
 pub const PROCESS_JS: &str = include_str!("process.js");
+
+pub(crate) fn source() -> &'static str {
+    #[cfg(not(feature = "terminal-process"))]
+    {
+        PROCESS_JS
+    }
+    #[cfg(feature = "terminal-process")]
+    {
+        static SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            let exit = "    throw new ProcessExitError(process.exitCode || 0);";
+            let uncaught = "        console.error(err);\n    }\n}";
+            let rejection =
+                "                process.emit('unhandledRejection', entry.reason, promise);";
+            assert_eq!(PROCESS_JS.matches(exit).count(), 1);
+            assert_eq!(PROCESS_JS.matches(uncaught).count(), 1);
+            assert_eq!(PROCESS_JS.matches(rejection).count(), 1);
+            let source = PROCESS_JS
+                .replace(exit, "    terminal_exit(process.exitCode || 0);\n    throw new ProcessExitError(process.exitCode || 0);")
+                .replace(uncaught, "        console.error(err);\n    }\n    terminal_uncaught();\n}")
+                .replace(rejection, "                if (terminal_active() && process.listenerCount('unhandledRejection') === 0) {\n                    __wasm_rquickjs_handleUncaughtError(entry.reason);\n                } else {\n                    process.emit('unhandledRejection', entry.reason, promise);\n                }");
+            format!(
+                "import {{ terminal_exit, terminal_uncaught, terminal_active }} from '__wasm_rquickjs_builtin/terminal_process_native';\n{source}"
+            )
+        });
+        &SOURCE
+    }
+}
 
 // Re-export for aliases
 pub const REEXPORT_JS: &str =

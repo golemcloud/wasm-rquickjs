@@ -301,6 +301,9 @@ pub fn add_module_resolvers(
         .with_module("wasm-rquickjs:execution")
         .with_module("__wasm_rquickjs_builtin/typescript_native");
 
+    #[cfg(feature = "terminal-process")]
+    let resolver = resolver.with_module("__wasm_rquickjs_builtin/terminal_process_native");
+
     #[cfg(feature = "golem")]
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/diagnostics_channel_native")
@@ -389,6 +392,11 @@ pub fn module_loader() -> (
         "__wasm_rquickjs_builtin/execution_native",
         execution::js_native_module,
     );
+    #[cfg(feature = "terminal-process")]
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/terminal_process_native",
+        crate::internal::terminal_runtime::js_native_module,
+    );
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/typescript_native",
         typescript::js_native_module,
@@ -452,12 +460,12 @@ pub fn module_loader() -> (
         .with_module("assert/strict", assert::REEXPORT_STRICT_JS)
         .with_syncable_module("node:querystring", querystring::QUERYSTRING_JS)
         .with_module("querystring", querystring::REEXPORT_JS)
-        .with_syncable_module("node:child_process", child_process::CHILD_PROCESS_JS)
+        .with_syncable_module("node:child_process", child_process::source())
         .with_module("child_process", child_process::REEXPORT_JS)
         .with_syncable_module("node:test", node_test::TEST_JS)
         .with_syncable_module("node:module", module::MODULE_JS)
         .with_module("module", module::REEXPORT_JS)
-        .with_syncable_module("node:process", process::PROCESS_JS)
+        .with_syncable_module("node:process", process::source())
         .with_module("process", process::REEXPORT_JS)
         .with_syncable_module("node:path", path::PATH_JS)
         .with_module("path", path::REEXPORT_JS)
@@ -570,8 +578,7 @@ pub fn module_loader() -> (
         .with_module("zlib", zlib::REEXPORT_JS)
         .with_syncable_module("node:sqlite", sqlite::SQLITE_JS);
 
-    let builtin_loader =
-        builtin_loader.with_module("wasm-rquickjs:execution", execution::EXECUTION_JS);
+    let builtin_loader = builtin_loader.with_module("wasm-rquickjs:execution", execution::source());
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

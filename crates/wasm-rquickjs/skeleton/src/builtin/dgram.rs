@@ -1,3 +1,6 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use std::cell::RefCell;
 
 use rquickjs::class::Trace;
@@ -30,6 +33,9 @@ use super::socket_helpers::{
 #[rquickjs::module]
 pub mod native_module {
     pub use super::DgramSocket;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     #[rquickjs::function]
     pub fn create_socket(ctx: rquickjs::Ctx<'_>, family: u32) -> rquickjs::Result<DgramSocket> {
@@ -140,7 +146,11 @@ pub struct DgramSocket {
 }
 
 #[cfg(feature = "p2")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl DgramSocket {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {
@@ -901,7 +911,11 @@ impl DgramSocket {
 }
 
 #[cfg(feature = "p3")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl DgramSocket {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {

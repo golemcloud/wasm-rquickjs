@@ -27,6 +27,9 @@
 //! instead of being buffered. Redirects for streaming bodies are resolved by the shared JS loop,
 //! one native request/response attempt at a time.
 
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use http::{HeaderName, HeaderValue, StatusCode, Version};
 use rquickjs::convert::Coerced;
 use rquickjs::prelude::List;
@@ -59,6 +62,9 @@ type TrailersWriter = FutureWriter<Result<Option<Trailers>, ErrorCode>>;
 pub mod native_module {
     pub use super::HttpRequest;
     pub use super::HttpResponse;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 }
 
 /// Test-instrumented variant of the native HTTP module. Keeping the hooks as module functions
@@ -68,6 +74,9 @@ pub mod native_module {
 pub mod native_module {
     pub use super::HttpRequest;
     pub use super::HttpResponse;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     #[qjs(rename = "takeRecoveredBodyReadBytesForTest")]
     #[rquickjs::function]
@@ -306,7 +315,14 @@ pub struct HttpRequest {
     send_future: Option<SendFuture>,
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+)]
+#[cfg_attr(
+    not(feature = "terminal-process"),
+    rquickjs::methods(rename_all = "camelCase")
+)]
 impl HttpRequest {
     #[qjs(constructor)]
     #[allow(clippy::too_many_arguments)]
@@ -835,7 +851,14 @@ impl Default for WrappedRequestBodyWriter {
     }
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+)]
+#[cfg_attr(
+    not(feature = "terminal-process"),
+    rquickjs::methods(rename_all = "camelCase")
+)]
 impl WrappedRequestBodyWriter {
     #[qjs(constructor)]
     pub fn new() -> Self {
@@ -949,7 +972,14 @@ impl Default for HttpResponse {
     }
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+)]
+#[cfg_attr(
+    not(feature = "terminal-process"),
+    rquickjs::methods(rename_all = "camelCase")
+)]
 impl HttpResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {
@@ -1276,7 +1306,14 @@ impl Default for ResponseBodyStream {
     }
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+)]
+#[cfg_attr(
+    not(feature = "terminal-process"),
+    rquickjs::methods(rename_all = "camelCase")
+)]
 impl ResponseBodyStream {
     #[qjs(constructor)]
     pub fn new() -> Self {

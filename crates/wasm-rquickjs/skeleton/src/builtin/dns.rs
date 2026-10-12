@@ -1,3 +1,6 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use rquickjs::{Ctx, Exception};
 
 #[cfg(feature = "p2")]
@@ -17,10 +20,17 @@ use wasip3::sockets::types::IpAddress;
 #[rquickjs::module]
 pub mod native_module {
     pub use super::DnsResult;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     /// Resolve a hostname to a list of IP addresses.
     /// Returns a list of DnsResult objects with `address` (string) and `family` (4 or 6).
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     pub async fn resolve(
         ctx: rquickjs::Ctx<'_>,
         hostname: String,
@@ -36,7 +46,11 @@ pub struct DnsResult {
     family: u32,
 }
 
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl DnsResult {
     #[qjs(constructor)]
     pub fn new(address: String, family: u32) -> Self {

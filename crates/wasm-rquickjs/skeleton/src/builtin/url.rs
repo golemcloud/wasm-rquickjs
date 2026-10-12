@@ -1,9 +1,15 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use rquickjs::prelude::*;
 use url::Url;
 
 // Native functions for the URL implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
     use rquickjs::class::Trace;
     use rquickjs::convert::Coerced;
     use rquickjs::prelude::*;
@@ -22,7 +28,11 @@ pub mod native_module {
         url::Host::parse(&domain).ok()
     }
 
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     #[qjs(rename = "domainToASCII")]
     pub fn domain_to_ascii(domain: String) -> String {
         parse_node_domain(&domain)
@@ -30,7 +40,11 @@ pub mod native_module {
             .unwrap_or_default()
     }
 
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     #[qjs(rename = "domainToUnicode")]
     pub fn domain_to_unicode(domain: String) -> String {
         match parse_node_domain(&domain) {
@@ -40,7 +54,11 @@ pub mod native_module {
         }
     }
 
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     #[qjs(rename = "domainToASCIILegacy")]
     pub fn domain_to_ascii_legacy(domain: String) -> String {
         const SENTINEL: &str = ".invalid";
@@ -70,7 +88,14 @@ pub mod native_module {
         url: Url,
     }
 
-    #[rquickjs::methods(rename_all = "camelCase")]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+    )]
+    #[cfg_attr(
+        not(feature = "terminal-process"),
+        rquickjs::methods(rename_all = "camelCase")
+    )]
     impl JsUrl {
         #[qjs(constructor)]
         pub fn new(

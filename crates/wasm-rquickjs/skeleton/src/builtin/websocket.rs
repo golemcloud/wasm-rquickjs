@@ -1,3 +1,6 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use golem_websocket::{Error as WsError, Message, WebsocketConnection};
 use rquickjs::class::Trace;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
@@ -52,6 +55,9 @@ fn receive_result_to_js<'js>(
 #[rquickjs::module]
 pub mod native_module {
     pub use super::WsConnection;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     #[rquickjs::function]
     pub fn ws_connect(
@@ -95,7 +101,11 @@ pub struct WsConnection {
     inner: RefCell<Option<Rc<WebsocketConnection>>>,
 }
 
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl WsConnection {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {

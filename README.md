@@ -1634,6 +1634,11 @@ Compatibility stubs — workers are not supported in single-threaded WASM.
 
 ## Developing
 
+The disabled-by-default `terminal-process` skeleton feature contains experimental native process dispatch and
+completion code. The runtime tests exercise it with real Node builtins, but it is not a supported public execution
+mode or a Golem tool export. See [the integration contract](tools/process-boundary-no-fork/TERMINAL-CONTRACT.md)
+for the ownership requirements and remaining gates.
+
 There are a few important things to keep in mind when working on the project:
 
 - The `skeleton` crate can be opened and compiled separately when working on the APIs provided for JavaScript.

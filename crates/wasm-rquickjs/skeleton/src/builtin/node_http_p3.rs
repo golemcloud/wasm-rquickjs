@@ -28,6 +28,9 @@
 //! chunk-by-chunk (not read to completion eagerly).
 
 use super::http_body::ResponseBody;
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
@@ -46,6 +49,9 @@ type SendFuture = Pin<Box<dyn Future<Output = Result<Response, ErrorCode>>>>;
 pub mod native_module {
     pub use super::NodeHttpClientRequest;
     pub use super::NodeHttpIncomingResponse;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 }
 
 pub(crate) struct RawResponse {
@@ -89,7 +95,14 @@ impl Default for NodeHttpClientRequest {
     }
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+)]
+#[cfg_attr(
+    not(feature = "terminal-process"),
+    rquickjs::methods(rename_all = "camelCase")
+)]
 impl NodeHttpClientRequest {
     #[qjs(constructor)]
     pub fn new(method: String, url: String) -> Self {
@@ -399,7 +412,14 @@ impl Default for NodeHttpIncomingResponse {
     }
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs", rename_all = "camelCase")
+)]
+#[cfg_attr(
+    not(feature = "terminal-process"),
+    rquickjs::methods(rename_all = "camelCase")
+)]
 impl NodeHttpIncomingResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {

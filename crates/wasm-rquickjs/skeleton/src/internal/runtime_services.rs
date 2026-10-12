@@ -623,6 +623,10 @@ fn drain_process_turn_queues(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<bool> 
 /// run. Rejection events and the work they create are processed to a fixpoint,
 /// matching Node's `processTicksAndRejections` loop.
 pub(crate) fn run_process_turn_checkpoint(ctx: &rquickjs::Ctx<'_>) -> rquickjs::Result<bool> {
+    #[cfg(feature = "terminal-process")]
+    if super::terminal_runtime::control(ctx).is_some_and(|control| control.running()) {
+        return super::terminal_runtime::checkpoint(ctx);
+    }
     let checkpoint = ctx
         .globals()
         .get::<_, Function>("__wasm_rquickjs_unhandled_rejection_checkpoint")
@@ -697,10 +701,18 @@ impl OwnedJsRuntime {
 
         rt.set_host_promise_rejection_tracker(Some(Box::new(
             |ctx, promise, reason, is_handled| {
+                #[cfg(feature = "terminal-process")]
+                if super::terminal_runtime::stopped(&ctx) {
+                    return;
+                }
                 if let Ok(handler) = ctx
                     .globals()
                     .get::<_, Function>("__wasm_rquickjs_rejection_tracker")
                 {
+                    #[cfg(feature = "terminal-process")]
+                    if super::terminal_runtime::stopped(&ctx) {
+                        return;
+                    }
                     let _ = handler.call::<_, Value>((promise, reason, is_handled));
                 }
             },

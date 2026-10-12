@@ -3,6 +3,9 @@ use crate::internal::runtime_services::{ExecutionProfile, ExecutionProfileSnapsh
 use crate::internal::runtime_services::{
     OwnedJsRuntime, RuntimeOutputSink, RuntimeServices, normalize_absolute_path,
 };
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
@@ -26,6 +29,22 @@ const MAX_TIMEOUT_MS: u64 = u64::MAX / 1_000_000;
 const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 
 pub const EXECUTION_JS: &str = include_str!("execution.js");
+
+pub(crate) fn source() -> &'static str {
+    #[cfg(not(all(feature = "terminal-process", feature = "internal-test-execution")))]
+    {
+        EXECUTION_JS
+    }
+    #[cfg(all(feature = "terminal-process", feature = "internal-test-execution"))]
+    {
+        static SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            format!(
+                "import {{ terminal_probe }} from '__wasm_rquickjs_builtin/terminal_process_native';\nexport {{ terminal_probe as terminalProbe }};\n{EXECUTION_JS}"
+            )
+        });
+        &SOURCE
+    }
+}
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -218,6 +237,9 @@ struct PollResult {
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use super::*;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     #[rquickjs::function]
     pub fn create_job(ctx: Ctx<'_>, options_json: String) -> rquickjs::Result<usize> {
@@ -274,7 +296,11 @@ pub mod native_module {
     /// Async native callbacks are owned and driven by rquickjs's promise
     /// machinery. Unlike a detached `Ctx::spawn` task, this remains live while
     /// the parent export awaits JavaScript promises on the P2 executor.
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     pub async fn start_job(ctx: Ctx<'_>, id: usize) -> rquickjs::Result<()> {
         let job = {
             let services = ctx
@@ -291,7 +317,11 @@ pub mod native_module {
         Ok(())
     }
 
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     pub async fn wait_job_event(ctx: Ctx<'_>, id: usize) -> rquickjs::Result<String> {
         let job = {
             let services = ctx
@@ -506,9 +536,10 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             if cancelled.load(Ordering::Relaxed) {
                 return true;
             }
-            if timeout_sampler.as_mut().is_some_and(|sampler| {
-                sampler.expired(Instant::now)
-            }) {
+            if timeout_sampler
+                .as_mut()
+                .is_some_and(|sampler| sampler.expired(Instant::now))
+            {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
             }
