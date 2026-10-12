@@ -62,7 +62,8 @@ jobs:
       - name: Check formatting
         run: cargo fmt -- --check
       - name: Install component license audit tool
-        run: cargo binstall --locked --version 0.9.2 cargo-about
+        # rust-cache can restore install metadata without the executable.
+        run: cargo binstall --force --locked --version 0.9.2 cargo-about
       - name: Check generated component licenses
         run: tools/check-component-licenses.sh --check
       - name: Clippy
