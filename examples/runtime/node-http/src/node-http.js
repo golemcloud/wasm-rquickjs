@@ -398,6 +398,193 @@ export function httpResponseLifecycle() {
         typeCode === 'ERR_INVALID_ARG_TYPE';
 }
 
+export async function httpResponseRepeatedEndCallbacks() {
+    const request = {
+        method: 'GET',
+        httpVersionMajor: 1,
+        httpVersionMinor: 1,
+        socket: null,
+    };
+    const makeSocket = (write) => {
+        const socket = new EventEmitter();
+        socket.destroyed = false;
+        socket.writable = true;
+        socket.writableEnded = false;
+        socket.writableCorked = 0;
+        socket.writableLength = 0;
+        socket.writableNeedDrain = false;
+        socket.writableHighWaterMark = 16 * 1024;
+        socket.cork = () => {};
+        socket.uncork = () => {};
+        socket.write = write;
+        return socket;
+    };
+    const queuedResponse = new http.ServerResponse(request);
+    let finishCount = 0;
+    let firstCallbackCount = 0;
+    let firstCallbackError;
+    let queuedCallbackCount = 0;
+    let queuedCallbackError;
+    let queuedCallbackWasAsync = false;
+    let queuedCallActive = true;
+    queuedResponse.on('finish', () => {
+        finishCount++;
+    });
+    const firstReturn = queuedResponse.end('body', (error) => {
+        firstCallbackCount++;
+        firstCallbackError = error;
+    });
+    const queuedReturn = queuedResponse.end((error) => {
+        queuedCallbackCount++;
+        queuedCallbackError = error;
+        queuedCallbackWasAsync = !queuedCallActive;
+    });
+    queuedCallActive = false;
+
+    if (
+        firstReturn !== queuedResponse ||
+        queuedReturn !== queuedResponse ||
+        queuedResponse.writableFinished ||
+        queuedCallbackCount !== 0
+    ) {
+        return false;
+    }
+
+    const wire = [];
+    const socket = makeSocket((chunk, callback) => {
+        wire.push(Buffer.from(chunk));
+        if (typeof callback === 'function') callback();
+        return true;
+    });
+    queuedResponse.assignSocket(socket);
+
+    let finishedCallActive = true;
+    let finishedCallbackCount = 0;
+    let finishedCallbackCode;
+    let finishedCallbackWasSync = false;
+    const finishedReturn = queuedResponse.end((error) => {
+        finishedCallbackCount++;
+        finishedCallbackCode = error && error.code;
+        finishedCallbackWasSync = finishedCallActive;
+    });
+    finishedCallActive = false;
+
+    if (
+        finishedReturn !== queuedResponse ||
+        !queuedResponse.writableFinished ||
+        Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') === false ||
+        finishCount !== 1 ||
+        firstCallbackCount !== 1 ||
+        firstCallbackError !== undefined ||
+        queuedCallbackCount !== 1 ||
+        queuedCallbackError !== undefined ||
+        !queuedCallbackWasAsync ||
+        finishedCallbackCount !== 1 ||
+        finishedCallbackCode !== 'ERR_STREAM_ALREADY_FINISHED' ||
+        !finishedCallbackWasSync
+    ) {
+        return false;
+    }
+
+    const blockedCallbacks = [];
+    const blockedSocket = makeSocket((chunk, callback) => {
+        blockedSocket.writableLength += chunk.length;
+        blockedSocket.writableNeedDrain = true;
+        blockedCallbacks.push(callback);
+        return false;
+    });
+    const blockedResponse = new http.ServerResponse(request);
+    blockedResponse.assignSocket(blockedSocket);
+    blockedResponse.end('blocked');
+    let blockedCallbackCount = 0;
+    let blockedCallbackError;
+    const blockedReturn = blockedResponse.end((error) => {
+        blockedCallbackCount++;
+        blockedCallbackError = error;
+    });
+    if (
+        blockedReturn !== blockedResponse ||
+        blockedResponse.writableFinished ||
+        blockedCallbackCount !== 0
+    ) {
+        return false;
+    }
+    blockedSocket.writableLength = 0;
+    blockedSocket.writableNeedDrain = false;
+    for (const callback of blockedCallbacks) callback();
+    if (
+        !blockedResponse.writableFinished ||
+        blockedCallbackCount !== 1 ||
+        blockedCallbackError !== undefined
+    ) {
+        return false;
+    }
+
+    const dataResponse = new http.ServerResponse(request);
+    const dataEvents = [];
+    let dataCallbackWasAsync = false;
+    let dataCallActive = true;
+    dataResponse.on('error', (error) => {
+        dataEvents.push('error:' + error.code);
+    });
+    dataResponse.end();
+    const dataReturn = dataResponse.end('ignored', (error) => {
+        dataEvents.push('callback:' + error.code);
+        dataCallbackWasAsync = !dataCallActive;
+    });
+    dataCallActive = false;
+    if (dataReturn !== dataResponse || dataEvents.length !== 0) {
+        return false;
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    if (
+        !dataCallbackWasAsync ||
+        dataEvents.join(',') !==
+            'callback:ERR_STREAM_WRITE_AFTER_END,error:ERR_STREAM_WRITE_AFTER_END'
+    ) {
+        return false;
+    }
+
+    const invalidResponse = new http.ServerResponse(request);
+    const invalidEvents = [];
+    invalidResponse.on('error', (error) => {
+        invalidEvents.push('error:' + error.code);
+    });
+    invalidResponse.end();
+    let invalidReturn;
+    try {
+        invalidReturn = invalidResponse.end([], (error) => {
+            invalidEvents.push('callback:' + error.code);
+        });
+    } catch (_) {
+        return false;
+    }
+
+    const destroyedResponse = new http.ServerResponse(request);
+    let destroyedCallbackCount = 0;
+    let destroyedErrorCount = 0;
+    destroyedResponse.on('error', () => {
+        destroyedErrorCount++;
+    });
+    destroyedResponse.end();
+    destroyedResponse.destroy();
+    const destroyedReturn = destroyedResponse.end('ignored', () => {
+        destroyedCallbackCount++;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    if (
+        invalidReturn !== invalidResponse ||
+        invalidEvents.join(',') !==
+            'callback:ERR_STREAM_WRITE_AFTER_END,error:ERR_STREAM_WRITE_AFTER_END' ||
+        destroyedReturn !== destroyedResponse ||
+        destroyedCallbackCount !== 0 ||
+        destroyedErrorCount !== 0
+    ) {
+        return false;
+    }
+    return true;
+}
+
 export async function httpResponsePostCloseWrites() {
     const detachedRequest = {
         method: 'GET',
