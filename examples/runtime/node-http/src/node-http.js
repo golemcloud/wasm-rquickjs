@@ -2042,7 +2042,9 @@ export async function httpRequestTrailerErrors() {
             },
             {
                 key: 'transfer-encoding-bare-cr',
-                suffix: 'Transfer-Encoding:\rX: okay\r\n\r\n',
+                suffix: 'Transfer-Encoding:\rX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-bare-cr HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
                 code: 'HPE_STRICT',
                 reason: 'Expected LF after CR',
                 offset(payload) {
@@ -2051,11 +2053,59 @@ export async function httpRequestTrailerErrors() {
             },
             {
                 key: 'transfer-encoding-bare-lf',
-                suffix: 'Transfer-Encoding:\nX: okay\r\n\r\n',
+                suffix: 'Transfer-Encoding:\nX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-bare-lf HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
                 code: 'HPE_INVALID_HEADER_TOKEN',
                 reason: 'Invalid header value char',
                 offset(payload) {
                     return payload.indexOf('\nX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-leading-whitespace-cr',
+                suffix: 'Transfer-Encoding: \t\rX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-leading-whitespace-cr HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_STRICT',
+                reason: 'Expected LF after CR',
+                offset(payload) {
+                    return payload.indexOf('\rX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-leading-whitespace-lf',
+                suffix: 'Transfer-Encoding: \t\nX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-leading-whitespace-lf HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header value char',
+                offset(payload) {
+                    return payload.indexOf('\nX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-mid-value-cr',
+                suffix: 'Transfer-Encoding: chunked\rX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-mid-value-cr HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                offset(payload) {
+                    return payload.lastIndexOf('Transfer-Encoding: chunked') +
+                        'Transfer-Encoding: c'.length;
+                },
+            },
+            {
+                key: 'transfer-encoding-mid-value-lf',
+                suffix: 'Transfer-Encoding: chunked\nX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-mid-value-lf HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                offset(payload) {
+                    return payload.lastIndexOf('Transfer-Encoding: chunked') +
+                        'Transfer-Encoding: c'.length;
                 },
             },
         ]) {

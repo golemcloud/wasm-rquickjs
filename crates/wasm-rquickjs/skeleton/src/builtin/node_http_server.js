@@ -4,7 +4,7 @@ import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { initializeIncomingMessage } from '__wasm_rquickjs_builtin/node_http_incoming';
-import { _checkInvalidHeaderChar, _checkIsHttpToken } from 'node:_http_common';
+import { _checkIsHttpToken } from 'node:_http_common';
 import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_ALREADY_FINISHED, ERR_STREAM_DESTROYED, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
@@ -2061,7 +2061,8 @@ function parseTrailerHeaders(block, complete) {
         }
         if (lowerName === 'transfer-encoding' &&
             valueWithoutLeadingWhitespace.length > 0) {
-            if (invalidValueByte === 0x0d || invalidValueByte === 0x0a) {
+            if (invalidValueIndex === leadingWhitespaceBytes &&
+                (invalidValueByte === 0x0d || invalidValueByte === 0x0a)) {
                 const isBareCarriageReturn = invalidValueByte === 0x0d;
                 return {
                     error: true,
