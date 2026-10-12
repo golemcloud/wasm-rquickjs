@@ -199,15 +199,13 @@ jobs:
       fail-fast: false
       matrix:
         suite: [generation, async-values]
-        # Temporary paired measurement; retain only the winning configuration.
-        artifact-cache: ["0", "1"]
         include:
           - suite: generation
             test_args: --test p3_generation --test p3_exported_resource --test optimize
           - suite: async-values
             test_args: --test p3_async_values
     env:
-      WASM_RQUICKJS_TEST_ARTIFACT_CACHE: ${{ matrix.artifact-cache }}
+      WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
     steps:
       - uses: actions/checkout@v4
         with:
@@ -215,7 +213,7 @@ jobs:
       - uses: ./.github/actions/setup
         with:
           cache-key: p3
-          component-cache-key: p3-${{ matrix.suite }}-${{ matrix.artifact-cache }}
+          component-cache-key: p3-${{ matrix.suite }}-shared
       # The WASI Preview 3 path does not use the Preview 2 `wasi:io/poll` pollable
       # behavior that the Golem wasmtime fork patches, so these tests run against
       # the stock crates.io wasmtime (no `enable-wasmtime-fork.sh`, no
