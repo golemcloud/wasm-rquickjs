@@ -293,7 +293,7 @@ function _getPreparedNativeStack() {
     let owner = this;
     while (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
         const state = nativeWeakMapGet(preparedNativeStacks, owner);
-        if (state !== undefined) {
+        if (state !== undefined && state.custom !== true) {
             if (!state.materialized) {
                 state.value = _refreshNativeStackHeader(
                     owner,
@@ -313,7 +313,7 @@ function _setPreparedNativeStack(stack) {
     let owner = this;
     while (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
         const state = nativeWeakMapGet(preparedNativeStacks, owner);
-        if (state !== undefined) {
+        if (state !== undefined && state.custom !== true) {
             state.value = stack;
             state.materialized = true;
             return;
@@ -333,10 +333,11 @@ function _dispatchPrepareStackTrace(error, callSites) {
         if (error && (typeof error === 'object' || typeof error === 'function')) {
             // The state object is also the cache-presence sentinel. In
             // particular, remember an explicit `undefined` result so QuickJS
-            // cannot invoke a custom formatter again with different frames.
+            // cannot invoke a custom formatter again for the same object with
+            // different frames.
             nativeWeakMapSet(preparedNativeStacks, error, {
                 value,
-                materialized: true,
+                custom: true,
             });
         }
         return value;

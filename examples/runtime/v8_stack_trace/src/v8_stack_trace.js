@@ -543,10 +543,36 @@ export const testPrepareStackTraceDescriptors = () => {
             configurable: true,
         });
         const undefinedPrepared = new Error('undefined-prepare');
+        try {
+            throw undefinedPrepared;
+        } catch (error) {
+            assert.strictEqual(error, undefinedPrepared);
+        }
         assert.strictEqual(undefinedPrepared.stack, undefined);
         assert.strictEqual(undefinedPrepared.stack, undefined);
         assert.strictEqual(undefinedPrepareCalls, 1,
             'an undefined custom result must still be cached');
+
+        let stringPrepareCalls = 0;
+        Error.prepareStackTrace = error => {
+            if (error?.message === 'string-prepare') stringPrepareCalls++;
+            return `prepared:${error?.message}`;
+        };
+        const stringPrepared = new Error('string-prepare');
+        const stringPreparedValue = stringPrepared.stack;
+        try {
+            throw 0;
+        } catch {
+            // QuickJS clears its current backtrace marker on every catch.
+        }
+        try {
+            throw stringPrepared;
+        } catch (error) {
+            assert.strictEqual(error, stringPrepared);
+        }
+        assert.strictEqual(stringPrepared.stack, stringPreparedValue);
+        assert.strictEqual(stringPrepareCalls, 1,
+            'a non-undefined custom result must remain cached after rethrow');
 
         delete Error.prepareStackTrace;
         assert.match(new Error('deleted').stack, /^Error: deleted(?:\n|$)/);
