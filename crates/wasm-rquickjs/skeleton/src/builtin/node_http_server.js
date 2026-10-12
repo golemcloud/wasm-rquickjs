@@ -4,8 +4,8 @@ import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
 import Readable from '__wasm_rquickjs_builtin/internal/streams/readable';
 import { initializeIncomingMessage } from '__wasm_rquickjs_builtin/node_http_incoming';
-import { _checkInvalidHeaderChar, _checkIsHttpToken } from 'node:_http_common';
-import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_DESTROYED, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
+import { _checkIsHttpToken } from 'node:_http_common';
+import { ERR_HTTP_BODY_NOT_ALLOWED, ERR_HTTP_CONTENT_LENGTH_MISMATCH, ERR_HTTP_HEADERS_SENT, ERR_HTTP_SOCKET_ASSIGNED, ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_STREAM_ALREADY_FINISHED, ERR_STREAM_DESTROYED, ERR_STREAM_NULL_VALUES, ERR_STREAM_WRITE_AFTER_END } from '__wasm_rquickjs_builtin/internal/errors';
 // STATUS_CODES is duplicated here to avoid circular dependency with node:http
 const STATUS_CODES = {
     100: 'Continue', 101: 'Switching Protocols', 102: 'Processing', 103: 'Early Hints',
@@ -317,7 +317,16 @@ Object.defineProperty(ServerResponse.prototype, 'writableEnded', {
 });
 
 Object.defineProperty(ServerResponse.prototype, 'writableFinished', {
-    get() { return this.finished; },
+    get() {
+        // This transport counts accepted writes until their host completion,
+        // unlike Node's socket. Only a backpressured socket queue represents
+        // response output that must still drain before writable completion.
+        const socketHasBlockedOutput = this.socket &&
+            !this._finishEmitted &&
+            (this._needDrain || this.socket.writableNeedDrain) &&
+            (this.socket.writableLength || 0) > 0;
+        return this.finished && this._outputSize === 0 && !socketHasBlockedOutput;
+    },
 });
 
 Object.defineProperty(ServerResponse.prototype, 'closed', {
@@ -837,6 +846,21 @@ ServerResponse.prototype._afterOutputComplete = function _afterOutputComplete(ca
     }
 };
 
+function scheduleWriteAfterEnd(response, callback) {
+    const error = new ERR_STREAM_WRITE_AFTER_END();
+    callback = typeof callback === 'function' ? callback : () => {};
+    if (response._destroyed) {
+        process.nextTick(() => callback(error));
+    } else {
+        process.nextTick(() => {
+            callback(error);
+            if (!response._destroyed) {
+                response.emit('error', error);
+            }
+        });
+    }
+}
+
 ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     if (typeof encoding === 'function') {
         cb = encoding;
@@ -852,18 +876,7 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     }
 
     if (this._writableEnded) {
-        const error = new ERR_STREAM_WRITE_AFTER_END();
-        const callback = typeof cb === 'function' ? cb : () => {};
-        if (this._destroyed) {
-            process.nextTick(() => callback(error));
-        } else {
-            process.nextTick(() => {
-                callback(error);
-                if (!this._destroyed) {
-                    this.emit('error', error);
-                }
-            });
-        }
+        scheduleWriteAfterEnd(this, cb);
         return false;
     }
 
@@ -939,6 +952,21 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         encoding = undefined;
     }
 
+    if (this._writableEnded) {
+        if (data) {
+            if (!this._destroyed) {
+                scheduleWriteAfterEnd(this, cb);
+            }
+        } else if (typeof cb === 'function') {
+            if (this.writableFinished) {
+                cb(new ERR_STREAM_ALREADY_FINISHED('end'));
+            } else {
+                this.on('finish', cb);
+            }
+        }
+        return this;
+    }
+
     if (data !== undefined && data !== null) {
         if (typeof data !== 'string' && !Buffer.isBuffer(data) && !(data instanceof Uint8Array)) {
             throw new ERR_INVALID_ARG_TYPE('first argument',
@@ -946,7 +974,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         }
     }
 
-    if (this._writableEnded || this._destroyed || this._closed) {
+    if (this._destroyed || this._closed) {
         if (typeof cb === 'function') cb();
         return this;
     }
@@ -2060,12 +2088,53 @@ function parseTrailerHeaders(block, complete) {
                 bytesParsed: bytesParsed + invalidIndex,
             };
         }
+        const lowerName = name.toLowerCase();
         const rawValue = line.substring(colonIdx + 1);
-        if (_checkInvalidHeaderChar(rawValue)) {
-            const invalidIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
-            const invalidByte = rawValue.charCodeAt(invalidIndex);
-            const isBareLineFeed = invalidByte === 0x0a;
-            const isBareCarriageReturn = invalidByte === 0x0d;
+        const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
+        const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
+        const invalidValueIndex = rawValue.search(INVALID_HEADER_CHAR_REGEX);
+        const invalidValueByte = invalidValueIndex < 0
+            ? undefined
+            : rawValue.charCodeAt(invalidValueIndex);
+        if (lowerName === 'content-length') {
+            return {
+                error: true,
+                type: 'trailer-error',
+                code: 'HPE_INVALID_CONTENT_LENGTH',
+                reason: "Content-Length can't be present with Transfer-Encoding",
+                bytesParsed: bytesParsed + colonIdx + 1,
+            };
+        }
+        if (lowerName === 'transfer-encoding' &&
+            valueWithoutLeadingWhitespace.length > 0) {
+            if (invalidValueIndex === leadingWhitespaceBytes &&
+                (invalidValueByte === 0x0d || invalidValueByte === 0x0a)) {
+                const isBareCarriageReturn = invalidValueByte === 0x0d;
+                return {
+                    error: true,
+                    type: 'trailer-error',
+                    code: isBareCarriageReturn
+                        ? 'HPE_STRICT'
+                        : 'HPE_INVALID_HEADER_TOKEN',
+                    reason: isBareCarriageReturn
+                        ? 'Expected LF after CR'
+                        : 'Invalid header value char',
+                    bytesParsed:
+                        bytesParsed + colonIdx + 2 + invalidValueIndex,
+                };
+            }
+            return {
+                error: true,
+                type: 'trailer-error',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                bytesParsed:
+                    bytesParsed + colonIdx + 2 + leadingWhitespaceBytes,
+            };
+        }
+        if (invalidValueIndex >= 0) {
+            const isBareLineFeed = invalidValueByte === 0x0a;
+            const isBareCarriageReturn = invalidValueByte === 0x0d;
             return {
                 error: true,
                 type: 'trailer-error',
@@ -2080,12 +2149,10 @@ function parseTrailerHeaders(block, complete) {
                         ? 'Missing expected LF after header value'
                         : 'Invalid header value char',
                 bytesParsed:
-                    bytesParsed + colonIdx + 1 + invalidIndex +
+                    bytesParsed + colonIdx + 1 + invalidValueIndex +
                     (isBareCarriageReturn ? 1 : 0),
             };
         }
-        const valueWithoutLeadingWhitespace = rawValue.replace(/^[\t ]+/, '');
-        const leadingWhitespaceBytes = rawValue.length - valueWithoutLeadingWhitespace.length;
         const lineHeaderBytes = name.length + valueWithoutLeadingWhitespace.length;
         if (headerBytes + lineHeaderBytes >= MAX_TRAILER_SIZE) {
             const acceptedValueBytes = Math.max(
