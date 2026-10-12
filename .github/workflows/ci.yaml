@@ -117,7 +117,7 @@ jobs:
           summary: true
           summary-report: true
           failed-report: true
-          slowest-report: true
+          slowest-report: false
           github-report: true
           flaky-report: true
           collapse-large-reports: true
@@ -161,7 +161,7 @@ jobs:
           summary: true
           summary-report: true
           failed-report: true
-          slowest-report: true
+          slowest-report: false
           github-report: true
           flaky-report: true
           collapse-large-reports: true
@@ -200,7 +200,7 @@ jobs:
           summary: true
           summary-report: true
           failed-report: true
-          slowest-report: true
+          slowest-report: false
           github-report: true
           flaky-report: true
           collapse-large-reports: true
@@ -278,7 +278,7 @@ jobs:
           summary: true
           summary-report: true
           failed-report: true
-          slowest-report: true
+          slowest-report: false
           github-report: true
           flaky-report: true
           collapse-large-reports: true
@@ -321,7 +321,7 @@ jobs:
           summary: true
           summary-report: true
           failed-report: true
-          slowest-report: true
+          slowest-report: false
           github-report: true
           flaky-report: true
           collapse-large-reports: true
