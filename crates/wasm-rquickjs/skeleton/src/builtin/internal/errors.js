@@ -88,7 +88,7 @@ function _remapSourceMappedStack(stackString) {
 
 function _formatNativeCallSites(error, callSites) {
     if (!Array.isArray(callSites)) {
-        return { value: '', headerLength: 0, materialized: false };
+        return { value: '', headerLength: 0, materialized: false, custom: false };
     }
     let header;
     try {
@@ -133,6 +133,7 @@ function _formatNativeCallSites(error, callSites) {
         value: lines.join('\n'),
         headerLength: header.length,
         materialized: false,
+        custom: false,
     };
 }
 

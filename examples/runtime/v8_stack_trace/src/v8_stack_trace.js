@@ -535,8 +535,8 @@ export const testPrepareStackTraceDescriptors = () => {
 
         let undefinedPrepareCalls = 0;
         Object.defineProperty(Error, 'prepareStackTrace', {
-            value: () => {
-                undefinedPrepareCalls++;
+            value: error => {
+                if (error?.message === 'undefined-prepare') undefinedPrepareCalls++;
                 return undefined;
             },
             writable: true,
@@ -581,6 +581,21 @@ export const testPrepareStackTraceDescriptors = () => {
 
         delete Error.prepareStackTrace;
         assert.match(new Error('deleted').stack, /^Error: deleted(?:\n|$)/);
+
+        const objectPrototypeCustom = Object.getOwnPropertyDescriptor(Object.prototype, 'custom');
+        try {
+            Object.defineProperty(Object.prototype, 'custom', {
+                value: true,
+                configurable: true,
+            });
+            assert.match(new Error('polluted-state').stack, /^Error: polluted-state(?:\n|$)/);
+        } finally {
+            if (objectPrototypeCustom) {
+                Object.defineProperty(Object.prototype, 'custom', objectPrototypeCustom);
+            } else {
+                delete Object.prototype.custom;
+            }
+        }
 
         Object.defineProperty(Error, 'prepareStackTrace', {
             value: customPrepare,
