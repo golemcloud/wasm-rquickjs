@@ -3,6 +3,112 @@ import * as https from 'node:https';
 import * as net from 'node:net';
 import { EventEmitter } from 'node:events';
 
+// Public stream operations only: the fixture never completes the pending body. The control
+// round trip gives its next read time to become pending without using a timer for synchronization.
+export async function httpResponseCancellation(port, testCase) {
+    const control = (path) => new Promise((resolve, reject) => {
+        http.get(`http://localhost:${port}/${path}`, res => {
+            res.on('error', reject);
+            res.on('end', resolve);
+            res.resume();
+        }).on('error', reject);
+    });
+    let request;
+    const requestErrors = [];
+    const bufferedEof = [12, 13, 17].includes(testCase);
+    const backpressure = testCase >= 14 && testCase <= 16;
+    const noErrorListener = testCase >= 9 && testCase <= 11;
+    const path = testCase === 6 ? 'finite-response-body'
+        : bufferedEof ? 'finite-keepalive-response-body'
+        : backpressure ? 'backpressure-response-body'
+        : testCase === 7 ? 'truncated-response-body'
+        : testCase === 8 ? 'empty-response-body' : 'pending-response-body';
+    const response = await new Promise(resolve => {
+        request = http.get(`http://localhost:${port}/${path}`, resolve);
+        request.on('error', error => requestErrors.push(error));
+    });
+    let closes = 0;
+    let ends = 0;
+    let aborts = 0;
+    let chunks = '';
+    const errors = [];
+    const closed = new Promise(resolve => response.on('close', () => {
+        closes++;
+        resolve();
+    }));
+    if (!noErrorListener) response.on('error', error => errors.push(error));
+    response.on('end', () => ends++);
+    response.on('aborted', () => aborts++);
+    if (bufferedEof) {
+        response.read(0);
+        while (!response.complete) await control('response-body-ready');
+        if (response.readableEnded || response.readableLength !== 23) return false;
+        if (testCase === 12) request.abort();
+        else if (testCase === 13) request.destroy();
+        else response.destroy();
+        await closed;
+        await control('response-body-released');
+        return closes === 1 && response.complete && errors.length === 0
+            && ends === (testCase === 17 ? 0 : 1) && aborts === (testCase === 17 ? 1 : 0);
+    }
+    if (testCase >= 6 && testCase <= 8) {
+        response.on('data', chunk => { chunks += chunk.toString(); });
+        await closed;
+        response.destroy();
+        request.destroy();
+        await control('response-body-released');
+        console.log(JSON.stringify({testCase, closes, ends, chunks, errors: errors.map(e => e.message)}));
+        if (testCase === 7) {
+            return closes === 1 && ends === 0 && !response.complete && errors.length === 1
+                && aborts === 1 && requestErrors.length === 0;
+        }
+        return closes === 1 && ends === 1 && response.complete && errors.length === 0
+            && aborts === 0 && requestErrors.length === 0
+            && chunks === (testCase === 6 ? 'first chunksecond chunk' : '');
+    }
+    if (backpressure) {
+        response.read(0);
+        while (response.readableLength < response.readableHighWaterMark) {
+            await control('response-body-ready');
+        }
+    } else if (testCase !== 5) {
+        await new Promise(resolve => response.on('data', chunk => {
+            chunks += chunk.toString();
+            resolve();
+        }));
+        await control('response-body-ready');
+    }
+    const reason = new Error('cancel response');
+    for (let repeat = 0; repeat < 2; repeat++) {
+        switch (testCase) {
+            case 0: case 5: case 14: response.destroy(); break;
+            case 1: case 9: case 15: request.abort(); break;
+            case 2: case 10: case 16: request.destroy(); break;
+            case 3: case 11: response.destroy(reason); break;
+            case 4: request.destroy(reason); break;
+        }
+    }
+    // Repeated cancellation must not emit duplicate terminal events or release resources twice.
+    await closed;
+    response.destroy();
+    request.destroy();
+    request.abort();
+    // This endpoint responds only after the tested connection closes. Returning from the export
+    // (and destroying its Wasmtime Store) cannot accidentally make this assertion pass.
+    await control('response-body-released');
+    console.log(JSON.stringify({testCase, closes, ends, chunks, errors: errors.map(e => e.message)}));
+    const suppliedError = [3, 4, 11].includes(testCase);
+    const reset = [1, 2, 4, 9, 10, 15, 16].includes(testCase);
+    return closes === 1 && ends === 0 && aborts === 1 && response.destroyed && !response.complete
+        && chunks === (testCase === 5 || backpressure ? '' : 'first chunk')
+        && requestErrors.length === (suppliedError ? 1 : 0)
+        && (!suppliedError || requestErrors[0] === reason)
+        && errors.length === (noErrorListener || !reset && testCase !== 3 ? 0 : 1)
+        && (testCase !== 3 || errors[0] === reason)
+        && (!reset || response.errored?.code === 'ECONNRESET')
+        && (testCase !== 11 || response.errored === reason);
+}
+
 // Test 1: http.get - use await on the _endPromise to let the runtime drive it
 export async function httpGet(port) {
     console.log('node:http test 1 - http.get');

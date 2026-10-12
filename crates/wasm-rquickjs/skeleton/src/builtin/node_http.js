@@ -839,7 +839,7 @@ IncomingMessage.prototype._dump = function _dump() {
 IncomingMessage.prototype._read = function _read(n) {
     if (!this._consuming) {
         this._consuming = true;
-        void this._pumpBody();
+        this._pumpPromise = this._pumpBody();
     }
 };
 
@@ -862,16 +862,10 @@ IncomingMessage.prototype._pumpBody = async function _pumpBody() {
     try {
         while (true) {
             if (this.destroyed) {
-                if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
-                    this._nativeRes.discardBody();
-                }
                 break;
             }
             const [chunk, done] = await this._nativeRes.readBodyChunk();
             if (this.destroyed) {
-                if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
-                    this._nativeRes.discardBody();
-                }
                 break;
             }
             if (done || chunk === null) {
@@ -887,18 +881,28 @@ IncomingMessage.prototype._pumpBody = async function _pumpBody() {
             }
         }
     } catch (err) {
+        // Transport/body-pump errors belong to the response, unlike a user-supplied destroy error.
+        this._bodyReadFailed = true;
         this.destroy(err);
     }
 };
 
 IncomingMessage.prototype._destroy = function _destroy(err, cb) {
+    if ((!this.readableEnded || !this.complete) && !this.aborted) {
+        this.aborted = true;
+        this.emit('aborted');
+    }
     if (this._nativeRes && typeof this._nativeRes.discardBody === 'function') {
         this._nativeRes.discardBody();
     }
     if (!this.complete && this.req && !this.req.destroyed) {
-        this.req.destroy();
+        this.req.destroy(this._bodyReadFailed ? undefined : err);
     }
-    cb(err);
+    // discardBody cancels the native read; do not report close while the pump still owns it.
+    const finish = error => process.nextTick(() => {
+        cb(error && this.listenerCount('error') > 0 ? error : null);
+    });
+    Promise.resolve(this._pumpPromise).then(() => finish(err), finish);
 };
 
 IncomingMessage.prototype._hasNoBody = function _hasNoBody() {
@@ -2152,9 +2156,8 @@ export class ClientRequest extends OutgoingMessage {
                 const responseHandled = this.emit('response', res);
 
                 if (this.aborted || this.destroyed) {
-                    if (res._nativeRes && typeof res._nativeRes.discardBody === 'function') {
-                        res._nativeRes.discardBody();
-                    }
+                    if (res.complete) res._dump();
+                    else res.destroy();
                     return;
                 }
 
@@ -2183,9 +2186,13 @@ export class ClientRequest extends OutgoingMessage {
         this.destroyed = true;
         this._abortNativeRequest();
         if (this._response) {
-            this._response.aborted = true;
-            this._response.destroyed = true;
-            this._response.emit('aborted');
+            if (this._response.complete) {
+                this._response._dump();
+            } else {
+                const error = new Error('aborted');
+                error.code = 'ECONNRESET';
+                this._response.destroy(error);
+            }
         }
         process.nextTick(() => {
             this.emit('abort');
@@ -2199,6 +2206,15 @@ export class ClientRequest extends OutgoingMessage {
         this.destroyed = true;
 
         this._abortNativeRequest();
+        if (this._response && !this._response.destroyed) {
+            if (this._response.complete) {
+                this._response._dump();
+            } else {
+                const responseError = new Error('aborted');
+                responseError.code = 'ECONNRESET';
+                this._response.destroy(responseError);
+            }
+        }
         if (!error && !this._response && !this._transportRejected) {
             // Request destroyed before receiving a response — emit ECONNRESET
             // matching Node.js behavior for destroyed pending requests.

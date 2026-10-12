@@ -8,6 +8,7 @@ world node-http {
   export http-self-connect: func();
   export http-self-connect-post: func();
   export http-abort-isolation: func() -> bool;
+  export http-response-cancellation: func(port: u16, test-case: u8) -> bool;
   export http-response-lifecycle: func() -> bool;
   export http-response-repeated-end-callbacks: func() -> bool;
   export http-response-post-close-writes: func() -> bool;
