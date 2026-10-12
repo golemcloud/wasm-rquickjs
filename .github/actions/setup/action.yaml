@@ -46,6 +46,7 @@ runs:
           target/p3-component-build
         # An immutable dependency baseline; Cargo rebuilds changed source.
         # Exact keys avoid relying on cross-commit prefix restoration.
+        # Bump components-v1 to refresh the baseline: exact hits are not resaved.
         key: components-v1-${{ runner.os }}-sdk${{ env.WASI_SDK_VERSION }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}
     - name: Clear reports restored with build artifacts
       shell: bash
