@@ -533,6 +533,21 @@ export const testPrepareStackTraceDescriptors = () => {
         assert.strictEqual(getterCalls, 0);
         assert.strictEqual(new TypeError('accessor').stack, 'custom-prepare');
 
+        let undefinedPrepareCalls = 0;
+        Object.defineProperty(Error, 'prepareStackTrace', {
+            value: () => {
+                undefinedPrepareCalls++;
+                return undefined;
+            },
+            writable: true,
+            configurable: true,
+        });
+        const undefinedPrepared = new Error('undefined-prepare');
+        assert.strictEqual(undefinedPrepared.stack, undefined);
+        assert.strictEqual(undefinedPrepared.stack, undefined);
+        assert.strictEqual(undefinedPrepareCalls, 1,
+            'an undefined custom result must still be cached');
+
         delete Error.prepareStackTrace;
         assert.match(new Error('deleted').stack, /^Error: deleted(?:\n|$)/);
 

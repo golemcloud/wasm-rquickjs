@@ -329,7 +329,17 @@ function _dispatchPrepareStackTrace(error, callSites) {
     }
     const prepare = NativeError.prepareStackTrace;
     if (typeof prepare === 'function') {
-        return prepare(error, callSites.map(_toCompatibleCallSite));
+        const value = prepare(error, callSites.map(_toCompatibleCallSite));
+        if (error && (typeof error === 'object' || typeof error === 'function')) {
+            // The state object is also the cache-presence sentinel. In
+            // particular, remember an explicit `undefined` result so QuickJS
+            // cannot invoke a custom formatter again with different frames.
+            nativeWeakMapSet(preparedNativeStacks, error, {
+                value,
+                materialized: true,
+            });
+        }
+        return value;
     }
     const state = _prepareSourceMappedStackState(error, callSites);
     _cachePreparedNativeStack(error, state);
