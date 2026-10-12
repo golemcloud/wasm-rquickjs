@@ -31,6 +31,8 @@ ALLOWLIST = {
     "runtime::fetch::fetch_abort_releases_upload",
     "runtime::fetch::fetch_abort_pending_response_body",
     "node_compat::gen_node_compat_tests::parallel__test_http_zero_length_write_js",
+    # Run 38285927640: 120s timeout, then 2.7s pass on the same commit.
+    "node_compat::gen_node_compat_tests::parallel__test_http_client_upload_js",
 }
 STATUSES = ("passed", "failed", "pending", "skipped", "other")
 

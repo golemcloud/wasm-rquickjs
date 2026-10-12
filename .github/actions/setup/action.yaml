@@ -44,9 +44,9 @@ runs:
           tmp/rt-target-internal-test-execution
           tmp/rt-target-p3-internal-test-execution
           target/p3-component-build
-        key: components-v1-${{ runner.os }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}-${{ github.sha }}
-        restore-keys: |
-          components-v1-${{ runner.os }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}-
+        # An immutable dependency baseline; Cargo rebuilds changed source.
+        # Exact keys avoid relying on cross-commit prefix restoration.
+        key: components-v1-${{ runner.os }}-sdk${{ env.WASI_SDK_VERSION }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}
     - name: Clear reports restored with build artifacts
       shell: bash
       run: rm -f target/ctrf-*.json
