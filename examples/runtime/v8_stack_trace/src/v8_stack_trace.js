@@ -544,6 +544,11 @@ export const testPrepareStackTraceDescriptors = () => {
         });
         const undefinedPrepared = new Error('undefined-prepare');
         try {
+            throw 0;
+        } catch {
+            // QuickJS clears its current backtrace marker on every catch.
+        }
+        try {
             throw undefinedPrepared;
         } catch (error) {
             assert.strictEqual(error, undefinedPrepared);

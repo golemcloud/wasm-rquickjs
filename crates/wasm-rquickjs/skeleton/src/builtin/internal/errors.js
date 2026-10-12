@@ -333,8 +333,8 @@ function _dispatchPrepareStackTrace(error, callSites) {
         if (error && (typeof error === 'object' || typeof error === 'function')) {
             // The state object is also the cache-presence sentinel. In
             // particular, remember an explicit `undefined` result so QuickJS
-            // cannot invoke a custom formatter again for the same object with
-            // different frames.
+            // reuses a successfully prepared result for the same object
+            // instead of invoking the formatter again with different frames.
             nativeWeakMapSet(preparedNativeStacks, error, {
                 value,
                 custom: true,
