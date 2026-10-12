@@ -17,6 +17,11 @@ env:
   CARGO_TERM_COLOR: always
   WASI_SDK_VERSION: "25"
   WASI_SDK_PATH: /opt/wasi-sdk
+  # Cache compilation only. Every case still creates a fresh Store, instance,
+  # WASI context, QuickJS runtime, and temporary filesystem.
+  WASM_RQUICKJS_TEST_WASMTIME_CACHE: "1"
+  WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE: "1"
+  WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT: "1"
   # CI always builds and tests against Golem's wasmtime fork — see
   # .github/scripts/enable-wasmtime-fork.sh for the rationale. Build/test
   # jobs run that script (which uncomments the [patch.crates-io] block in
