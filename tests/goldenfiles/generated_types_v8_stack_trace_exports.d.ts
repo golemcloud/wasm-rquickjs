@@ -1,4 +1,5 @@
 declare module 'v8-stack-trace' {
+  export function benchmarkErrorStack(path: string, iterations: number): Promise<number>;
   export function testCaptureStackTraceExists(): Promise<boolean>;
   export function testCaptureStackTraceBasic(): Promise<boolean>;
   export function testPrepareStackTrace(): Promise<boolean>;
@@ -9,6 +10,7 @@ declare module 'v8-stack-trace' {
   export function testAssertionListenerStackFrame(): Promise<string>;
   export function testCjsCallSiteLineOffset(): Promise<string>;
   export function testPrepareStackTraceDescriptors(): Promise<boolean>;
+  export function testProxyStackHolderEngineBoundary(): Promise<boolean>;
   export function testConstructorOpt(): Promise<boolean>;
   export function testStackTraceLimit(): Promise<boolean>;
   export function testDepdPattern(): Promise<boolean>;
