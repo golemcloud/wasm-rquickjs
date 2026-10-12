@@ -2,13 +2,70 @@ test_r::enable!();
 
 use crate::common::{FeatureCombination, collect_example_paths, use_local_golem_websocket};
 use camino::Utf8Path;
+use camino_tempfile::Utf8TempDir;
 use std::process::Command;
 use test_r::core::{DynamicTestRegistration, TestProperties};
-use test_r::{add_test, test_gen};
-use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
+use test_r::{add_test, test, test_gen};
+use wasm_rquickjs::{
+    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate,
+    generate_wrapper_crate_with_target,
+};
 
 #[allow(dead_code)]
 mod common;
+
+#[test]
+fn local_websocket_bridge_supports_locked_resolution() -> anyhow::Result<()> {
+    for target in [GenerationTarget::WasiP2, GenerationTarget::WasiP3] {
+        let temp = Utf8TempDir::new()?;
+        let wit = temp.path().join("wit");
+        std::fs::create_dir(&wit)?;
+        std::fs::write(
+            wit.join("test.wit"),
+            "package test:locked-bridge; world test { export run: func(); }",
+        )?;
+        let js = temp.path().join("module.js");
+        std::fs::write(&js, "export function run() {}")?;
+        let output = temp.path().join("out");
+        generate_wrapper_crate_with_target(
+            &wit,
+            &[JsModuleSpec {
+                name: "module".to_string(),
+                mode: EmbeddingMode::EmbedFile(js),
+            }],
+            &output,
+            None,
+            target,
+        )?;
+        use_local_golem_websocket(&output)?;
+        let fetch = Command::new("cargo")
+            .args(["fetch", "--locked"])
+            .current_dir(&output)
+            .status()?;
+        assert!(
+            fetch.success(),
+            "{target:?}: failed to fetch locked dependencies"
+        );
+        let metadata = Command::new("cargo")
+            .args([
+                "metadata",
+                "--locked",
+                "--offline",
+                "--format-version",
+                "1",
+                "--features",
+                "websocket",
+            ])
+            .current_dir(&output)
+            .output()?;
+        assert!(
+            metadata.status.success(),
+            "{target:?}: {}",
+            String::from_utf8_lossy(&metadata.stderr)
+        );
+    }
+    Ok(())
+}
 
 #[test_gen]
 fn gen_compilation_tests(r: &mut DynamicTestRegistration) {

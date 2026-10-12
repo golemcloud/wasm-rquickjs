@@ -355,6 +355,21 @@ fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
         "generated Cargo.toml did not contain the expected golem-websocket branch patch"
     );
     std::fs::write(manifest, updated)?;
+    // The copied skeleton lockfile still identifies the bridge by its Git source.
+    let mut status = Command::new("cargo")
+        .args(["update", "--offline", "-p", "golem-websocket"])
+        .current_dir(root.join("out"))
+        .status()?;
+    if !status.success() {
+        status = Command::new("cargo")
+            .args(["update", "-p", "golem-websocket"])
+            .current_dir(root.join("out"))
+            .status()?;
+    }
+    anyhow::ensure!(
+        status.success(),
+        "failed to lock the local golem-websocket bridge"
+    );
     Ok(())
 }
 
