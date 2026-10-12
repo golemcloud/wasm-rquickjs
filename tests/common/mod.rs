@@ -77,9 +77,11 @@ impl ws_mock_p2::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
+        reconstruction_policy: Option<ws_mock_p2::golem::websocket::client::ReconstructionPolicy>,
     ) -> wasmtime::Result<
         Result<Resource<WsMockConnection>, ws_mock_p2::golem::websocket::client::Error>,
     > {
+        assert!(reconstruction_policy.is_none());
         Ok(Ok(self.table.lock().unwrap().push(WsMockConnection)?))
     }
 
@@ -155,9 +157,11 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnection for Host {
         &mut self,
         _url: String,
         _headers: Option<Vec<(String, String)>>,
+        reconstruction_policy: Option<ws_mock_p3::golem::websocket::client::ReconstructionPolicy>,
     ) -> wasmtime::Result<
         Result<Resource<WsMockConnection>, ws_mock_p3::golem::websocket::client::Error>,
     > {
+        assert!(reconstruction_policy.is_none());
         Ok(Ok(self.table.lock().unwrap().push(WsMockConnection)?))
     }
 
@@ -235,6 +239,40 @@ impl ws_mock_p3::golem::websocket::client::HostWebsocketConnectionWithStore<Host
 
 /// Default timeout for node_compat tests (in seconds).
 pub const DEFAULT_NODE_COMPAT_TEST_TIMEOUT_SECS: u64 = 120;
+
+/// Build generated test components against the bridge sources in this checkout.
+pub fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
+    let manifest = root.join("Cargo.toml");
+    let contents = fs::read_to_string(&manifest)?;
+    let remote_patch = concat!(
+        "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
+        "branch = \"gol804-websocket-current-generator\" }"
+    );
+    let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
+    let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
+    let updated = contents.replace(remote_patch, &local_patch);
+    anyhow::ensure!(
+        updated != contents,
+        "generated Cargo.toml did not contain the expected golem-websocket branch patch"
+    );
+    fs::write(manifest, updated)?;
+    // The copied skeleton lockfile still identifies the bridge by its Git source.
+    let mut status = Command::new("cargo")
+        .args(["update", "--offline", "-p", "golem-websocket"])
+        .current_dir(root)
+        .status()?;
+    if !status.success() {
+        status = Command::new("cargo")
+            .args(["update", "-p", "golem-websocket"])
+            .current_dir(root)
+            .status()?;
+    }
+    anyhow::ensure!(
+        status.success(),
+        "failed to lock the local golem-websocket bridge"
+    );
+    Ok(())
+}
 
 const TEST_ARTIFACT_CACHE_ENV: &str = "WASM_RQUICKJS_TEST_ARTIFACT_CACHE";
 const TEST_COMPONENT_PROFILE_ENV: &str = "WASM_RQUICKJS_TEST_COMPONENT_PROFILE";
@@ -1766,6 +1804,26 @@ fn newest_modified_time_of_existing(paths: &[Utf8PathBuf]) -> anyhow::Result<Sys
     Ok(newest)
 }
 
+fn compile_cache_inputs(path: &Utf8Path) -> Vec<Utf8PathBuf> {
+    vec![
+        path.to_path_buf(),
+        Utf8Path::new("crates").join("wasm-rquickjs").join("src"),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("skeleton"),
+        Utf8Path::new("crates").join("wasi-logging").join("src"),
+        Utf8Path::new("crates").join("golem-websocket"),
+        Utf8Path::new("Cargo.toml").to_path_buf(),
+        Utf8Path::new("Cargo.lock").to_path_buf(),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("Cargo.toml"),
+        Utf8Path::new("crates")
+            .join("wasi-logging")
+            .join("Cargo.toml"),
+    ]
+}
+
 fn output_fresh_for_inputs(
     output: &Utf8Path,
     stamp: &Utf8Path,
@@ -2736,6 +2794,44 @@ mod tests {
 
         assert!(retained.is_none());
         assert!(sender.is_closed());
+    }
+
+    #[test]
+    fn bridge_changes_invalidate_compiled_artifact_cache() -> anyhow::Result<()> {
+        if test_drop_cache_enabled() {
+            return Ok(());
+        }
+
+        for relative in [
+            "src/lib.rs",
+            "wit/deps/golem-websocket/websocket.wit",
+            "wit-p3/deps/golem-websocket/websocket.wit",
+        ] {
+            let temp = Utf8TempDir::new()?;
+            let bridge_input = temp.path().join("crates/golem-websocket").join(relative);
+            fs::create_dir_all(bridge_input.parent().unwrap())?;
+            fs::write(&bridge_input, "bridge-v1")?;
+            let inputs: Vec<_> = compile_cache_inputs(Utf8Path::new("fixture"))
+                .iter()
+                .map(|path| temp.path().join(path))
+                .collect();
+            let output = temp.path().join("output.wasm");
+            let stamp = temp.path().join("output.stamp");
+            let signature = "test-signature";
+            fs::write(&output, "output")?;
+            refresh_cache_stamp(&stamp, signature)?;
+            assert!(output_fresh_for_inputs(&output, &stamp, &inputs, signature));
+
+            fs::write(&bridge_input, "bridge-v2")?;
+            fs::File::open(&bridge_input)?.set_times(
+                fs::FileTimes::new().set_modified(modified_time(&stamp)? + Duration::from_secs(1)),
+            )?;
+            assert!(
+                !output_fresh_for_inputs(&output, &stamp, &inputs, signature),
+                "a bridge-only change to {relative} must invalidate the component"
+            );
+        }
+        Ok(())
     }
 
     #[test]
@@ -4485,22 +4581,7 @@ impl CompiledTest {
         };
         let compile_cache_kind = format!("compile-{}", component_profile.label());
         let compile_stamp = test_cache_stamp(name, feature_combination, &compile_cache_kind);
-        let compile_inputs = vec![
-            path.to_path_buf(),
-            Utf8Path::new("crates").join("wasm-rquickjs").join("src"),
-            Utf8Path::new("crates")
-                .join("wasm-rquickjs")
-                .join("skeleton"),
-            Utf8Path::new("crates").join("wasi-logging").join("src"),
-            Utf8Path::new("Cargo.toml").to_path_buf(),
-            Utf8Path::new("Cargo.lock").to_path_buf(),
-            Utf8Path::new("crates")
-                .join("wasm-rquickjs")
-                .join("Cargo.toml"),
-            Utf8Path::new("crates")
-                .join("wasi-logging")
-                .join("Cargo.toml"),
-        ];
+        let compile_inputs = compile_cache_inputs(path);
         let compile_signature = cache_stamp_signature(
             name,
             feature_combination,
@@ -4594,6 +4675,7 @@ impl CompiledTest {
             None,
             target.generation_target(),
         )?;
+        use_local_golem_websocket(&wrapper_crate_root)?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
         let locked_build = truthy_env(TEST_LOCKED_BUILDS_ENV);
