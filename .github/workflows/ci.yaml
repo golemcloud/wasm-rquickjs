@@ -215,7 +215,9 @@ jobs:
           - suite: generation
             test_args: --test p3_generation --test p3_exported_resource --test optimize
           - suite: async-values
-            test_args: --test p3_async_values
+            # Each case creates its own Tokio runtime and compiles a Wasmtime
+            # component inside the timeout. Bound competing compiler/runtime pools.
+            test_args: --test p3_async_values -- --test-threads 4
     env:
       WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
     steps:
