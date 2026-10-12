@@ -1,0 +1,37 @@
+name: Collect test report
+description: Preserve raw test evidence independently of GitHub report publishing
+
+inputs:
+  name:
+    description: Unique job or shard name
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ${{ inputs.name }}-report-attempt${{ github.run_attempt }}
+        path: |
+          target/ctrf-*.json
+          target/ci-retries/
+        if-no-files-found: warn
+        retention-days: 35
+    - name: Require reports for successful tests
+      if: success()
+      shell: bash
+      run: |
+        python3 - <<'PY'
+        import glob
+        import json
+
+        paths = glob.glob('target/ctrf-*.json')
+        if not paths:
+            raise SystemExit('Successful test job produced no CTRF reports')
+        for path in paths:
+            with open(path) as report:
+                data = json.load(report)
+            if not data['results']['tests']:
+                raise SystemExit(f'Empty test report: {path}')
+        PY

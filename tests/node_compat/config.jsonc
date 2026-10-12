@@ -12,7 +12,7 @@
   //                         "engine-difference" - V8 behavior QuickJS cannot reasonably mirror
   //                         "node-internals"    - tests Node.js internals/implementation details
   //                         "unevaluated"       - not triaged yet; excluded from percentages
-  //   "flaky": true       - retry up to 10 times before failing
+  //   "flaky": true       - one retry (two total attempts) before failing
   //   "reason": "..."     - explanation for skip/flaky/impossible marking
   //
   // Only tests listed here will be run by the test harness.
@@ -4790,7 +4790,7 @@
       }
     },
     "parallel/test-http-write-head.js": { "category": "wasi-impossible", "reason": "wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied" },
-    "parallel/test-http-zero-length-write.js": {},
+    "parallel/test-http-zero-length-write.js": { "timeout": 30 },
     "parallel/test-http-zerolengthbuffer.js": {},
     "parallel/test-http2-autoselect-protocol.js": { "category": "wasi-impossible", "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-connecting-to-http.js": { "category": "wasi-impossible", "reason": "requires raw TLS handshake/protocol-mismatch behavior (HTTPS client to HTTP server), unavailable with wasi:http" },

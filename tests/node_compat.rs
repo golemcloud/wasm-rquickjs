@@ -490,7 +490,7 @@ fn handle_test_result(
 /// Maximum number of attempts for tests marked `"flaky": true` in
 /// `tests/node_compat/config.jsonc`. A flaky test passes if any single attempt
 /// passes; it only fails after all `FLAKY_MAX_ATTEMPTS` attempts fail.
-const FLAKY_MAX_ATTEMPTS: u32 = 10;
+const FLAKY_MAX_ATTEMPTS: u32 = 2;
 
 // --- Shard tagging for CI parallelism ---
 

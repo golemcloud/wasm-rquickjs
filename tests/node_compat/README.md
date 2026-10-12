@@ -50,7 +50,7 @@ missing classification inputs from silently changing the compatibility totals.
 are run by the test harness. Each entry can include:
 
 - `{}` — test should pass
-- `{ "flaky": true }` — retry up to 10 times
+- `{ "flaky": true }` — one retry (two total attempts, each with fresh runtime state)
 - `{ "skip": true, "reason": "..." }` — skip with explanation
 
 ## Common Shim

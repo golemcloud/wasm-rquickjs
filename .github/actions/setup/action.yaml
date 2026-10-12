@@ -6,19 +6,30 @@ inputs:
     description: "Shared cache key for rust-cache"
     required: false
     default: "debug"
+  wasmtime-fork:
+    description: "Patch the manifest before computing the Rust cache key"
+    required: false
+    default: "false"
 
 runs:
   using: "composite"
   steps:
+    - name: Setup Rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-wasip1, wasm32-wasip2
+    - name: Enable Golem wasmtime fork
+      if: inputs.wasmtime-fork == 'true'
+      shell: bash
+      run: bash .github/scripts/enable-wasmtime-fork.sh
     - uses: useblacksmith/rust-cache@v3
       with:
         prefix-key: v1-rust
         shared-key: ${{ inputs.cache-key }}
         cache-all-crates: true
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
-      with:
-        targets: wasm32-wasip1, wasm32-wasip2
+    - name: Clear reports restored with build artifacts
+      shell: bash
+      run: rm -f target/ctrf-*.json
     - uses: cargo-bins/cargo-binstall@main
     - name: Install cargo-component
       shell: bash
