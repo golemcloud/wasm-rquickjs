@@ -1,8 +1,10 @@
 import assert from 'node:assert';
+import { webcrypto } from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import module, { createRequire } from 'node:module';
 import { inspect } from 'node:util';
+import vm from 'node:vm';
 
 const require = createRequire(import.meta.url);
 
@@ -57,14 +59,46 @@ export const testPrivateWeakCollectionsBypassPublicPrototypes = () => {
         assert.match(inspect(new TextEncoderStream()), /TextEncoderStream/);
         assert.match(inspect(new TextDecoderStream()), /TextDecoderStream/);
 
-        const cyclicActual = {};
-        const cyclicExpected = {};
-        cyclicActual.self = cyclicActual;
-        cyclicExpected.self = cyclicExpected;
-        assert.deepStrictEqual(cyclicActual, cyclicExpected);
+        const objectPrototypeGet = Object.getOwnPropertyDescriptor(Object.prototype, 'get');
+        try {
+            Object.defineProperty(Object.prototype, 'get', {
+                value() {},
+                configurable: true,
+            });
+            const cyclicActual = {};
+            const cyclicExpected = {};
+            cyclicActual.self = cyclicActual;
+            cyclicExpected.self = cyclicExpected;
+            assert.partialDeepStrictEqual(cyclicActual, cyclicExpected);
+        } finally {
+            if (objectPrototypeGet) {
+                Object.defineProperty(Object.prototype, 'get', objectPrototypeGet);
+            } else {
+                delete Object.prototype.get;
+            }
+        }
 
         const url = new URL('https://example.com/?value=1');
         assert.strictEqual(url.searchParams.get('value'), '1');
+
+        assert.match(new Error('private-error-cache').stack, /^Error: private-error-cache(?:\n|$)/);
+
+        const context = vm.createContext({ value: 21 });
+        assert.strictEqual(new vm.Script('value * 2').runInContext(context), 42);
+
+        assert.strictEqual(webcrypto.subtle.constructor.name, 'SubtleCrypto');
+        webcrypto.getRandomValues(new Uint8Array(1));
+
+        globalThis.__wasm_rquickjs_ignore_unhandled_rejection(Promise.resolve());
+
+        const modulePath = '/private-weak-cache.cjs';
+        fs.writeFileSync(modulePath, 'module.exports = 42;');
+        try {
+            assert.strictEqual(require(modulePath), 42);
+        } finally {
+            delete require.cache[modulePath];
+            fs.unlinkSync(modulePath);
+        }
     } finally {
         Object.assign(WeakMap.prototype, weakMapMethods);
         Object.assign(WeakSet.prototype, weakSetMethods);

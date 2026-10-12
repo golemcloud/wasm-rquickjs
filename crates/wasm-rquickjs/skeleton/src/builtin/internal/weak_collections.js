@@ -18,16 +18,18 @@ export const NativeWeakRef = WeakRef;
 export const nativeWeakRefDeref = call.bind(WeakRef.prototype.deref);
 
 const privateWeakMapMethods = {
-    delete: { value: function del(key) { return nativeWeakMapDelete(this, key); } },
-    get: { value: function get(key) { return nativeWeakMapGet(this, key); } },
-    has: { value: function has(key) { return nativeWeakMapHas(this, key); } },
-    set: { value: function set(key, value) { return nativeWeakMapSet(this, key, value); } },
+    __proto__: null,
+    delete: { __proto__: null, value: function del(key) { return nativeWeakMapDelete(this, key); } },
+    get: { __proto__: null, value: function get(key) { return nativeWeakMapGet(this, key); } },
+    has: { __proto__: null, value: function has(key) { return nativeWeakMapHas(this, key); } },
+    set: { __proto__: null, value: function set(key, value) { return nativeWeakMapSet(this, key, value); } },
 };
 
 const privateWeakSetMethods = {
-    add: { value: function add(value) { return nativeWeakSetAdd(this, value); } },
-    delete: { value: function del(value) { return nativeWeakSetDelete(this, value); } },
-    has: { value: function has(value) { return nativeWeakSetHas(this, value); } },
+    __proto__: null,
+    add: { __proto__: null, value: function add(value) { return nativeWeakSetAdd(this, value); } },
+    delete: { __proto__: null, value: function del(value) { return nativeWeakSetDelete(this, value); } },
+    has: { __proto__: null, value: function has(value) { return nativeWeakSetHas(this, value); } },
 };
 
 // Own methods keep runtime-private collections on the captured native path even
