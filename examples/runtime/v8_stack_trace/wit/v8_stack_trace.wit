@@ -1,6 +1,7 @@
 package quickjs:v8-stack-trace;
 
 world v8-stack-trace {
+  export benchmark-error-stack: func(path: string, iterations: u32) -> u32;
   export test-capture-stack-trace-exists: func() -> bool;
   export test-capture-stack-trace-basic: func() -> bool;
   export test-prepare-stack-trace: func() -> bool;
@@ -11,6 +12,7 @@ world v8-stack-trace {
   export test-assertion-listener-stack-frame: func() -> string;
   export test-cjs-call-site-line-offset: func() -> string;
   export test-prepare-stack-trace-descriptors: func() -> bool;
+  export test-proxy-stack-holder-engine-boundary: func() -> bool;
   export test-constructor-opt: func() -> bool;
   export test-stack-trace-limit: func() -> bool;
   export test-depd-pattern: func() -> bool;

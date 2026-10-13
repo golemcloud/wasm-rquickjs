@@ -6556,7 +6556,16 @@
       }
     },
     "parallel/test-error-format-list.js": { "category": "node-internals", "reason": "uses --expose-internals and internal/errors formatList" },
-    "parallel/test-error-prepare-stack-trace.js": { "category": "known-gap", "reason": "Error.prepareStackTrace default behavior is incomplete" },
+    "parallel/test-error-prepare-stack-trace.js": {
+      "split": true,
+      "isolateBlockSubtests": true,
+      "subtests": {
+        "block_00_statement_00": { "category": "node-internals", "reason": "setup-only Node test-harness import has no public API assertion" },
+        "block_01_verify_that_the_default_error_preparestacktrace_is_present": { "category": "runnable" },
+        "block_02_error_preparestacktrace_can_be_overridden": { "category": "runnable" },
+        "block_03_statement_03": { "category": "wasi-impossible", "reason": "requires spawning a child Node process with --enable-source-maps" }
+      }
+    },
     "parallel/test-error-reporting.js": { "category": "wasi-impossible", "reason": "requires child_process.exec subprocess behavior" },
     "parallel/test-errors-aborterror.js": {
       "category": "node-internals",

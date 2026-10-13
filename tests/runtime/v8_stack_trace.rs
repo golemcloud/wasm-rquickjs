@@ -1,5 +1,6 @@
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{CompiledTest, PreparedComponent, TestInstance, invoke_and_capture_output};
 use camino::Utf8Path;
+use std::time::{Duration, Instant};
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
 
@@ -9,6 +10,58 @@ async fn compiled_v8_stack_trace() -> CompiledTest {
     CompiledTest::new(path, true)
         .await
         .expect("Failed to compile v8_stack_trace")
+}
+
+#[test]
+#[ignore = "manual performance evidence; run explicitly after Error stack changes"]
+async fn v8_stack_trace_benchmark(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    const ITERATIONS: u32 = 3_000;
+    const ROUNDS: usize = 7;
+    let prepared = PreparedComponent::new(compiled_test.wasm_path())?;
+
+    for path in [
+        "construction",
+        "first-read",
+        "repeated-read",
+        "throw-catch",
+        "throw-plain",
+        "capture-first-read",
+        "custom-first-read",
+    ] {
+        let mut samples = Vec::with_capacity(ROUNDS);
+        for _ in 0..ROUNDS {
+            // Immutable engine/linker/component preparation is shared. Each
+            // sample still gets a fresh store, component instance, WASI state,
+            // QuickJS runtime, memory, and temp directory.
+            let mut instance = TestInstance::from_prepared(&prepared).await?;
+            let start = Instant::now();
+            let result = instance
+                .invoke(
+                    None,
+                    "benchmark-error-stack",
+                    &[Val::String(path.into()), Val::U32(ITERATIONS)],
+                )
+                .await?;
+            let elapsed = start.elapsed();
+            assert!(matches!(result, Some(Val::U32(checksum)) if checksum > 0));
+            samples.push(elapsed);
+        }
+        samples.sort_unstable();
+        println!(
+            "Error stack {path:<13} iterations={ITERATIONS} rounds={ROUNDS} median={:.3}ms min={:.3}ms max={:.3}ms",
+            millis(samples[ROUNDS / 2]),
+            millis(samples[0]),
+            millis(samples[ROUNDS - 1]),
+        );
+    }
+
+    Ok(())
+}
+
+fn millis(duration: Duration) -> f64 {
+    duration.as_secs_f64() * 1_000.0
 }
 
 #[test]
@@ -229,6 +282,22 @@ async fn v8_stack_trace_prepare_stack_trace_descriptors(
     let r = r?;
     println!("Output:\n{}", output);
     assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn v8_stack_trace_proxy_holder_engine_boundary(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-proxy-stack-holder-engine-boundary",
+        &[],
+    )
+    .await;
+    println!("Output:\n{output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
     Ok(())
 }
 
