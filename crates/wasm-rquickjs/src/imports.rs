@@ -304,9 +304,12 @@ fn build_freestanding_import_bridge(
 ///    `crate::internal::future_writer_from_js` / `crate::internal::stream_writer_from_js`), so no
 ///    background task ever drives the rquickjs runtime — this works whether the host consumes the
 ///    reader during the import call or stores it and consumes it from a later call;
-/// 3. spawns a single wit-bindgen task that awaits the component import and then settles the
+/// 3. spawns a wit-bindgen task that awaits the component import and sends its Rust result through
+///    a oneshot channel;
+/// 4. spawns a task in the originating JS context that receives the result and settles the
 ///    deferred promise ([`crate::internal::settle_import_promise`], which also pumps the QuickJS
-///    job queue so the awaiting JS continuation resumes).
+///    job queue so the awaiting JS continuation resumes). Runtime teardown drops the receiver and
+///    the JS callbacks, so a late native result cannot retain a destroyed runtime.
 fn build_deferred_import_bridge(
     context: &GeneratorContext<'_>,
     rust_fn: &RustWitFunction,
@@ -434,20 +437,26 @@ fn build_deferred_import_bridge(
         #[rquickjs::function]
         fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<rquickjs::Promise<'js>> {
             let (__promise, __resolve, __reject) = rquickjs::Promise::new(&ctx)?;
-            let __resolve = rquickjs::Persistent::save(&ctx, __resolve);
-            let __reject = rquickjs::Persistent::save(&ctx, __reject);
             // Lower each `future<T>` / `stream<T>` parameter into a component reader here, while a
             // `Ctx` is available. The writers are fed from JS (promise callbacks / a JS pump) and
             // pure component-model tasks, so they keep running correctly after the import returns.
             #(#arg_bindings)*
+            let (__result_tx, __result_rx) = futures::channel::oneshot::channel();
             wit_bindgen_p3::rt::async_support::spawn_local(async move {
                 let __result: #result_ty = #bindgen_path(#(#arg_exprs),*).await;
+                // The receiver is dropped if the originating JavaScript runtime shuts down.
+                let _ = __result_tx.send(__result);
+            });
+            let __settle_ctx = ctx.clone();
+            ctx.spawn(async move {
+                let __result = __result_rx.await
+                    .expect("async import task dropped without returning a result");
                 crate::internal::settle_import_promise(
+                    &__settle_ctx,
                     __resolve,
                     __reject,
                     move |__ctx| { #produce_body },
-                )
-                .await;
+                );
             });
             Ok(__promise)
         }

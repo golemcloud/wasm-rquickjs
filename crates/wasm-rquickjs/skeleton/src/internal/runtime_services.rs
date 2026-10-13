@@ -14,6 +14,27 @@ use std::sync::atomic::AtomicUsize;
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::time::{Duration, Instant};
 
+#[derive(Default, JsLifetime)]
+struct VariantCaseTagCache<'js> {
+    tags: RefCell<HashMap<String, rquickjs::String<'js>>>,
+}
+
+pub fn variant_case_tag<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    name: &'static str,
+) -> rquickjs::Result<rquickjs::String<'js>> {
+    let cache = ctx
+        .userdata::<VariantCaseTagCache<'js>>()
+        .expect("variant tag cache not initialized");
+    if let Some(tag) = cache.tags.borrow().get(name) {
+        return Ok(tag.clone());
+    }
+
+    let tag = rquickjs::String::from_str(ctx.clone(), name)?;
+    cache.tags.borrow_mut().insert(name.to_owned(), tag.clone());
+    Ok(tag)
+}
+
 #[cfg(feature = "typescript-compiler-profiling")]
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -680,6 +701,8 @@ impl OwnedJsRuntime {
             };
             ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
+            ctx.store_userdata(VariantCaseTagCache::default())
+                .expect("Failed to initialize variant tag cache");
         })
         .await;
 
@@ -715,6 +738,8 @@ impl OwnedJsRuntime {
     pub(crate) async fn initialize_node_builtins(&self) -> Result<(), String> {
         initialize_dispose_symbols(&self.ctx).await?;
         self.rt.idle().await;
+        #[cfg(feature = "p3")]
+        super::p3::JsState::initialize_async_value_helpers(&self.ctx).await;
         initialize_builtin_wiring(&self.ctx).await?;
         self.rt.idle().await;
         Ok(())
