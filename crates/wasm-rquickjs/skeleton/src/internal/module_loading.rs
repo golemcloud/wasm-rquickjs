@@ -429,6 +429,7 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders &&
     __wasm_rquickjs_import_attr_global.__wasm_rquickjs_registered_loaders.length > 0 &&
     typeof __wasm_rquickjs_import_attr_global.__wasm_rquickjs_prepare_static_registered_loader_graph === 'function' &&
+    !(generatedRewriteToken && completedKey.startsWith('import-attr:json:')) &&
     !String(prepared).startsWith('data:application/json') &&
     !/[.]json(?:[?#]|$)/.test(String(prepared))
   ) {

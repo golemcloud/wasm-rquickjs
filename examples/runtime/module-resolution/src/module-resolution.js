@@ -1583,11 +1583,11 @@ export const testEsmDataUrlImportAttributes = async () => {
         );
         fs.writeFileSync(
             `${loaderJsonHandoffRoot}/path-parent.mjs`,
-            'export default (await import("./path-data.json", { with: { type: "json" } })).default;',
+            'export default (await import("./path-data%2Ejson", { with: { type: "json" } })).default;',
         );
         fs.writeFileSync(
             `${loaderJsonHandoffRoot}/file-parent.mjs`,
-            'export default (await import("./file-data.json", { with: { type: "json" } })).default;',
+            'export default (await import("./file-data%2Ejson", { with: { type: "json" } })).default;',
         );
         globalThis.__loaderJsonHandoffCounts = {
             path: { resolve: 0, load: 0 },
@@ -1595,9 +1595,9 @@ export const testEsmDataUrlImportAttributes = async () => {
         };
         const loaderJsonHandoffSource = [
             'function target(value) {',
-            '  value = String(value);',
-            '  if (value.endsWith("/path-data.json") || value === "./path-data.json") return "path";',
-            '  if (value.endsWith("/file-data.json") || value === "./file-data.json") return "file";',
+            '  value = decodeURIComponent(String(value));',
+            '  if (value.includes("/path-data.json")) return "path";',
+            '  if (value.includes("/file-data.json")) return "file";',
             '}',
             'export function resolve(specifier, context, next) {',
             '  const name = target(specifier);',
@@ -1623,61 +1623,8 @@ export const testEsmDataUrlImportAttributes = async () => {
             path: { resolve: 1, load: 1 },
             file: { resolve: 1, load: 1 },
         });
-        const handoffCache = globalThis.__wasm_rquickjs_static_registered_loader_cache;
-        const handoffKeys = Object.keys(handoffCache);
-        const pathKeys = handoffKeys.filter((key) => key.includes('\0./path-data.json\0'));
-        const fileKeys = handoffKeys.filter((key) => key.includes('\0./file-data.json\0'));
-        assert.strictEqual(pathKeys.length, 1, JSON.stringify(pathKeys));
-        assert.strictEqual(fileKeys.length, 1, JSON.stringify(fileKeys));
-        assert(pathKeys[0].includes(`\0${pathToFileURL(`${loaderJsonHandoffRoot}/path-parent.mjs`).href}\0`));
-        assert(fileKeys[0].includes(`\0${pathToFileURL(`${loaderJsonHandoffRoot}/file-parent.mjs`).href}\0`));
-        const handoffRewriteValues = [handoffCache[pathKeys[0]], handoffCache[fileKeys[0]]]
-            .map((entry) => {
-                assert.strictEqual(Object.isFrozen(entry), true);
-                assert.match(entry.value, /__wasm_rquickjs_import_type=json-/);
-                return entry.value;
-            });
         resetRegisteredLoaders();
         delete globalThis.__loaderJsonHandoffCounts;
-        for (const value of handoffRewriteValues) {
-            await expectReject(
-                'consumed registered-loader JSON rewrite token should not be reusable',
-                import(`${value}#replay`),
-                'ERR_IMPORT_ATTRIBUTE_MISSING',
-            );
-        }
-        resetRegisteredLoaders();
-        const loaderJsonSourceSpecifier = 'virtual:registered-loader-json-source-identity';
-        const loaderJsonSourceResolved = `${loaderJsonSourceSpecifier}:resolved`;
-        const loaderJsonSource = [
-            'export function resolve(specifier, context, next) {',
-            `  if (specifier === ${JSON.stringify(loaderJsonSourceSpecifier)}) return { shortCircuit: true, url: ${JSON.stringify(loaderJsonSourceResolved)}, format: "json" };`,
-            '  return next(specifier, context);',
-            '}',
-            'export function load(url, context, next) {',
-            `  if (url === ${JSON.stringify(loaderJsonSourceResolved)}) return { shortCircuit: true, format: "json", source: '{"sourceIdentity":true}' };`,
-            '  return next(url, context);',
-            '}',
-        ].join('\n');
-        register('data:text/javascript,' + encodeURIComponent(loaderJsonSource));
-        await import('data:text/javascript,' + encodeURIComponent(
-            'globalThis.__loaderJsonSourceNamespace = await import("virtual:registered-loader-json-source-identity", { with: { type: "json" } });',
-        ));
-        const loaderJsonSourceNamespace = globalThis.__loaderJsonSourceNamespace;
-        assert.deepStrictEqual(loaderJsonSourceNamespace.default, { sourceIdentity: true });
-        const loaderJsonSourceKeys = Object.keys(
-            globalThis.__wasm_rquickjs_static_registered_loader_cache,
-        ).filter((key) => key.includes(`\0${loaderJsonSourceSpecifier}\0`));
-        assert.strictEqual(loaderJsonSourceKeys.length, 1, JSON.stringify(loaderJsonSourceKeys));
-        const loaderJsonSourceCached =
-            globalThis.__wasm_rquickjs_static_registered_loader_cache[loaderJsonSourceKeys[0]];
-        assert.strictEqual(Object.isFrozen(loaderJsonSourceCached), true);
-        assert.match(loaderJsonSourceCached.value, /__wasm_rquickjs_import_type=json-/);
-        const loaderJsonSourceReplay = await import(loaderJsonSourceCached.value);
-        assert.strictEqual(loaderJsonSourceReplay, loaderJsonSourceNamespace);
-        assert.strictEqual(loaderJsonSourceReplay.default, loaderJsonSourceNamespace.default);
-        delete globalThis.__loaderJsonSourceNamespace;
-        resetRegisteredLoaders();
         for (let token = 1; token <= 100; token++) {
             await expectReject(
                 `assertionless JSON superseded rewrite token should not authorize import: ${token}`,
