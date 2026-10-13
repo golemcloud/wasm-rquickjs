@@ -11,6 +11,7 @@ const RESULT_OK: &str = "ok";
 const RESULT_ERR: &str = "err";
 
 /// Add readable coercion without replacing the WIT error or changing its enumerable fields.
+#[allow(dead_code)]
 pub fn with_error_display<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Value<'js>> {
     if value.is_object() {
         let decorate: rquickjs::Function = ctx.eval(include_str!("error_display.js"))?;
