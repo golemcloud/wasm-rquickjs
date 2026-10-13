@@ -255,7 +255,8 @@ fn build_freestanding_import_bridge(
                         Ok(result) => Ok(#wrap_result),
                         Err(error) => {
                             let error: #wrapped_exception = #wrap_exception;
-                            Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                            let value = rquickjs::IntoJs::into_js(error, &ctx)?;
+                            Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
                         }
                     }
                 }
@@ -415,7 +416,9 @@ fn build_deferred_import_bridge(
                             rquickjs::IntoJs::into_js(#wrap_result, __ctx)?
                         )),
                         Err(__err) => Ok(crate::internal::PromiseOutcome::Reject(
-                            rquickjs::IntoJs::into_js(#wrap_exception, __ctx)?
+                            crate::wrappers::with_error_display(
+                                __ctx, rquickjs::IntoJs::into_js(#wrap_exception, __ctx)?
+                            )?
                         )),
                     }
                 },
@@ -726,7 +729,8 @@ fn generate_import_module(
                                     Ok(result) => Ok(#wrap_result),
                                     Err(error) => {
                                         let error: #wrapped_exception = #wrap_exception;
-                                        Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                                        let value = rquickjs::IntoJs::into_js(error, &ctx)?;
+                                        Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
                                     }
                                 }
                             }
@@ -759,7 +763,8 @@ fn generate_import_module(
                                     Ok(result) => Ok(#wrap_result),
                                     Err(error) => {
                                         let error: #wrapped_exception = #wrap_exception;
-                                        Err(ctx.throw(rquickjs::IntoJs::into_js(error, &ctx)?))
+                                        let value = rquickjs::IntoJs::into_js(error, &ctx)?;
+                                        Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
                                     }
                                 }
                             }

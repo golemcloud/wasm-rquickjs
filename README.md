@@ -352,6 +352,23 @@ sync or async.
 | Future                  | `future<T>`         | `Promise<T>`                                      | WASI Preview 3 (`--target wasi-p3`) only                                   |
 | Stream                  | `stream<T>`         | `AsyncIterable<T>`                                | WASI Preview 3 (`--target wasi-p3`) only                                   |
 
+### Imported result errors
+
+An imported function that returns `result<T, E>` returns `T` on success and throws
+`E` on failure. Async imports reject with the same error value.
+
+Structured error values retain their WIT representation. `String(error)`, template
+interpolation, and `new Error(error).message` render the payload as JSON instead of
+`[object Object]`. For example, a permission error renders as
+`{"tag":"permission-denied"}`, and a backend error renders as
+`{"tag":"backend-error","val":"service unavailable"}`. Bigint fields render as
+decimal strings without changing the original values.
+
+The coercion methods are non-enumerable. The original fields, object identity,
+enumerable keys, and typed catch-and-rethrow behavior remain unchanged. Primitive
+errors and successful values are not decorated. This rendering applies to error
+string coercion; it does not replace the runtime's uncaught-exception formatter.
+
 ### Limitations
 
 - Maximum number of function parameters is 26
