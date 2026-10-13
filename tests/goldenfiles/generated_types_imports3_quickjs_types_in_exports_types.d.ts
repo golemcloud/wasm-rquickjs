@@ -23,6 +23,10 @@ declare module 'quickjs:types-in-exports/types' {
   export function f15(bytes: Uint8Array): Uint8Array;
   export function f16(in_: Rec2[] | undefined): string[] | undefined;
   export function f17(in_: string[] | undefined): Rec2[] | undefined;
+  /**
+   * @throws Var1
+   */
+  export function f18(error: Var1): void;
   export type Color = quickjsTypesInExportsOtherTypes.Color;
   export type ListOfStrings = quickjsTypesInExportsOtherTypes.ListOfStrings;
   export type Rec2 = quickjsTypesInExportsOtherTypes.Rec2;
