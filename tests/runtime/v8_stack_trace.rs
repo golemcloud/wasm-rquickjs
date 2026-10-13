@@ -44,7 +44,7 @@ async fn v8_stack_trace_prepared_cache_does_not_retain_errors(
 }
 
 #[test]
-async fn v8_stack_trace_prepared_cache_does_not_retain_custom_cycles(
+async fn v8_stack_trace_custom_prepared_stack_cycles_are_collectable(
     #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {
     let (result, _) = invoke_and_capture_output(

@@ -398,11 +398,11 @@
         "block_18_test_for_array_constructor_in_different_context": {},
         "block_19_test_for_other_constructors_in_different_context": {},
         "block_20_test_for_property_descriptors": {},
-        "block_21_exceptions_should_print_the_error_message_not": {},
-        "block_22_block_22": {},
-        "block_23_block_23": {},
-        "block_24_prevent_enumerable_error_properties_from_being_printed": {},
-        "block_25_doesn_t_capture_stack_trace": {},
+        "block_21_exceptions_should_print_the_error_message_not": { "category": "runnable" },
+        "block_22_block_22": { "category": "runnable" },
+        "block_23_block_23": { "category": "runnable" },
+        "block_24_prevent_enumerable_error_properties_from_being_printed": { "category": "runnable" },
+        "block_25_doesn_t_capture_stack_trace": { "category": "runnable" },
         "block_26_https_github_com_nodejs_node_v0_x_archive_issues_1944": {},
         "block_27_should_not_throw": {},
         "block_28_should_not_throw": {},
@@ -480,10 +480,7 @@
         "block_94_block_94": { "category": "runnable" },
         "block_95_block_95": { "category": "runnable" },
         "block_96_block_96": { "category": "runnable" },
-        "block_97_block_97": {
-          "category": "known-gap",
-          "reason": "QuickJS stack frame formatting differs for Error objects whose name is a non-string object"
-        },
+        "block_97_block_97": { "category": "runnable" },
         "block_98_block_98": { "category": "runnable" }
       }
     },

@@ -98,6 +98,15 @@ export function testSourceMapApi() {
         const rawOrigin = module.findSourceMap(rawOffsets).findOrigin(8, 8);
         assert(rawOrigin.lineNumber === 1, 'public findOrigin uses raw generated position');
 
+        const mappedLookingMessage = new Error(`before\n    at ${rawOffsets}:8:8`);
+        mappedLookingMessage.message = `after\n    at ${rawOffsets}:8:8`;
+        assert(
+            mappedLookingMessage.stack.startsWith(
+                `Error: after\n    at ${rawOffsets}:8:8\n    at `,
+            ),
+            'source-map remapping does not rewrite multiline Error messages',
+        );
+
         const absoluteSource = module.findSourceMap(rawOffsets).findEntry(7, 0).originalSource;
         assert(absoluteSource.startsWith('file://') && absoluteSource.endsWith('/raw-offset-source.js'), 'absolute source URL');
 

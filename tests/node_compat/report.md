@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3178/4388 (72.4%)
+**Primary compatibility (CI-enforced):** 3184/4393 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3178 | 72.4% | 55.3% | 46.2% |
-| 🧩 known gap | 1210 | 27.6% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3184 | 72.5% | 55.3% | 46.3% |
+| 🧩 known gap | 1209 | 27.5% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1123 | — | — | 16.3% |
+| 🔒 Node.js internals (excluded) | 1118 | — | — | 16.3% |
 | **Total** | **6873** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3178/5750 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3184/5755 (55.3%)**.
 
 ## Inventory by Module
 
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 29 | 19 | 9 | 0 | 0 | 0 | 1 | 67.9% | 67.9% |
-| util | 174 | 87 | 10 | 0 | 0 | 0 | 77 | 89.7% | 89.7% |
+| util | 174 | 93 | 9 | 0 | 0 | 0 | 72 | 91.2% | 91.2% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
 | vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
@@ -584,7 +584,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-util-format.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
 | `test-util-getcallsites.js` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |
 | `test-util-inspect-getters-accessing-this.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-util-inspect.js` | 99 | 47 | 3 | 0 | 0 | 0 | 49 |
+| `test-util-inspect.js` | 99 | 53 | 2 | 0 | 0 | 0 | 44 |
 | `test-util-isDeepStrictEqual.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-promisify.js` | 19 | 0 | 0 | 0 | 0 | 0 | 19 |
 | `test-util-types.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -686,7 +686,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1210)
+### known gap (1209)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -923,7 +923,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
 | Overridden globalAgent socket bookkeeping (agent.sockets/close lifecycle) is not Node-compatible | 1 | `parallel/test-http-client-override-global-agent.js` |
 | QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361 | 1 | `es-module/test-esm-live-binding.mjs` |
-| QuickJS stack frame formatting differs for Error objects whose name is a non-string object | 1 | `parallel/test-util-inspect.js#block_97_block_97` |
 | RSA imported-key algorithm metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-encrypt-decrypt-rsa.js` |
 | RSA key import/export metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-export-import-rsa.js` |
 | RSA private-key parsing/signing path is incomplete (Failed to parse private key) | 1 | `parallel/test-crypto-sign-verify.js#block_12_block_12` |
@@ -1586,7 +1585,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 _No entries._
 
-### Node.js internals (1123)
+### Node.js internals (1118)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1594,7 +1593,7 @@ _No entries._
 | requires internal/util/inspect via --expose-internals | 78 | `parallel/test-readline-interface.js#block_00_block_00`, `parallel/test-readline-interface.js#block_01_block_01`, `parallel/test-readline-interface.js#block_02_block_02`, ... (+75) |
 | requires --expose-internals and internal/webstreams/adapters | 60 | `parallel/test-whatwg-webstreams-adapters-streambase.js#block_00_block_00`, `parallel/test-whatwg-webstreams-adapters-streambase.js#block_01_block_01`, `parallel/test-whatwg-webstreams-adapters-streambase.js#block_02_block_02`, ... (+57) |
 | inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs | 57 | `parallel/test-eventtarget.js#block_00_first_test_event`, `parallel/test-eventtarget.js#block_01_block_01`, `parallel/test-eventtarget.js#block_02_block_02`, ... (+54) |
-| requires --expose-internals plus internal/test/binding internalBinding('js_stream'/'util') | 48 | `parallel/test-util-inspect.js#block_00_special_function_inspection`, `parallel/test-util-inspect.js#block_01_block_01`, `parallel/test-util-inspect.js#block_02_block_02`, ... (+45) |
+| requires --expose-internals plus internal/test/binding internalBinding('js_stream'/'util') | 43 | `parallel/test-util-inspect.js#block_00_special_function_inspection`, `parallel/test-util-inspect.js#block_01_block_01`, `parallel/test-util-inspect.js#block_02_block_02`, ... (+40) |
 | uses --expose-internals with internal/test/binding (internalBinding('uv')) | 32 | `parallel/test-fs-copyfile.js`, `parallel/test-fs-error-messages.js#block_00_stat`, `parallel/test-fs-error-messages.js#block_01_lstat`, ... (+29) |
 | validates Node repository ESLint tooling/rules under tools/, not runtime API | 24 | `parallel/test-eslint-alphabetize-errors.js`, `parallel/test-eslint-alphabetize-primordials.js`, `parallel/test-eslint-async-iife-no-unused-result.js`, ... (+21) |
 | inherited: requires --expose-internals and internal/event_target | 23 | `parallel/test-nodeeventtarget.js#block_00_block_00`, `parallel/test-nodeeventtarget.js#block_01_block_01`, `parallel/test-nodeeventtarget.js#block_02_block_02`, ... (+20) |

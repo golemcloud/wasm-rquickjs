@@ -99,7 +99,9 @@ async function checkPreparedStackCacheLifetime(customStack) {
         assert.strictEqual(plain.filter(ref => ref.deref() === undefined).length, 64,
             'GC positive control must collect plain cycles');
         assert.strictEqual(errors.filter(ref => ref.deref() === undefined).length, 64,
-            'private prepared-stack cache must not retain discarded errors');
+            customStack
+                ? 'custom prepared stack cycles must remain collectable'
+                : 'private prepared-stack cache must not retain discarded errors');
         assert.strictEqual(publicWeakEntries.filter(ref => ref.deref() === undefined).length, 64,
             'inspection bookkeeping must not retain public weak entries');
         assert.strictEqual(publicWeakMap.get(liveMapKey), currentMapValue);
@@ -318,7 +320,135 @@ export const testErrorInspectUsesCurrentName = () => {
     try {
         const error = new RangeError('foo');
         error.name = 404;
+        assert.match(error.stack, /^404: foo(?:\n|$)/);
         assert.match(inspect(error), /^404 \[RangeError\]: foo(?:\n|$)/);
+
+        const readBeforeRename = new RangeError('fixed');
+        const unreadDescriptor = Object.getOwnPropertyDescriptor(readBeforeRename, 'stack');
+        assert.strictEqual(typeof unreadDescriptor.get, 'function');
+        assert.strictEqual(unreadDescriptor.enumerable, false);
+        assert.strictEqual(unreadDescriptor.configurable, true);
+        assert.match(readBeforeRename.stack, /^RangeError: fixed(?:\n|$)/);
+        const materializedDescriptor = Object.getOwnPropertyDescriptor(readBeforeRename, 'stack');
+        assert.strictEqual(materializedDescriptor.get, unreadDescriptor.get);
+        assert.strictEqual(materializedDescriptor.set, unreadDescriptor.set);
+        assert.strictEqual('value' in materializedDescriptor, false);
+        readBeforeRename.name = 404;
+        assert.match(readBeforeRename.stack, /^RangeError: fixed(?:\n|$)/);
+        assert.match(inspect(readBeforeRename), /^RangeError: fixed(?:\n|$)/);
+
+        const messageBeforeRead = new Error('before');
+        messageBeforeRead.message = 'after';
+        assert.match(messageBeforeRead.stack, /^Error: after(?:\n|$)/);
+        const messageAfterRead = new Error('before');
+        assert.match(messageAfterRead.stack, /^Error: before(?:\n|$)/);
+        messageAfterRead.message = 'after';
+        assert.match(messageAfterRead.stack, /^Error: before(?:\n|$)/);
+
+        const frameLikeMessage = new Error('before\n    at message');
+        frameLikeMessage.message = 'after\n    at message';
+        assert.match(frameLikeMessage.stack, /^Error: after\n    at message\n    at /);
+
+        const internalFrameMessage = new Error('before\n    at construct (native)');
+        internalFrameMessage.message = 'after\n    at construct (native)';
+        assert.match(
+            internalFrameMessage.stack,
+            /^Error: after\n    at construct \(native\)\n    at /,
+        );
+
+        const inheritedBase = new Error('inherited');
+        const inherited = Object.create(inheritedBase);
+        assert.strictEqual(inherited.stack, inheritedBase.stack);
+        assert.strictEqual(Object.hasOwn(inherited, 'stack'), false);
+        inherited.stack = 'child-manual';
+        assert.strictEqual(inherited.stack, 'child-manual');
+        assert.strictEqual(Object.hasOwn(inherited, 'stack'), false);
+        assert.strictEqual(inheritedBase.stack, 'child-manual');
+
+        const detachedStack = {};
+        Object.defineProperty(detachedStack, 'stack', unreadDescriptor);
+        detachedStack.stack = 'ignored';
+        assert.strictEqual(detachedStack.stack, undefined);
+
+        const unreadInheritedBase = new Error('unread-inherited');
+        const unreadInherited = Object.create(unreadInheritedBase);
+        unreadInherited.name = 'ChildName';
+        assert.match(unreadInherited.stack, /^Error: unread-inherited(?:\n|$)/);
+
+        function LegacyError(message) {
+            this.message = message;
+            this.stack = new Error(message).stack;
+        }
+        LegacyError.prototype = new Error('legacy-prototype');
+        const firstLegacyError = new LegacyError('first-legacy');
+        assert.match(firstLegacyError.stack, /^Error: first-legacy(?:\n|$)/);
+        assert.strictEqual(Object.hasOwn(firstLegacyError, 'stack'), false);
+        const secondLegacyError = new LegacyError('second-legacy');
+        assert.match(firstLegacyError.stack, /^Error: second-legacy(?:\n|$)/);
+        assert.strictEqual(secondLegacyError.stack, firstLegacyError.stack);
+        assert.strictEqual(LegacyError.prototype.stack, firstLegacyError.stack);
+        assert.strictEqual(Object.hasOwn(secondLegacyError, 'stack'), false);
+
+        const originalDefineProperty = Object.defineProperty;
+        try {
+            Object.defineProperty = () => { throw 1; };
+            const definePropertyPoisoned = new Error('old');
+            definePropertyPoisoned.name = 'Renamed';
+            assert.match(definePropertyPoisoned.stack, /^Renamed: old(?:\n|$)/);
+        } finally {
+            Object.defineProperty = originalDefineProperty;
+        }
+
+        try {
+            Object.prototype.value = 'poisoned';
+            const descriptorPolluted = new Error('old');
+            descriptorPolluted.name = 'Renamed';
+            assert.match(descriptorPolluted.stack, /^Renamed: old(?:\n|$)/);
+        } finally {
+            delete Object.prototype.value;
+        }
+
+        const originalFunctionCall = Function.prototype.call;
+        const originalStringSlice = String.prototype.slice;
+        let intrinsicPoisonedStack;
+        try {
+            Function.prototype.call = () => { throw 1; };
+            String.prototype.slice = () => { throw 1; };
+            const intrinsicPoisoned = new Error('old');
+            intrinsicPoisoned.name = 'Renamed';
+            intrinsicPoisonedStack = intrinsicPoisoned.stack;
+        } finally {
+            Function.prototype.call = originalFunctionCall;
+            String.prototype.slice = originalStringSlice;
+        }
+        assert.match(intrinsicPoisonedStack, /^Renamed: old(?:\n|$)/);
+
+        const originalStackTraceLimit = Error.stackTraceLimit;
+        try {
+            Error.stackTraceLimit = 0;
+            const noFrames = new Error('no-frames');
+            noFrames.name = 'Renamed';
+            assert.strictEqual(noFrames.stack, 'Renamed: no-frames');
+            noFrames.name = 'AfterRead';
+            assert.strictEqual(noFrames.stack, 'Renamed: no-frames');
+        } finally {
+            Error.stackTraceLimit = originalStackTraceLimit;
+        }
+
+        const sealedError = new Error('sealed');
+        sealedError.name = 'Initial';
+        Object.seal(sealedError);
+        sealedError.name = 'BeforeRead';
+        const sealedStack = sealedError.stack;
+        assert.match(sealedStack, /^BeforeRead: sealed(?:\n|$)/);
+        sealedError.name = 'AfterRead';
+        assert.strictEqual(sealedError.stack, sealedStack);
+
+        const symbolName = new Error('symbol-name');
+        symbolName.name = Symbol('invalid');
+        assert.throws(() => symbolName.stack, TypeError);
+        symbolName.name = 'Recovered';
+        assert.match(symbolName.stack, /^Recovered: symbol-name(?:\n|$)/);
 
         const manualStackError = new RangeError('foo');
         manualStackError.stack = 'RangeError: foo\n    at manual (x.js:1:2)';
@@ -327,6 +457,7 @@ export const testErrorInspectUsesCurrentName = () => {
             inspect(manualStackError),
             'RangeError: foo\n    at manual (x.js:1:2)',
         );
+
         return true;
     } catch (e) {
         console.error('testErrorInspectUsesCurrentName FAIL:', e.message);
@@ -383,7 +514,13 @@ export const testPrepareStackTraceDescriptors = () => {
         Error.prepareStackTrace = customPrepare;
         Object.defineProperty(Error, 'prepareStackTrace', { enumerable: false });
         assert.strictEqual(Error.prepareStackTrace, customPrepare);
-        assert.strictEqual(new Error('partial-descriptor').stack, 'custom-prepare');
+        const customPrepared = new Error('partial-descriptor');
+        assert.strictEqual(customPrepared.stack, 'custom-prepare');
+        const customPreparedDescriptor = Object.getOwnPropertyDescriptor(customPrepared, 'stack');
+        assert.strictEqual(customPreparedDescriptor.value, 'custom-prepare');
+        assert.strictEqual(customPreparedDescriptor.writable, true);
+        assert.strictEqual(customPreparedDescriptor.enumerable, false);
+        assert.strictEqual(customPreparedDescriptor.configurable, true);
 
         let getterCalls = 0;
         Object.defineProperty(Error, 'prepareStackTrace', {
@@ -396,8 +533,69 @@ export const testPrepareStackTraceDescriptors = () => {
         assert.strictEqual(getterCalls, 0);
         assert.strictEqual(new TypeError('accessor').stack, 'custom-prepare');
 
+        let undefinedPrepareCalls = 0;
+        Object.defineProperty(Error, 'prepareStackTrace', {
+            value: error => {
+                if (error?.message === 'undefined-prepare') undefinedPrepareCalls++;
+                return undefined;
+            },
+            writable: true,
+            configurable: true,
+        });
+        const undefinedPrepared = new Error('undefined-prepare');
+        try {
+            throw 0;
+        } catch {
+            // QuickJS clears its current backtrace marker on every catch.
+        }
+        try {
+            throw undefinedPrepared;
+        } catch (error) {
+            assert.strictEqual(error, undefinedPrepared);
+        }
+        assert.strictEqual(undefinedPrepared.stack, undefined);
+        assert.strictEqual(undefinedPrepared.stack, undefined);
+        assert.strictEqual(undefinedPrepareCalls, 1,
+            'an undefined custom result must still be cached');
+
+        let stringPrepareCalls = 0;
+        Error.prepareStackTrace = error => {
+            if (error?.message === 'string-prepare') stringPrepareCalls++;
+            return `prepared:${error?.message}`;
+        };
+        const stringPrepared = new Error('string-prepare');
+        const stringPreparedValue = stringPrepared.stack;
+        try {
+            throw 0;
+        } catch {
+            // QuickJS clears its current backtrace marker on every catch.
+        }
+        try {
+            throw stringPrepared;
+        } catch (error) {
+            assert.strictEqual(error, stringPrepared);
+        }
+        assert.strictEqual(stringPrepared.stack, stringPreparedValue);
+        assert.strictEqual(stringPrepareCalls, 1,
+            'a non-undefined custom result must remain cached after rethrow');
+
         delete Error.prepareStackTrace;
         assert.match(new Error('deleted').stack, /^Error: deleted(?:\n|$)/);
+
+        const objectPrototypeCustom = Object.getOwnPropertyDescriptor(Object.prototype, 'custom');
+        try {
+            Object.defineProperty(Object.prototype, 'custom', {
+                value: true,
+                configurable: true,
+            });
+            assert.match(new Error('polluted-state').stack, /^Error: polluted-state(?:\n|$)/);
+        } finally {
+            if (objectPrototypeCustom) {
+                Object.defineProperty(Object.prototype, 'custom', objectPrototypeCustom);
+            } else {
+                delete Object.prototype.custom;
+            }
+        }
 
         Object.defineProperty(Error, 'prepareStackTrace', {
             value: customPrepare,
