@@ -4450,11 +4450,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
-        if (mode !== 'static-raw') {
-            cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result);
-        }
         const loadedHasSource = registeredLoaderHasSource(result);
         const loadedFormat = result.format;
+        const dynamicCacheEntry = mode !== 'static-raw'
+            ? cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result)
+            : undefined;
         if (mode === 'static-raw') {
             return result;
         }
@@ -4477,6 +4477,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderCommonJsReturn(result, normalizedResolved.url, undefined);
         }
         if (loadedHasSource && loadedFormat === 'json') {
+            if (dynamicCacheEntry && dynamicCacheEntry.created) {
+                if (dynamicCacheEntry.cached.error) throw dynamicCacheEntry.cached.error;
+                return dynamicCacheEntry.cached.value;
+            }
             return registeredLoaderJsonSourceReturn(result.source, normalizedResolved.url);
         }
         if (resolvedState.loadContext.importAttributes && resolvedState.loadContext.importAttributes.type === 'json') {
@@ -4699,29 +4703,31 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function cacheDynamicRegisteredLoaderResult(parentUrl, specifier, attrs, loaded) {
-        if (loaded && loaded.format === 'json') return;
         if (
             typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_has_import_mock === 'function' &&
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_has_import_mock(specifier, parentUrl)
         ) {
-            return;
+            return undefined;
         }
         if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
         const key = staticRegisteredLoaderCacheKey(normalizeLoaderResolvedUrl(String(parentUrl)), specifier, attrs);
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
+        let created = false;
         if (!Object.prototype.hasOwnProperty.call(cache, key)) {
+            created = true;
             try {
                 cache[key] = normalizedRegisteredLoaderCacheResult(
                     loaded,
-                    staticRegisteredLoaderReturn(loaded),
+                    staticRegisteredLoaderReturnForEdge(loaded, attrs),
                     undefined,
                 );
             } catch (error) {
                 cache[key] = normalizedRegisteredLoaderCacheResult(loaded, undefined, error);
             }
         }
+        return { cached: cache[key], created };
     }
 
     function staticRegisteredLoaderSourceForUrl(url) {
