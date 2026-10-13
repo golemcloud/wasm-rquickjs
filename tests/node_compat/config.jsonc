@@ -12,7 +12,7 @@
   //                         "engine-difference" - V8 behavior QuickJS cannot reasonably mirror
   //                         "node-internals"    - tests Node.js internals/implementation details
   //                         "unevaluated"       - not triaged yet; excluded from percentages
-  //   "flaky": true       - retry up to 10 times before failing
+  //   "flaky": true       - one retry (two total attempts) before failing
   //   "reason": "..."     - explanation for skip/flaky/impossible marking
   //
   // Only tests listed here will be run by the test harness.
@@ -4456,7 +4456,7 @@
     "parallel/test-http-client-timeout-with-data.js": { "category": "known-gap", "reason": "Request timeout behavior during response body transfer is not Node-compatible" },
     "parallel/test-http-client-timeout.js": { "category": "known-gap", "reason": "ClientRequest.setTimeout callback path does not reliably destroy/close the request" },
     "parallel/test-http-client-upload-buf.js": {},
-    "parallel/test-http-client-upload.js": {},
+    "parallel/test-http-client-upload.js": { "timeout": 30, "flaky": true, "reason": "Recovered on same-commit rerun in CI run 38285927640 (120s timeout, then 2.7s pass)" },
     "parallel/test-http-client-with-create-connection.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to select a raw TCP or Unix-socket transport; node:http outbound requests always use wasi:http" },
     "parallel/test-http-connect-req-res.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket detachment; node:http outbound requests always use wasi:http" },
     "parallel/test-http-connect.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket data forwarding; node:http outbound requests always use wasi:http" },
@@ -4484,7 +4484,7 @@
       }
     },
     "parallel/test-http-dump-req-when-res-ends.js": { "category": "known-gap", "reason": "wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks" },
-    "parallel/test-http-early-hints-invalid-argument.js": { "category": "known-gap", "reason": "ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws)" },
+    "parallel/test-http-early-hints-invalid-argument.js": {},
     "parallel/test-http-early-hints.js": {
       "split": true,
       "subtests": {
@@ -4497,8 +4497,8 @@
       }
     },
     "parallel/test-http-eof-on-connect.js": {},
-    "parallel/test-http-expect-continue.js": { "category": "known-gap", "reason": "Expect: 100-continue flow (checkContinue/continue events) is incomplete" },
-    "parallel/test-http-expect-handling.js": { "category": "known-gap", "reason": "Expect header handling is incomplete (default 417/checkExpectation paths diverge)" },
+    "parallel/test-http-expect-continue.js": { "category": "known-gap", "reason": "wasi:http client does not surface interim 100 Continue responses or the continue event" },
+    "parallel/test-http-expect-handling.js": {},
     "parallel/test-http-flush-headers.js": { "category": "known-gap", "reason": "ClientRequest.flushHeaders() does not reliably complete request/response lifecycle" },
     "parallel/test-http-flush-response-headers.js": {},
     "parallel/test-http-full-response.js": { "category": "wasi-impossible", "reason": "requires child_process.exec of external 'ab' binary" },
@@ -4775,7 +4775,7 @@
     "parallel/test-http-upgrade-server2.js": { "category": "known-gap", "reason": "server-side Upgrade event/error propagation is incomplete" },
     "parallel/test-http-wget.js": {},
     "parallel/test-http-writable-true-after-close.js": { "category": "known-gap", "reason": "response writable state around aborted proxy close is not Node-compatible" },
-    "parallel/test-http-write-callbacks.js": { "category": "known-gap", "reason": "checkContinue/write callback ordering and completion semantics are incomplete" },
+    "parallel/test-http-write-callbacks.js": { "category": "known-gap", "reason": "wasi:http client does not surface interim 100 Continue responses or the continue event" },
     "parallel/test-http-write-empty-string.js": {},
     "parallel/test-http-write-head-2.js": {
       "split": true,
@@ -4787,7 +4787,7 @@
       }
     },
     "parallel/test-http-write-head.js": { "category": "wasi-impossible", "reason": "wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied" },
-    "parallel/test-http-zero-length-write.js": {},
+    "parallel/test-http-zero-length-write.js": { "timeout": 30, "flaky": true, "reason": "Recovered on same-commit reruns; previously allowlisted by the CI retry wrapper" },
     "parallel/test-http-zerolengthbuffer.js": {},
     "parallel/test-http2-autoselect-protocol.js": { "category": "wasi-impossible", "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-connecting-to-http.js": { "category": "wasi-impossible", "reason": "requires raw TLS handshake/protocol-mismatch behavior (HTTPS client to HTTP server), unavailable with wasi:http" },

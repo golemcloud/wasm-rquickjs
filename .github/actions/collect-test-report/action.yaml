@@ -1,0 +1,31 @@
+name: Collect test report
+description: Preserve raw test evidence independently of GitHub report publishing
+
+inputs:
+  name:
+    description: Unique job or shard name
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - uses: actions/upload-artifact@v4
+      if: always()
+      with:
+        name: ${{ inputs.name }}-report-attempt${{ github.run_attempt }}
+        path: target/ctrf-*.json
+        if-no-files-found: warn
+        retention-days: 35
+    - name: Require reports for successful tests
+      if: success()
+      shell: bash
+      run: |
+        shopt -s nullglob
+        reports=(target/ctrf-*.json)
+        if (( ${#reports[@]} == 0 )); then
+          echo 'Successful test job produced no CTRF reports' >&2
+          exit 1
+        fi
+        for report in "${reports[@]}"; do
+          jq -e -s 'length == 1 and (.[0].results.tests | type == "array" and length > 0)' "$report" > /dev/null
+        done

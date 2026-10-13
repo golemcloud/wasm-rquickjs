@@ -213,6 +213,5 @@ golem-websocket = { version = "0.0.3", default-features = false, optional = true
 [patch.crates-io]
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
-# INTERIM: the target-specific P3 bindings are available on the `wasi-p3` branch.
-# FINALIZE: publish the updated crate and drop this patch entry.
-golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", branch = "wasi-p3" }
+# The bridge includes the target-specific receive signatures and reconstruction policy.
+golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", branch = "gol804-websocket-current-generator" }

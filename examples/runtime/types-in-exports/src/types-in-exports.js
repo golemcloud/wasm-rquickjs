@@ -148,5 +148,8 @@ export const types = {
     f15: (bytes) => {
         console.log(`bytes: ${bytes}`);
         return bytes;
+    },
+    f18: (error) => {
+        throw error;
     }
 };

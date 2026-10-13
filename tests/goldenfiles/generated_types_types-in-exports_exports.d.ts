@@ -24,6 +24,10 @@ declare module 'types-in-exports' {
     export function f15(bytes: Uint8Array): Promise<Uint8Array>;
     export function f16(in_: Rec2[] | undefined): Promise<string[] | undefined>;
     export function f17(in_: string[] | undefined): Promise<Rec2[] | undefined>;
+    /**
+     * @throws Var1
+     */
+    export function f18(error: Var1): Promise<void>;
     export type Color = quickjsTypesInExportsOtherTypes.Color;
     export type ListOfStrings = quickjsTypesInExportsOtherTypes.ListOfStrings;
     export type Rec2 = quickjsTypesInExportsOtherTypes.Rec2;

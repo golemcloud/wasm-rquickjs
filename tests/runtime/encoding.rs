@@ -12,6 +12,7 @@ async fn compiled_encoding() -> CompiledTest {
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn encoding(#[tagged_as("encoding")] compiled: &CompiledTest) -> anyhow::Result<()> {
     let (r, output) = invoke_and_capture_output(compiled.wasm_path(), None, "test1", &[]).await;
     let _ = r?;

@@ -352,6 +352,23 @@ sync or async.
 | Future                  | `future<T>`         | `Promise<T>`                                      | WASI Preview 3 (`--target wasi-p3`) only                                   |
 | Stream                  | `stream<T>`         | `AsyncIterable<T>`                                | WASI Preview 3 (`--target wasi-p3`) only                                   |
 
+### Imported result errors
+
+An imported function that returns `result<T, E>` returns `T` on success and throws
+`E` on failure. Async imports reject with the same error value.
+
+Structured error values retain their WIT representation. `String(error)`, template
+interpolation, and `new Error(error).message` render the payload as JSON instead of
+`[object Object]`. For example, a permission error renders as
+`{"tag":"permission-denied"}`, and a backend error renders as
+`{"tag":"backend-error","val":"service unavailable"}`. Bigint fields render as
+decimal strings without changing the original values.
+
+The coercion methods are non-enumerable. The original fields, object identity,
+enumerable keys, and typed catch-and-rethrow behavior remain unchanged. Primitive
+errors and successful values are not decorated. This rendering applies to error
+string coercion; it does not replace the runtime's uncaught-exception formatter.
+
 ### Limitations
 
 - Maximum number of function parameters is 26
@@ -663,7 +680,7 @@ Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled t
 - `http.createServer([options][, requestListener])` — create an HTTP/1.1 server (requires `wasi:sockets`)
 - `http.Server` (extends `net.Server`): `listen`, `close`, `closeAllConnections`, `closeIdleConnections`, `setTimeout`, `maxRequestsPerSocket`; emits `dropRequest` when the per-socket limit is exceeded
 - `http.ServerResponse` (extends `EventEmitter`): `writeHead`, `setHeader`, `getHeader`, `removeHeader`, `hasHeader`, `getHeaders`, `getHeaderNames`, `getRawHeaderNames`, `write`, `end`, `flushHeaders`, `writeContinue`, `writeProcessing`, `writeEarlyHints`, `cork`, `uncork`
-- Server-side `IncomingMessage` (extends `stream.Readable`): `method`, `url`, `headers`, `headersDistinct`, `rawHeaders`, `httpVersion`, `socket`, `client`, `complete`, `aborted`, `trailers`, `rawTrailers` (chunked request trailers are not yet parsed)
+- Server-side `IncomingMessage` (extends `stream.Readable`): `method`, `url`, `headers`, `headersDistinct`, `rawHeaders`, `httpVersion`, `socket`, `client`, `complete`, `aborted`, `trailers`, `trailersDistinct`, `rawTrailers`
 - `node:_http_common` — `_checkIsHttpToken`, `_checkInvalidHeaderChar`
 - Supported features: keep-alive connections, chunked transfer encoding, content-length bodies, ordered pipelined responses, server-side 100/102/103 informational responses, per-socket request limits, idle connection cleanup
 

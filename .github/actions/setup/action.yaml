@@ -6,19 +6,51 @@ inputs:
     description: "Shared cache key for rust-cache"
     required: false
     default: "debug"
+  wasmtime-fork:
+    description: "Patch the manifest before computing the Rust cache key"
+    required: false
+    default: "false"
+  component-cache-key:
+    description: "Optional lane/shard identity for generated Cargo build artifacts"
+    required: false
+    default: ""
 
 runs:
   using: "composite"
   steps:
+    - name: Setup Rust
+      id: rust
+      uses: dtolnay/rust-toolchain@stable
+      with:
+        targets: wasm32-wasip1, wasm32-wasip2
+    - name: Enable Golem wasmtime fork
+      if: inputs.wasmtime-fork == 'true'
+      shell: bash
+      run: bash .github/scripts/enable-wasmtime-fork.sh
     - uses: useblacksmith/rust-cache@v3
       with:
         prefix-key: v1-rust
         shared-key: ${{ inputs.cache-key }}
         cache-all-crates: true
-    - name: Setup Rust
-      uses: dtolnay/rust-toolchain@stable
+    # rust-cache cleans workspace binaries and does not include these nested
+    # Cargo targets. Never cache all of tmp/: fixtures and runtime state stay fresh.
+    - name: Cache generated Cargo artifacts
+      if: inputs.component-cache-key != ''
+      uses: useblacksmith/cache@v5
       with:
-        targets: wasm32-wasip1, wasm32-wasip2
+        path: |
+          tmp/rt-target
+          tmp/rt-target-p3
+          tmp/rt-target-internal-test-execution
+          tmp/rt-target-p3-internal-test-execution
+          target/p3-component-build
+        # An immutable dependency baseline; Cargo rebuilds changed source.
+        # Exact keys avoid relying on cross-commit prefix restoration.
+        # Bump components-v1 to refresh the baseline: exact hits are not resaved.
+        key: components-v1-${{ runner.os }}-sdk${{ env.WASI_SDK_VERSION }}-${{ inputs.component-cache-key }}-${{ steps.rust.outputs.cachekey }}-${{ hashFiles('Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.lock', 'crates/wasm-rquickjs/skeleton/Cargo.toml_') }}
+    - name: Clear reports restored with build artifacts
+      shell: bash
+      run: rm -f target/ctrf-*.json
     - uses: cargo-bins/cargo-binstall@main
     - name: Install cargo-component
       shell: bash

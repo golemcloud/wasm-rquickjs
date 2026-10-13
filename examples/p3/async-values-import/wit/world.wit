@@ -11,6 +11,8 @@ interface host {
   make-stream: func(n: u32) -> stream<u8>;
   consume-future: async func(f: future<u32>) -> u32;
   consume-stream: async func(s: stream<u8>) -> u32;
+  check-future: async func(f: future<u32>) -> result<u32, string>;
+  delayed-future: async func(f: future<u32>) -> u32;
   consume-stream-prefix: async func(s: stream<u8>) -> u8;
   consume-stream-with-backpressure: async func(s: stream<u8>);
   store-future: async func(f: future<u32>);
@@ -32,4 +34,5 @@ world async-values-import {
   export run-sync-stream-promise-rejection: async func() -> string;
   export run-import-checkpoint-future: async func() -> future<u32>;
   export read-import-checkpoint-count: async func() -> u32;
+  export run-nested-imports: async func() -> string;
 }
