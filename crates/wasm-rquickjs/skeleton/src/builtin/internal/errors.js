@@ -3,9 +3,14 @@ import {
     createPrivateWeakMap,
     nativeWeakMapDelete,
     nativeWeakMapGet,
-    nativeWeakMapHas,
     nativeWeakMapSet,
 } from "__wasm_rquickjs_builtin/internal/weak_collections";
+
+const nativeObjectDefineProperty = Object.defineProperty;
+const nativeObjectGetPrototypeOf = Object.getPrototypeOf;
+const nativeObjectCreate = Object.create;
+const nativeReflectApply = Reflect.apply;
+const nativeStringSlice = String.prototype.slice;
 
 // ---------------------------------------------------------------------------
 // V8-compatible CallSite objects
@@ -76,16 +81,19 @@ function _remapSourceMappedStack(stackString) {
         const offset = line.lastIndexOf(location);
         if (offset === -1) continue;
         const mapped = `${origin.fileName}:${origin.lineNumber}:${origin.columnNumber}`;
-        lines[i] = line.slice(0, offset) + mapped + line.slice(offset + location.length);
+        lines[i] = nativeReflectApply(nativeStringSlice, line, [0, offset]) + mapped +
+            nativeReflectApply(nativeStringSlice, line, [offset + location.length]);
     }
     return lines.join('\n');
 }
 
 function _formatNativeCallSites(error, callSites) {
-    if (!Array.isArray(callSites)) return '';
+    if (!Array.isArray(callSites)) {
+        return { value: '', headerLength: 0, materialized: false, custom: false };
+    }
     let header;
     try {
-        header = nativeErrorToString.call(error);
+        header = nativeReflectApply(nativeErrorToString, error, []);
     } catch {
         header = 'Error';
     }
@@ -122,11 +130,25 @@ function _formatNativeCallSites(error, callSites) {
         }
         lines.push(`    at ${text}`);
     }
-    return lines.join('\n');
+    return {
+        value: lines.join('\n'),
+        headerLength: header.length,
+        materialized: false,
+        custom: false,
+    };
+}
+
+function _prepareSourceMappedStackState(error, callSites) {
+    const state = _formatNativeCallSites(error, callSites);
+    state.value = nativeReflectApply(nativeStringSlice, state.value, [0, state.headerLength]) +
+        _remapSourceMappedStack(
+            nativeReflectApply(nativeStringSlice, state.value, [state.headerLength]),
+        );
+    return state;
 }
 
 function _prepareSourceMappedStack(error, callSites) {
-    return _remapSourceMappedStack(_formatNativeCallSites(error, callSites));
+    return _prepareSourceMappedStackState(error, callSites).value;
 }
 
 const nativeCallSiteCaptures = createPrivateWeakMap();
@@ -243,25 +265,88 @@ const nativeErrorCaptureStackTrace = NativeError.captureStackTrace;
 const initialPublicPrepareStackTrace = NativeError.prepareStackTrace;
 const preparedNativeStacks = createPrivateWeakMap();
 
-export function isPreparedNativeStack(error, stack) {
-    return error !== null &&
-        (typeof error === 'object' || typeof error === 'function') &&
-        nativeWeakMapGet(preparedNativeStacks, error) === stack;
+function _refreshNativeStackHeader(error, stack, headerLength) {
+    if (typeof stack !== 'string') return stack;
+    const currentHeader = nativeReflectApply(nativeErrorToString, error, []);
+    if (typeof currentHeader !== 'string') return stack;
+    return currentHeader + nativeReflectApply(nativeStringSlice, stack, [headerLength]);
+}
+
+const preparedNativeStackDescriptor = nativeObjectCreate(null);
+preparedNativeStackDescriptor.get = _getPreparedNativeStack;
+preparedNativeStackDescriptor.set = _setPreparedNativeStack;
+preparedNativeStackDescriptor.configurable = true;
+preparedNativeStackDescriptor.enumerable = false;
+
+function _cachePreparedNativeStack(error, state) {
+    if (error === null || (typeof error !== 'object' && typeof error !== 'function')) {
+        return;
+    }
+    nativeWeakMapSet(preparedNativeStacks, error, state);
+    try {
+        nativeObjectDefineProperty(error, 'stack', preparedNativeStackDescriptor);
+    } catch {
+        // QuickJS retains its eager stack value if the accessor cannot be
+        // installed, for example on an already non-configurable property.
+    }
+}
+
+function _getPreparedNativeStack() {
+    let owner = this;
+    while (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
+        const state = nativeWeakMapGet(preparedNativeStacks, owner);
+        if (state !== undefined && state.custom !== true) {
+            if (!state.materialized) {
+                state.value = _refreshNativeStackHeader(
+                    owner,
+                    state.value,
+                    state.headerLength,
+                );
+                state.materialized = true;
+            }
+            return state.value;
+        }
+        owner = nativeObjectGetPrototypeOf(owner);
+    }
+    return undefined;
+}
+
+function _setPreparedNativeStack(stack) {
+    let owner = this;
+    while (owner !== null && (typeof owner === 'object' || typeof owner === 'function')) {
+        const state = nativeWeakMapGet(preparedNativeStacks, owner);
+        if (state !== undefined && state.custom !== true) {
+            state.value = stack;
+            state.materialized = true;
+            return;
+        }
+        owner = nativeObjectGetPrototypeOf(owner);
+    }
 }
 
 function _dispatchPrepareStackTrace(error, callSites) {
-    if (error && (typeof error === 'object' || typeof error === 'function') &&
-        nativeWeakMapHas(preparedNativeStacks, error)) {
-        return nativeWeakMapGet(preparedNativeStacks, error);
+    if (error && (typeof error === 'object' || typeof error === 'function')) {
+        const state = nativeWeakMapGet(preparedNativeStacks, error);
+        if (state !== undefined) return state.value;
     }
     const prepare = NativeError.prepareStackTrace;
-    const result = typeof prepare === 'function'
-        ? prepare(error, callSites.map(_toCompatibleCallSite))
-        : _prepareSourceMappedStack(error, callSites);
-    if (error && (typeof error === 'object' || typeof error === 'function')) {
-        nativeWeakMapSet(preparedNativeStacks, error, result);
+    if (typeof prepare === 'function') {
+        const value = prepare(error, callSites.map(_toCompatibleCallSite));
+        if (error && (typeof error === 'object' || typeof error === 'function')) {
+            // The state object is also the cache-presence sentinel. In
+            // particular, remember an explicit `undefined` result so QuickJS
+            // reuses a successfully prepared result for the same object
+            // instead of invoking the formatter again with different frames.
+            nativeWeakMapSet(preparedNativeStacks, error, {
+                value,
+                custom: true,
+            });
+        }
+        return value;
     }
-    return result;
+    const state = _prepareSourceMappedStackState(error, callSites);
+    _cachePreparedNativeStack(error, state);
+    return state.value;
 }
 
 if (nativeErrorPrepareStackTraceDescriptor &&
@@ -278,10 +363,9 @@ if (nativeErrorPrepareStackTraceDescriptor &&
         configurable: true,
         enumerable: false,
     });
-    nativeErrorPrepareStackTraceDescriptor.set.call(
-        NativeError,
+    nativeReflectApply(nativeErrorPrepareStackTraceDescriptor.set, NativeError, [
         _dispatchPrepareStackTrace,
-    );
+    ]);
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stack_shim', {
@@ -305,18 +389,16 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
         nativeErrorPrepareStackTraceDescriptor &&
         typeof nativeErrorPrepareStackTraceDescriptor.set === 'function') {
         function captureCallSites(targetObject, constructorOpt) {
-            nativeErrorPrepareStackTraceDescriptor.set.call(
-                NativeError,
+            nativeReflectApply(nativeErrorPrepareStackTraceDescriptor.set, NativeError, [
                 _captureNativeCallSites,
-            );
+            ]);
             try {
                 nativeErrorCaptureStackTrace(targetObject, constructorOpt);
                 return _takeNativeCallSites(targetObject) ?? [];
             } finally {
-                nativeErrorPrepareStackTraceDescriptor.set.call(
-                    NativeError,
+                nativeReflectApply(nativeErrorPrepareStackTraceDescriptor.set, NativeError, [
                     _dispatchPrepareStackTrace,
-                );
+                ]);
             }
         }
 
