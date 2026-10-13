@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3184/4393 (72.5%)
+**Primary compatibility (CI-enforced):** 3186/4394 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3184 | 72.5% | 55.3% | 46.3% |
-| 🧩 known gap | 1209 | 27.5% | 21.0% | 17.6% |
-| 🚫 WASI-impossible (excluded) | 1195 | — | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3186 | 72.5% | 55.3% | 46.3% |
+| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
+| 🚫 WASI-impossible (excluded) | 1196 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1118 | — | — | 16.3% |
-| **Total** | **6873** |  |  | **100.0%** |
+| 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
+| **Total** | **6876** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3184/5755 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3186/5757 (55.3%)**.
 
 ## Inventory by Module
 
@@ -45,7 +45,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
 | domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| errors | 46 | 0 | 1 | 1 | 0 | 0 | 44 | 0.0% | 0.0% |
+| errors | 49 | 2 | 0 | 2 | 0 | 0 | 45 | 100.0% | 50.0% |
 | eslint | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 0.0% | 0.0% |
 | events | 93 | 59 | 2 | 0 | 0 | 0 | 32 | 96.7% | 96.7% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
@@ -215,6 +215,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-domain-promise.js` | 10 | 4 | 6 | 0 | 0 | 0 | 0 |
 | `test-domexception-cause.js` | 4 | 1 | 3 | 0 | 0 | 0 | 0 |
 | `test-error-aggregateTwoErrors.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
+| `test-error-prepare-stack-trace.js` | 4 | 2 | 0 | 1 | 0 | 0 | 1 |
 | `test-errors-aborterror.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-errors-hide-stack-frames.js` | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
 | `test-errors-systemerror.js` | 15 | 0 | 0 | 0 | 0 | 0 | 15 |
@@ -686,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1209)
+### known gap (1208)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -868,7 +869,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | ECDH key import/deriveKey compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-derivekey-ecdh.js` |
 | ECDSA key import/sign/verify compatibility for test vectors is incomplete | 1 | `parallel/test-webcrypto-sign-verify-ecdsa.js` |
 | EdDSA sign/verify vector compatibility is incomplete | 1 | `parallel/test-webcrypto-sign-verify-eddsa.js` |
-| Error.prepareStackTrace default behavior is incomplete | 1 | `parallel/test-error-prepare-stack-trace.js` |
 | EventEmitter captureRejections option validation/behavior is incomplete | 1 | `parallel/test-event-capture-rejections.js` |
 | EventEmitter error -> uncaughtException stack handling is incomplete | 1 | `parallel/test-events-uncaught-exception-stack.js` |
 | EventSource global is not implemented (experimental SSE API) | 1 | `parallel/test-eventsource.js` |
@@ -1336,7 +1336,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1195)
+### WASI-impossible (1196)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1503,6 +1503,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires real child_process for fork/event-loop-exit semantics | 1 | `parallel/test-pipe-unref.js` |
 | requires real child_process.spawn concurrency for server/client subprocesses | 1 | `sequential/test-net-GH-5504.js` |
 | requires real worker_threads execution (HAS_STARTED_WORKER round-trip) which is not available in single-threaded WASM | 1 | `parallel/test-crypto-key-objects-messageport.js` |
+| requires spawning a child Node process with --enable-source-maps | 1 | `parallel/test-error-prepare-stack-trace.js#block_03_statement_03` |
 | requires spawning a shell process with closed inherited stdio, which is unavailable in WASM | 1 | `parallel/test-stdio-closed.js` |
 | requires spawning an external Python process with inherited stdio, which is unavailable in WASM | 1 | `parallel/test-child-process-set-blocking.js` |
 | requires spawning an interactive Node REPL subprocess (--interactive) and driving it via stdin | 1 | `parallel/test-cwd-enoent-repl.js` |
@@ -1585,7 +1586,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 _No entries._
 
-### Node.js internals (1118)
+### Node.js internals (1119)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1798,6 +1799,7 @@ _No entries._
 | requires internalBinding('uv') and internalBinding('stream_wrap') | 1 | `parallel/test-net-end-close.js` |
 | requires private core module _http_outgoing | 1 | `parallel/test-outgoing-message-pipe.js` |
 | second block asserts private EventEmitter kCapture symbol initialization details | 1 | `parallel/test-domain-ee.js` |
+| setup-only Node test-harness import has no public API assertion | 1 | `parallel/test-error-prepare-stack-trace.js#block_00_statement_00` |
 | tests deprecated internal timers.enroll() validation/error paths | 1 | `parallel/test-timers-enroll-invalid-msecs.js` |
 | uses --expose-internals and imports node:internal/modules/esm/get_format | 1 | `es-module/test-esm-url-extname.js` |
 | uses --expose-internals and internal/errors formatList | 1 | `parallel/test-error-format-list.js` |
