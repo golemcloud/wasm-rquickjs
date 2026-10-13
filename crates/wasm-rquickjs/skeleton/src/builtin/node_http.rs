@@ -1,6 +1,8 @@
+use futures::future::{AbortHandle, Abortable};
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
+use std::cell::RefCell;
 #[cfg(feature = "net-write-profiling")]
 use std::time::Instant;
 use wasip2::http::outgoing_handler;
@@ -19,9 +21,10 @@ enum ResponseBodyState {
         incoming_response: wasi_http::IncomingResponse,
     },
     Stream {
+        // Drop children before parents, including when a pending read future is cancelled.
         stream: InputStream,
-        body: wasi_http::IncomingBody,
-        incoming_response: wasi_http::IncomingResponse,
+        _body: wasi_http::IncomingBody,
+        _incoming_response: wasi_http::IncomingResponse,
     },
     Consumed,
 }
@@ -521,9 +524,15 @@ impl NodeHttpClientRequest {
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct NodeHttpIncomingResponse {
     #[qjs(skip_trace)]
-    body_state: ResponseBodyState,
+    body: RefCell<IncomingBody>,
     headers: Vec<Vec<String>>,
     status: u16,
+}
+
+struct IncomingBody {
+    source: Option<ResponseBodyState>,
+    active_abort: Option<AbortHandle>,
+    discarded: bool,
 }
 
 impl Default for NodeHttpIncomingResponse {
@@ -537,7 +546,11 @@ impl NodeHttpIncomingResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {
         NodeHttpIncomingResponse {
-            body_state: ResponseBodyState::Consumed,
+            body: RefCell::new(IncomingBody {
+                source: Some(ResponseBodyState::Consumed),
+                active_abort: None,
+                discarded: false,
+            }),
             headers: Vec::new(),
             status: 0,
         }
@@ -546,9 +559,13 @@ impl NodeHttpIncomingResponse {
     #[qjs(skip)]
     pub(crate) fn from_raw_response(raw: RawResponse) -> Self {
         NodeHttpIncomingResponse {
-            body_state: ResponseBodyState::WasiNative {
-                incoming_response: raw.incoming_response,
-            },
+            body: RefCell::new(IncomingBody {
+                source: Some(ResponseBodyState::WasiNative {
+                    incoming_response: raw.incoming_response,
+                }),
+                active_abort: None,
+                discarded: false,
+            }),
             headers: raw.headers,
             status: raw.status,
         }
@@ -564,102 +581,99 @@ impl NodeHttpIncomingResponse {
         self.headers.clone()
     }
 
-    pub fn discard_body(&mut self) {
-        let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
-        match state {
-            ResponseBodyState::WasiNative { incoming_response } => {
-                drop(incoming_response);
-            }
-            ResponseBodyState::Stream {
-                stream,
-                body,
-                incoming_response,
-            } => {
-                drop(stream);
-                drop(body);
-                drop(incoming_response);
-            }
-            ResponseBodyState::Consumed => {}
+    pub fn discard_body(&self) {
+        let mut state = self.body.borrow_mut();
+        state.discarded = true;
+        state.source.take();
+        if let Some(abort) = state.active_abort.take() {
+            abort.abort();
         }
     }
 
     pub async fn read_body_chunk<'js>(
-        &mut self,
+        &self,
         ctx: Ctx<'js>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, bool)>> {
-        let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
-
-        match state {
-            ResponseBodyState::WasiNative { incoming_response } => {
-                let incoming_body = incoming_response.consume().map_err(|_| {
-                    Exception::throw_message(&ctx, "failed to consume response body")
+        let (mut source, registration) = {
+            let mut state = self.body.borrow_mut();
+            if state.discarded {
+                return Ok(List((None, true)));
+            }
+            let source = state.source.take().ok_or_else(|| {
+                Exception::throw_message(&ctx, "Response body read is already pending")
+            })?;
+            let (abort, registration) = AbortHandle::new_pair();
+            state.active_abort = Some(abort);
+            (source, registration)
+        };
+        let read_ctx = ctx.clone();
+        // The future owns all WASI resources. Abort drops the pollable before the stream and its
+        // parents, without holding an exclusive class borrow that would prevent discardBody().
+        let read = async move {
+            let outcome = source.read_chunk(&read_ctx).await;
+            (source, outcome)
+        };
+        let outcome = Abortable::new(read, registration).await;
+        let mut state = self.body.borrow_mut();
+        state.active_abort = None;
+        let Ok((source, outcome)) = outcome else {
+            return Ok(List((None, true)));
+        };
+        if state.discarded {
+            return Ok(List((None, true)));
+        }
+        if outcome.is_ok() {
+            state.source = Some(source);
+        } else {
+            state.discarded = true;
+        }
+        drop(state);
+        match outcome? {
+            Some(bytes) => {
+                let chunk = TypedArray::new_copy(ctx.clone(), bytes).map_err(|_| {
+                    Exception::throw_message(
+                        &ctx,
+                        "Failed to create TypedArray from response body chunk",
+                    )
                 })?;
-                let stream = incoming_body
-                    .stream()
-                    .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
-                self.body_state = ResponseBodyState::Stream {
-                    stream,
-                    body: incoming_body,
-                    incoming_response,
-                };
-                self.read_from_stream(ctx).await
+                Ok(List((Some(chunk), false)))
             }
-            ResponseBodyState::Stream {
-                stream,
-                body,
-                incoming_response,
-            } => {
-                self.body_state = ResponseBodyState::Stream {
-                    stream,
-                    body,
-                    incoming_response,
-                };
-                self.read_from_stream(ctx).await
-            }
-            ResponseBodyState::Consumed => Ok(List((None, true))),
+            None => Ok(List((None, true))),
         }
     }
 }
 
-impl NodeHttpIncomingResponse {
-    async fn read_from_stream<'js>(
-        &mut self,
-        ctx: Ctx<'js>,
-    ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, bool)>> {
-        let state = std::mem::replace(&mut self.body_state, ResponseBodyState::Consumed);
-
-        if let ResponseBodyState::Stream {
-            stream,
-            body,
-            incoming_response,
-        } = state
-        {
+impl ResponseBodyState {
+    async fn read_chunk(&mut self, ctx: &Ctx<'_>) -> rquickjs::Result<Option<Vec<u8>>> {
+        if matches!(self, Self::WasiNative { .. }) {
+            let Self::WasiNative { incoming_response } = std::mem::replace(self, Self::Consumed)
+            else {
+                unreachable!();
+            };
+            let body = incoming_response
+                .consume()
+                .map_err(|_| Exception::throw_message(ctx, "failed to consume response body"))?;
+            let stream = body
+                .stream()
+                .map_err(|_| Exception::throw_message(ctx, "failed to get body stream"))?;
+            *self = Self::Stream {
+                stream,
+                _body: body,
+                _incoming_response: incoming_response,
+            };
+        }
+        if let Self::Stream { stream, .. } = self {
             const CHUNK_SIZE: u64 = 4096;
             loop {
                 match stream.read(CHUNK_SIZE) {
-                    Ok(chunk) if !chunk.is_empty() => {
-                        let js_array = TypedArray::new_copy(ctx.clone(), chunk).map_err(|_| {
-                            Exception::throw_message(
-                                &ctx,
-                                "Failed to create TypedArray from response body chunk",
-                            )
-                        })?;
-                        self.body_state = ResponseBodyState::Stream {
-                            stream,
-                            body,
-                            incoming_response,
-                        };
-                        return Ok(List((Some(js_array), false)));
-                    }
+                    Ok(chunk) if !chunk.is_empty() => return Ok(Some(chunk)),
                     Ok(_) => {
                         let pollable = stream.subscribe();
                         AsyncPollable::new(pollable).wait_for().await;
                     }
                     Err(StreamError::Closed) => {
-                        drop(stream);
-                        drop(body);
-                        drop(incoming_response);
-                        return Ok(List((None, true)));
+                        *self = Self::Consumed;
+                        return Ok(None);
                     }
                     Err(StreamError::LastOperationFailed(err)) => {
                         let debug_message = err.to_debug_string();
@@ -670,14 +684,14 @@ impl NodeHttpIncomingResponse {
                         }
 
                         return Err(Exception::throw_message(
-                            &ctx,
+                            ctx,
                             &format!("Failed to read response body: {debug_message}"),
                         ));
                     }
                 }
             }
         } else {
-            Ok(List((None, true)))
+            Ok(None)
         }
     }
 }

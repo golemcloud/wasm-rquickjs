@@ -31,6 +31,7 @@ pub(crate) mod typescript;
 pub(crate) use module_loading::{
     mark_node_package_deprecation_warning_seen, node_package_deprecation_warning_seen,
 };
+pub use runtime_services::variant_case_tag;
 
 #[cfg(feature = "p2")]
 mod p2;

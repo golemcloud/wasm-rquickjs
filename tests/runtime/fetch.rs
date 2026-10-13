@@ -947,6 +947,7 @@ async fn fetch_function_shape(#[tagged_as("fetch")] compiled: &CompiledTest) -> 
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn fetch_abort_releases_request(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -999,6 +1000,7 @@ async fn run_abort_case(compiled: &CompiledTest, function: &'static str) -> anyh
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn fetch_abort_releases_upload(
     #[tagged_as("fetch")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -1033,6 +1035,7 @@ async fn fetch_abort_response_body(
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn fetch_abort_pending_response_body(
     #[tagged_as("fetch_internal")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

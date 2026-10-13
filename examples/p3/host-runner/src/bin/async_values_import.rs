@@ -86,6 +86,24 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
         rx.await.expect("host future did not resolve")
     }
 
+    async fn check_future<T: Send>(
+        accessor: &Accessor<T, Self>,
+        f: FutureReader<u32>,
+    ) -> Result<u32, String> {
+        let value = Self::consume_future(accessor, f).await;
+        if value == 13 {
+            Err("unlucky".to_string())
+        } else {
+            Ok(value + 1)
+        }
+    }
+
+    async fn delayed_future<T: Send>(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
+        let value = Self::consume_future(accessor, f).await;
+        tokio::time::sleep(std::time::Duration::from_millis(100)).await;
+        value
+    }
+
     async fn consume_stream<T: Send>(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u32 {
         let (tx, rx) = mpsc::channel::<u8>(16);
         accessor

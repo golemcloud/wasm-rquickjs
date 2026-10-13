@@ -355,6 +355,7 @@ pub async fn start_response_body_abort_test_server() -> (
     let (released_tx, released_rx) = mpsc::unbounded_channel();
     let release_clone_race = Arc::new(Notify::new());
     let clone_race_bytes_sent = Arc::new(Notify::new());
+    let body_released = Arc::new(Notify::new());
 
     let handle = tokio::spawn(async move {
         loop {
@@ -362,6 +363,7 @@ pub async fn start_response_body_abort_test_server() -> (
             let released_tx = released_tx.clone();
             let release_clone_race = release_clone_race.clone();
             let clone_race_bytes_sent = clone_race_bytes_sent.clone();
+            let body_released = body_released.clone();
             tokio::spawn(async move {
                 let mut request = Vec::new();
                 let mut buf = [0u8; 1024];
@@ -371,6 +373,22 @@ pub async fn start_response_body_abort_test_server() -> (
                         return;
                     }
                     request.extend_from_slice(&buf[..read]);
+                }
+
+                // A guest can acknowledge an event-loop turn and then wait for disposal without
+                // relying on sleeps or allowing component teardown to release the tested body.
+                let request_line = String::from_utf8_lossy(&request);
+                if request_line.starts_with("GET /response-body-ready ")
+                    || request_line.starts_with("GET /response-body-released ")
+                {
+                    if request_line.starts_with("GET /response-body-released ") {
+                        body_released.notified().await;
+                    }
+                    socket
+                        .write_all(b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n")
+                        .await
+                        .unwrap();
+                    return;
                 }
 
                 let clone_race_release = request
@@ -397,6 +415,12 @@ pub async fn start_response_body_abort_test_server() -> (
                 let empty = request
                     .windows(b"/empty-response-body".len())
                     .any(|window| window == b"/empty-response-body");
+                let finite = request
+                    .windows(b"/finite-response-body".len())
+                    .any(|window| window == b"/finite-response-body");
+                let finite_keepalive =
+                    request_line.starts_with("GET /finite-keepalive-response-body ");
+                let backpressure = request_line.starts_with("GET /backpressure-response-body ");
                 let clone = request
                     .windows(b"/clone-response-body".len())
                     .any(|window| window == b"/clone-response-body");
@@ -434,19 +458,27 @@ pub async fn start_response_body_abort_test_server() -> (
                 } else if empty {
                     b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
                         .as_slice()
+                } else if finite {
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 23\r\nConnection: close\r\n\r\nfirst chunksecond chunk".as_slice()
+                } else if finite_keepalive {
+                    b"HTTP/1.1 200 OK\r\nContent-Length: 23\r\nConnection: keep-alive\r\n\r\nfirst chunksecond chunk".as_slice()
                 } else {
                     b"HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 1000000\r\nConnection: close\r\n\r\nfirst chunk".as_slice()
                 };
                 socket.write_all(response).await.unwrap();
+                if backpressure {
+                    socket.write_all(&vec![b'x'; 128 * 1024]).await.unwrap();
+                }
                 socket.flush().await.unwrap();
                 let _ = released_tx.send(ResponseBodyServerEvent::HeadSent);
 
-                if truncated || empty {
+                if truncated || empty || finite {
                     let _ = socket.shutdown().await;
                 } else {
                     while socket.read(&mut buf).await.unwrap_or(0) != 0 {}
                 }
                 let _ = released_tx.send(ResponseBodyServerEvent::Released);
+                body_released.notify_one();
             });
         }
     });

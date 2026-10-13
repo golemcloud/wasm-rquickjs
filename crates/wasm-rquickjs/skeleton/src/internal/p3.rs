@@ -11,7 +11,7 @@ use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::promise::Promised;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Exception, Filter, FromJs,
-    Function, IntoJs, Module, Object, Persistent, Promise, String as JsString, Value, async_with,
+    Function, IntoJs, Module, Object, Persistent, Promise, Value, async_with,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -48,7 +48,6 @@ pub struct JsState {
     pub rt: AsyncRuntime,
     pub ctx: AsyncContext,
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
-    pub variant_case_tag_cache: RefCell<HashMap<&'static str, Persistent<JsString<'static>>>>,
     /// Ids of exported resource instances whose host handle has been dropped. Populated
     /// synchronously from the resource's `Drop` (which cannot `.await`) and drained at the start
     /// of the next JS entry point, where the corresponding entry is removed from the JS resource
@@ -76,7 +75,6 @@ impl JsState {
             rt,
             ctx,
             exported_function_cache: RefCell::new(HashMap::new()),
-            variant_case_tag_cache: RefCell::new(HashMap::new()),
             pending_resource_drops: RefCell::new(Vec::new()),
             writer_lease: RuntimeWriterLease::new(),
         }
@@ -95,6 +93,23 @@ impl JsState {
             ctx.globals()
                 .set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()).expect("Failed to create the resource table object"))
                 .expect("Failed to initialize the exported resource table");
+        })
+        .await;
+        Self::initialize_async_value_helpers(&self.ctx).await;
+        initialize_builtin_wiring(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        initialize_exported_resource_id_map(&self.ctx, RESOURCE_ID_MAP_NAME)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
+        // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
+        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        drain_and_idle(self).await;
+    }
+
+    pub(crate) async fn initialize_async_value_helpers(context: &AsyncContext) {
+        async_with!(context => |ctx| {
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
             // `get_async_iterator` normalizes any (async or sync) iterable passed from JS into an
@@ -227,16 +242,6 @@ impl JsState {
 
         })
         .await;
-        initialize_builtin_wiring(&self.ctx)
-            .await
-            .unwrap_or_else(|error| panic!("{error}"));
-        initialize_exported_resource_id_map(&self.ctx, RESOURCE_ID_MAP_NAME)
-            .await
-            .unwrap_or_else(|error| panic!("{error}"));
-        // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
-        // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
-        drain_and_idle(self).await;
     }
 
     /// Phase 2b: import and evaluate the user module. Must run after
@@ -1580,23 +1585,6 @@ fn dump_cannot_find_export(
     panic_message
 }
 
-pub fn variant_case_tag<'js>(
-    ctx: &Ctx<'js>,
-    name: &'static str,
-) -> rquickjs::Result<JsString<'js>> {
-    let js_state = get_js_state();
-    if let Some(tag) = js_state.variant_case_tag_cache.borrow().get(name).cloned() {
-        return tag.restore(ctx);
-    }
-
-    let tag = JsString::from_str(ctx.clone(), name)?;
-    js_state
-        .variant_case_tag_cache
-        .borrow_mut()
-        .insert(name, Persistent::save(ctx, tag.clone()));
-    Ok(tag)
-}
-
 pub fn format_js_exception(exc: &Value) -> String {
     try_format_js_error(exc)
         .or_else(|| try_format_tagged_error(exc))
@@ -2202,40 +2190,32 @@ where
 /// queue so the awaiting JS continuation — and the root export's promise-resolution callback —
 /// actually run. Merely calling `resolve`/`reject` and returning is not sufficient: promise
 /// reaction jobs are only executed while the QuickJS job queue is pumped.
-pub async fn settle_import_promise<P>(
-    resolve: Persistent<Function<'static>>,
-    reject: Persistent<Function<'static>>,
+pub fn settle_import_promise<'js, P>(
+    ctx: &Ctx<'js>,
+    resolve: Function<'js>,
+    reject: Function<'js>,
     produce: P,
 ) where
-    P: for<'js> FnOnce(&Ctx<'js>) -> rquickjs::Result<PromiseOutcome<'js>> + 'static,
+    P: FnOnce(&Ctx<'js>) -> rquickjs::Result<PromiseOutcome<'js>>,
 {
-    async_with!(get_js_state().ctx => |ctx| {
-        let resolve = resolve
-            .restore(&ctx)
-            .expect("Failed to restore a persisted async-import resolve function");
-        let reject = reject
-            .restore(&ctx)
-            .expect("Failed to restore a persisted async-import reject function");
-        match produce(&ctx) {
-            Ok(PromiseOutcome::Resolve(value)) => {
-                resolve
-                    .call::<_, ()>((value,))
-                    .unwrap_or_else(|e| panic!("Failed to resolve an async import promise: {e:?}"));
-            }
-            Ok(PromiseOutcome::Reject(error)) => {
-                reject
-                    .call::<_, ()>((error,))
-                    .unwrap_or_else(|e| panic!("Failed to reject an async import promise: {e:?}"));
-            }
-            Err(e) => panic!("Failed to convert an async import result to JavaScript: {e:?}"),
+    match produce(ctx) {
+        Ok(PromiseOutcome::Resolve(value)) => {
+            resolve
+                .call::<_, ()>((value,))
+                .unwrap_or_else(|e| panic!("Failed to resolve an async import promise: {e:?}"));
         }
-        // Run the promise reaction jobs enqueued by resolve/reject (and any transitive
-        // continuations), including Node's end-of-turn rejection checkpoint.
-        run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
-            panic!("failed to run process turn checkpoint after async import: {error}")
-        });
-    })
-    .await;
+        Ok(PromiseOutcome::Reject(error)) => {
+            reject
+                .call::<_, ()>((error,))
+                .unwrap_or_else(|e| panic!("Failed to reject an async import promise: {e:?}"));
+        }
+        Err(e) => panic!("Failed to convert an async import result to JavaScript: {e:?}"),
+    }
+    // Run the promise reaction jobs enqueued by resolve/reject (and any transitive
+    // continuations), including Node's end-of-turn rejection checkpoint.
+    run_process_turn_checkpoint(ctx).unwrap_or_else(|error| {
+        panic!("failed to run process turn checkpoint after async import: {error}")
+    });
 }
 
 /// A single async-iterator result (`{ value, done }`) produced from an `Option`.

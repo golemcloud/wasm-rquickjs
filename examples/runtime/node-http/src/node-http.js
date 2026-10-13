@@ -3,6 +3,112 @@ import * as https from 'node:https';
 import * as net from 'node:net';
 import { EventEmitter } from 'node:events';
 
+// Public stream operations only: the fixture never completes the pending body. The control
+// round trip gives its next read time to become pending without using a timer for synchronization.
+export async function httpResponseCancellation(port, testCase) {
+    const control = (path) => new Promise((resolve, reject) => {
+        http.get(`http://localhost:${port}/${path}`, res => {
+            res.on('error', reject);
+            res.on('end', resolve);
+            res.resume();
+        }).on('error', reject);
+    });
+    let request;
+    const requestErrors = [];
+    const bufferedEof = [12, 13, 17].includes(testCase);
+    const backpressure = testCase >= 14 && testCase <= 16;
+    const noErrorListener = testCase >= 9 && testCase <= 11;
+    const path = testCase === 6 ? 'finite-response-body'
+        : bufferedEof ? 'finite-keepalive-response-body'
+        : backpressure ? 'backpressure-response-body'
+        : testCase === 7 ? 'truncated-response-body'
+        : testCase === 8 ? 'empty-response-body' : 'pending-response-body';
+    const response = await new Promise(resolve => {
+        request = http.get(`http://localhost:${port}/${path}`, resolve);
+        request.on('error', error => requestErrors.push(error));
+    });
+    let closes = 0;
+    let ends = 0;
+    let aborts = 0;
+    let chunks = '';
+    const errors = [];
+    const closed = new Promise(resolve => response.on('close', () => {
+        closes++;
+        resolve();
+    }));
+    if (!noErrorListener) response.on('error', error => errors.push(error));
+    response.on('end', () => ends++);
+    response.on('aborted', () => aborts++);
+    if (bufferedEof) {
+        response.read(0);
+        while (!response.complete) await control('response-body-ready');
+        if (response.readableEnded || response.readableLength !== 23) return false;
+        if (testCase === 12) request.abort();
+        else if (testCase === 13) request.destroy();
+        else response.destroy();
+        await closed;
+        await control('response-body-released');
+        return closes === 1 && response.complete && errors.length === 0
+            && ends === (testCase === 17 ? 0 : 1) && aborts === (testCase === 17 ? 1 : 0);
+    }
+    if (testCase >= 6 && testCase <= 8) {
+        response.on('data', chunk => { chunks += chunk.toString(); });
+        await closed;
+        response.destroy();
+        request.destroy();
+        await control('response-body-released');
+        console.log(JSON.stringify({testCase, closes, ends, chunks, errors: errors.map(e => e.message)}));
+        if (testCase === 7) {
+            return closes === 1 && ends === 0 && !response.complete && errors.length === 1
+                && aborts === 1 && requestErrors.length === 0;
+        }
+        return closes === 1 && ends === 1 && response.complete && errors.length === 0
+            && aborts === 0 && requestErrors.length === 0
+            && chunks === (testCase === 6 ? 'first chunksecond chunk' : '');
+    }
+    if (backpressure) {
+        response.read(0);
+        while (response.readableLength < response.readableHighWaterMark) {
+            await control('response-body-ready');
+        }
+    } else if (testCase !== 5) {
+        await new Promise(resolve => response.on('data', chunk => {
+            chunks += chunk.toString();
+            resolve();
+        }));
+        await control('response-body-ready');
+    }
+    const reason = new Error('cancel response');
+    for (let repeat = 0; repeat < 2; repeat++) {
+        switch (testCase) {
+            case 0: case 5: case 14: response.destroy(); break;
+            case 1: case 9: case 15: request.abort(); break;
+            case 2: case 10: case 16: request.destroy(); break;
+            case 3: case 11: response.destroy(reason); break;
+            case 4: request.destroy(reason); break;
+        }
+    }
+    // Repeated cancellation must not emit duplicate terminal events or release resources twice.
+    await closed;
+    response.destroy();
+    request.destroy();
+    request.abort();
+    // This endpoint responds only after the tested connection closes. Returning from the export
+    // (and destroying its Wasmtime Store) cannot accidentally make this assertion pass.
+    await control('response-body-released');
+    console.log(JSON.stringify({testCase, closes, ends, chunks, errors: errors.map(e => e.message)}));
+    const suppliedError = [3, 4, 11].includes(testCase);
+    const reset = [1, 2, 4, 9, 10, 15, 16].includes(testCase);
+    return closes === 1 && ends === 0 && aborts === 1 && response.destroyed && !response.complete
+        && chunks === (testCase === 5 || backpressure ? '' : 'first chunk')
+        && requestErrors.length === (suppliedError ? 1 : 0)
+        && (!suppliedError || requestErrors[0] === reason)
+        && errors.length === (noErrorListener || !reset && testCase !== 3 ? 0 : 1)
+        && (testCase !== 3 || errors[0] === reason)
+        && (!reset || response.errored?.code === 'ECONNRESET')
+        && (testCase !== 11 || response.errored === reason);
+}
+
 // Test 1: http.get - use await on the _endPromise to let the runtime drive it
 export async function httpGet(port) {
     console.log('node:http test 1 - http.get');
@@ -398,6 +504,193 @@ export function httpResponseLifecycle() {
         typeCode === 'ERR_INVALID_ARG_TYPE';
 }
 
+export async function httpResponseRepeatedEndCallbacks() {
+    const request = {
+        method: 'GET',
+        httpVersionMajor: 1,
+        httpVersionMinor: 1,
+        socket: null,
+    };
+    const makeSocket = (write) => {
+        const socket = new EventEmitter();
+        socket.destroyed = false;
+        socket.writable = true;
+        socket.writableEnded = false;
+        socket.writableCorked = 0;
+        socket.writableLength = 0;
+        socket.writableNeedDrain = false;
+        socket.writableHighWaterMark = 16 * 1024;
+        socket.cork = () => {};
+        socket.uncork = () => {};
+        socket.write = write;
+        return socket;
+    };
+    const queuedResponse = new http.ServerResponse(request);
+    let finishCount = 0;
+    let firstCallbackCount = 0;
+    let firstCallbackError;
+    let queuedCallbackCount = 0;
+    let queuedCallbackError;
+    let queuedCallbackWasAsync = false;
+    let queuedCallActive = true;
+    queuedResponse.on('finish', () => {
+        finishCount++;
+    });
+    const firstReturn = queuedResponse.end('body', (error) => {
+        firstCallbackCount++;
+        firstCallbackError = error;
+    });
+    const queuedReturn = queuedResponse.end((error) => {
+        queuedCallbackCount++;
+        queuedCallbackError = error;
+        queuedCallbackWasAsync = !queuedCallActive;
+    });
+    queuedCallActive = false;
+
+    if (
+        firstReturn !== queuedResponse ||
+        queuedReturn !== queuedResponse ||
+        queuedResponse.writableFinished ||
+        queuedCallbackCount !== 0
+    ) {
+        return false;
+    }
+
+    const wire = [];
+    const socket = makeSocket((chunk, callback) => {
+        wire.push(Buffer.from(chunk));
+        if (typeof callback === 'function') callback();
+        return true;
+    });
+    queuedResponse.assignSocket(socket);
+
+    let finishedCallActive = true;
+    let finishedCallbackCount = 0;
+    let finishedCallbackCode;
+    let finishedCallbackWasSync = false;
+    const finishedReturn = queuedResponse.end((error) => {
+        finishedCallbackCount++;
+        finishedCallbackCode = error && error.code;
+        finishedCallbackWasSync = finishedCallActive;
+    });
+    finishedCallActive = false;
+
+    if (
+        finishedReturn !== queuedResponse ||
+        !queuedResponse.writableFinished ||
+        Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') === false ||
+        finishCount !== 1 ||
+        firstCallbackCount !== 1 ||
+        firstCallbackError !== undefined ||
+        queuedCallbackCount !== 1 ||
+        queuedCallbackError !== undefined ||
+        !queuedCallbackWasAsync ||
+        finishedCallbackCount !== 1 ||
+        finishedCallbackCode !== 'ERR_STREAM_ALREADY_FINISHED' ||
+        !finishedCallbackWasSync
+    ) {
+        return false;
+    }
+
+    const blockedCallbacks = [];
+    const blockedSocket = makeSocket((chunk, callback) => {
+        blockedSocket.writableLength += chunk.length;
+        blockedSocket.writableNeedDrain = true;
+        blockedCallbacks.push(callback);
+        return false;
+    });
+    const blockedResponse = new http.ServerResponse(request);
+    blockedResponse.assignSocket(blockedSocket);
+    blockedResponse.end('blocked');
+    let blockedCallbackCount = 0;
+    let blockedCallbackError;
+    const blockedReturn = blockedResponse.end((error) => {
+        blockedCallbackCount++;
+        blockedCallbackError = error;
+    });
+    if (
+        blockedReturn !== blockedResponse ||
+        blockedResponse.writableFinished ||
+        blockedCallbackCount !== 0
+    ) {
+        return false;
+    }
+    blockedSocket.writableLength = 0;
+    blockedSocket.writableNeedDrain = false;
+    for (const callback of blockedCallbacks) callback();
+    if (
+        !blockedResponse.writableFinished ||
+        blockedCallbackCount !== 1 ||
+        blockedCallbackError !== undefined
+    ) {
+        return false;
+    }
+
+    const dataResponse = new http.ServerResponse(request);
+    const dataEvents = [];
+    let dataCallbackWasAsync = false;
+    let dataCallActive = true;
+    dataResponse.on('error', (error) => {
+        dataEvents.push('error:' + error.code);
+    });
+    dataResponse.end();
+    const dataReturn = dataResponse.end('ignored', (error) => {
+        dataEvents.push('callback:' + error.code);
+        dataCallbackWasAsync = !dataCallActive;
+    });
+    dataCallActive = false;
+    if (dataReturn !== dataResponse || dataEvents.length !== 0) {
+        return false;
+    }
+    await new Promise((resolve) => setImmediate(resolve));
+    if (
+        !dataCallbackWasAsync ||
+        dataEvents.join(',') !==
+            'callback:ERR_STREAM_WRITE_AFTER_END,error:ERR_STREAM_WRITE_AFTER_END'
+    ) {
+        return false;
+    }
+
+    const invalidResponse = new http.ServerResponse(request);
+    const invalidEvents = [];
+    invalidResponse.on('error', (error) => {
+        invalidEvents.push('error:' + error.code);
+    });
+    invalidResponse.end();
+    let invalidReturn;
+    try {
+        invalidReturn = invalidResponse.end([], (error) => {
+            invalidEvents.push('callback:' + error.code);
+        });
+    } catch (_) {
+        return false;
+    }
+
+    const destroyedResponse = new http.ServerResponse(request);
+    let destroyedCallbackCount = 0;
+    let destroyedErrorCount = 0;
+    destroyedResponse.on('error', () => {
+        destroyedErrorCount++;
+    });
+    destroyedResponse.end();
+    destroyedResponse.destroy();
+    const destroyedReturn = destroyedResponse.end('ignored', () => {
+        destroyedCallbackCount++;
+    });
+    await new Promise((resolve) => setImmediate(resolve));
+    if (
+        invalidReturn !== invalidResponse ||
+        invalidEvents.join(',') !==
+            'callback:ERR_STREAM_WRITE_AFTER_END,error:ERR_STREAM_WRITE_AFTER_END' ||
+        destroyedReturn !== destroyedResponse ||
+        destroyedCallbackCount !== 0 ||
+        destroyedErrorCount !== 0
+    ) {
+        return false;
+    }
+    return true;
+}
+
 export async function httpResponsePostCloseWrites() {
     const detachedRequest = {
         method: 'GET',
@@ -617,6 +910,1514 @@ export async function httpResponsePostCloseWrites() {
     });
 }
 
+function runHttpActiveDrainScenario() {
+    return new Promise((resolve) => {
+        const requestCount = 8;
+        const body = Buffer.alloc(4096, 'b');
+        let settled = false;
+        let socket;
+        let requestsSeen = 0;
+        let bodyBytes = 0;
+        let bodyCompleted = false;
+        let requestSocketPausedAfterWrite = true;
+        let laterRequestBeforeDrain = false;
+        let falseWrites = 0;
+        let drainCount = 0;
+        let finishCount = 0;
+        let lengthAtFalse = 0;
+        let lengthAtDrain = -1;
+        let needDrainAtDrain = true;
+        let highWaterMark = 0;
+        let noBodyWriteResult = false;
+        let noBodyCallbackCount = 0;
+        let noBodyDrainCount = 0;
+        let noBodyNeedDrain = true;
+        const chunk = Buffer.alloc(8 * 1024, 'a');
+        let activeDrained = false;
+        const sendBodyAndRemainingRequests = () => {
+            let requests =
+                'HEAD /head HTTP/1.1\r\nHost: localhost\r\n\r\n';
+            for (let index = 2; index < requestCount; index++) {
+                requests +=
+                    `GET /${index} HTTP/1.1\r\n` +
+                    'Host: localhost\r\n' +
+                    (index === requestCount - 1
+                        ? 'Connection: close\r\n'
+                        : '') +
+                    '\r\n';
+            }
+            socket.write(Buffer.concat([body.subarray(1), Buffer.from(requests)]));
+        };
+        const server = http.createServer((req, res) => {
+            const index = requestsSeen++;
+            res.on('error', () => finish(false));
+            res.on('finish', () => {
+                finishCount++;
+            });
+
+            if (index !== 0) {
+                if (!activeDrained) laterRequestBeforeDrain = true;
+                if (req.method === 'HEAD') {
+                    res.on('drain', () => noBodyDrainCount++);
+                    noBodyWriteResult = res.write('ignored', () => {
+                        noBodyCallbackCount++;
+                    });
+                    noBodyNeedDrain = res.writableNeedDrain;
+                }
+                res.end(index === requestCount - 1 ? 'last' : 'next');
+                return;
+            }
+
+            req.on('data', (data) => {
+                bodyBytes += data.length;
+            });
+            req.on('end', () => {
+                bodyCompleted = bodyBytes === body.length;
+                setImmediate(() => socket.resume());
+            });
+            for (let writes = 0; writes < 32; writes++) {
+                if (!res.write(chunk)) {
+                    falseWrites++;
+                    lengthAtFalse = res.writableLength;
+                    highWaterMark = res.writableHighWaterMark;
+                    requestSocketPausedAfterWrite = req.socket.isPaused();
+                    res.once('drain', () => {
+                        activeDrained = true;
+                        drainCount++;
+                        lengthAtDrain = res.writableLength;
+                        needDrainAtDrain = res.writableNeedDrain;
+                        res.end();
+                    });
+                    setImmediate(sendBodyAndRemainingRequests);
+                    return;
+                }
+            }
+            finish(false);
+        });
+        server.on('error', () => finish(false));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => {
+                const observation = {
+                    result,
+                    falseWrites,
+                    drainCount,
+                    finishCount,
+                    requestsSeen,
+                    bodyBytes,
+                    bodyCompleted,
+                    requestSocketPausedAfterWrite,
+                    laterRequestBeforeDrain,
+                    lengthAtFalse,
+                    lengthAtDrain,
+                    needDrainAtDrain,
+                    highWaterMark,
+                    noBodyWriteResult,
+                    noBodyCallbackCount,
+                    noBodyDrainCount,
+                    noBodyNeedDrain,
+                };
+                const valid = result &&
+                    falseWrites === 1 &&
+                    drainCount === 1 &&
+                    finishCount === requestCount &&
+                    requestsSeen === requestCount &&
+                    bodyBytes === body.length &&
+                    bodyCompleted &&
+                    !requestSocketPausedAfterWrite &&
+                    !laterRequestBeforeDrain &&
+                    lengthAtFalse >= highWaterMark &&
+                    !needDrainAtDrain &&
+                    noBodyWriteResult &&
+                    noBodyCallbackCount === 1 &&
+                    noBodyDrainCount === 0 &&
+                    !noBodyNeedDrain;
+                if (!valid) console.log('active drain failure', JSON.stringify(observation));
+                resolve(valid);
+            });
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.pause();
+                socket.write(
+                    'POST /active HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    `Content-Length: ${body.length}\r\n\r\n` +
+                    body.subarray(0, 1).toString('latin1')
+                );
+            });
+            socket.on('data', () => {});
+            socket.on('end', () => setImmediate(() => finish(true)));
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+function runHttpBlockedDrainAndBodyScenario() {
+    return new Promise((resolve) => {
+        const body = Buffer.alloc(4096, 'b');
+        const payload = Buffer.alloc(80 * 1024, 'p');
+        const responses = [];
+        const finishOrder = [];
+        const callbackOrder = [];
+        let settled = false;
+        let socket;
+        let firstResponse;
+        let thirdResponse;
+        let bodyBytes = 0;
+        let bodyCompletedBeforeRelease = false;
+        let requestsBeforeFirstRelease = 0;
+        let blockedWriteResult = true;
+        let requestSocketPausedAfterWrite = true;
+        let blockedDrainCount = 0;
+        let endedBlockedWriteResult = true;
+        let endedBlockedDrainCount = 0;
+
+        const server = http.createServer((req, res) => {
+            const index = responses.length;
+            responses.push(res);
+            res.on('error', () => finish(false));
+            res.on('finish', () => finishOrder.push(index));
+
+            if (index === 0) {
+                firstResponse = res;
+                return;
+            }
+
+            res.setHeader('Content-Length', payload.length);
+            if (index === 1) {
+                req.on('data', (chunk) => {
+                    bodyBytes += chunk.length;
+                });
+                req.on('end', () => {
+                    bodyCompletedBeforeRelease = true;
+                    setImmediate(() => {
+                        socket.write(
+                            'GET /third HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                        );
+                        setTimeout(() => socket.write(
+                            'GET /ended HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n'
+                        ), 1);
+                        setTimeout(() => {
+                            requestsBeforeFirstRelease = responses.length;
+                            firstResponse.end('first');
+                        }, 10);
+                    });
+                });
+                res.on('drain', () => {
+                    blockedDrainCount++;
+                    res.end();
+                });
+                blockedWriteResult = res.write(payload, () => {
+                    callbackOrder.push(index);
+                });
+                requestSocketPausedAfterWrite = req.socket.isPaused();
+                setImmediate(() => socket.write(body.subarray(1)));
+                return;
+            }
+
+            if (index === 2) {
+                thirdResponse = res;
+                res.removeHeader('Content-Length');
+                setImmediate(() => thirdResponse.end('third'));
+                return;
+            }
+
+            res.on('drain', () => endedBlockedDrainCount++);
+            endedBlockedWriteResult = res.write(payload, () => {
+                callbackOrder.push(index);
+            });
+            res.end();
+        });
+        server.on('error', () => finish(false));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => {
+                const orderedFinishes = finishOrder.length === 4 &&
+                    finishOrder.every((value, index) => value === index);
+                const observation = {
+                    result,
+                    responseCount: responses.length,
+                    bodyBytes,
+                    bodyCompletedBeforeRelease,
+                    requestsBeforeFirstRelease,
+                    blockedWriteResult,
+                    requestSocketPausedAfterWrite,
+                    blockedDrainCount,
+                    endedBlockedWriteResult,
+                    endedBlockedDrainCount,
+                    callbackOrder,
+                    finishOrder,
+                };
+                const valid = result &&
+                    responses.length === 4 &&
+                    bodyBytes === body.length &&
+                    bodyCompletedBeforeRelease &&
+                    requestsBeforeFirstRelease >= 2 &&
+                    requestsBeforeFirstRelease <= 3 &&
+                    !blockedWriteResult &&
+                    !requestSocketPausedAfterWrite &&
+                    blockedDrainCount === 1 &&
+                    !endedBlockedWriteResult &&
+                    endedBlockedDrainCount === 0 &&
+                    callbackOrder.length === 2 &&
+                    callbackOrder[0] === 1 &&
+                    callbackOrder[1] === 3 &&
+                    orderedFinishes;
+                if (!valid) console.log('blocked drain failure', JSON.stringify(observation));
+                resolve(valid);
+            });
+        };
+        const timeout = setTimeout(() => finish(false), 10000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    `POST /body HTTP/1.1\r\nHost: localhost\r\nContent-Length: ${body.length}\r\n\r\n` +
+                    body.subarray(0, 1).toString('latin1')
+                );
+            });
+            socket.on('data', () => {});
+            socket.on('end', () => setImmediate(() => finish(true)));
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+function runHttpPausedAbortScenario() {
+    return new Promise((resolve) => {
+        const payload = Buffer.alloc(80 * 1024, 'x');
+        let settled = false;
+        let socket;
+        let requestsSeen = 0;
+        let secondWriteResult = true;
+        let writeCallbackErrors = 0;
+        let responseCloseCount = 0;
+
+        const server = http.createServer((req, res) => {
+            const index = requestsSeen++;
+            res.on('error', () => {});
+            res.on('close', () => {
+                responseCloseCount++;
+                setImmediate(() => finish(true));
+            });
+            if (index === 0) return;
+
+            res.setHeader('Content-Length', payload.length);
+            secondWriteResult = res.write(payload, (error) => {
+                if (error) writeCallbackErrors++;
+            });
+            const responseSocket = req.socket;
+            res.end();
+            setImmediate(() => responseSocket.destroy());
+        });
+        server.on('error', () => finish(false));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => {
+                const observation = {
+                    result,
+                    requestsSeen,
+                    secondWriteResult,
+                    writeCallbackErrors,
+                    responseCloseCount,
+                };
+                const valid = result &&
+                    requestsSeen === 2 &&
+                    !secondWriteResult &&
+                    responseCloseCount >= 1;
+                if (!valid) console.log('paused abort failure', JSON.stringify(observation));
+                resolve(valid);
+            });
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'GET /first HTTP/1.1\r\nHost: localhost\r\n\r\n' +
+                    'GET /abort HTTP/1.1\r\nHost: localhost\r\n\r\n'
+                );
+            });
+            socket.on('data', () => {});
+            socket.on('error', () => {});
+        });
+    });
+}
+
+export async function httpPipelineBackpressure() {
+    const activeDrain = await runHttpActiveDrainScenario();
+    if (!activeDrain) return false;
+
+    const blockedDrainAndBody = await runHttpBlockedDrainAndBodyScenario();
+    if (!blockedDrainAndBody) return false;
+
+    const pausedAbort = await runHttpPausedAbortScenario();
+    if (!pausedAbort) return false;
+
+    const profile = await runHttpPipelineBackpressureScenario(false);
+    return validateHttpPipelineBackpressureProfile(profile);
+}
+
+function validateHttpPipelineBackpressureProfile(profile) {
+    return profile.ok &&
+        profile.admittedBeforeRelease >= 2 &&
+        profile.admittedBeforeRelease < profile.requestCount &&
+        !profile.blockedFinishedBeforeRelease &&
+        profile.finishCount === profile.requestCount &&
+        profile.callbackCount === profile.requestCount &&
+        profile.ordered &&
+        profile.highWaterMark > 0 &&
+        profile.queuedBytesBeforeRelease > profile.highWaterMark &&
+        profile.queuedBytesBeforeRelease <=
+            profile.highWaterMark + profile.payloadBytes + 1024;
+}
+
+function runHttpPipelineBackpressureScenario(captureWriteProfile, requestCount = 32) {
+    return new Promise((resolve) => {
+        const payload = Buffer.alloc(20 * 1024, 'p');
+        const responses = [];
+        const finishOrder = [];
+        const callbackOrder = [];
+        let settled = false;
+        let socket;
+        let firstResponse;
+        let admittedBeforeRelease = 0;
+        let queuedBytesBeforeRelease = 0;
+        let blockedFinishedBeforeRelease = false;
+        let highWaterMark = 0;
+        const startedAt = Date.now();
+        const memoryBefore = process.memoryUsage();
+        let heapUsedHighWater = memoryBefore.heapUsed;
+
+        const sampleHeap = () => {
+            heapUsedHighWater = Math.max(
+                heapUsedHighWater,
+                process.memoryUsage().heapUsed
+            );
+        };
+
+        const server = http.createServer((_req, res) => {
+            sampleHeap();
+            const index = responses.length;
+            responses.push(res);
+            res.setHeader('Content-Length', payload.length);
+            res.on('finish', () => {
+                finishOrder.push(index);
+                if (finishOrder.length === requestCount) {
+                    setImmediate(() => finish(true));
+                }
+            });
+            res.on('error', () => finish(false));
+
+            if (index === 0) {
+                firstResponse = res;
+                setImmediate(() => {
+                    admittedBeforeRelease = responses.length;
+                    blockedFinishedBeforeRelease = finishOrder.length !== 0;
+                    highWaterMark = responses[1] && responses[1].writableHighWaterMark;
+                    queuedBytesBeforeRelease = responses
+                        .slice(1)
+                        .reduce((total, response) => total + response.writableLength, 0);
+                    firstResponse.write(payload, () => callbackOrder.push(0));
+                    firstResponse.end();
+                });
+                return;
+            }
+
+            res.write(payload, () => callbackOrder.push(index));
+            res.end();
+            sampleHeap();
+        });
+        server.on('error', () => finish(false));
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            sampleHeap();
+            const memoryAfter = process.memoryUsage();
+            let writeProfile = null;
+            const handle = firstResponse && firstResponse.socket && firstResponse.socket._handle;
+            if (captureWriteProfile && handle && typeof handle.get_write_profile === 'function') {
+                writeProfile = handle.get_write_profile();
+            }
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => {
+                const ordered = finishOrder.every((value, index) => value === index) &&
+                    callbackOrder.every((value, index) => value === index);
+                resolve({
+                    ok: result,
+                    requestCount,
+                    payloadBytes: payload.length,
+                    admittedBeforeRelease,
+                    queuedBytesBeforeRelease,
+                    blockedFinishedBeforeRelease,
+                    finishCount: finishOrder.length,
+                    callbackCount: callbackOrder.length,
+                    ordered,
+                    highWaterMark,
+                    wallMs: Date.now() - startedAt,
+                    memory: {
+                        before: memoryBefore,
+                        after: memoryAfter,
+                        heapUsedHighWater,
+                    },
+                    writeProfile,
+                });
+            });
+        };
+        const timeout = setTimeout(() => finish(false), 10000);
+
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                let requests = '';
+                for (let index = 0; index < requestCount; index++) {
+                    requests +=
+                        `GET /${index} HTTP/1.1\r\n` +
+                        'Host: localhost\r\n' +
+                        '\r\n';
+                }
+                socket.write(requests);
+            });
+            socket.on('data', () => {});
+            socket.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpPipelineBackpressureProfile() {
+    const activeDrain = await runHttpActiveDrainScenario();
+    if (!activeDrain) {
+        return JSON.stringify({ valid: false, activeDrain: false });
+    }
+    const profile = await runHttpPipelineBackpressureScenario(true, 64);
+    profile.activeDrain = true;
+    profile.valid = validateHttpPipelineBackpressureProfile(profile);
+    return JSON.stringify(profile);
+}
+
+export async function httpRequestTrailers() {
+    const primaryValid = await new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let socketErrorCode;
+        let wire = '';
+        const validUrls = [];
+        let emptyTrailersValid = false;
+        let populatedTrailersValid = false;
+        let cachedDistinctValid = false;
+        let fragmentedTrailersValid = false;
+
+        const server = http.createServer((req, res) => {
+            validUrls.push(req.url);
+            if (req.url === '/empty') {
+                req.on('end', () => {
+                    const parsedDistinct = req.trailersDistinct;
+                    const assignedDistinct = { assigned: ['value'] };
+                    req.trailersDistinct = assignedDistinct;
+                    emptyTrailersValid = req.complete &&
+                        Object.keys(req.trailers).length === 0 &&
+                        Object.keys(parsedDistinct).length === 0 &&
+                        Object.getPrototypeOf(parsedDistinct) === null &&
+                        req.trailersDistinct === assignedDistinct &&
+                        req.rawTrailers.length === 0;
+                    res.end('empty');
+                });
+                req.resume();
+                return;
+            }
+
+            if (req.url === '/trailers') {
+                const trailers = req.trailers;
+                const fieldsEmptyBeforeEnd = Object.keys(trailers).length === 0;
+                const requestHeadersValid =
+                    Object.getPrototypeOf(req.headersDistinct) === null &&
+                    Object.prototype.hasOwnProperty.call(
+                        req.headersDistinct,
+                        '__proto__',
+                    ) &&
+                    req.headersDistinct.__proto__.join(',') === 'request' &&
+                    !Object.prototype.hasOwnProperty.call(
+                        req.headers,
+                        '__proto__',
+                    );
+                let body = '';
+                req.on('data', (chunk) => {
+                    body += chunk.toString();
+                });
+                req.on('end', () => {
+                    const trailersDistinct = req.trailersDistinct;
+                    const rawTrailers = req.rawTrailers;
+                    populatedTrailersValid = fieldsEmptyBeforeEnd &&
+                        requestHeadersValid &&
+                        req.complete &&
+                        req.trailers === trailers &&
+                        body === pipelineBody + 'abc' &&
+                        trailers['x-mixed'] === 'one' &&
+                        trailers['x-dupe'] === 'first, second' &&
+                        trailers.cookie === 'a=1; b=2' &&
+                        Array.isArray(trailers['set-cookie']) &&
+                        trailers['set-cookie'].join(',') === 'c=1,d=2' &&
+                        trailers['content-type'] === 'text/plain' &&
+                        trailersDistinct['x-dupe'].join(',') === 'first,second' &&
+                        trailersDistinct['content-type'].join(',') ===
+                            'text/plain,ignored' &&
+                        Object.prototype.hasOwnProperty.call(
+                            trailers,
+                            'constructor',
+                        ) &&
+                        trailers.constructor === 'safe' &&
+                        trailersDistinct.constructor.join(',') === 'safe' &&
+                        Object.getPrototypeOf(trailersDistinct) === null &&
+                        !Object.prototype.hasOwnProperty.call(
+                            trailers,
+                            '__proto__',
+                        ) &&
+                        Object.prototype.hasOwnProperty.call(
+                            trailersDistinct,
+                            '__proto__',
+                        ) &&
+                        trailersDistinct.__proto__.join(',') === 'ignored' &&
+                        trailers['x-obs-text'] === '\xa0value\xa0' &&
+                        JSON.stringify(rawTrailers) === JSON.stringify([
+                            'X-Mixed', 'one',
+                            'X-Dupe', 'first',
+                            'x-dupe', 'second',
+                            'Cookie', 'a=1',
+                            'cookie', 'b=2',
+                            'Set-Cookie', 'c=1',
+                            'Set-Cookie', 'd=2',
+                            'Content-Type', 'text/plain',
+                            'content-type', 'ignored',
+                            'constructor', 'safe',
+                            '__proto__', 'ignored',
+                            'X-Obs-Text', '\xa0value\xa0',
+                        ]);
+                    res.end('trailers');
+                });
+                return;
+            }
+
+            if (req.url === '/cached-distinct') {
+                const trailers = req.trailers;
+                const trailersDistinct = req.trailersDistinct;
+                const rawTrailers = req.rawTrailers;
+                req.on('end', () => {
+                    cachedDistinctValid = req.complete &&
+                        req.trailers === trailers &&
+                        req.trailers['x-cached'] === 'one' &&
+                        req.trailersDistinct === trailersDistinct &&
+                        Object.keys(trailersDistinct).length === 0 &&
+                        Object.getPrototypeOf(trailersDistinct) === null &&
+                        req.rawTrailers !== rawTrailers &&
+                        JSON.stringify(req.rawTrailers) ===
+                            JSON.stringify(['X-Cached', 'one']);
+                    res.end('cached-distinct');
+                });
+                req.resume();
+                return;
+            }
+
+            if (req.url === '/fragmented') {
+                req.on('end', () => {
+                    fragmentedTrailersValid = req.complete &&
+                        req.trailers['x-fragmented'] === 'bytewise' &&
+                        req.trailersDistinct['x-fragmented'][0] === 'bytewise';
+                    res.end('fragmented');
+                });
+                req.resume();
+                return;
+            }
+
+            res.end('next');
+        });
+
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (!result) {
+                console.log(JSON.stringify({
+                    emptyTrailersValid,
+                    populatedTrailersValid,
+                    cachedDistinctValid,
+                    fragmentedTrailersValid,
+                    socketErrorCode,
+                    validUrls,
+                    wire,
+                }));
+            }
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 10000);
+        const writeBytewise = (buffer, done, index = 0) => {
+            if (index === buffer.length) {
+                done();
+                return;
+            }
+            socket.write(buffer.subarray(index, index + 1), () => {
+                setImmediate(() => writeBytewise(buffer, done, index + 1));
+            });
+        };
+
+        const pipelineBody = 'p'.repeat(17 * 1024);
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => {
+                socket.write(
+                    'POST /empty HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Transfer-Encoding: chunked\r\n\r\n' +
+                    '0\r\n\r',
+                    () => {
+                        setImmediate(() => {
+                            const request = Buffer.from(
+                                '\nPOST /trailers HTTP/1.1\r\n' +
+                                'Host: localhost\r\n' +
+                                '__proto__: request\r\n' +
+                                'Transfer-Encoding: chunked\r\n\r\n' +
+                                pipelineBody.length.toString(16) + '\r\n' +
+                                pipelineBody + '\r\n' +
+                                '3\r\nabc\r\n' +
+                                '0\r\n' +
+                                'X-Mixed: one\r\n' +
+                                'X-Dupe: first\r\n' +
+                                'x-dupe: second\r\n' +
+                                'Cookie: a=1\r\n' +
+                                'cookie: b=2\r\n' +
+                                'Set-Cookie: c=1\r\n' +
+                                'Set-Cookie: d=2\r\n' +
+                                'Content-Type: text/plain\r\n' +
+                                'content-type: ignored\r\n' +
+                                'constructor: safe\r\n' +
+                                '__proto__: ignored\r\n' +
+                                'X-Obs-Text: \xa0value\xa0\r\n\r',
+                                'latin1',
+                            );
+                            socket.write(
+                                request,
+                                () => {
+                                    setImmediate(() => {
+                                        socket.write(
+                                            '\nPOST /cached-distinct HTTP/1.1\r\n' +
+                                            'Host: localhost\r\n' +
+                                            'Transfer-Encoding: chunked\r\n\r\n' +
+                                            '0\r\nX-Cached: one\r\n\r\n' +
+                                            'POST /fragmented HTTP/1.1\r\n' +
+                                            'Host: localhost\r\n' +
+                                            'Transfer-Encoding: chunked\r\n\r\n' +
+                                            '0\r\n',
+                                            () => writeBytewise(
+                                                Buffer.from(
+                                                    'X-Fragmented: bytewise\r\n\r\n',
+                                                ),
+                                                () => socket.write(
+                                                    'GET /next HTTP/1.1\r\n' +
+                                                    'Host: localhost\r\n' +
+                                                    'Connection: close\r\n\r\n',
+                                                ),
+                                            ),
+                                        );
+                                    });
+                                },
+                            );
+                        });
+                    },
+                );
+            });
+            const evaluate = () => {
+                const empty = wire.indexOf('empty');
+                const trailers = wire.indexOf('trailers', empty + 1);
+                const cached = wire.indexOf('cached-distinct', trailers + 1);
+                const fragmented = wire.indexOf('fragmented', cached + 1);
+                const next = wire.indexOf('next', fragmented + 1);
+                if (
+                    emptyTrailersValid &&
+                    populatedTrailersValid &&
+                    cachedDistinctValid &&
+                    fragmentedTrailersValid &&
+                    validUrls.join(',') ===
+                        '/empty,/trailers,/cached-distinct,/fragmented,/next' &&
+                    empty !== -1 &&
+                    trailers > empty &&
+                    cached > trailers &&
+                    fragmented > cached &&
+                    next > fragmented
+                ) {
+                    finish(true);
+                }
+            };
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                evaluate();
+            });
+            socket.on('error', (error) => {
+                socketErrorCode = error.code;
+            });
+            const evaluateTerminal = () => {
+                evaluate();
+                if (!settled) finish(false);
+            };
+            socket.on('end', evaluateTerminal);
+            socket.on('close', evaluateTerminal);
+        });
+    });
+    if (!primaryValid) return false;
+
+    const joinedValid = await new Promise((resolve) => {
+        let settled = false;
+        let socket;
+        let requestValid = false;
+        let wire = '';
+        const server = http.createServer(
+            { joinDuplicateHeaders: true },
+            (req, res) => {
+                requestValid = req.headers['content-type'] === 'first, second' &&
+                    req.headersDistinct['content-type'].join(',') ===
+                        'first,second';
+                req.on('end', () => {
+                    requestValid = requestValid && req.complete &&
+                        req.trailers['content-type'] === 'third, fourth' &&
+                        req.trailersDistinct['content-type'].join(',') ===
+                            'third,fourth';
+                    res.end('joined');
+                });
+                req.resume();
+            },
+        );
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (socket) socket.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+        server.listen(0, () => {
+            socket = net.connect({ port: server.address().port });
+            socket.on('connect', () => socket.write(
+                'POST /join HTTP/1.1\r\n' +
+                'Host: localhost\r\n' +
+                'Content-Type: first\r\n' +
+                'content-type: second\r\n' +
+                'Transfer-Encoding: chunked\r\n' +
+                'Connection: close\r\n\r\n' +
+                '0\r\n' +
+                'Content-Type: third\r\n' +
+                'content-type: fourth\r\n\r\n',
+            ));
+            socket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+            });
+            socket.on('error', () => finish(false));
+            socket.on('close', () => finish(
+                requestValid && wire.includes('joined'),
+            ));
+        });
+    });
+    if (!joinedValid) return false;
+
+    return new Promise((resolve) => {
+        let settled = false;
+        let request;
+        const server = http.createServer((_req, res) => {
+            res.setHeader('__proto__', 'proto-value');
+            res.setHeader('constructor', 'constructor-value');
+            res.end('client-distinct');
+        });
+        const finish = (result) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            if (request) request.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(result));
+        };
+        const timeout = setTimeout(() => finish(false), 5000);
+        server.listen(0, () => {
+            request = http.get({ port: server.address().port }, (res) => {
+                const headersValid =
+                    Object.getPrototypeOf(res.headersDistinct) === null &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headersDistinct,
+                        '__proto__',
+                    ) &&
+                    res.headersDistinct.__proto__.join(',') === 'proto-value' &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headersDistinct,
+                        'constructor',
+                    ) &&
+                    res.headersDistinct.constructor.join(',') ===
+                        'constructor-value' &&
+                    !Object.prototype.hasOwnProperty.call(
+                        res.headers,
+                        '__proto__',
+                    ) &&
+                    Object.prototype.hasOwnProperty.call(
+                        res.headers,
+                        'constructor',
+                    ) &&
+                    res.headers.constructor === 'constructor-value';
+                res.on('end', () => finish(headersValid));
+                res.resume();
+            });
+            request.on('error', () => finish(false));
+        });
+    });
+}
+
+export async function httpRequestTrailerErrors() {
+    let activeSocket;
+    let currentCase;
+    let lastParserError;
+    let validSplitTrailers;
+    const requests = {};
+    const lifecycles = {};
+
+    const server = http.createServer((req, res) => {
+        const key = currentCase;
+        if (!requests[key]) requests[key] = [];
+        requests[key].push(req.url);
+        const lifecycle = {
+            req,
+            end: 0,
+            aborted: 0,
+            error: 0,
+            errorCode: undefined,
+            close: 0,
+        };
+        lifecycles[key] = lifecycle;
+        req.on('end', () => lifecycle.end++);
+        req.on('aborted', () => lifecycle.aborted++);
+        req.on('error', (error) => {
+            lifecycle.error++;
+            lifecycle.errorCode = error.code;
+        });
+        req.on('close', () => lifecycle.close++);
+        if (key === 'boundary-ok') {
+            req.on('end', () => res.end('boundary-ok'));
+        } else if (key === 'valid-final-crlf-split') {
+            req.on('end', () => {
+                validSplitTrailers = req.complete === true &&
+                    req.trailers['x-split'] === 'value' &&
+                    req.trailersDistinct['x-split'].join(',') === 'value' &&
+                    req.rawTrailers.join(',') === 'X-Split,value';
+                res.end('valid-final-crlf-split');
+            });
+        } else if (key === 'started-response') {
+            res.write('prefix');
+        }
+        req.resume();
+    });
+
+    const onClientError = (error, socket) => {
+        const lifecycle = lifecycles[currentCase];
+        lastParserError = {
+            code: error.code,
+            reason: error.reason,
+            bytesParsed: error.bytesParsed,
+            hasRawPacket: error.rawPacket instanceof Buffer,
+            rawPacket: error.rawPacket && error.rawPacket.toString('latin1'),
+            abortedAtCallback: lifecycle && lifecycle.req.aborted,
+            completeAtCallback: lifecycle && lifecycle.req.complete,
+        };
+        socket.destroy();
+    };
+    server.on('clientError', onClientError);
+
+    const exchange = (payload, endAfterWrite = false) => new Promise((resolve) => {
+        let settled = false;
+        let wire = '';
+        let socketErrorCode;
+        const finish = (timedOut) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timeout);
+            resolve({ wire, socketErrorCode, timedOut });
+        };
+        const timeout = setTimeout(() => {
+            if (activeSocket) activeSocket.destroy();
+            finish(true);
+        }, 10000);
+        const socket = net.connect({ port: server.address().port });
+        activeSocket = socket;
+        socket.on('connect', () => {
+            const parts = Array.isArray(payload) ? payload : [payload];
+            const writePart = (index) => {
+                if (socket.destroyed) return;
+                const isLast = index === parts.length - 1;
+                if (isLast && endAfterWrite) {
+                    socket.end(parts[index]);
+                    return;
+                }
+                socket.write(parts[index], () => {
+                    if (!isLast && !socket.destroyed) {
+                        setTimeout(() => writePart(index + 1), 50);
+                    }
+                });
+            };
+            writePart(0);
+        });
+        socket.on('data', (chunk) => {
+            wire += chunk.toString('latin1');
+        });
+        socket.on('error', (error) => {
+            socketErrorCode = error.code;
+        });
+        socket.on('close', () => finish(false));
+    });
+
+    const exchangeAfterResponse = (before, after) =>
+        new Promise((resolve) => {
+            let settled = false;
+            let sentAfter = false;
+            let wire = '';
+            let socketErrorCode;
+            const finish = (timedOut) => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve({ wire, socketErrorCode, timedOut });
+            };
+            const timeout = setTimeout(() => {
+                if (activeSocket) activeSocket.destroy();
+                finish(true);
+            }, 10000);
+            activeSocket = net.connect({ port: server.address().port });
+            activeSocket.on('connect', () => activeSocket.write(before));
+            activeSocket.on('data', (chunk) => {
+                wire += chunk.toString('latin1');
+                if (!sentAfter) {
+                    sentAfter = true;
+                    activeSocket.write(after);
+                }
+            });
+            activeSocket.on('error', (error) => {
+                socketErrorCode = error.code;
+            });
+            activeSocket.on('close', () => finish(false));
+        });
+
+    const nextTurn = () => new Promise((resolve) => setImmediate(resolve));
+    const settleLifecycle = async () => {
+        await nextTurn();
+        await nextTurn();
+        await nextTurn();
+    };
+    const waitForLifecycleClose = async (key) => {
+        const lifecycle = lifecycles[key];
+        if (!lifecycle || lifecycle.close > 0) return;
+        await new Promise((resolve) => {
+            let settled = false;
+            const finish = () => {
+                if (settled) return;
+                settled = true;
+                clearTimeout(timeout);
+                resolve();
+            };
+            const timeout = setTimeout(finish, 2000);
+            lifecycle.req.once('close', finish);
+        });
+    };
+    const lifecycleIsAborted = (key) => {
+        const lifecycle = lifecycles[key];
+        return lifecycle && lifecycle.req.complete === false &&
+            lifecycle.end === 0 && lifecycle.aborted === 1 &&
+            lifecycle.error === 1 && lifecycle.errorCode === 'ECONNRESET' &&
+            lifecycle.close === 1;
+    };
+    const lifecycleIsComplete = (key) => {
+        const lifecycle = lifecycles[key];
+        return lifecycle && lifecycle.req.complete === true &&
+            lifecycle.end === 1 && lifecycle.aborted === 0 &&
+            lifecycle.error === 0 && lifecycle.close === 1;
+    };
+    const handledErrorIsValid = (
+        code,
+        reason,
+        bytesParsed,
+        rawPacket,
+    ) =>
+        lastParserError && lastParserError.code === code &&
+        lastParserError.reason === reason &&
+        lastParserError.bytesParsed === bytesParsed &&
+        lastParserError.hasRawPacket === (rawPacket !== undefined) &&
+        lastParserError.rawPacket === rawPacket &&
+        lastParserError.abortedAtCallback === false &&
+        lastParserError.completeAtCallback === false;
+
+    const runHandled = async (key, payload, endAfterWrite = false) => {
+        currentCase = key;
+        lastParserError = undefined;
+        const result = await exchange(payload, endAfterWrite);
+        await settleLifecycle();
+        await waitForLifecycleClose(key);
+        return result;
+    };
+
+    const closeServer = () => new Promise((resolve) => {
+        if (activeSocket) activeSocket.destroy();
+        server.closeAllConnections();
+        server.close(resolve);
+    });
+
+    let failure;
+    try {
+        await new Promise((resolve) => server.listen(0, resolve));
+
+        const validSplitPrefix = Buffer.from(
+            'POST /valid-final-crlf-split HTTP/1.1\r\n' +
+            'Host: localhost\r\nConnection: close\r\n' +
+            'Transfer-Encoding: chunked\r\n\r\n' +
+            '0\r\nX-Split: value\r\n\r',
+            'latin1',
+        );
+        const validSplitSuffix = Buffer.from('\n', 'latin1');
+        let result = await runHandled(
+            'valid-final-crlf-split',
+            [validSplitPrefix, validSplitSuffix],
+        );
+        if (result.timedOut ||
+            !result.wire.includes('valid-final-crlf-split') ||
+            lastParserError !== undefined ||
+            validSplitTrailers !== true ||
+            !lifecycleIsComplete('valid-final-crlf-split')) {
+            failure = 'valid-final-crlf-split';
+        }
+
+        const vtPayload = Buffer.from(
+            'POST /bad-vt HTTP/1.1\r\n' +
+            'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+            '0\r\nX-Bad:\x0bvalue\r\n\r\n' +
+            'GET /smuggled HTTP/1.1\r\nHost: localhost\r\n\r\n',
+            'latin1',
+        );
+        result = await runHandled('vt', vtPayload);
+        if (result.timedOut || result.wire !== '' ||
+            requests.vt.join(',') !== '/bad-vt' ||
+            !handledErrorIsValid(
+                'HPE_INVALID_HEADER_TOKEN',
+                'Invalid header value char',
+                vtPayload.indexOf(0x0b),
+                vtPayload.toString('latin1'),
+            ) || !lifecycleIsAborted('vt')) {
+            failure = 'vertical-tab';
+        }
+
+        if (!failure) {
+            const ffPrefix = Buffer.from(
+                'POST /bad-ff HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\n',
+                'latin1',
+            );
+            const ffSuffix = Buffer.from(
+                'X-Bad:\x0cvalue\r\n\r\n',
+                'latin1',
+            );
+            result = await runHandled('ff', [ffPrefix, ffSuffix]);
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header value char',
+                    ffSuffix.indexOf(0x0c),
+                    ffSuffix.toString('latin1'),
+                ) || !lifecycleIsAborted('ff')) {
+                failure = 'form-feed';
+            }
+        }
+
+        const invalidTrailerPrefix = (key) =>
+            'POST /' + key + ' HTTP/1.1\r\n' +
+            'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+            '0\r\n';
+        for (const invalidCase of [
+            {
+                key: 'no-colon',
+                suffix: 'foo\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('foo\r\n') + 3;
+                },
+            },
+            {
+                key: 'invalid-name-before-cr',
+                suffix: 'fo o\r',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('fo o') + 2;
+                },
+            },
+            {
+                key: 'invalid-name',
+                suffix: 'a b\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf('a b') + 1;
+                },
+            },
+            {
+                key: 'obs-fold',
+                suffix: ' value\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf(' value');
+                },
+            },
+            {
+                key: 'empty-name',
+                suffix: ': value\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header token',
+                offset(payload) {
+                    return payload.indexOf(': value');
+                },
+            },
+            {
+                key: 'bare-lf',
+                suffix: 'X: value\nY: okay\r\n\r\n',
+                code: 'HPE_CR_EXPECTED',
+                reason: 'Missing expected CR after header value',
+                offset(payload) {
+                    return payload.indexOf('\nY');
+                },
+            },
+            {
+                key: 'bare-cr',
+                suffix: 'X: value\rY: okay\r\n\r\n',
+                code: 'HPE_LF_EXPECTED',
+                reason: 'Missing expected LF after header value',
+                offset(payload) {
+                    return payload.indexOf('\rY') + 1;
+                },
+            },
+            {
+                key: 'content-length',
+                suffix: 'Content-Length: 1\r\n\r\n' +
+                    'GET /smuggled-content-length HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_CONTENT_LENGTH',
+                reason: "Content-Length can't be present with Transfer-Encoding",
+                offset(payload) {
+                    return payload.indexOf('Content-Length:') +
+                        'Content-Length:'.length;
+                },
+            },
+            {
+                key: 'transfer-encoding',
+                suffix: 'Transfer-Encoding: chunked\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                offset(payload) {
+                    return payload.lastIndexOf('Transfer-Encoding: chunked') +
+                        'Transfer-Encoding: c'.length;
+                },
+            },
+            {
+                key: 'transfer-encoding-bare-cr',
+                suffix: 'Transfer-Encoding:\rX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-bare-cr HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_STRICT',
+                reason: 'Expected LF after CR',
+                offset(payload) {
+                    return payload.indexOf('\rX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-bare-lf',
+                suffix: 'Transfer-Encoding:\nX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-bare-lf HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header value char',
+                offset(payload) {
+                    return payload.indexOf('\nX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-leading-whitespace-cr',
+                suffix: 'Transfer-Encoding: \t\rX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-leading-whitespace-cr HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_STRICT',
+                reason: 'Expected LF after CR',
+                offset(payload) {
+                    return payload.indexOf('\rX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-leading-whitespace-lf',
+                suffix: 'Transfer-Encoding: \t\nX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-leading-whitespace-lf HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_HEADER_TOKEN',
+                reason: 'Invalid header value char',
+                offset(payload) {
+                    return payload.indexOf('\nX: okay') + 1;
+                },
+            },
+            {
+                key: 'transfer-encoding-mid-value-cr',
+                suffix: 'Transfer-Encoding: chunked\rX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-mid-value-cr HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                offset(payload) {
+                    return payload.lastIndexOf('Transfer-Encoding: chunked') +
+                        'Transfer-Encoding: c'.length;
+                },
+            },
+            {
+                key: 'transfer-encoding-mid-value-lf',
+                suffix: 'Transfer-Encoding: chunked\nX: okay\r\n\r\n' +
+                    'GET /smuggled-transfer-encoding-mid-value-lf HTTP/1.1\r\n' +
+                    'Host: localhost\r\n\r\n',
+                code: 'HPE_INVALID_TRANSFER_ENCODING',
+                reason: 'Invalid `Transfer-Encoding` header value',
+                offset(payload) {
+                    return payload.lastIndexOf('Transfer-Encoding: chunked') +
+                        'Transfer-Encoding: c'.length;
+                },
+            },
+        ]) {
+            if (failure) break;
+            const payload = Buffer.from(
+                invalidTrailerPrefix(invalidCase.key) + invalidCase.suffix,
+                'latin1',
+            );
+            result = await runHandled(invalidCase.key, payload);
+            if (result.timedOut || result.wire !== '' ||
+                requests[invalidCase.key].join(',') !==
+                    '/' + invalidCase.key ||
+                !handledErrorIsValid(
+                    invalidCase.code,
+                    invalidCase.reason,
+                    invalidCase.offset(payload),
+                    payload.toString('latin1'),
+                ) || !lifecycleIsAborted(invalidCase.key)) {
+                failure = invalidCase.key;
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-no-colon') + 'foo',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('\r\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-no-colon',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header token',
+                    0,
+                    splitSuffix.toString('latin1'),
+                ) || lastParserError.bytesParsed < 0 ||
+                !lifecycleIsAborted('split-no-colon')) {
+                failure = 'split-no-colon';
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-no-colon-cr') + 'foo\r',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-no-colon-cr',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_HEADER_TOKEN',
+                    'Invalid header token',
+                    splitPrefix.length - 1,
+                    splitPrefix.toString('latin1'),
+                ) || !lifecycleIsAborted('split-no-colon-cr')) {
+                failure = 'split-no-colon-cr';
+            }
+        }
+
+        if (!failure) {
+            const splitPrefix = Buffer.from(
+                invalidTrailerPrefix('split-bare-cr') + 'X: value\r',
+                'latin1',
+            );
+            const splitSuffix = Buffer.from('Y: okay\r\n\r\n', 'latin1');
+            result = await runHandled(
+                'split-bare-cr',
+                [splitPrefix, splitSuffix],
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_LF_EXPECTED',
+                    'Missing expected LF after header value',
+                    0,
+                    splitSuffix.toString('latin1'),
+                ) || !lifecycleIsAborted('split-bare-cr')) {
+                failure = 'split-bare-cr';
+            }
+        }
+
+        for (const [key, suffix] of [
+            ['empty-eof', ''],
+            ['partial-eof', 'X-Test: value\r\n'],
+        ]) {
+            if (failure) break;
+            result = await runHandled(key,
+                'POST /' + key + ' HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\n' + suffix,
+                true,
+            );
+            if (result.timedOut || result.wire !== '' ||
+                !handledErrorIsValid(
+                    'HPE_INVALID_EOF_STATE',
+                    'Invalid EOF state',
+                    0,
+                    undefined,
+                ) || !lifecycleIsAborted(key)) {
+                failure = key;
+            }
+        }
+
+        if (!failure) {
+            server.removeListener('clientError', onClientError);
+            currentCase = 'default';
+            result = await exchange(
+                'POST /default HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\nBad Name: value\r\n\r\n' +
+                'GET /smuggled HTTP/1.1\r\nHost: localhost\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('default');
+            if (result.timedOut ||
+                result.wire !== 'HTTP/1.1 400 Bad Request\r\n' +
+                    'Connection: close\r\n\r\n' ||
+                requests.default.join(',') !== '/default' ||
+                !lifecycleIsAborted('default')) {
+                failure = { phase: 'default-handler', result };
+            }
+        }
+
+        if (!failure) {
+            currentCase = 'boundary-ok';
+            result = await exchange(
+                'POST /boundary-ok HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n' +
+                'Connection: close\r\n\r\n' +
+                '0\r\nX: ' + 'a'.repeat(16382) + '\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('boundary-ok');
+            if (result.timedOut || !result.wire.includes('boundary-ok') ||
+                !lifecycleIsComplete('boundary-ok')) {
+                failure = { phase: 'boundary-ok', result };
+            }
+        }
+
+        if (!failure) {
+            currentCase = 'overflow';
+            result = await exchange(
+                'POST /overflow HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\nX: ' + 'a'.repeat(16383) + '\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('overflow');
+            if (result.timedOut ||
+                result.wire !==
+                    'HTTP/1.1 431 Request Header Fields Too Large\r\n' +
+                    'Connection: close\r\n\r\n' ||
+                !lifecycleIsAborted('overflow')) {
+                failure = { phase: 'overflow', result };
+            }
+        }
+
+        if (!failure) {
+            currentCase = 'started-response';
+            result = await exchangeAfterResponse(
+                'POST /started-response HTTP/1.1\r\n' +
+                'Host: localhost\r\nTransfer-Encoding: chunked\r\n\r\n' +
+                '0\r\n',
+                'Bad Name: value\r\n\r\n',
+            );
+            await settleLifecycle();
+            await waitForLifecycleClose('started-response');
+            if (result.timedOut || !result.wire.includes('prefix') ||
+                result.wire.includes('400 Bad Request') ||
+                result.wire.includes('431 Request Header Fields Too Large') ||
+                result.wire.split('HTTP/1.1').length !== 2 ||
+                !lifecycleIsAborted('started-response')) {
+                failure = { phase: 'started-response', result };
+            }
+        }
+    } catch (error) {
+        failure = error && (error.stack || error.message) || String(error);
+    } finally {
+        await closeServer();
+    }
+
+    if (failure) {
+        console.log(JSON.stringify({
+            failure,
+            lastParserError,
+            requests,
+            lifecycles: Object.fromEntries(Object.entries(lifecycles).map(
+                ([key, value]) => [key, {
+                    complete: value.req.complete,
+                    end: value.end,
+                    aborted: value.aborted,
+                    error: value.error,
+                    errorCode: value.errorCode,
+                    close: value.close,
+                }],
+            )),
+        }));
+    }
+    return !failure;
+}
+
 export async function httpPipelinedResponseOrder() {
     return new Promise((resolve) => {
         let settled = false;
@@ -709,6 +2510,426 @@ export async function httpPipelinedResponseOrder() {
             });
         });
     });
+}
+
+export async function httpExpectContinueFlow() {
+    const listen = (server) => new Promise((resolve) => server.listen(0, resolve));
+    const close = async (server) => {
+        server.closeAllConnections();
+        await new Promise((resolve) => server.close(resolve));
+    };
+    const exchange = async (server, initialRequest, onWire) => {
+        await listen(server);
+        let socket;
+        try {
+            return await new Promise((resolve) => {
+                let settled = false;
+                let wire = '';
+                const finish = (result) => {
+                    if (settled) return;
+                    settled = true;
+                    clearTimeout(timeout);
+                    if (socket) socket.destroy();
+                    resolve(result);
+                };
+                const timeout = setTimeout(() => finish({ timedOut: true, wire }), 2000);
+                socket = net.connect({ port: server.address().port });
+                socket.on('connect', () => socket.write(initialRequest));
+                socket.on('data', (chunk) => {
+                    wire += chunk.toString('latin1');
+                    if (onWire) onWire(wire, socket);
+                });
+                socket.on('error', (error) => finish({ error: error.message, wire }));
+                socket.on('end', () => finish({ wire }));
+                socket.on('close', () => finish({ wire }));
+            });
+        } finally {
+            await close(server);
+        }
+    };
+
+    let autoRequests = 0;
+    let autoBody = '';
+    let autoExpect;
+    let autoSent100;
+    let autoEnd = 0;
+    let autoClose = 0;
+    const autoServer = http.createServer((req, res) => {
+        autoRequests++;
+        autoExpect = res._expect_continue;
+        autoSent100 = res._sent100;
+        req.on('data', (chunk) => {
+            autoBody += chunk.toString();
+        });
+        req.on('end', () => {
+            autoEnd++;
+            res.end('auto');
+        });
+        req.on('close', () => autoClose++);
+    });
+    let autoBodySent = false;
+    const auto = await exchange(
+        autoServer,
+        'POST /auto HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: other, 100-Continue\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\n',
+        (wire, socket) => {
+            if (!autoBodySent && wire.includes('HTTP/1.1 100 Continue\r\n\r\n')) {
+                autoBodySent = true;
+                socket.write('body');
+            }
+        },
+    );
+    const autoContinue = auto.wire.indexOf('HTTP/1.1 100 Continue');
+    const autoFinal = auto.wire.indexOf('HTTP/1.1 200 OK');
+    if (auto.timedOut || auto.error || autoRequests !== 1 ||
+        autoExpect !== true || autoSent100 !== true ||
+        autoBody !== 'body' || autoEnd !== 1 || autoClose !== 1 ||
+        autoContinue === -1 || autoFinal <= autoContinue ||
+        !auto.wire.includes('\r\n\r\nauto')) {
+        console.log(JSON.stringify({ phase: 'automatic', auto, autoRequests,
+            autoExpect, autoSent100, autoBody, autoEnd, autoClose }));
+        return false;
+    }
+
+    const explicitRequests = [];
+    let checkContinue = 0;
+    let explicitBody = '';
+    let explicitBefore;
+    let explicitAfter;
+    let explicitExpect;
+    let continueCallbacks = 0;
+    let continueCallbackError;
+    const explicitServer = http.createServer((req, res) => {
+        explicitRequests.push(req.url);
+        res.end('next');
+    });
+    explicitServer.on('checkContinue', (req, res) => {
+        checkContinue++;
+        explicitExpect = res._expect_continue;
+        explicitBefore = res._sent100;
+        res.writeContinue((error) => {
+            continueCallbacks++;
+            continueCallbackError = error;
+        });
+        explicitAfter = res._sent100;
+        req.on('data', (chunk) => {
+            explicitBody += chunk.toString();
+        });
+        req.on('end', () => res.end('explicit'));
+    });
+    let explicitBodySent = false;
+    const explicit = await exchange(
+        explicitServer,
+        'POST /explicit HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n\r\n',
+        (wire, socket) => {
+            if (!explicitBodySent && wire.includes('HTTP/1.1 100 Continue\r\n\r\n')) {
+                explicitBodySent = true;
+                socket.write(
+                    'data' +
+                    'GET /next HTTP/1.1\r\n' +
+                    'Host: localhost\r\n' +
+                    'Connection: close\r\n\r\n',
+                );
+            }
+        },
+    );
+    const explicitContinue = explicit.wire.indexOf('HTTP/1.1 100 Continue');
+    const explicitFinal = explicit.wire.indexOf('HTTP/1.1 200 OK');
+    const explicitNext = explicit.wire.indexOf('HTTP/1.1 200 OK', explicitFinal + 1);
+    if (explicit.timedOut || explicit.error ||
+        explicitRequests.join(',') !== '/next' ||
+        checkContinue !== 1 || explicitExpect !== true ||
+        explicitBefore !== false || explicitAfter !== true ||
+        continueCallbacks !== 1 || continueCallbackError !== null ||
+        explicitBody !== 'data' || explicitContinue === -1 ||
+        explicitFinal <= explicitContinue || explicitNext <= explicitFinal ||
+        !explicit.wire.slice(explicitFinal, explicitNext)
+            .includes('Connection: keep-alive') ||
+        !explicit.wire.includes('\r\n\r\nexplicit') ||
+        !explicit.wire.includes('\r\n\r\nnext')) {
+        console.log(JSON.stringify({ phase: 'explicit', explicit,
+            explicitRequests, checkContinue, explicitExpect, explicitBefore,
+            explicitAfter, continueCallbacks, continueCallbackError,
+            explicitBody }));
+        return false;
+    }
+
+    const rejectWithoutContinue = async (maxRequestsPerSocket) => {
+        let requests = 0;
+        let checks = 0;
+        let ends = 0;
+        const server = http.createServer(() => requests++);
+        server.on('checkContinue', (req, res) => {
+            checks++;
+            req.on('end', () => ends++);
+            req.resume();
+            res.statusCode = 417;
+            res.end('rejected');
+        });
+        if (maxRequestsPerSocket !== undefined) {
+            server.maxRequestsPerSocket = maxRequestsPerSocket;
+        }
+        const result = await exchange(
+            server,
+            'POST /rejected HTTP/1.1\r\n' +
+            'Host: localhost\r\n' +
+            'Expect: 100-continue\r\n' +
+            'Content-Length: 4\r\n\r\nbody',
+        );
+        return { result, requests, checks, ends };
+    };
+    for (const [caseName, maxRequestsPerSocket] of [
+        ['ordinary', undefined],
+        ['request-limit-boundary', 1],
+    ]) {
+        const rejected = await rejectWithoutContinue(maxRequestsPerSocket);
+        const result = rejected.result;
+        if (result.timedOut || result.error || rejected.requests !== 0 ||
+            rejected.checks !== 1 || rejected.ends !== 1 ||
+            result.wire.includes('100 Continue') ||
+            !result.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+            !result.wire.includes('Connection: close') ||
+            !result.wire.includes('\r\n\r\nrejected')) {
+            console.log(JSON.stringify({ phase: 'unanswered-continue-' + caseName,
+                maxRequestsPerSocket, rejected }));
+            return false;
+        }
+    }
+
+    const overrideRequests = [];
+    let overrideCheckContinue = 0;
+    const overrideServer = http.createServer((req, res) => {
+        overrideRequests.push(req.url);
+        res.end('after');
+    });
+    overrideServer.on('checkContinue', (req, res) => {
+        overrideCheckContinue++;
+        req.resume();
+        res.setHeader('Connection', 'keep-alive');
+        res.statusCode = 417;
+        res.end('override');
+    });
+    const override = await exchange(
+        overrideServer,
+        'POST /override HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n\r\nbody' +
+        'GET /after HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    const overrideFailed = override.wire.indexOf('HTTP/1.1 417 Expectation Failed');
+    const overrideAfter = override.wire.indexOf('HTTP/1.1 200 OK', overrideFailed + 1);
+    if (override.timedOut || override.error || overrideCheckContinue !== 1 ||
+        overrideRequests.join(',') !== '/after' ||
+        override.wire.includes('100 Continue') || overrideFailed === -1 ||
+        overrideAfter <= overrideFailed ||
+        !override.wire.slice(overrideFailed, overrideAfter)
+            .includes('Connection: keep-alive') ||
+        !override.wire.includes('\r\n\r\noverride') ||
+        !override.wire.includes('\r\n\r\nafter')) {
+        console.log(JSON.stringify({ phase: 'expect-connection-override',
+            override, overrideRequests, overrideCheckContinue }));
+        return false;
+    }
+
+    const requestCloseRequests = [];
+    let requestCloseChecks = 0;
+    const requestCloseServer = http.createServer((req, res) => {
+        requestCloseRequests.push(req.url);
+        res.end('unexpected');
+    });
+    requestCloseServer.on('checkContinue', (req, res) => {
+        requestCloseChecks++;
+        req.resume();
+        res.setHeader('Connection', 'keep-alive');
+        res.statusCode = 417;
+        res.end('closed');
+    });
+    const requestClose = await exchange(
+        requestCloseServer,
+        'POST /closed HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: 100-continue\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\nbody' +
+        'GET /after HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    if (requestClose.timedOut || requestClose.error ||
+        requestCloseChecks !== 1 || requestCloseRequests.length !== 0 ||
+        requestClose.wire.includes('100 Continue') ||
+        !requestClose.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+        !requestClose.wire.includes('Connection: keep-alive') ||
+        !requestClose.wire.includes('\r\n\r\nclosed') ||
+        requestClose.wire.includes('HTTP/1.1 200 OK')) {
+        console.log(JSON.stringify({ phase: 'expect-request-close',
+            requestClose, requestCloseRequests, requestCloseChecks }));
+        return false;
+    }
+
+    const defaultRequests = [];
+    const defaultServer = http.createServer((req, res) => {
+        defaultRequests.push(req.url);
+        res.end('next');
+    });
+    const defaultResult = await exchange(
+        defaultServer,
+        'POST /unsupported HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: meoww\r\n' +
+        'Content-Length: 4\r\n\r\n' +
+        'body' +
+        'GET /next HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    const expectationFailed = defaultResult.wire.indexOf(
+        'HTTP/1.1 417 Expectation Failed',
+    );
+    const nextResponse = defaultResult.wire.indexOf(
+        'HTTP/1.1 200 OK',
+        expectationFailed + 1,
+    );
+    if (defaultResult.timedOut || defaultResult.error ||
+        defaultRequests.join(',') !== '/next' ||
+        expectationFailed === -1 || nextResponse <= expectationFailed ||
+        !defaultResult.wire.includes('\r\n\r\nnext')) {
+        console.log(JSON.stringify({ phase: 'default-expectation',
+            defaultResult, defaultRequests }));
+        return false;
+    }
+
+    let expectationRequests = 0;
+    let checkExpectation = 0;
+    let expectationComplete;
+    const expectationServer = http.createServer(() => expectationRequests++);
+    expectationServer.on('checkExpectation', (req, res) => {
+        checkExpectation++;
+        req.on('end', () => {
+            expectationComplete = req.complete;
+            res.statusCode = 417;
+            res.end('custom');
+        });
+        req.resume();
+    });
+    const expectation = await exchange(
+        expectationServer,
+        'POST /custom HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Expect: custom\r\n' +
+        'Content-Length: 4\r\n' +
+        'Connection: close\r\n\r\ndata',
+    );
+    if (expectation.timedOut || expectation.error || expectationRequests !== 0 ||
+        checkExpectation !== 1 || expectationComplete !== true ||
+        !expectation.wire.includes('HTTP/1.1 417 Expectation Failed') ||
+        !expectation.wire.includes('\r\n\r\ncustom')) {
+        console.log(JSON.stringify({ phase: 'custom-expectation', expectation,
+            expectationRequests, checkExpectation, expectationComplete }));
+        return false;
+    }
+
+    let legacyRequests = 0;
+    let legacyCheckContinue = 0;
+    let legacyCheckExpectation = 0;
+    const legacyServer = http.createServer((_req, res) => {
+        legacyRequests++;
+        res.end('legacy');
+    });
+    legacyServer.on('checkContinue', () => legacyCheckContinue++);
+    legacyServer.on('checkExpectation', () => legacyCheckExpectation++);
+    const legacy = await exchange(
+        legacyServer,
+        'GET /legacy HTTP/1.0\r\n' +
+        'Expect: custom\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    if (legacy.timedOut || legacy.error || legacyRequests !== 1 ||
+        legacyCheckContinue !== 0 || legacyCheckExpectation !== 0 ||
+        legacy.wire.includes('100 Continue') ||
+        legacy.wire.includes('417 Expectation Failed') ||
+        !legacy.wire.includes('\r\n\r\nlegacy')) {
+        console.log(JSON.stringify({ phase: 'http-1.0', legacy, legacyRequests,
+            legacyCheckContinue, legacyCheckExpectation }));
+        return false;
+    }
+
+    let skippedHintCallbacks = 0;
+    let earlyHintCallbacks = 0;
+    let earlyHintCallbackError;
+    let sparseLinkErrorCode;
+    const earlyHintsServer = http.createServer((_req, res) => {
+        res.writeEarlyHints({ test: 'missing-link' }, () => skippedHintCallbacks++);
+        res.writeEarlyHints(
+            { link: undefined, test: 'undefined-link' },
+            () => skippedHintCallbacks++,
+        );
+        res.writeEarlyHints({ link: [] }, () => skippedHintCallbacks++);
+        res.writeEarlyHints({
+            link: '</lower.js>; rel=preload',
+            Link: '</upper.js>; rel=preload',
+            test: 'included',
+        }, (error) => {
+            earlyHintCallbacks++;
+            earlyHintCallbackError = error;
+        });
+        res.writeEarlyHints({
+            link: [{
+                toString() {
+                    return '</coerced.js>; rel=preload';
+                },
+            }],
+        }, (error) => {
+            earlyHintCallbacks++;
+            earlyHintCallbackError ||= error;
+        });
+        try {
+            const sparseLinks = [];
+            sparseLinks.length = 2;
+            sparseLinks[1] = '</sparse.js>; rel=preload';
+            res.writeEarlyHints({ link: sparseLinks });
+        } catch (error) {
+            sparseLinkErrorCode = error.code;
+        }
+        res.end('hints');
+    });
+    const earlyHints = await exchange(
+        earlyHintsServer,
+        'GET /hints HTTP/1.1\r\n' +
+        'Host: localhost\r\n' +
+        'Connection: close\r\n\r\n',
+    );
+    const expectedEarlyHints =
+        'HTTP/1.1 103 Early Hints\r\n' +
+        'Link: </lower.js>; rel=preload\r\n' +
+        'Link: </upper.js>; rel=preload\r\n' +
+        'test: included\r\n\r\n' +
+        'HTTP/1.1 103 Early Hints\r\n' +
+        'Link: </coerced.js>; rel=preload\r\n\r\n';
+    if (earlyHints.timedOut || earlyHints.error || skippedHintCallbacks !== 0 ||
+        earlyHintCallbacks !== 2 || earlyHintCallbackError !== null ||
+        sparseLinkErrorCode !== 'ERR_INVALID_ARG_VALUE' ||
+        earlyHints.wire.split('HTTP/1.1 103 Early Hints').length !== 3 ||
+        !earlyHints.wire.includes(expectedEarlyHints) ||
+        earlyHints.wire.includes('missing-link') ||
+        earlyHints.wire.includes('undefined-link') ||
+        !earlyHints.wire.includes('\r\n\r\nhints')) {
+        console.log(JSON.stringify({ phase: 'early-hints', earlyHints,
+            skippedHintCallbacks, earlyHintCallbacks,
+            earlyHintCallbackError, sparseLinkErrorCode }));
+        return false;
+    }
+
+    return true;
 }
 
 export async function httpHalfOpenPipelinedRequests() {

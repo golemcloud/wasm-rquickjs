@@ -77,6 +77,7 @@ interface types {
   f15: func(bytes: list<u8>) -> list<u8>;
   f16: func(in: option<list<rec2>>) -> option<list<string>>;
   f17: func(in: option<list<string>>) -> option<list<rec2>>;
+  f18: func(error: var1) -> result<_, var1>;
 }
 
 world types-in-exports {
