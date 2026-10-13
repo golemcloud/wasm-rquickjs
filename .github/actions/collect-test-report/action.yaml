@@ -13,25 +13,19 @@ runs:
       if: always()
       with:
         name: ${{ inputs.name }}-report-attempt${{ github.run_attempt }}
-        path: |
-          target/ctrf-*.json
-          target/ci-retries/
+        path: target/ctrf-*.json
         if-no-files-found: warn
         retention-days: 35
     - name: Require reports for successful tests
       if: success()
       shell: bash
       run: |
-        python3 - <<'PY'
-        import glob
-        import json
-
-        paths = glob.glob('target/ctrf-*.json')
-        if not paths:
-            raise SystemExit('Successful test job produced no CTRF reports')
-        for path in paths:
-            with open(path) as report:
-                data = json.load(report)
-            if not data['results']['tests']:
-                raise SystemExit(f'Empty test report: {path}')
-        PY
+        shopt -s nullglob
+        reports=(target/ctrf-*.json)
+        if (( ${#reports[@]} == 0 )); then
+          echo 'Successful test job produced no CTRF reports' >&2
+          exit 1
+        fi
+        for report in "${reports[@]}"; do
+          jq -e -s 'length == 1 and (.[0].results.tests | type == "array" and length > 0)' "$report" > /dev/null
+        done
