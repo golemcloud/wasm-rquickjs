@@ -708,7 +708,9 @@ function normalizeIncomingRawPairs(nativeRes) {
 function parseIncomingHeaders(rawPairs, joinDuplicateHeaders) {
     const rawHeaders = [];
     const headers = {};
-    const headersDistinct = {};
+    const headersDistinct = Object.create(null);
+    const hasOwn = (object, key) =>
+        Object.prototype.hasOwnProperty.call(object, key);
 
     for (const pair of rawPairs) {
         const name = String(pair[0]);
@@ -719,15 +721,17 @@ function parseIncomingHeaders(rawPairs, joinDuplicateHeaders) {
             const valueString = String(value);
             rawHeaders.push(name, valueString);
 
-            if (!headersDistinct[lower]) {
+            if (!hasOwn(headersDistinct, lower)) {
                 headersDistinct[lower] = [];
             }
             headersDistinct[lower].push(valueString);
 
+            if (lower === '__proto__') continue;
+
             if (lower === SET_COOKIE_HEADER) {
-                if (Array.isArray(headers[lower])) {
+                if (hasOwn(headers, lower) && Array.isArray(headers[lower])) {
                     headers[lower].push(valueString);
-                } else if (headers[lower] !== undefined) {
+                } else if (hasOwn(headers, lower)) {
                     headers[lower] = [headers[lower], valueString];
                 } else {
                     headers[lower] = [valueString];
@@ -736,7 +740,7 @@ function parseIncomingHeaders(rawPairs, joinDuplicateHeaders) {
             }
 
             if (lower === COOKIE_HEADER) {
-                if (headers[lower] !== undefined) {
+                if (hasOwn(headers, lower)) {
                     headers[lower] += '; ' + valueString;
                 } else {
                     headers[lower] = valueString;
@@ -746,7 +750,7 @@ function parseIncomingHeaders(rawPairs, joinDuplicateHeaders) {
 
             if (joinDuplicateHeaders) {
                 // When joinDuplicateHeaders is true, join ALL duplicates with ', '
-                if (headers[lower] !== undefined) {
+                if (hasOwn(headers, lower)) {
                     headers[lower] += ', ' + valueString;
                 } else {
                     headers[lower] = valueString;
@@ -755,13 +759,13 @@ function parseIncomingHeaders(rawPairs, joinDuplicateHeaders) {
             }
 
             if (NO_DUPLICATE_HEADERS.has(lower)) {
-                if (headers[lower] === undefined) {
+                if (!hasOwn(headers, lower)) {
                     headers[lower] = valueString;
                 }
                 continue;
             }
 
-            if (headers[lower] !== undefined) {
+            if (hasOwn(headers, lower)) {
                 headers[lower] += ', ' + valueString;
             } else {
                 headers[lower] = valueString;
