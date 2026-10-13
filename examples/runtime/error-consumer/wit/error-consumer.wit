@@ -1,0 +1,20 @@
+package quickjs:error-consumer;
+
+interface output {
+  variant detail {
+    permission-denied,
+    unavailable(string),
+  }
+  variant failure {
+    permission-denied,
+    backend-error(string),
+    nested(detail),
+  }
+  rethrow: func(kind: string) -> result<string, failure>;
+}
+
+world error-consumer {
+  import quickjs:error-provider/api;
+  export observe: func() -> string;
+  export output;
+}

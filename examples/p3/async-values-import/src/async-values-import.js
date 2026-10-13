@@ -200,3 +200,52 @@ export async function runImportCheckpointFuture() {
 export function readImportCheckpointCount() {
   return importCheckpointCount;
 }
+
+export async function runNestedImports() {
+  const { runJavaScript, startJavaScript } = await import('wasm-rquickjs:execution');
+  const results = [];
+  for (let i = 0; i < 3; i++) {
+    const result = await runJavaScript({
+      source: `
+        const host = await import('test:async-values-import/host');
+        const future = await host.consumeFuture(Promise.resolve(${17 + i}));
+        const stream = await host.consumeStream([2, 3, ${7 + i}]);
+        const checked = await host.checkFuture(Promise.resolve(${23 + i}));
+        let error;
+        try {
+          await host.checkFuture(Promise.resolve(13));
+        } catch (caught) {
+          error = caught;
+        }
+        return { future, stream, checked, error };
+      `,
+    });
+    results.push(result.value);
+  }
+
+  const pendingSource = `
+    const host = await import('test:async-values-import/host');
+    const pending = host.delayedFuture(Promise.resolve(41));
+    console.log('pending');
+    return await pending;
+  `;
+  let timedOut = false;
+  try {
+    await runJavaScript({ source: pendingSource, timeoutMs: 20 });
+  } catch (error) {
+    timedOut = String(error).includes('timed out');
+  }
+  const job = startJavaScript({ source: pendingSource });
+  await new Promise(resolve => job.stdout.once('data', resolve));
+  job.cancel();
+  let cancelled = false;
+  try {
+    await job.result;
+  } catch (error) {
+    cancelled = String(error).includes('cancelled');
+  }
+  // Let both native imports finish after their child runtimes have been destroyed.
+  await new Promise(resolve => setTimeout(resolve, 150));
+  const control = await host.consumeFuture(Promise.resolve(53));
+  return JSON.stringify({ results, timedOut, cancelled, control });
+}

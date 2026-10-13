@@ -50,8 +50,21 @@ missing classification inputs from silently changing the compatibility totals.
 are run by the test harness. Each entry can include:
 
 - `{}` — test should pass
-- `{ "flaky": true }` — retry up to 10 times
+- `{ "flaky": true }` — one retry (two total attempts, each with fresh runtime state)
 - `{ "skip": true, "reason": "..." }` — skip with explanation
+
+Retries are bounded by test-r's native `RetryKnownFlaky(2)` policy: a passing
+attempt ends the test, and two failed attempts fail it. Non-split tests use the
+entry's `flaky` flag; split tests use only their own subtest's `flaky` flag.
+There are no body-level or CI-wrapper retries layered on top. Each invocation
+constructs a fresh `TestInstance` and temporary filesystem; only immutable
+prepared components are reused.
+
+Per-case timeouts remain inside the test body and return an error with stdout,
+stderr, and host-trace diagnostics, so a known flaky case can retry a timeout.
+They are not test-r harness timeouts, which are not retryable. Native CTRF output
+records retry counts, flaky status, and attempt history without post-processing
+the report or replacing the original failure evidence.
 
 ## Common Shim
 

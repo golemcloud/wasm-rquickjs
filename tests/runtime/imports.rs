@@ -1,4 +1,4 @@
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use anyhow::anyhow;
 use camino::Utf8Path;
 use indoc::indoc;
@@ -65,6 +65,109 @@ async fn imports1(#[tagged_as("imports1")] compiled: &CompiledTest) -> anyhow::R
         "Expected a number in the second part"
     );
 
+    Ok(())
+}
+
+#[test_dep(tagged_as = "error_provider", scope = Cloneable)]
+async fn compiled_error_provider() -> CompiledTest {
+    CompiledTest::new_unoptimized_with_features(
+        Utf8Path::new("examples/runtime/error-provider"),
+        true,
+        crate::common::FeatureCombination::Normal,
+    )
+    .await
+    .expect("Failed to compile error-provider")
+}
+
+#[test_dep(tagged_as = "error_consumer", scope = Cloneable)]
+async fn compiled_error_consumer() -> CompiledTest {
+    CompiledTest::new_unoptimized_with_features(
+        Utf8Path::new("examples/runtime/error-consumer"),
+        true,
+        crate::common::FeatureCombination::Normal,
+    )
+    .await
+    .expect("Failed to compile error-consumer")
+}
+
+#[test]
+async fn imported_errors_are_readable_and_rethrow_as_typed_results(
+    #[tagged_as("error_provider")] provider: &CompiledTest,
+    #[tagged_as("error_consumer")] consumer: &CompiledTest,
+) -> anyhow::Result<()> {
+    let composed = provider.plug_into(consumer)?;
+    let mut instance = TestInstance::new(composed.wasm_path()).await?;
+    let (result, _) = instance
+        .invoke_and_capture_output(None, "observe", &[])
+        .await;
+    let Some(Val::String(observed)) = result? else {
+        return Err(anyhow!("Expected observations"));
+    };
+    let observed: serde_json::Value = serde_json::from_str(&observed)?;
+    let denied = serde_json::json!({
+        "text": "{\"tag\":\"permission-denied\"}", "message": "{\"tag\":\"permission-denied\"}",
+        "json": "{\"tag\":\"permission-denied\"}", "keys": ["tag"],
+        "spread": "{\"tag\":\"permission-denied\"}"
+    });
+    let backend = serde_json::json!({
+        "text": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}", "message": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}",
+        "json": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}", "keys": ["tag", "val"],
+        "spread": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}"
+    });
+    assert_eq!(
+        observed,
+        serde_json::json!([
+            denied, backend,
+            {"text": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}", "message": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}",
+             "json": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}", "keys": ["tag", "val"],
+             "spread": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}"},
+            backend,
+            {"text": "permission-denied", "message": "permission-denied", "json": "\"permission-denied\"", "keys": [], "spread": null},
+            {"text": "host unavailable", "message": "host unavailable", "json": "\"host unavailable\"", "keys": [], "spread": null},
+            {"text": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}",
+             "message": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}",
+             "json": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}", "keys": ["tag", "toString", "count"],
+             "spread": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}"},
+            "ok"
+        ])
+    );
+
+    for (kind, expected) in [
+        (
+            "permission-denied",
+            Val::Result(Err(Some(Box::new(Val::Variant(
+                "permission-denied".into(),
+                None,
+            ))))),
+        ),
+        (
+            "backend-error",
+            Val::Result(Err(Some(Box::new(Val::Variant(
+                "backend-error".into(),
+                Some(Box::new(Val::String("service unavailable".into()))),
+            ))))),
+        ),
+        (
+            "nested",
+            Val::Result(Err(Some(Box::new(Val::Variant(
+                "nested".into(),
+                Some(Box::new(Val::Variant("permission-denied".into(), None))),
+            ))))),
+        ),
+        (
+            "success",
+            Val::Result(Ok(Some(Box::new(Val::String("ok".into()))))),
+        ),
+    ] {
+        let (result, _) = instance
+            .invoke_and_capture_output(
+                Some("quickjs:error-consumer/output"),
+                "rethrow",
+                &[Val::String(kind.into())],
+            )
+            .await;
+        assert_eq!(result?, Some(expected), "rethrow {kind}");
+    }
     Ok(())
 }
 
@@ -215,5 +318,44 @@ async fn imports3(
         )
     );
 
+    Ok(())
+}
+
+#[test]
+async fn imports3_nested_variants(
+    #[tagged_as("imports3")] compiled: &CompiledTest,
+    #[tagged_as("types_in_exports")] types_in_exports: &CompiledTest,
+) -> anyhow::Result<()> {
+    let composed = types_in_exports.plug_into(compiled)?;
+    for warm_parent in [true, false] {
+        let (result, _) = invoke_and_capture_output(
+            composed.wasm_path(),
+            None,
+            "nested-variants",
+            &[Val::Bool(warm_parent)],
+        )
+        .await;
+        let Some(Val::String(json)) = result? else {
+            anyhow::bail!("expected JSON string result");
+        };
+        let report: serde_json::Value = serde_json::from_str(&json)?;
+        let expected: Vec<_> = (0..3)
+            .map(|i| {
+                serde_json::json!({
+                    "values": [
+                        { "tag": "specific", "val": format!("child-{i}") },
+                        { "tag": "none" },
+                        { "tag": "specific", "val": format!("again-{i}") },
+                    ],
+                    "error": { "tag": "any" },
+                })
+            })
+            .collect();
+        assert_eq!(
+            report,
+            serde_json::json!(expected),
+            "warm_parent={warm_parent}"
+        );
+    }
     Ok(())
 }

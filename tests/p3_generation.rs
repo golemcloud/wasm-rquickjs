@@ -13,6 +13,8 @@ use wasm_rquickjs::{
     generate_wrapper_crate_with_target,
 };
 
+mod p3_build;
+
 /// Starts a minimal single-threaded HTTP/1.1 test server on an ephemeral loopback port and
 /// returns the bound port. The server runs on a detached background thread for the lifetime of
 /// the test process and serves:
@@ -345,7 +347,7 @@ fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
     let contents = std::fs::read_to_string(&manifest)?;
     let remote_patch = concat!(
         "golem-websocket = { git = \"https://github.com/golemcloud/wasm-rquickjs\", ",
-        "branch = \"wasi-p3\" }"
+        "branch = \"gol804-websocket-current-generator\" }"
     );
     let local_crate = Utf8Path::new(env!("CARGO_MANIFEST_DIR")).join("crates/golem-websocket");
     let local_patch = format!("golem-websocket = {{ path = \"{local_crate}\" }}");
@@ -355,6 +357,21 @@ fn use_local_golem_websocket(root: &Utf8Path) -> anyhow::Result<()> {
         "generated Cargo.toml did not contain the expected golem-websocket branch patch"
     );
     std::fs::write(manifest, updated)?;
+    // The copied skeleton lockfile still identifies the bridge by its Git source.
+    let mut status = Command::new("cargo")
+        .args(["update", "--offline", "-p", "golem-websocket"])
+        .current_dir(root.join("out"))
+        .status()?;
+    if !status.success() {
+        status = Command::new("cargo")
+            .args(["update", "-p", "golem-websocket"])
+            .current_dir(root.join("out"))
+            .status()?;
+    }
+    anyhow::ensure!(
+        status.success(),
+        "failed to lock the local golem-websocket bridge"
+    );
     Ok(())
 }
 
@@ -373,7 +390,9 @@ fn build_p3_with_features(
     wasm_name: &str,
     features: Option<&str>,
 ) -> anyhow::Result<Utf8PathBuf> {
+    let cache = p3_build::BuildCache::new()?;
     let mut build_cmd = Command::new("cargo");
+    cache.configure(&mut build_cmd);
     build_cmd
         .arg("build")
         .arg("--manifest-path")
@@ -395,7 +414,9 @@ fn build_p3_with_features(
         String::from_utf8_lossy(&build.stderr)
     );
 
-    let metadata = Command::new("cargo")
+    let mut metadata_cmd = Command::new("cargo");
+    cache.configure(&mut metadata_cmd);
+    let metadata = metadata_cmd
         .arg("metadata")
         .arg("--no-deps")
         .arg("--format-version")
@@ -414,10 +435,14 @@ fn build_p3_with_features(
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("missing target_directory in cargo metadata"))?;
 
-    Ok(Utf8PathBuf::from(target_dir)
+    let wasm = Utf8PathBuf::from(target_dir)
         .join("wasm32-wasip2")
         .join("debug")
-        .join(format!("{wasm_name}.wasm")))
+        .join(format!("{wasm_name}.wasm"));
+    Ok(Utf8PathBuf::from_path_buf(
+        cache.finish(wasm.as_std_path(), root.join("out").as_std_path())?,
+    )
+    .expect("generated paths are UTF-8"))
 }
 
 fn run_p3_string_export(wasm_path: &Utf8Path, export: &str) -> anyhow::Result<String> {
@@ -1587,14 +1612,24 @@ fn p3_websocket_builds_on_wasi_p3() -> anyhow::Result<()> {
             package bug:p3-websocket;
 
             world p3-websocket {
+              import golem:websocket/client@1.5.0;
               export run: async func() -> string;
             }
         "#},
         indoc! {r#"
+            import { WebsocketConnection } from 'golem:websocket/client@1.5.0';
+
             export async function run() {
-              return `${typeof WebSocket},${typeof WebSocketStream}`;
+              return `${typeof WebSocket},${typeof WebSocketStream},${typeof WebsocketConnection.connect}`;
             }
         "#},
+    )?;
+
+    let websocket_deps = temp.path().join("wit/deps/golem-websocket");
+    std::fs::create_dir_all(&websocket_deps)?;
+    std::fs::write(
+        websocket_deps.join("websocket.wit"),
+        include_str!("../crates/golem-websocket/wit-p3/deps/golem-websocket/websocket.wit"),
     )?;
 
     generate_p3(temp.path())?;
