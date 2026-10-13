@@ -2286,9 +2286,9 @@ dependencies = [
 
 [[package]]
 name = "quick-xml"
-version = "0.38.4"
+version = "0.41.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b66c2058c55a409d601666cffe35f04333cf1013010882cec174a7467cd4e21c"
+checksum = "e660451e55124f798a69a5af3f49ccfbefbd41910eefd25caf2393e1f3473ec1"
 dependencies = [
  "memchr",
 ]
@@ -2827,9 +2827,9 @@ dependencies = [
 
 [[package]]
 name = "test-r"
-version = "3.0.7"
+version = "3.0.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b1f54d617133ece0f6b6b48b79c5375dad8d3d0d3cacbfc1f190fc103a75ee34"
+checksum = "e361ad73890588c43f56484a883f442b2b0803b754b661a073eca5bdf62fa23b"
 dependencies = [
  "ctor",
  "test-r-core",
@@ -2839,9 +2839,9 @@ dependencies = [
 
 [[package]]
 name = "test-r-core"
-version = "8.0.1"
+version = "12.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1463f141e46664871f1599f988a4be8a57140024ab3c7a3197837517308a1e55"
+checksum = "a42e5c40c3492e670539efd04bfa0cb1f0c7ac30542e881fee5cea898ecc5e8d"
 dependencies = [
  "anstream",
  "anstyle",
@@ -2854,6 +2854,7 @@ dependencies = [
  "escape8259",
  "futures",
  "interprocess",
+ "libc",
  "parking_lot",
  "quick-xml",
  "rand 0.10.1",
@@ -2861,13 +2862,14 @@ dependencies = [
  "tokio",
  "topological-sort",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
 name = "test-r-macro"
-version = "1.4.7"
+version = "1.4.13"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e6adc0b8fc94fb2d340e7447a1cf8114d87e6fdd78eec99d77c6f5607e1931cf"
+checksum = "64c1b97ebf095f1cf930beb1a52c4d21ca36924d1bd652edd473f20e71554029"
 dependencies = [
  "darling",
  "humantime",

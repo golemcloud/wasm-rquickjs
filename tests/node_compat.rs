@@ -14,7 +14,7 @@ use std::fs;
 use std::hash::{Hash, Hasher};
 use std::sync::Arc;
 use std::time::Duration;
-use test_r::core::{DynamicTestRegistration, TestProperties};
+use test_r::core::{DynamicTestRegistration, FlakinessControl, TestProperties};
 use test_r::{test_dep, test_gen};
 use tokio::time::timeout;
 use wasmtime::component::Val;
@@ -485,13 +485,6 @@ fn handle_test_result(
     }
 }
 
-// --- Flaky test retry support ---
-
-/// Maximum number of attempts for tests marked `"flaky": true` in
-/// `tests/node_compat/config.jsonc`. A flaky test passes if any single attempt
-/// passes; it only fails after all `FLAKY_MAX_ATTEMPTS` attempts fail.
-const FLAKY_MAX_ATTEMPTS: u32 = 10;
-
 // --- Shard tagging for CI parallelism ---
 
 const NUM_SHARDS: u64 = 8;
@@ -522,10 +515,14 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
             let props = TestProperties {
                 is_ignored: entry.category.should_ignore_in_runner(),
                 tags: vec![shard_tag(&file_test_name)],
+                flakiness_control: if entry.flaky {
+                    FlakinessControl::RetryKnownFlaky(2)
+                } else {
+                    FlakinessControl::None
+                },
                 ..TestProperties::unit_test()
             };
 
-            let entry_flaky = entry.flaky;
             r.add_async_test(
                 file_test_name,
                 props,
@@ -539,63 +536,36 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     let prepared = prepared.as_ref().as_ref().0.clone();
                     let path = path.clone();
                     Box::pin(async move {
-                        let max_attempts = if entry_flaky { FLAKY_MAX_ATTEMPTS } else { 1 };
-                        let mut last_err: Option<anyhow::Error> = None;
-                        for attempt in 1..=max_attempts {
-                            let prepared = prepared.clone();
-                            let path = path.clone();
-                            let attempt_result = async {
-                                let mut instance =
-                                    TestInstance::from_golem_prepared(&prepared).await?;
-                                instance.set_epoch_deadline(test_timeout_secs);
-                                setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                        let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
+                        instance.set_epoch_deadline(test_timeout_secs);
+                        setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                                let guest_path = format!("/home/node/test/{}", path);
-                                let test_future = async {
-                                    let (result, stdout, stderr) = instance
-                                        .invoke_and_capture_output_with_stderr(
-                                            None,
-                                            "run-test",
-                                            &[Val::String(guest_path)],
-                                        )
-                                        .await;
+                        let guest_path = format!("/home/node/test/{}", path);
+                        let test_future = async {
+                            let (result, stdout, stderr) = instance
+                                .invoke_and_capture_output_with_stderr(
+                                    None,
+                                    "run-test",
+                                    &[Val::String(guest_path)],
+                                )
+                                .await;
 
-                                    handle_test_result(result, &stdout, &stderr)
-                                };
-                                match timeout(Duration::from_secs(test_timeout_secs), test_future)
-                                    .await
-                                {
-                                    Ok(result) => result,
-                                    Err(_) => {
-                                        let stdout = instance.read_stdout().unwrap_or_default();
-                                        let stderr = instance.read_stderr().unwrap_or_default();
-                                        anyhow::bail!(
-                                            "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
-                                            test_timeout_secs,
-                                            stdout.trim(),
-                                            stderr.trim(),
-                                            common::host_trace().trim()
-                                        )
-                                    }
-                                }
-                            }
-                            .await;
-                            match attempt_result {
-                                Ok(()) => return Ok(()),
-                                Err(e) => {
-                                    if entry_flaky && attempt < max_attempts {
-                                        eprintln!(
-                                            "Flaky test attempt {}/{} failed, retrying: {}",
-                                            attempt, max_attempts, e
-                                        );
-                                    }
-                                    last_err = Some(e);
-                                }
+                            handle_test_result(result, &stdout, &stderr)
+                        };
+                        match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
+                            Ok(result) => result,
+                            Err(_) => {
+                                let stdout = instance.read_stdout().unwrap_or_default();
+                                let stderr = instance.read_stderr().unwrap_or_default();
+                                anyhow::bail!(
+                                    "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
+                                    test_timeout_secs,
+                                    stdout.trim(),
+                                    stderr.trim(),
+                                    common::host_trace().trim()
+                                )
                             }
                         }
-                        Err(last_err.unwrap_or_else(|| {
-                            anyhow::anyhow!("Test failed with no recorded error")
-                        }))
                     })
                 },
             );
@@ -636,6 +606,11 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 let props = TestProperties {
                     is_ignored,
                     tags: vec![shard_tag(&test_name)],
+                    flakiness_control: if subtest.flaky {
+                        FlakinessControl::RetryKnownFlaky(2)
+                    } else {
+                        FlakinessControl::None
+                    },
                     ..TestProperties::unit_test()
                 };
 
@@ -650,8 +625,6 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         Some(DiscoveryData::NodeTest(tests.clone()))
                     }
                 };
-                let subtest_flaky = subtest.flaky;
-
                 r.add_async_test(
                     test_name,
                     props,
@@ -667,96 +640,62 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();
                         Box::pin(async move {
-                            let max_attempts =
-                                if subtest_flaky { FLAKY_MAX_ATTEMPTS } else { 1 };
-                            let mut last_err: Option<anyhow::Error> = None;
-                            for attempt in 1..=max_attempts {
-                                let prepared = prepared.clone();
-                                let path = path.clone();
-                                let source = source.clone();
-                                let discovery_clone = discovery_clone.clone();
-                                let attempt_result = async {
-                                    let mut instance =
-                                        TestInstance::from_golem_prepared(&prepared).await?;
-                                    instance.set_epoch_deadline(test_timeout_secs);
-                                    setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                            let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
+                            instance.set_epoch_deadline(test_timeout_secs);
+                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                                    // Rewrite the test file to isolate the target subtest
-                                    let rewritten = match &discovery_clone {
-                                        Some(DiscoveryData::Block(blocks)) => rewrite_for_block_with_options(
-                                            &source,
-                                            blocks,
-                                            subtest_index,
-                                            isolate_block_subtests,
-                                        ),
-                                        Some(DiscoveryData::NodeTest(tests)) => {
-                                            rewrite_for_node_test(&source, tests, subtest_index)
-                                        }
-                                        None => source.clone(),
-                                    };
-
-                                    // Write the rewritten file to the temp dir
-                                    let test_filename = path.rsplit('/').next().unwrap_or(&path);
-                                    let suite = path.split('/').next().unwrap_or("parallel");
-                                    let rewritten_path = instance
-                                        .temp_dir_path()
-                                        .join("home")
-                                        .join("node")
-                                        .join("test")
-                                        .join(suite)
-                                        .join(test_filename);
-                                    fs::write(&rewritten_path, &rewritten)?;
-
-                                    let guest_path = format!("/home/node/test/{}", path);
-                                    let test_future = async {
-                                        let (result, stdout, stderr) = instance
-                                            .invoke_and_capture_output_with_stderr(
-                                                None,
-                                                "run-test",
-                                                &[Val::String(guest_path)],
-                                            )
-                                            .await;
-
-                                        handle_test_result(result, &stdout, &stderr)
-                                    };
-                                    match timeout(
-                                        Duration::from_secs(test_timeout_secs),
-                                        test_future,
-                                    )
-                                    .await
-                                    {
-                                        Ok(result) => result,
-                                        Err(_) => {
-                                            let stdout = instance.read_stdout().unwrap_or_default();
-                                            let stderr = instance.read_stderr().unwrap_or_default();
-                                            anyhow::bail!(
-                                                "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
-                                                test_timeout_secs,
-                                                stdout.trim(),
-                                                stderr.trim(),
-                                                common::host_trace().trim()
-                                            )
-                                        }
-                                    }
+                            // Rewrite the test file to isolate the target subtest
+                            let rewritten = match &discovery_clone {
+                                Some(DiscoveryData::Block(blocks)) => rewrite_for_block_with_options(
+                                    &source,
+                                    blocks,
+                                    subtest_index,
+                                    isolate_block_subtests,
+                                ),
+                                Some(DiscoveryData::NodeTest(tests)) => {
+                                    rewrite_for_node_test(&source, tests, subtest_index)
                                 }
-                                .await;
+                                None => source.clone(),
+                            };
 
-                                match attempt_result {
-                                    Ok(()) => return Ok(()),
-                                    Err(e) => {
-                                        if subtest_flaky && attempt < max_attempts {
-                                            eprintln!(
-                                                "Flaky test attempt {}/{} failed, retrying: {}",
-                                                attempt, max_attempts, e
-                                            );
-                                        }
-                                        last_err = Some(e);
-                                    }
+                            // Write the rewritten file to the temp dir
+                            let test_filename = path.rsplit('/').next().unwrap_or(&path);
+                            let suite = path.split('/').next().unwrap_or("parallel");
+                            let rewritten_path = instance
+                                .temp_dir_path()
+                                .join("home")
+                                .join("node")
+                                .join("test")
+                                .join(suite)
+                                .join(test_filename);
+                            fs::write(&rewritten_path, &rewritten)?;
+
+                            let guest_path = format!("/home/node/test/{}", path);
+                            let test_future = async {
+                                let (result, stdout, stderr) = instance
+                                    .invoke_and_capture_output_with_stderr(
+                                        None,
+                                        "run-test",
+                                        &[Val::String(guest_path)],
+                                    )
+                                    .await;
+
+                                handle_test_result(result, &stdout, &stderr)
+                            };
+                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
+                                Ok(result) => result,
+                                Err(_) => {
+                                    let stdout = instance.read_stdout().unwrap_or_default();
+                                    let stderr = instance.read_stderr().unwrap_or_default();
+                                    anyhow::bail!(
+                                        "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
+                                        test_timeout_secs,
+                                        stdout.trim(),
+                                        stderr.trim(),
+                                        common::host_trace().trim()
+                                    )
                                 }
                             }
-                            Err(last_err.unwrap_or_else(|| {
-                                anyhow::anyhow!("Test failed with no recorded error")
-                            }))
                         })
                     },
                 );

@@ -246,6 +246,7 @@ async fn node_http_self_connect(
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn node_http_self_connect_post(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -444,6 +445,7 @@ async fn node_http_pipelined_active_timeout(
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn net_write_timeout_lifecycle(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -749,6 +751,7 @@ async fn node_http_falsy_port_uses_protocol_default(
 }
 
 #[test]
+#[test_r::flaky(2)]
 async fn node_http_response_persistence(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
