@@ -199,6 +199,24 @@ impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
             .await
     }
 
+    async fn check_future(
+        accessor: &Accessor<T, Self>,
+        f: FutureReader<u32>,
+    ) -> Result<u32, String> {
+        let value = Self::consume_future(accessor, f).await;
+        if value == 13 {
+            Err("unlucky".to_string())
+        } else {
+            Ok(value + 1)
+        }
+    }
+
+    async fn delayed_future(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
+        let value = Self::consume_future(accessor, f).await;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        value
+    }
+
     async fn consume_stream_prefix(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u8 {
         let (tx, rx) = oneshot::channel();
         accessor
@@ -235,6 +253,14 @@ fn new_store(engine: &Engine) -> Store<Host> {
     let stderr = MemoryOutputPipe::new(1024 * 1024);
     let mut builder = WasiCtxBuilder::new();
     builder.inherit_stdout().stderr(stderr.clone());
+    builder
+        .preopened_dir(
+            "examples/p3",
+            "/",
+            wasmtime_wasi::DirPerms::READ,
+            wasmtime_wasi::FilePerms::READ,
+        )
+        .expect("failed to preopen fixture directory");
     #[cfg(feature = "use-golem-wasmtime")]
     let (wasi, io_ctx) = builder.build();
     #[cfg(not(feature = "use-golem-wasmtime"))]
@@ -872,6 +898,26 @@ async fn run_import_world(component_path: &Utf8Path) -> Result<String> {
     Ok(result)
 }
 
+async fn run_nested_imports(component_path: &Utf8Path) -> Result<String> {
+    let engine = engine()?;
+    let component = Component::from_file(&engine, component_path)?;
+    let mut linker = base_linker(&engine)?;
+    test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |h| h)?;
+    let mut store = new_store(&engine);
+    let bindings = AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+    let result = store
+        .run_concurrent(async move |accessor| bindings.call_run_nested_imports(accessor).await)
+        .await
+        .and_then(|result| result);
+    if result.is_err() {
+        eprintln!(
+            "guest stderr:\n{}",
+            String::from_utf8_lossy(&store.data().stderr.contents())
+        );
+    }
+    result
+}
+
 async fn run_import_world_promise_stream_items(component_path: &Utf8Path) -> Result<String> {
     let engine = engine()?;
     let component = Component::from_file(&engine, component_path)?;
@@ -1177,6 +1223,28 @@ fn p3_async_values_import_boundaries_roundtrip() {
     // `41` from make-future, `1,2,3,4` from make-stream, `7` from consume-future(Promise.resolve(7)),
     // `10` from consume-stream(async generator yielding 2,3,5).
     assert_eq!(result, "41|1,2,3,4|7|10");
+}
+
+#[test]
+fn p3_async_values_nested_imports_settle_in_originating_runtime() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+    let result = block_on_with_timeout(120, run_nested_imports(&wasm));
+    let report: serde_json::Value = serde_json::from_str(&result).expect("JSON report");
+    assert_eq!(
+        report,
+        serde_json::json!({
+            "results": [
+                { "future": 17, "stream": 12, "checked": 24, "error": "unlucky" },
+                { "future": 18, "stream": 13, "checked": 25, "error": "unlucky" },
+                { "future": 19, "stream": 14, "checked": 26, "error": "unlucky" },
+            ],
+            "timedOut": true,
+            "cancelled": true,
+            "control": 53,
+        })
+    );
 }
 
 #[test]

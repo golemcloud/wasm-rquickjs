@@ -14,14 +14,9 @@ use std::sync::atomic::AtomicUsize;
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::time::{Duration, Instant};
 
-#[derive(Default)]
+#[derive(Default, JsLifetime)]
 struct VariantCaseTagCache<'js> {
-    tags: RefCell<HashMap<&'static str, rquickjs::String<'js>>>,
-}
-
-// Only the lifetime of the cached JavaScript strings changes.
-unsafe impl<'js> JsLifetime<'js> for VariantCaseTagCache<'js> {
-    type Changed<'to> = VariantCaseTagCache<'to>;
+    tags: RefCell<HashMap<String, rquickjs::String<'js>>>,
 }
 
 pub fn variant_case_tag<'js>(
@@ -36,7 +31,7 @@ pub fn variant_case_tag<'js>(
     }
 
     let tag = rquickjs::String::from_str(ctx.clone(), name)?;
-    cache.tags.borrow_mut().insert(name, tag.clone());
+    cache.tags.borrow_mut().insert(name.to_owned(), tag.clone());
     Ok(tag)
 }
 
@@ -743,6 +738,8 @@ impl OwnedJsRuntime {
     pub(crate) async fn initialize_node_builtins(&self) -> Result<(), String> {
         initialize_dispose_symbols(&self.ctx).await?;
         self.rt.idle().await;
+        #[cfg(feature = "p3")]
+        super::p3::JsState::initialize_async_value_helpers(&self.ctx).await;
         initialize_builtin_wiring(&self.ctx).await?;
         self.rt.idle().await;
         Ok(())
