@@ -1,0 +1,27 @@
+package quickjs:error-provider;
+
+interface api {
+  variant detail {
+    permission-denied,
+    unavailable(string),
+  }
+  variant failure {
+    permission-denied,
+    backend-error(string),
+    nested(detail),
+  }
+  enum status { permission-denied, unavailable }
+  record record-error { to-string: string, count: u64 }
+  fail: func(kind: string) -> result<string, failure>;
+  fail-enum: func() -> result<string, status>;
+  fail-string: func() -> result<string, string>;
+  fail-record: func() -> result<string, record-error>;
+  resource gate {
+    constructor();
+    fail-static: static func(kind: string) -> result<string, failure>;
+  }
+}
+
+world error-provider {
+  export api;
+}
