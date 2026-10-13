@@ -1,6 +1,7 @@
 // Web platform Event, EventTarget, and CustomEvent implementations
+import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
-const _eventTrusted = new WeakMap();
+const _eventTrusted = createPrivateWeakMap();
 let _currentPassiveListener = false;
 
 class Event {

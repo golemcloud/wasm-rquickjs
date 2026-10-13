@@ -16,4 +16,5 @@ declare module 'v8-stack-trace' {
   export function testDepdPattern(): Promise<boolean>;
   export function testPreparedStackCacheDoesNotRetainErrors(): Promise<boolean>;
   export function testPreparedStackCacheDoesNotRetainCustomCycles(): Promise<boolean>;
+  export function testPrivateWeakCollectionsBypassPublicPrototypes(): Promise<boolean>;
 }

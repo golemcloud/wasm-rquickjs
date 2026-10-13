@@ -18,4 +18,5 @@ world v8-stack-trace {
   export test-depd-pattern: func() -> bool;
   export test-prepared-stack-cache-does-not-retain-errors: func() -> bool;
   export test-prepared-stack-cache-does-not-retain-custom-cycles: func() -> bool;
+  export test-private-weak-collections-bypass-public-prototypes: func() -> bool;
 }

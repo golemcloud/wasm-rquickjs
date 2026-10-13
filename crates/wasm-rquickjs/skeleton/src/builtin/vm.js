@@ -7,17 +7,18 @@ import {
 import * as pathModule from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
+import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 let contextIdCounter = 1;
-const contextIds = new WeakMap();
-const contextOptions = new WeakMap();
-const contextDeletedGlobals = new WeakMap();
+const contextIds = createPrivateWeakMap();
+const contextOptions = createPrivateWeakMap();
+const contextDeletedGlobals = createPrivateWeakMap();
 const identifierPattern = /^[$A-Z_a-z][$0-9A-Z_a-z]*$/;
 const moduleNamespaceExportsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceExports');
 const moduleNamespaceBindingsSymbol = Symbol.for('wasm-rquickjs.vm.namespaceBindings');
 const moduleNamespaceBrandSymbol = Symbol('wasm-rquickjs.vm.namespaceBrand');
 const vmDynamicImportReferrerSymbol = Symbol('wasm-rquickjs.vm.dynamicImportReferrer');
-const scriptBrandSet = new WeakSet();
+const scriptBrandSet = createPrivateWeakSet();
 const vmModuleInstanceBrandSymbol = Symbol('wasm-rquickjs.vm.moduleInstance');
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
 const USE_MAIN_CONTEXT_DEFAULT_LOADER = Symbol('vm_dynamic_import_main_context_default');

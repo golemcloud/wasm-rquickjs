@@ -1,5 +1,6 @@
 import { inspect, format } from "__wasm_rquickjs_builtin/internal/util/inspect";
 import {
+    createPrivateWeakMap,
     nativeWeakMapDelete,
     nativeWeakMapGet,
     nativeWeakMapSet,
@@ -157,7 +158,7 @@ function _prepareSourceMappedStack(error, callSites) {
     return _prepareSourceMappedStackState(error, callSites).value;
 }
 
-const nativeCallSiteCaptures = new WeakMap();
+const nativeCallSiteCaptures = createPrivateWeakMap();
 
 function _captureNativeCallSites(error, callSites) {
     if (error && (typeof error === 'object' || typeof error === 'function')) {
@@ -286,7 +287,7 @@ const initialPublicPrepareStackTrace = typeof NativeError.prepareStackTrace === 
     ? NativeError.prepareStackTrace
     : ErrorPrepareStackTrace;
 const defaultPublicPrepareStackTrace = initialPublicPrepareStackTrace;
-const preparedNativeStacks = new WeakMap();
+const preparedNativeStacks = createPrivateWeakMap();
 let formattingNativeStack = false;
 
 const preparedNativeStackDescriptor = nativeObjectCreate(null);

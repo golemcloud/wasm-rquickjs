@@ -31,6 +31,7 @@ import {
 } from "__wasm_rquickjs_builtin/internal/binding/util_native";
 import {
     NativeWeakRef,
+    createPrivateWeakMap,
     nativeWeakMapDelete,
     nativeWeakMapGet,
     nativeWeakMapHas,
@@ -68,7 +69,7 @@ function installPrivateSymbolAccessor(privateSymbol, store) {
 
 function createPrivateSymbol(description) {
     const privateSymbol = Symbol(description);
-    const store = new WeakMap();
+    const store = createPrivateWeakMap();
     installPrivateSymbolAccessor(privateSymbol, store);
     return privateSymbol;
 }
@@ -129,9 +130,9 @@ export const ONLY_ENUM_WRITABLE = 6;
 export const SKIP_STRINGS = 8;
 export const SKIP_SYMBOLS = 16;
 
-const previewEntriesCache = new WeakMap();
-const weakMapEntriesCache = new WeakMap();
-const weakSetEntriesCache = new WeakMap();
+const previewEntriesCache = createPrivateWeakMap();
+const weakMapEntriesCache = createPrivateWeakMap();
+const weakSetEntriesCache = createPrivateWeakMap();
 const minimumWeakEntryCompactionInterval = 16;
 
 function createWeakEntryState() {
@@ -218,7 +219,7 @@ if (typeof WeakSet === "function") {
     };
 }
 
-const nullPrototypeConstructorNames = new WeakMap();
+const nullPrototypeConstructorNames = createPrivateWeakMap();
 const originalObjectSetPrototypeOf = Object.setPrototypeOf;
 const originalReflectSetPrototypeOf = Reflect.setPrototypeOf;
 

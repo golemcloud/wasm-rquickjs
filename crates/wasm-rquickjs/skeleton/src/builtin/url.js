@@ -6,6 +6,7 @@ import {
 } from '__wasm_rquickjs_builtin/url_native';
 import * as querystring from 'node:querystring';
 import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
+import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 const __URLSearchParams__ = "__URLSearchParams__";
 const __URLSearchParamsURL__ = "__URLSearchParamsURL__";
@@ -218,7 +219,7 @@ Object.defineProperty(URL.prototype, "searchParams", {
     configurable: true
 });
 
-const urlSearchParamsCache = new WeakMap();
+const urlSearchParamsCache = createPrivateWeakMap();
 
 function syncSearchParamsFromUrl(url) {
     const params = urlSearchParamsCache.get(url);

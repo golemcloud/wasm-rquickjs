@@ -13,6 +13,7 @@ import {
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
+import { createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 function _invalidArgTypeHelper(value) {
     if (value == null) return ' Received ' + String(value);
@@ -1022,8 +1023,8 @@ process._runExitHandlers = function _runExitHandlers(code) {
 // after a microtask turn, so that assert.rejects() and similar patterns
 // that handle the rejection synchronously don't cause false positives.
 const _pendingRejections = new Map();
-const _ignoredUnhandledRejections = new WeakSet();
-const _emittedUnhandledRejections = new WeakSet();
+const _ignoredUnhandledRejections = createPrivateWeakSet();
+const _emittedUnhandledRejections = createPrivateWeakSet();
 const _pendingRejectionHandled = new Set();
 const _requireEsmRejectionScopes = [];
 const _sameValue = Object.is;

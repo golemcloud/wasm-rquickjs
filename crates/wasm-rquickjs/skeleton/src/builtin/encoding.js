@@ -6,11 +6,12 @@ import {
     ERR_INVALID_ARG_TYPE,
     ERR_INVALID_THIS,
 } from '__wasm_rquickjs_builtin/internal/errors';
+import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
-const textDecoderState = new WeakMap();
-const textDecoderStreamState = new WeakSet();
-const textEncoderStreamState = new WeakSet();
+const textDecoderState = createPrivateWeakMap();
+const textDecoderStreamState = createPrivateWeakSet();
+const textEncoderStreamState = createPrivateWeakSet();
 
 function validateOptions(options) {
     if (options !== undefined && options !== null && typeof options !== 'object') {

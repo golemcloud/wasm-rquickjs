@@ -1,6 +1,7 @@
 import * as utilBinding from "__wasm_rquickjs_builtin/internal/binding/util";
 import { constants as osConstants } from "node:os";
 import * as fsModule from "node:fs";
+import { createPrivateWeakSet } from "__wasm_rquickjs_builtin/internal/weak_collections";
 
 const inspectCustomSymbol = Symbol.for("nodejs.util.inspect.custom");
 const externalValueMarkerSymbol = Symbol.for("wasm-rquickjs.util.types.external");
@@ -11,7 +12,7 @@ const externalValueMarkerSymbol = Symbol.for("wasm-rquickjs.util.types.external"
 // QuickJS does not expose this internal state, so this test binding tracks
 // `.buffer` access for small typed arrays to emulate Node's observable behavior.
 const INLINE_TYPED_ARRAY_LIMIT = 64;
-const smallViewsWithMaterializedBuffer = new WeakSet();
+const smallViewsWithMaterializedBuffer = createPrivateWeakSet();
 
 let arrayBufferTrackingInstalled = false;
 

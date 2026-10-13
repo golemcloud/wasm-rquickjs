@@ -19,6 +19,7 @@ import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
+import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
 import {
     eval_with_filename as _evalWithFilename,
     require_builtin as _requireBuiltin,
@@ -711,8 +712,8 @@ const _defaultExtHandlers = setFromArray([
     defaultNodeExtensionHandler,
 ]);
 
-const moduleCompileContexts = new WeakMap();
-const moduleRequireOverrides = new WeakMap();
+const moduleCompileContexts = createPrivateWeakMap();
+const moduleRequireOverrides = createPrivateWeakMap();
 let activeModuleLoadContext = null;
 let activeModuleLoadParent = null;
 let activeModuleLoadRequest = null;
@@ -2062,7 +2063,7 @@ function fileUrlForPath(filename) {
 }
 
 const cjsEsmDefaultSnapshotSymbol = Symbol('wasm-rquickjs.cjs-esm-default-snapshot');
-const cjsTypeScriptAnalysisCache = new WeakMap();
+const cjsTypeScriptAnalysisCache = createPrivateWeakMap();
 const cjsTypeScriptAnalysisCacheQueue = [];
 const cjsTypeScriptAnalysisCacheMaxEntries = 32;
 const cjsTypeScriptAnalysisCacheMaxBytes = 1024 * 1024;

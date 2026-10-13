@@ -112,6 +112,21 @@ async fn v8_stack_trace_custom_prepared_stack_cycles_are_collectable(
 }
 
 #[test]
+async fn v8_stack_trace_private_weak_collections_bypass_public_prototypes(
+    #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-private-weak-collections-bypass-public-prototypes",
+        &[],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn v8_stack_trace_capture_basic(
     #[tagged_as("v8_stack_trace")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

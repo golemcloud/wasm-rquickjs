@@ -12,7 +12,7 @@ use wstd::runtime::block_on;
 
 use super::runtime_services::{
     OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
-    run_process_turn_checkpoint,
+    initialize_exported_resource_id_map, run_process_turn_checkpoint,
 };
 
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
@@ -66,13 +66,6 @@ impl JsState {
 
             global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                 .expect("Failed to initialize resource table");
-            global
-                .set(
-                    RESOURCE_ID_MAP_NAME,
-                    ctx.eval::<Object, _>("new WeakMap()")
-                        .expect("Failed to create resource ID map"),
-                )
-                .expect("Failed to initialize resource ID map");
         })
         .await;
 
@@ -97,6 +90,9 @@ impl JsState {
         self.rt.idle().await;
 
         initialize_builtin_wiring(&self.ctx)
+            .await
+            .unwrap_or_else(|error| panic!("{error}"));
+        initialize_exported_resource_id_map(&self.ctx, RESOURCE_ID_MAP_NAME)
             .await
             .unwrap_or_else(|error| panic!("{error}"));
         drain_and_idle(self).await;

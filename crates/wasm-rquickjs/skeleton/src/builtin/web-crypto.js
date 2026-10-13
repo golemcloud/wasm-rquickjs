@@ -17,6 +17,7 @@ import {
 } from '__wasm_rquickjs_builtin/internal/errors'
 import { normalizeEncoding } from '__wasm_rquickjs_builtin/internal/util'
 import { inspect } from '__wasm_rquickjs_builtin/internal/util/inspect'
+import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections'
 import { kMaxLength } from 'buffer'
 
 const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone')
@@ -2768,8 +2769,8 @@ const TO_CRYPTO_KEY_ALGORITHM_NAMES = {
 const KEY_OBJECT_TYPES = new Set(['secret', 'public', 'private']);
 const PRIVATE_KEY_CACHE = new Map();
 const PUBLIC_KEY_CACHE = new Map();
-const PRIVATE_JWK_KEY_CACHE = new WeakMap();
-const PUBLIC_JWK_KEY_CACHE = new WeakMap();
+const PRIVATE_JWK_KEY_CACHE = createPrivateWeakMap();
+const PUBLIC_JWK_KEY_CACHE = createPrivateWeakMap();
 const RSA_PRIVATE_DECRYPT_CACHE = new Map();
 const RSA_PUBLIC_DECRYPT_CACHE = new Map();
 
@@ -7752,9 +7753,9 @@ function normalizeHashForSign(algorithm) {
 }
 
 const kInternal = Symbol('webcrypto.internal');
-const cryptoBrand = new WeakSet();
-const subtleBrand = new WeakSet();
-const cryptoKeyBrand = new WeakSet();
+const cryptoBrand = createPrivateWeakSet();
+const subtleBrand = createPrivateWeakSet();
+const cryptoKeyBrand = createPrivateWeakSet();
 
 function assertCrypto(thisArg) {
     if (!cryptoBrand.has(thisArg)) throw new ERR_INVALID_THIS('Crypto');
