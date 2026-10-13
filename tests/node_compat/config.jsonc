@@ -4487,7 +4487,7 @@
       }
     },
     "parallel/test-http-dump-req-when-res-ends.js": { "category": "known-gap", "reason": "wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks" },
-    "parallel/test-http-early-hints-invalid-argument.js": { "category": "known-gap", "reason": "ServerResponse.writeEarlyHints() argument validation is incomplete (missing expected ERR_INVALID_ARG_VALUE throws)" },
+    "parallel/test-http-early-hints-invalid-argument.js": {},
     "parallel/test-http-early-hints.js": {
       "split": true,
       "subtests": {
@@ -4500,8 +4500,8 @@
       }
     },
     "parallel/test-http-eof-on-connect.js": {},
-    "parallel/test-http-expect-continue.js": { "category": "known-gap", "reason": "Expect: 100-continue flow (checkContinue/continue events) is incomplete" },
-    "parallel/test-http-expect-handling.js": { "category": "known-gap", "reason": "Expect header handling is incomplete (default 417/checkExpectation paths diverge)" },
+    "parallel/test-http-expect-continue.js": { "category": "known-gap", "reason": "wasi:http client does not surface interim 100 Continue responses or the continue event" },
+    "parallel/test-http-expect-handling.js": {},
     "parallel/test-http-flush-headers.js": { "category": "known-gap", "reason": "ClientRequest.flushHeaders() does not reliably complete request/response lifecycle" },
     "parallel/test-http-flush-response-headers.js": {},
     "parallel/test-http-full-response.js": { "category": "wasi-impossible", "reason": "requires child_process.exec of external 'ab' binary" },
@@ -4778,7 +4778,7 @@
     "parallel/test-http-upgrade-server2.js": { "category": "known-gap", "reason": "server-side Upgrade event/error propagation is incomplete" },
     "parallel/test-http-wget.js": {},
     "parallel/test-http-writable-true-after-close.js": { "category": "known-gap", "reason": "response writable state around aborted proxy close is not Node-compatible" },
-    "parallel/test-http-write-callbacks.js": { "category": "known-gap", "reason": "checkContinue/write callback ordering and completion semantics are incomplete" },
+    "parallel/test-http-write-callbacks.js": { "category": "known-gap", "reason": "wasi:http client does not surface interim 100 Continue responses or the continue event" },
     "parallel/test-http-write-empty-string.js": {},
     "parallel/test-http-write-head-2.js": {
       "split": true,
