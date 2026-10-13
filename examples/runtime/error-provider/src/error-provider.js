@@ -9,7 +9,7 @@ export const api = {
     fail,
     failEnum() { throw 'permission-denied'; },
     failString() { throw 'host unavailable'; },
-    failRecord() { throw { toString: 'declared field', count: 9007199254740993n }; },
+    failRecord() { throw { tag: '', toString: 'declared field', count: 9007199254740993n }; },
     Gate: class {
         static failStatic(kind) { return fail(kind); }
     },

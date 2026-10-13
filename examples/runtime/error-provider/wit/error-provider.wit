@@ -11,7 +11,7 @@ interface api {
     nested(detail),
   }
   enum status { permission-denied, unavailable }
-  record record-error { to-string: string, count: u64 }
+  record record-error { tag: string, to-string: string, count: u64 }
   fail: func(kind: string) -> result<string, failure>;
   fail-enum: func() -> result<string, status>;
   fail-string: func() -> result<string, string>;

@@ -73,7 +73,7 @@ async fn compiled_error_provider() -> CompiledTest {
     CompiledTest::new_unoptimized_with_features(
         Utf8Path::new("examples/runtime/error-provider"),
         true,
-        crate::common::FeatureCombination::None,
+        crate::common::FeatureCombination::Normal,
     )
     .await
     .expect("Failed to compile error-provider")
@@ -84,7 +84,7 @@ async fn compiled_error_consumer() -> CompiledTest {
     CompiledTest::new_unoptimized_with_features(
         Utf8Path::new("examples/runtime/error-consumer"),
         true,
-        crate::common::FeatureCombination::None,
+        crate::common::FeatureCombination::Normal,
     )
     .await
     .expect("Failed to compile error-consumer")
@@ -105,12 +105,12 @@ async fn imported_errors_are_readable_and_rethrow_as_typed_results(
     };
     let observed: serde_json::Value = serde_json::from_str(&observed)?;
     let denied = serde_json::json!({
-        "text": "permission-denied", "message": "permission-denied",
+        "text": "{\"tag\":\"permission-denied\"}", "message": "{\"tag\":\"permission-denied\"}",
         "json": "{\"tag\":\"permission-denied\"}", "keys": ["tag"],
         "spread": "{\"tag\":\"permission-denied\"}"
     });
     let backend = serde_json::json!({
-        "text": "backend-error: service unavailable", "message": "backend-error: service unavailable",
+        "text": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}", "message": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}",
         "json": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}", "keys": ["tag", "val"],
         "spread": "{\"tag\":\"backend-error\",\"val\":\"service unavailable\"}"
     });
@@ -118,16 +118,16 @@ async fn imported_errors_are_readable_and_rethrow_as_typed_results(
         observed,
         serde_json::json!([
             denied, backend,
-            {"text": "nested: permission-denied", "message": "nested: permission-denied",
+            {"text": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}", "message": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}",
              "json": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}", "keys": ["tag", "val"],
              "spread": "{\"tag\":\"nested\",\"val\":{\"tag\":\"permission-denied\"}}"},
             backend,
             {"text": "permission-denied", "message": "permission-denied", "json": "\"permission-denied\"", "keys": [], "spread": null},
             {"text": "host unavailable", "message": "host unavailable", "json": "\"host unavailable\"", "keys": [], "spread": null},
-            {"text": "{\"toString\":\"declared field\",\"count\":\"9007199254740993\"}",
-             "message": "{\"toString\":\"declared field\",\"count\":\"9007199254740993\"}",
-             "json": "{\"toString\":\"declared field\",\"count\":\"9007199254740993\"}", "keys": ["toString", "count"],
-             "spread": "{\"toString\":\"declared field\",\"count\":\"9007199254740993\"}"},
+            {"text": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}",
+             "message": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}",
+             "json": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}", "keys": ["tag", "toString", "count"],
+             "spread": "{\"tag\":\"\",\"toString\":\"declared field\",\"count\":\"9007199254740993\"}"},
             "ok"
         ])
     );
