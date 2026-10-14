@@ -118,7 +118,7 @@ async fn optimizer_determinism_requires_matching_restore_capability() -> anyhow:
     Ok(())
 }
 
-async fn assert_entropy_denied(path: &Utf8Path) -> anyhow::Result<()> {
+async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option<String>> {
     use wasmtime::component::{Component, Linker, ResourceTable};
     use wasmtime::{Config, Engine, Store, StoreContextMut};
 
@@ -153,9 +153,13 @@ async fn assert_entropy_denied(path: &Utf8Path) -> anyhow::Result<()> {
     config
         .wasm_component_model(true)
         .wasm_component_model_async(true);
+    if std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").is_ok_and(|value| value == "1") {
+        config.cache(Some(wasmtime::Cache::new(wasmtime::CacheConfig::new())?));
+    }
     let engine = Engine::new(&config)?;
     let component = Component::from_file(&engine, path)?;
     let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
+    builder.env("GOL787_RUNTIME", "live").arg(path.as_str());
     #[cfg(not(feature = "use-golem-wasmtime"))]
     let wasi = builder.build();
     #[cfg(feature = "use-golem-wasmtime")]
@@ -182,7 +186,7 @@ async fn assert_entropy_denied(path: &Utf8Path) -> anyhow::Result<()> {
     // async signatures even though this probe never performs HTTP requests.
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     for (name, _) in component.component_type().imports(&engine) {
-        if name.starts_with("wasi:random/random@") {
+        if deny_entropy && name.starts_with("wasi:random/random@") {
             let mut random = linker.instance(name)?;
             random.func_wrap(
                 "get-random-u64",
@@ -201,6 +205,13 @@ async fn assert_entropy_denied(path: &Utf8Path) -> anyhow::Result<()> {
         }
     }
     let instance = linker.instantiate_async(&mut store, &component).await?;
+    if !deny_entropy {
+        let run = instance.get_typed_func::<(), (String,)>(&mut store, "run")?;
+        let (json,) = store
+            .run_concurrent(async move |accessor| run.call_concurrent(accessor, ()).await)
+            .await??;
+        return Ok(Some(json));
+    }
     let ready = instance.get_typed_func::<(), (String,)>(&mut store, "ready")?;
     let result = ready.call_async(&mut store, ()).await;
     assert!(result.is_err(), "restore ignored unavailable entropy");
@@ -212,7 +223,7 @@ async fn assert_entropy_denied(path: &Utf8Path) -> anyhow::Result<()> {
         ready.call_async(&mut store, ()).await.is_err(),
         "retry after a failed restore exposed application JS"
     );
-    Ok(())
+    Ok(None)
 }
 
 #[test]
@@ -221,8 +232,9 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
     use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
 
     let temp = Utf8TempDir::new()?;
-    let wasmtime_cache =
-        std::env::var("WASM_RQUICKJS_TEST_WASMTIME_CACHE").is_ok_and(|value| value == "1");
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
     for (target, tier) in [
         (GenerationTarget::WasiP2, "p2,encoding"),
         (GenerationTarget::WasiP2, "p2,crypto,encoding"),
@@ -353,34 +365,7 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
             let before = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
                 .as_millis() as u64;
-            let mut runtime = Command::new("wasmtime");
-            runtime.arg("run");
-            if wasmtime_cache {
-                runtime.args(["-C", "cache=y"]);
-            }
-            let result = runtime
-                .args([
-                    "-S",
-                    "p3=y",
-                    "-S",
-                    "http=y",
-                    "--wasm",
-                    "component-model=y",
-                    "--wasm",
-                    "component-model-async=y",
-                    "--env",
-                    "GOL787_RUNTIME=live",
-                    "--invoke",
-                    "run()",
-                ])
-                .arg(component)
-                .output()?;
-            assert!(
-                result.status.success(),
-                "{tier}: {}",
-                String::from_utf8_lossy(&result.stderr)
-            );
-            let json: String = serde_json::from_slice(&result.stdout)?;
+            let json = runtime.block_on(run_probe(component, false))?.unwrap();
             let value: serde_json::Value = serde_json::from_str(&json)?;
             let after = std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)?
@@ -429,10 +414,7 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
         }
         // This export makes no random calls. Without restore-time reseeding it
         // would succeed, silently leaving the build-time stream available.
-        tokio::runtime::Builder::new_current_thread()
-            .enable_all()
-            .build()?
-            .block_on(assert_entropy_denied(&optimized))?;
+        runtime.block_on(run_probe(&optimized, true))?;
         eprintln!("{tier}: entropy-denied restoration trapped before ready()");
     }
     Ok(())
