@@ -652,7 +652,7 @@ const moduleCache = Object.create(null);
 let moduleExportsInitialized = false;
 let activeModuleCacheOverride;
 const loaderHooksModuleCache = Object.create(null);
-const moduleCacheDomains = new WeakMap();
+const moduleCacheDomains = createPrivateWeakMap();
 const loaderHooksRealmParam = '__wasm_rquickjs_loader_realm=hooks';
 
 function currentModuleCache() {
