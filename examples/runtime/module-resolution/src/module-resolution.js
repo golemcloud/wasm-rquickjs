@@ -3497,6 +3497,10 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             JSON.stringify({ kind: 'source-required-json' }),
         );
         fs.writeFileSync(
+            `${formatRoot}/source-required.odd`,
+            JSON.stringify({ kind: 'invalid-json-format-target' }),
+        );
+        fs.writeFileSync(
             `${formatRoot}/catch-default.odd`,
             JSON.stringify({ kind: 'uncaught-default-json' }),
         );
@@ -3531,6 +3535,9 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             '  if (specifier === "virtual:short-json" || specifier === "virtual:short-module") {',
             '    return { shortCircuit: true, url: specifier };',
             '  }',
+            '  if (specifier === "./source-required.odd") {',
+            `    return { shortCircuit: true, url: ${JSON.stringify(pathToFileURL(`${formatRoot}/source-required.odd`).href)}, format: "json" };`,
+            '  }',
             '  if (targets[specifier]) return { shortCircuit: true, url: targets[specifier], format: formats[specifier] };',
             '  return next(specifier, context);',
             '}',
@@ -3543,7 +3550,7 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             '    return { shortCircuit: true, format: "module", source: "export default \'short-module\'" };',
             '  }',
             `  if (url === ${JSON.stringify(pathToFileURL(`${formatRoot}/source-commonjs.cjs`).href)}) {`,
-            '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\'./source-required.json\');" };',
+            '    return { shortCircuit: true, format: "commonjs", source: "const value = require(\'./source-required.json\'); let invalidCode; try { require(\'./source-required.odd\'); } catch (error) { invalidCode = error.code; } module.exports = { value, invalidCode };" };',
             '  }',
             '  return next(url, context);',
             '}',
@@ -3572,7 +3579,10 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             ');',
             'assert.deepStrictEqual(',
             '  (await import("virtual:source-commonjs-json")).default,',
-            '  { kind: "source-required-json" },',
+            '  {',
+            '    value: { kind: "source-required-json" },',
+            '    invalidCode: "ERR_IMPORT_ATTRIBUTE_MISSING",',
+            '  },',
             ');',
         ].join('\n')));
         assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
@@ -3583,6 +3593,11 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
         assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
             record.hook === 'load' &&
             record.url === pathToFileURL(`${formatRoot}/data.odd`).href &&
+            record.attrs.type === 'json'
+        ));
+        assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
+            record.hook === 'load' &&
+            record.url === pathToFileURL(`${formatRoot}/source-required.json`).href &&
             record.attrs.type === 'json'
         ));
 

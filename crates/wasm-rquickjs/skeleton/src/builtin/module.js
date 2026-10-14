@@ -4951,22 +4951,28 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const normalizedResolved = resolvedState.normalizedResolved;
         const resolvedFormat = resolvedState.resolvedFormat;
         if (resolveOnly) return registeredLoaderUrlFormatResult(normalizedResolved.url, resolvedFormat);
+        if (
+            !isImportMode &&
+            defaultLoaderFormatForFilename(
+                loaderCommonJsFilename(normalizedResolved.url),
+            ) === 'json'
+        ) {
+            resolvedState.loadContext.importAttributes = { type: 'json' };
+        }
 
         const runLoad = (index, nextUrl, context) => {
             if (index < 0) {
                 const defaultLoaded = registeredLoaderDefaultLoad(nextUrl, context);
-                if (isImportMode) {
-                    validateRegisteredLoaderImportAttributes(
-                        {
-                            url: String(nextUrl),
-                            format: registeredLoaderFinalLoadFormat(
-                                defaultLoaded,
-                                resolvedState.resolvedFormat,
-                            ),
-                        },
-                        context && context.importAttributes,
-                    );
-                }
+                validateRegisteredLoaderImportAttributes(
+                    {
+                        url: String(nextUrl),
+                        format: registeredLoaderFinalLoadFormat(
+                            defaultLoaded,
+                            resolvedState.resolvedFormat,
+                        ),
+                    },
+                    context && context.importAttributes,
+                );
                 return defaultLoaded;
             }
             const module = entries[index].module;
