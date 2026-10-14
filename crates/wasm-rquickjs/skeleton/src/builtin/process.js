@@ -14,6 +14,7 @@ import {
 
 import EventEmitter from 'node:events';
 import { createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
 
 function _invalidArgTypeHelper(value) {
     if (value == null) return ' Received ' + String(value);
@@ -435,8 +436,6 @@ Object.defineProperty(process, Symbol.toStringTag, {
     configurable: true,
 });
 
-let _startTime = null;
-
 process.cpuUsage = function cpuUsage(previousValue) {
     if (previousValue !== undefined) {
         if (typeof previousValue !== 'object' || previousValue === null) {
@@ -488,10 +487,10 @@ process.availableMemory = function availableMemory() {
 };
 
 process.uptime = function uptime() {
-    if (_startTime === null) {
-        _startTime = Date.now();
-    }
-    return (Date.now() - _startTime) / 1000;
+    // Runtime-owned origin is refreshed after Wizer, even when uptime was
+    // called during module initialization.
+    const origin = time_origin();
+    return (Date.now() - origin) / 1000;
 };
 
 process.binding = function binding() {

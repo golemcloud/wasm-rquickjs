@@ -102,7 +102,7 @@ mod os;
 #[path = "builtin/path.rs"]
 mod path;
 #[path = "builtin/perf_hooks.rs"]
-mod perf_hooks;
+pub(crate) mod perf_hooks;
 #[path = "builtin/process.rs"]
 mod process;
 #[path = "builtin/punycode.rs"]
@@ -240,6 +240,7 @@ pub fn add_module_resolvers(
         .with_module("base64-js")
         .with_module("ieee754")
         .with_module("__wasm_rquickjs_builtin/os_native")
+        .with_module("__wasm_rquickjs_builtin/perf_hooks_native")
         .with_module("node:os")
         .with_module("os")
         .with_module("node:assert")
@@ -418,6 +419,10 @@ pub fn module_loader() -> (
             intl::js_native_module,
         )
         .with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
+        .with_module(
+            "__wasm_rquickjs_builtin/perf_hooks_native",
+            perf_hooks::js_native_module,
+        )
         .with_module(
             "__wasm_rquickjs_builtin/process_native",
             process::js_native_module,

@@ -405,6 +405,8 @@ pub async fn ensure_initialized() -> &'static JsState {
                 unsafe {
                     INIT = InitState::InProgress;
                 }
+                // Fail closed before process refresh can invoke application JS.
+                super::restore_runtime_state();
                 let state = unsafe { STATE.as_ref().unwrap() };
                 JsState::refresh_process_env(state).await;
                 unsafe {

@@ -57,7 +57,7 @@ mod node_http {
 mod node_test;
 mod os;
 mod path;
-mod perf_hooks;
+pub(crate) mod perf_hooks;
 mod process;
 mod punycode;
 mod querystring;
@@ -176,6 +176,7 @@ pub fn add_module_resolvers(
         .with_module("base64-js")
         .with_module("ieee754")
         .with_module("__wasm_rquickjs_builtin/os_native")
+        .with_module("__wasm_rquickjs_builtin/perf_hooks_native")
         .with_module("node:os")
         .with_module("os")
         .with_module("node:assert")
@@ -347,6 +348,10 @@ pub fn module_loader() -> (
         )
         .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
         .with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
+        .with_module(
+            "__wasm_rquickjs_builtin/perf_hooks_native",
+            perf_hooks::js_native_module,
+        )
         .with_module(
             "__wasm_rquickjs_builtin/process_native",
             process::js_native_module,

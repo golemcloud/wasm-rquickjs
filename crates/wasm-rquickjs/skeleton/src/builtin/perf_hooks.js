@@ -1,6 +1,8 @@
 // node:perf_hooks - partial implementation
 
-const _timeOrigin = Date.now();
+import { time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
+// Populate the runtime-owned cache on module load; restore clears it before JS runs.
+time_origin();
 const _marks = [];
 const _measures = [];
 
@@ -55,10 +57,10 @@ function removeByName(arr, name) {
 }
 
 const performance = {
-    timeOrigin: _timeOrigin,
+    get timeOrigin() { return time_origin(); },
 
     now() {
-        return Date.now() - _timeOrigin;
+        return Date.now() - time_origin();
     },
 
     mark(name, options) {
@@ -124,7 +126,7 @@ const performance = {
     nodeTiming,
 
     toJSON() {
-        return { timeOrigin: _timeOrigin };
+        return { timeOrigin: time_origin() };
     },
 };
 

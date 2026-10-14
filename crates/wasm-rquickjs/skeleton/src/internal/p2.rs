@@ -322,7 +322,9 @@ pub fn get_js_state() -> &'static JsState {
                 INIT_PHASE = InitPhase::FullyInitialized;
             }
             InitPhase::WizerPreInitialized => {
-                // Wizer snapshot restored — refresh argv/env from the real host.
+                INIT_PHASE = InitPhase::Initializing;
+                // Refresh entropy before any JS can run, then argv/env.
+                super::restore_runtime_state();
                 let state = STATE.as_ref().unwrap();
                 block_on(JsState::refresh_process_env(state));
                 INIT_PHASE = InitPhase::FullyInitialized;
