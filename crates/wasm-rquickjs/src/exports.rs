@@ -268,7 +268,13 @@ fn generate_guest_impl(
     for (name, function) in exports {
         match &function.kind {
             FunctionKind::Freestanding => {
-                if name == "wizer-initialize" {
+                if interface.is_none() && name == crate::wit::WIZER_RESTORE_CAPABILITY {
+                    func_impls.push(quote! {
+                        fn wasm_rquickjs_wizer_restore_v1() {
+                            crate::internal::wizer_restore_v1();
+                        }
+                    });
+                } else if name == "wizer-initialize" {
                     // wizer-initialize calls directly into the skeleton's
                     // pre-init function instead of dispatching to JS
                     func_impls.push(quote! {

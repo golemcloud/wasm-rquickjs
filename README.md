@@ -162,6 +162,35 @@ initialization must become quiescent before the snapshot and cannot leave timers
 Runtime arguments and environment variables are restored before the first export runs; modules
 must not capture their values or immutable aliases during top-level initialization.
 
+**Deterministic pre-initialization:** newly generated P2 and P3 templates export
+`wasm-rquickjs-wizer-restore-v1`. When optimizing their `wizer-initialize` export,
+the optimizer supplies fixed-seed entropy, Unix-epoch wall time, and a zero
+monotonic clock, with empty arguments/environment. These services exist only in
+the optimizer store. Before any restored application JS runs, the guest reseeds
+its crypto RNG from runtime host entropy (failure traps) and refreshes its
+performance/uptime origin. Captured `Math.random` functions, including functions
+from `node:vm` contexts, use that reseeded RNG. Runtime clock reads still use the
+deployment host. Determinism is for identical input with the same optimizer and
+dependencies, not a cross-version artifact format guarantee. Initialization must
+also avoid external I/O and application-owned sources of nondeterminism; the
+optimizer does not make arbitrary application code reproducible.
+
+**Application initialization is still snapshotted.** Values already computed at
+module top level—timestamps, random IDs, keys, library-owned PRNG state, performance
+marks, and copies of environment values—remain frozen. Internal-service refresh
+cannot undo those computations. Generate secrets and per-instance IDs after
+restoration, inside an exported function; do not generate them at module top level.
+Initialization must not depend on clocks advancing. Applications that need live
+top-level entropy/time should skip `optimize` and initialize at runtime instead.
+
+Old/unmarked components and other initializer names retain legacy real entropy
+and clocks, with a warning: output is not guaranteed reproducible, and cached RNG
+state may still be shared by restored instances. **Update both the optimizer and
+rebuild guest templates** to enable the deterministic path safely. Updating the
+optimizer alone does not repair a published template or existing snapshots. The
+capability export is a template producer's declaration of this restore contract,
+not a guarantee that arbitrary application state or composed code is snapshot-safe.
+
 Library callers using the `optimize` feature can configure the guest-to-host copy budget for
 initialization and Wizer snapshot memory extraction:
 

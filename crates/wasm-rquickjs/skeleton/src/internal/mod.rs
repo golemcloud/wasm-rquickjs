@@ -33,6 +33,20 @@ pub(crate) use module_loading::{
 };
 pub use runtime_services::variant_case_tag;
 
+/// Capability declaration for templates whose restore paths refresh entropy
+/// and runtime-owned clock origins. Kept separate from JS export dispatch.
+pub fn wizer_restore_v1() {}
+
+fn restore_runtime_state() {
+    // ThreadRng's ChaCha state and buffered bytes are part of the snapshot.
+    // Fail closed before JS (including process.env Proxy callbacks) can observe
+    // the deterministic pre-init stream. Both P2 and P3 restore here.
+    rand::rng()
+        .reseed()
+        .expect("Failed to reseed runtime randomness after Wizer restoration");
+    crate::builtin::perf_hooks::reset_time_origin();
+}
+
 #[cfg(feature = "p2")]
 mod p2;
 #[cfg(feature = "p2")]

@@ -1,10 +1,35 @@
 use anyhow::anyhow;
 use camino::Utf8Path;
+use std::time::Duration;
 use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component, Linker, LinkerInstance, ResourceType};
 use wasmtime::{Config, Engine, Store, StoreContextMut};
 use wasmtime_wasi::p2::bindings;
 use wasmtime_wizer::Wizer;
+
+// These providers belong only to the optimizer store, never a deployment host.
+// A fixed clock also makes QuickJS's context-local random seed reproducible.
+struct PreinitClock;
+
+impl wasmtime_wasi::clocks::HostWallClock for PreinitClock {
+    fn resolution(&self) -> Duration {
+        Duration::from_nanos(1)
+    }
+
+    fn now(&self) -> Duration {
+        Duration::ZERO
+    }
+}
+
+impl wasmtime_wasi::clocks::HostMonotonicClock for PreinitClock {
+    fn resolution(&self) -> u64 {
+        1
+    }
+
+    fn now(&self) -> u64 {
+        0
+    }
+}
 
 /// Mock logging level for wasi:logging/logging
 #[derive(wasmtime::component::ComponentType, wasmtime::component::Lift)]
@@ -102,6 +127,14 @@ pub struct OptimizeOptions {
 /// implementations. Any remaining unknown imports are automatically stubbed
 /// with trapping functions — if the init code calls them, pre-initialization
 /// will fail with an error identifying the unexpected import call.
+///
+/// Updated wasm-rquickjs templates advertise `wasm-rquickjs-wizer-restore-v1`.
+/// For their `wizer-initialize` export only, entropy and clocks are deterministic
+/// during pre-initialization. The guest refreshes runtime-owned RNG state and
+/// time origins on restoration. Application values computed during initialization
+/// remain frozen: do not generate secrets or per-instance IDs at module top level.
+/// Unmarked components retain legacy host services with a warning; rebuild old
+/// templates to enable deterministic pre-initialization safely.
 pub async fn optimize_component(
     input: &Utf8Path,
     output: &Utf8Path,
@@ -178,6 +211,41 @@ pub async fn optimize_component_with_options(
             &mut store,
             &wasm_bytes,
             async |store: &mut Store<WizerHost>, component: &Component| {
+                // Inspect Wizer's compiled component before instantiation, so
+                // capability negotiation does not compile the input twice.
+                let deterministic = init_func == "wizer-initialize"
+                    && component.component_type().exports(store.engine()).any(|(name, item)| {
+                        name == crate::wit::WIZER_RESTORE_CAPABILITY
+                            && matches!(item.ty, ComponentItem::ComponentFunc(ref f)
+                                if !f.async_() && f.params().len() == 0 && f.results().len() == 0)
+                    });
+                if deterministic {
+                    use rand_10::{SeedableRng, rngs::StdRng};
+                    let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
+                    builder
+                        .inherit_stdout()
+                        .inherit_stderr()
+                        .secure_random(StdRng::from_seed([0; 32]))
+                        .insecure_random(StdRng::from_seed([1; 32]))
+                        .insecure_random_seed(0)
+                        .wall_clock(PreinitClock)
+                        .monotonic_clock(PreinitClock);
+                    #[cfg(not(feature = "use-golem-wasmtime"))]
+                    { store.data_mut().wasi = builder.build(); }
+                    #[cfg(feature = "use-golem-wasmtime")]
+                    {
+                        let (wasi, io_ctx) = builder.build();
+                        store.data_mut().wasi = wasi;
+                        store.data_mut().io_ctx = io_ctx;
+                    }
+                } else {
+                    eprintln!(
+                        "Warning: no supported Wizer restore capability for initializer `{init_func}`; \
+                         preserving legacy entropy/clocks. Output is not guaranteed reproducible and \
+                         snapshotted RNG state may be reused. Rebuild the guest template to enable \
+                         deterministic pre-initialization."
+                    );
+                }
                 let mut linker: Linker<WizerHost> = Linker::new(store.engine());
 
                 // Add real Preview 2 and Preview 3 WASI and HTTP implementations. Preview 3

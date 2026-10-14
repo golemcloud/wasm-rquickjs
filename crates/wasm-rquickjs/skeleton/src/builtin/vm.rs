@@ -127,6 +127,16 @@ fn eval_in_new_context_impl<'js>(
 
     // Restore sandbox values into the new context's global object
     let new_global = new_ctx.globals();
+    // A function returned from a preinitialized VM can keep this context alive.
+    // Its Math.random must use the reseeded guest RNG, not QuickJS's saved seed.
+    let math: rquickjs::Object = new_global.get("Math")?;
+    math.set(
+        "random",
+        rquickjs::Function::new(new_ctx.clone(), || {
+            rand::Rng::random::<f64>(&mut rand::rng())
+        })?
+        .with_name("random")?,
+    )?;
     // Match the Node 22 vm global surface by hiding QuickJS globals that are
     // not present on a fresh contextified global unless the sandbox provides them.
     for key in [

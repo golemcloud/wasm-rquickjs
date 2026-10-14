@@ -815,11 +815,26 @@ pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(),
 }
 
 pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), String> {
+    let mut source = crate::builtin::wire_builtins();
+    // Shared by P2/P3 and all crypto tiers, before user modules can capture a
+    // reference. QuickJS's context-local PRNG seed remains in the snapshot but
+    // is never used by these functions after restoration.
+    source.push_str(r#"
+        import { random_bytes as __wasm_rquickjs_random_bytes } from '__wasm_rquickjs_builtin/web_crypto_native';
+        Math.random = function random() {
+            const bytes = __wasm_rquickjs_random_bytes(8);
+            let value = 0;
+            for (let i = 0; i < 6; i++) {
+                value = value * 256 + bytes[i];
+            }
+            return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
+        };
+    "#);
     async_with!(ctx => |ctx| {
         Module::evaluate(
             ctx.clone(),
             "__wasm_rquickjs_init_wiring",
-            crate::builtin::wire_builtins(),
+            source,
         )
         .catch(&ctx)
         .map_err(|error| {

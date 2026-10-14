@@ -9,7 +9,7 @@ description.workspace = true
 
 [features]
 default = []
-optimize = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:wasmtime-wizer", "dep:tokio"]
+optimize = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:wasmtime-wizer", "dep:tokio", "dep:rand_10"]
 use-golem-wasmtime = []
 # Development-only: read the skeleton from the checkout instead of embedding it into this
 # crate. This keeps skeleton edits from invalidating the host-side test binary.
@@ -24,6 +24,7 @@ indexmap = "2.11.0"
 prettier-please = { workspace = true }
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
+rand_10 = { package = "rand", version = "0.10.1", optional = true }
 syn = { workspace = true }
 toml_edit = { workspace = true }
 tokio = { workspace = true, features = ["rt"], optional = true }
