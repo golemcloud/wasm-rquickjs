@@ -4369,7 +4369,14 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function registeredLoaderFileUrlReturn(url) {
-        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_file_url(String(url));
+        const resolved = new URL(String(url));
+        const href = resolved.href;
+        const suffixStart = href.search(/[?#]/);
+        const suffix = suffixStart < 0 ? '' : href.slice(suffixStart);
+        const canonical = nodeUrl.pathToFileURL(nodeUrl.fileURLToPath(resolved)).href + suffix;
+        return canonical === href
+            ? registeredLoaderPathOrUrlReturn(href, true)
+            : fsNative.fs_register_esm_file_url(href);
     }
 
     function registeredLoaderJsonSourceReturn(source, url) {
@@ -4562,9 +4569,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
-        if (isImportMode) {
-            validateEsmPathSpecifier(specifier);
-        }
         const useLoadCache = !resolveOnly && !isImportMode;
         const loadCacheKey = useLoadCache
             ? String(globalThis.__wasm_rquickjs_registered_loader_generation || 0) +

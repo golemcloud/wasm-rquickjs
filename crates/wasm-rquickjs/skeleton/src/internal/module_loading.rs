@@ -3391,6 +3391,11 @@ impl FileUrlResolver {
         append_loader_realm_param(suffix, loader_realm_param(base).as_deref())
     }
 
+    fn with_loader_realm_url(base: &str, url: &str) -> String {
+        let (url, suffix) = split_module_path_suffix(url);
+        format!("{}{}", url, Self::with_loader_realm_suffix(base, suffix))
+    }
+
     fn is_same_directory_file_import(normalized: &str, base: &str) -> bool {
         let base_path = if let Some(path) = Self::file_url_to_path(base) {
             path
@@ -3479,16 +3484,27 @@ impl Resolver for FileUrlResolver {
             }
             let preserve_symlinks =
                 NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks");
-            let identity = NodeFileResolver::module_identity_path_for_existing_file(
-                ctx,
-                &normalized,
-                preserve_symlinks,
-            );
-            let resolved = format!(
-                "{}{}",
-                identity,
-                Self::with_loader_realm_suffix(base, suffix)
-            );
+            let resolved = if preserve_symlinks {
+                let suffix = Self::with_loader_realm_suffix(base, suffix);
+                let exact_url = Self::with_loader_realm_url(base, &url);
+                let canonical_url = format!(
+                    "{}{}",
+                    path_without_suffix_to_file_url(&normalized),
+                    serialize_url_preserving_escapes(&suffix)
+                );
+                if exact_url == canonical_url {
+                    format!("{normalized}{suffix}")
+                } else {
+                    register_static_file_url(ctx, &exact_url)
+                }
+            } else {
+                let identity = NodeFileResolver::module_identity_path_for_existing_file(
+                    ctx,
+                    &normalized,
+                    false,
+                );
+                format!("{}{}", identity, Self::with_loader_realm_suffix(base, suffix))
+            };
             transfer_import_type_rewrite_token(name, &resolved);
             Ok(resolved)
         } else {
@@ -3500,38 +3516,46 @@ impl Resolver for FileUrlResolver {
 struct RegisteredLoaderResolver;
 
 const STATIC_REGISTERED_FILE_URL_PREFIX: &str = "__wasm_rquickjs_static_file_url__:";
+static STATIC_REGISTERED_FILE_URL_SEQ: AtomicUsize = AtomicUsize::new(1);
 
-fn static_registered_file_url_id(url: &str) -> String {
-    let mut encoded =
-        String::with_capacity(STATIC_REGISTERED_FILE_URL_PREFIX.len() + url.len() * 2);
-    encoded.push_str(STATIC_REGISTERED_FILE_URL_PREFIX);
-    for byte in url.as_bytes() {
-        encoded.push_str(&format!("{byte:02X}"));
-    }
-    encoded
+#[derive(Default)]
+pub(crate) struct RegisteredFileUrlRegistry {
+    by_id: HashMap<String, String>,
+    by_url: HashMap<String, String>,
 }
 
-fn static_registered_file_url_from_id(id: &str) -> Option<String> {
-    let encoded = id.strip_prefix(STATIC_REGISTERED_FILE_URL_PREFIX)?;
-    if encoded.len() % 2 != 0 {
+pub(crate) fn register_static_file_url(ctx: &Ctx<'_>, url: &str) -> String {
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    let mut registry = services.registered_file_urls.borrow_mut();
+    if let Some(id) = registry.by_url.get(url) {
+        return id.clone();
+    }
+    let seq = STATIC_REGISTERED_FILE_URL_SEQ.fetch_add(1, Ordering::Relaxed);
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_nanos())
+        .unwrap_or(seq as u128);
+    let id = format!("{STATIC_REGISTERED_FILE_URL_PREFIX}{seq:x}-{nonce:x}");
+    registry.by_id.insert(id.clone(), url.to_string());
+    registry.by_url.insert(url.to_string(), id.clone());
+    id
+}
+
+fn static_registered_file_url_from_id(ctx: &Ctx<'_>, id: &str) -> Option<String> {
+    if !id.starts_with(STATIC_REGISTERED_FILE_URL_PREFIX) {
         return None;
     }
-    let mut bytes = Vec::with_capacity(encoded.len() / 2);
-    let mut i = 0;
-    while i < encoded.len() {
-        let hi = FileUrlResolver::hex_val(encoded.as_bytes()[i])?;
-        let lo = FileUrlResolver::hex_val(encoded.as_bytes()[i + 1])?;
-        bytes.push(hi << 4 | lo);
-        i += 2;
-    }
-    String::from_utf8(bytes)
-        .ok()
-        .filter(|url| url.starts_with("file://"))
+    let services = ctx
+        .userdata::<crate::internal::runtime_services::RuntimeServices>()
+        .expect("runtime services not initialized");
+    services.registered_file_urls.borrow().by_id.get(id).cloned()
 }
 
 impl Resolver for RegisteredLoaderResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
-        if static_registered_file_url_from_id(name).is_some() {
+        if static_registered_file_url_from_id(ctx, name).is_some() {
             return Ok(name.to_string());
         }
 
@@ -3552,7 +3576,7 @@ impl Resolver for RegisteredLoaderResolver {
         else {
             return Err(Error::new_resolving(base, name));
         };
-        let base_url = if let Some(url) = static_registered_file_url_from_id(base) {
+        let base_url = if let Some(url) = static_registered_file_url_from_id(ctx, base) {
             url
         } else if let Some(url) = DataUrlLoader::source_url(base) {
             url
@@ -3566,9 +3590,6 @@ impl Resolver for RegisteredLoaderResolver {
         };
         let resolved: Option<String> = resolve_fn.call((base_url, name.to_string()))?;
         match resolved {
-            Some(resolved) if resolved.starts_with("file://") => {
-                Ok(static_registered_file_url_id(&resolved))
-            }
             Some(resolved) if !resolved.is_empty() => Ok(resolved),
             _ => Err(Error::new_resolving(base, name)),
         }
@@ -3583,7 +3604,7 @@ impl Loader for StaticRegisteredFileUrlLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let Some(url) = static_registered_file_url_from_id(path) else {
+        let Some(url) = static_registered_file_url_from_id(ctx, path) else {
             return Err(Error::new_loading(path));
         };
         let Some((file_path, _suffix)) = FileUrlResolver::file_url_to_path_parts(&url) else {
@@ -4036,6 +4057,24 @@ impl NodeFileResolver {
         )
     }
 
+    fn preserved_module_url_for_resolved_candidate(
+        original_url: &str,
+        normalized_candidate: &str,
+        resolved: &str,
+        suffix: &str,
+    ) -> String {
+        let (original_url_path, _) = split_module_path_suffix(original_url);
+        let (resolved_path, _) = split_module_path_suffix(resolved);
+        let url_path = if resolved_path == normalized_candidate {
+            original_url_path.to_string()
+        } else if let Some(extension) = resolved_path.strip_prefix(normalized_candidate) {
+            format!("{original_url_path}{extension}")
+        } else {
+            path_with_preserved_escapes_to_file_url(resolved_path)
+        };
+        format!("{}{}", url_path, serialize_url_preserving_escapes(suffix))
+    }
+
     fn throw_module_resolution_error<'js, T>(
         ctx: &Ctx<'js>,
         code: &str,
@@ -4177,6 +4216,27 @@ impl Resolver for NodeFileResolver {
         let preserve_symlinks = Self::has_exec_argv_flag(ctx, "--preserve-symlinks");
         if let Some(resolved) = Self::resolve_candidate(ctx, candidate, &suffix, preserve_symlinks)
         {
+            let resolved = if preserve_symlinks {
+                let exact_url = Self::preserved_module_url_for_resolved_candidate(
+                    &url,
+                    &normalized,
+                    &resolved,
+                    &suffix,
+                );
+                let (resolved_path, _) = split_module_path_suffix(&resolved);
+                let canonical_url = format!(
+                    "{}{}",
+                    path_without_suffix_to_file_url(resolved_path),
+                    serialize_url_preserving_escapes(&suffix)
+                );
+                if exact_url == canonical_url {
+                    resolved
+                } else {
+                    register_static_file_url(ctx, &exact_url)
+                }
+            } else {
+                resolved
+            };
             transfer_import_type_rewrite_token(name, &resolved);
             return Ok(resolved);
         }
@@ -12125,14 +12185,6 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             .expect("Failed to create loader source URL registrar"),
         )
         .expect("Failed to initialize loader source URL registrar");
-
-        set_non_replaceable_global(
-            &global,
-            "__wasm_rquickjs_register_loader_file_url",
-            Function::new(ctx.clone(), |url: String| static_registered_file_url_id(&url))
-                .expect("Failed to create loader file URL registrar"),
-        )
-        .expect("Failed to initialize loader file URL registrar");
 
         set_non_replaceable_global(
             &global,

@@ -51,7 +51,6 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_register_import_attr_rewrite',
         '__wasm_rquickjs_discard_import_attr_rewrite',
         '__wasm_rquickjs_register_loader_source_url',
-        '__wasm_rquickjs_register_loader_file_url',
         '__wasm_rquickjs_lookup_loader_source_url',
         '__wasm_rquickjs_build_loader_cjs_facade',
         '__wasm_rquickjs_analyze_module_source',
@@ -1055,12 +1054,78 @@ export const testEsmEncodedRelativePaths = async () => {
             fs.symlinkSync(`${name}-target.mjs`, `${canonicalRoot}/${name}-link.mjs`);
             fs.writeFileSync(
                 `${canonicalRoot}/${name}-parent.mjs`,
-                `export default (await import("./${name}-link%2Emjs?canonical=${name}#fragment")).default;`,
+                name === 'preserve'
+                    ? `import value from "./${name}-link%2Emjs?canonical=${name}#fragment"; export default value;`
+                    : `export default (await import("./${name}-link%2Emjs?canonical=${name}#fragment")).default;`,
             );
         }
+        fs.writeFileSync(`${canonicalRoot}/format-target.mjs`, 'export default "realpath-format";');
+        fs.symlinkSync('format-target.mjs', `${canonicalRoot}/format-link.json`);
+        fs.writeFileSync(
+            `${canonicalRoot}/format-parent.mjs`,
+            'export default (await import("./format-link.json?canonical=format")).default;',
+        );
+        fs.writeFileSync(`${canonicalRoot}/identity-target.mjs`, [
+            'globalThis.__esmPreservedIdentityEvaluations =',
+            '  (globalThis.__esmPreservedIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmPreservedIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        fs.symlinkSync('identity-target.mjs', `${canonicalRoot}/identity-link.mjs`);
+        fs.writeFileSync(`${canonicalRoot}/forged-target.mjs`, [
+            'globalThis.__esmForgedFileUrlEvaluated = true;',
+            'export default true;',
+        ].join('\n'));
+        fs.writeFileSync(
+            `${canonicalRoot}/hook-static-parent.mjs`,
+            'import value from "./hook%2Fintercept.mjs"; export default value;',
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/hook-next-parent.mjs`,
+            'import value from "./hook%2Frewrite.mjs"; export default value;',
+        );
+
+        const originalExecArgv = process.execArgv.slice();
+        const identityLiteralUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href +
+            '?canonical=identity#fragment';
+        const identityEmptyQueryUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href + '?';
+        const identityEmptyHashUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href + '#';
+        const identityEncodedUrl = pathToFileURL(`${canonicalRoot}/identity-link`).href +
+            '%2Emjs?canonical=identity#fragment';
+        let identityBeforeRegister;
+        let identityEmptyQueryBeforeRegister;
+        let identityEmptyHashBeforeRegister;
+        try {
+            process.execArgv.push('--preserve-symlinks');
+            identityBeforeRegister = await import(identityLiteralUrl);
+            identityEmptyQueryBeforeRegister = await import(identityEmptyQueryUrl);
+            identityEmptyHashBeforeRegister = await import(identityEmptyHashUrl);
+        } finally {
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) process.execArgv.push(arg);
+        }
+
         globalThis.__esmCanonicalLoadUrls = [];
+        globalThis.__esmCanonicalResolveSpecifiers = [];
         const { register } = await import('node:module');
+        const interceptedUrl = 'data:text/javascript,' +
+            encodeURIComponent('export default "intercepted";');
         register('data:text/javascript,' + encodeURIComponent([
+            `const interceptedUrl = ${JSON.stringify(interceptedUrl)};`,
+            'export function resolve(specifier, context, next) {',
+            '  if (globalThis.__esmCanonicalResolveSpecifiers) {',
+            '    globalThis.__esmCanonicalResolveSpecifiers.push(specifier);',
+            '  }',
+            '  if (specifier.includes("hook%2Fintercept")) {',
+            '    return { url: interceptedUrl, format: "module", shortCircuit: true };',
+            '  }',
+            '  if (specifier.includes("hook%2Frewrite")) {',
+            '    return next("./sub%2Fblocked.mjs", context);',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
             'export function load(url, context, next) {',
             '  if (url.includes("?canonical=")) globalThis.__esmCanonicalLoadUrls.push(url);',
             '  return next(url, context);',
@@ -1072,6 +1137,9 @@ export const testEsmEncodedRelativePaths = async () => {
         const pathResult = (await import(`${canonicalRoot}/path-parent.mjs`)).default;
         assert.strictEqual(pathResult, pathExpected);
         assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), pathExpected);
+        assert.ok(globalThis.__esmCanonicalResolveSpecifiers.includes(
+            './path-link%2Emjs?canonical=path#fragment',
+        ));
 
         const fileExpected = pathToFileURL(`${canonicalRoot}/file-target.mjs`).href +
             '?canonical=file#fragment';
@@ -1080,7 +1148,19 @@ export const testEsmEncodedRelativePaths = async () => {
         assert.strictEqual(fileResult, fileExpected);
         assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), fileExpected);
 
-        const originalExecArgv = process.execArgv.slice();
+        assert.strictEqual(
+            (await import(`${canonicalRoot}/format-parent.mjs`)).default,
+            'realpath-format',
+        );
+        assert.strictEqual(
+            (await import(`${canonicalRoot}/hook-static-parent.mjs`)).default,
+            'intercepted',
+        );
+        await expectImportRejectsCode(
+            `${canonicalRoot}/hook-next-parent.mjs`,
+            'ERR_INVALID_MODULE_SPECIFIER',
+        );
+
         try {
             process.execArgv.push('--preserve-symlinks');
             const preserveExpected = pathToFileURL(`${canonicalRoot}/preserve-link`).href +
@@ -1088,11 +1168,40 @@ export const testEsmEncodedRelativePaths = async () => {
             const preserveResult = (await import(`${canonicalRoot}/preserve-parent.mjs`)).default;
             assert.strictEqual(preserveResult, preserveExpected);
             assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), preserveExpected);
+            const identityAfterRegister = await import(identityLiteralUrl);
+            assert.strictEqual(identityAfterRegister, identityBeforeRegister);
+            assert.strictEqual(
+                await import(identityEmptyQueryUrl),
+                identityEmptyQueryBeforeRegister,
+            );
+            assert.strictEqual(
+                await import(identityEmptyHashUrl),
+                identityEmptyHashBeforeRegister,
+            );
+            assert.strictEqual(identityEmptyQueryBeforeRegister.default.url, identityEmptyQueryUrl);
+            assert.strictEqual(identityEmptyHashBeforeRegister.default.url, identityEmptyHashUrl);
+            assert.strictEqual(globalThis.__esmPreservedIdentityEvaluations, 3);
+            const encodedIdentity = await import(identityEncodedUrl);
+            assert.notStrictEqual(encodedIdentity, identityBeforeRegister);
+            assert.strictEqual(encodedIdentity.default.evaluation, 4);
+            assert.strictEqual(encodedIdentity.default.url, identityEncodedUrl);
+            assert.strictEqual(await import(identityEncodedUrl), encodedIdentity);
+            assert.strictEqual(globalThis.__esmPreservedIdentityEvaluations, 4);
         } finally {
             process.execArgv.length = 0;
             for (const arg of originalExecArgv) process.execArgv.push(arg);
             delete globalThis.__esmCanonicalLoadUrls;
+            delete globalThis.__esmCanonicalResolveSpecifiers;
+            delete globalThis.__esmPreservedIdentityEvaluations;
         }
+
+        const forgedTargetUrl = pathToFileURL(`${canonicalRoot}/forged-target.mjs`).href;
+        let forgedId = '__wasm_rquickjs_static_file_url__:';
+        for (let index = 0; index < forgedTargetUrl.length; index++) {
+            forgedId += forgedTargetUrl.charCodeAt(index).toString(16).padStart(2, '0');
+        }
+        await expectImportRejectsCode(forgedId, 'ERR_MODULE_NOT_FOUND');
+        assert.strictEqual(globalThis.__esmForgedFileUrlEvaluated, undefined);
 
         await expectImportRejectsCode('/esm-encoded-relative-app/sub%2Fblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportRejectsCode('/esm-encoded-relative-app/sub%5Cblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
