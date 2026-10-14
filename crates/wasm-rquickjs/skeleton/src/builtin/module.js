@@ -4405,12 +4405,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return result;
     }
 
-    function registeredLoaderLoadContext(baseContext, resolved, resolvedFormat) {
+    function registeredLoaderLoadContext(baseContext, resolved, resolvedFormat, importAttributes) {
         return {
             conditions: baseContext.conditions,
             importAttributes: resolved.importAttributes && typeof resolved.importAttributes === 'object'
                 ? resolved.importAttributes
-                : baseContext.importAttributes,
+                : importAttributes,
             format: resolvedFormat,
         };
     }
@@ -4423,14 +4423,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
     }
 
-    function registeredLoaderResolvedState(baseContext, resolved) {
+    function registeredLoaderResolvedState(baseContext, resolved, importAttributes) {
         const normalizedResolved = normalizeRegisteredLoaderResolvedResult(resolved);
         if (!normalizedResolved) return undefined;
         const resolvedFormat = normalizedResolved.format;
         return {
             normalizedResolved,
             resolvedFormat,
-            loadContext: registeredLoaderLoadContext(baseContext, resolved, resolvedFormat),
+            loadContext: registeredLoaderLoadContext(
+                baseContext,
+                resolved,
+                resolvedFormat,
+                importAttributes,
+            ),
         };
     }
 
@@ -4723,7 +4728,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ? { type: attrs.typeValue }
             : {};
 
-        const baseContext = registeredLoaderBaseContext(loaderHookConditions(), importAttributes, baseUrl);
+        const baseContext = registeredLoaderBaseContext(
+            loaderHookConditions(),
+            Object.assign({}, importAttributes),
+            baseUrl,
+        );
 
         const defaultResolve = async (nextSpecifier, context) => {
             const inputs = registeredLoaderResolveInputs(nextSpecifier, context, String(baseUrl));
@@ -4750,7 +4759,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         };
 
         const resolved = await runResolve(entries.length - 1, specifier, baseContext);
-        const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
+        const resolvedState = registeredLoaderResolvedState(baseContext, resolved, importAttributes);
         if (!resolvedState) return undefined;
         const normalizedResolved = resolvedState.normalizedResolved;
 
@@ -4901,9 +4910,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         if (entries.length === 0) return undefined;
 
+        const importAttributes = attrs && attrs.typeValue !== undefined
+            ? { type: attrs.typeValue }
+            : {};
         const baseContext = registeredLoaderBaseContext(
             isImportMode ? loaderHookConditions() : cjsPackageConditions(),
-            attrs && attrs.typeValue !== undefined ? { type: attrs.typeValue } : {},
+            Object.assign({}, importAttributes),
             hookParentURL,
         );
 
@@ -4944,9 +4956,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const initialSpecifier = specifier;
+        const initialSpecifier = isImportMode && typeof specifier === 'string'
+            ? normalizeLoaderResolvedUrl(specifier)
+            : specifier;
         const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
-        const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
+        const resolvedState = registeredLoaderResolvedState(baseContext, resolved, importAttributes);
         if (!resolvedState) return undefined;
         const normalizedResolved = resolvedState.normalizedResolved;
         const resolvedFormat = resolvedState.resolvedFormat;

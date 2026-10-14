@@ -2203,6 +2203,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             'globalThis.__assertionlessJsonSeen = [];',
             'function resolve(specifier, context, next) {',
             '  const noType = context.importAttributes.type == null;',
+            '  context.importAttributes.type = "whatever";',
             '  const result = next(specifier, context);',
             '  const finish = (result) => {',
             '  const resultUrl = String(result.url);',
@@ -2951,7 +2952,7 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/grand#literal.mjs`, 'export default "literal-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
-            '  if (specifier.startsWith("/") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
+            '  if (specifier.startsWith("file:") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
             '  }',
             '  if (specifier === "virtual:static-child-query") {',
@@ -3010,7 +3011,7 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         );
         assert.strictEqual(
             globalThis.__static_loader_absolute_entry_seen,
-            `${root}/entry.mjs?cache#frag`,
+            `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
         );
         assert.strictEqual(
             (await import('data:text/javascript,' + encodeURIComponent(
