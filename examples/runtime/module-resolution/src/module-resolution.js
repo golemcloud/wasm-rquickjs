@@ -2897,6 +2897,14 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.mkdirSync(`${root}/node_modules/static-condition-pkg`, { recursive: true });
         fs.writeFileSync(`${root}/entry.mjs`, 'export default true;');
         fs.writeFileSync(
+            `${root}/importer.mjs`,
+            `import value from ${JSON.stringify(`${root}/entry.mjs?cache#frag`)}; export default value;`,
+        );
+        fs.writeFileSync(`${root}/cli-entry.mjs`, 'export default "original-entry";');
+        fs.writeFileSync(`${root}/redirected-entry.mjs`, 'export default "redirected-entry";');
+        const cliEntryUrl = pathToFileURL(`${root}/cli-entry.mjs`).href;
+        const redirectedEntryUrl = pathToFileURL(`${root}/redirected-entry.mjs`).href;
+        fs.writeFileSync(
             `${root}/node_modules/static-condition-pkg/package.json`,
             JSON.stringify({
                 name: 'static-condition-pkg',
@@ -2952,6 +2960,10 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/grand#literal.mjs`, 'export default "literal-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
+            `  if (specifier === ${JSON.stringify(cliEntryUrl)}) {`,
+            '    globalThis.__static_loader_cli_entry_calls = (globalThis.__static_loader_cli_entry_calls || 0) + 1;',
+            `    return { shortCircuit: true, url: ${JSON.stringify(redirectedEntryUrl)}, format: "module" };`,
+            '  }',
             '  if (specifier.startsWith("/") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
             '  }',
@@ -3003,10 +3015,15 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         const { register } = await import('node:module');
         register(loaderUrl);
         await import('data:text/javascript,export default 0');
+        await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(
+            cliEntryUrl,
+            cliEntryUrl,
+            import.meta.url,
+        );
+        assert.strictEqual((await import(cliEntryUrl)).default, 'redirected-entry');
+        assert.strictEqual(globalThis.__static_loader_cli_entry_calls, 1);
         assert.strictEqual(
-            (await import('data:text/javascript,' + encodeURIComponent(
-                `import value from ${JSON.stringify(`${root}/entry.mjs?cache#frag`)}; export default value;`,
-            ))).default,
+            (await import(pathToFileURL(`${root}/importer.mjs`).href)).default,
             true,
         );
         assert.strictEqual(
@@ -3066,10 +3083,12 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         );
         delete globalThis.__static_loader_absolute_entry_seen;
         delete globalThis.__static_loader_child_query_seen;
+        delete globalThis.__static_loader_cli_entry_calls;
         return true;
     } catch (error) {
         delete globalThis.__static_loader_absolute_entry_seen;
         delete globalThis.__static_loader_child_query_seen;
+        delete globalThis.__static_loader_cli_entry_calls;
         console.error(error);
         throw error;
     }

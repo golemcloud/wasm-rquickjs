@@ -259,7 +259,7 @@ async function prepareStaticRegisteredLoaderGraph(testPath) {
         globalThis.__wasm_rquickjs_registered_loaders.length === 0 ||
         typeof globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph !== 'function'
     ) {
-        return;
+        return testPath;
     }
     globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
     var urlBuiltin = require('node:url');
@@ -270,6 +270,7 @@ async function prepareStaticRegisteredLoaderGraph(testPath) {
         testUrl,
         import.meta.url,
     );
+    return testUrl;
 }
 
 export const runTest = async (testPath) => {
@@ -329,8 +330,8 @@ export const runTest = async (testPath) => {
         restorePromise = installRejectionTracking();
 
         if (testPath.endsWith('.mjs')) {
-            await prepareStaticRegisteredLoaderGraph(testPath);
-            await import(testPath);
+            var testSpecifier = await prepareStaticRegisteredLoaderGraph(testPath);
+            await import(testSpecifier);
         } else {
             // Use createRequire('/') so the test module gets parent: null,
             // simulating Node.js's behavior when running a script directly
