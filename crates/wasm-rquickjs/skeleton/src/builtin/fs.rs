@@ -1702,12 +1702,16 @@ pub mod native_module {
         identity_url: String,
         public_url: Option<String>,
         loader_realm_param: Option<String>,
+        format: Option<String>,
+        attributes_validated: Option<bool>,
     ) -> String {
         crate::internal::module_loading::preserved_file_url_identity_with_public(
             &ctx,
             &identity_url,
             public_url.as_deref().unwrap_or(&identity_url),
             loader_realm_param.as_deref(),
+            format.as_deref(),
+            attributes_validated.unwrap_or(false),
         )
     }
 

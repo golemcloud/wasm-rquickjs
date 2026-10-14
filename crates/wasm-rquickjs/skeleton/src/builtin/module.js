@@ -651,7 +651,9 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin',
 const moduleCache = Object.create(null);
 let moduleExportsInitialized = false;
 let activeModuleCacheOverride;
-const loaderRealmModuleCaches = new Map();
+const loaderHooksModuleCache = Object.create(null);
+const moduleCacheDomains = new WeakMap();
+const loaderHooksRealmParam = '__wasm_rquickjs_loader_realm=hooks';
 
 function currentModuleCache() {
     if (activeModuleCacheOverride !== undefined) {
@@ -670,13 +672,17 @@ function withModuleCache(cache, callback) {
     }
 }
 
-function withLoaderRealmModuleCache(realm, callback) {
-    let cache = loaderRealmModuleCaches.get(realm);
-    if (cache === undefined) {
-        cache = Object.create(null);
-        loaderRealmModuleCaches.set(realm, cache);
-    }
-    return withModuleCache(cache, callback);
+function withLoaderRealmModuleCache(_realm, callback) {
+    return withModuleCache(loaderHooksModuleCache, callback);
+}
+
+function loaderRealmUrlWithParam(url, realmParam) {
+    if (!url.startsWith('file://')) return url;
+    const hashIndex = url.indexOf('#');
+    const beforeHash = hashIndex < 0 ? url : url.slice(0, hashIndex);
+    const hash = hashIndex < 0 ? '' : url.slice(hashIndex);
+    const separator = beforeHash.includes('?') ? '&' : '?';
+    return beforeHash + separator + realmParam + hash;
 }
 
 function shouldPreserveSymlinks(isMainModuleLoad) {
@@ -2754,6 +2760,18 @@ function defaultLoaderFormatForFilename(filename) {
     return undefined;
 }
 
+function defaultLoaderFormatForDataUrl(url) {
+    if (!url.startsWith('data:')) return undefined;
+    const comma = url.indexOf(',');
+    if (comma < 0) return undefined;
+    const metadata = url.slice(5, comma);
+    const semicolon = metadata.indexOf(';');
+    const mime = (semicolon < 0 ? metadata : metadata.slice(0, semicolon)).trim();
+    if (mime === 'application/json') return 'json';
+    if (mime === 'text/javascript' || mime === 'application/javascript') return 'module';
+    return undefined;
+}
+
 function loaderFormatOrUndefined(format) {
     return format === undefined || format === null ? undefined : String(format);
 }
@@ -2792,7 +2810,7 @@ function resultForEsmFileUrl(url, parentURL) {
     if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
     if (stat !== 0) throw makeEsmModuleNotFoundError(url.href);
     if (shouldPreserveSymlinks(false)) {
-        return registeredLoaderUrlFormatResult(url.href, defaultLoaderFormatForFilename(filename));
+        return registeredLoaderUrlFormatResult(url.href, defaultLoaderFormatForFilename(url.pathname));
     }
     const outcome = fsNative.fs_esm_loader_realpath(filename);
     if (outcome.error) throw createFsSystemError(outcome.error);
@@ -3142,8 +3160,18 @@ function unmarkRequireEsmSourceOverride(previous) {
 }
 
 function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOverride) {
-    throwIfRequireEsmGraphCycle(resolvedFilename);
-    const markedGraph = markRequireEsmGraph(resolvedFilename);
+    let esmIdentity = resolvedFilename;
+    if (
+        sourceOverride === undefined &&
+        moduleCacheDomains.get(mod) === loaderHooksModuleCache &&
+        typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_hooks_esm_identity === 'function'
+    ) {
+        esmIdentity = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_hooks_esm_identity(
+            resolvedFilename,
+        );
+    }
+    throwIfRequireEsmGraphCycle(esmIdentity);
+    const markedGraph = markRequireEsmGraph(esmIdentity);
     const previousSourceOverride = sourceOverride === undefined
         ? undefined
         : markRequireEsmSourceOverride(resolvedFilename, sourceOverride);
@@ -3155,7 +3183,7 @@ function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOver
     });
     try {
         if (forceModule) markRequireEsmForcedModule(resolvedFilename);
-        const namespace = _requireEsm(resolvedFilename);
+        const namespace = _requireEsm(esmIdentity);
         if (namespace && typeof namespace === 'object' && Object.hasOwn(namespace, 'module.exports')) {
             return namespace['module.exports'];
         }
@@ -3274,6 +3302,9 @@ function loadCommonJsTransaction(descriptor) {
             parentModule,
             pathsBase,
         );
+    }
+    if (activeModuleCacheOverride !== undefined) {
+        moduleCacheDomains.set(mod, activeModuleCacheOverride);
     }
 
     // Cache before executing (handles circular dependencies)
@@ -3597,6 +3628,38 @@ function loadJsonLoaderSourceExports(filename, source) {
     }).exports;
 }
 
+function loadJsonModuleValue(filename, dirname, source, loaderRealm) {
+    filename = String(filename);
+    dirname = String(dirname);
+    source = String(source);
+    const load = () => {
+        const cache = currentModuleCache();
+        const cached = cache[filename];
+        if (cached) return cached.exports;
+        const value = JSON.parse(source);
+        cache[filename] = {
+            id: filename,
+            filename,
+            path: dirname,
+            exports: value,
+            loaded: true,
+            parent: null,
+            children: [],
+            paths: [],
+        };
+        return value;
+    };
+    return loaderRealm === undefined || loaderRealm === null || loaderRealm === ''
+        ? load()
+        : withLoaderRealmModuleCache(String(loaderRealm), load);
+}
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_load_json_module_value', {
+    value: loadJsonModuleValue,
+    writable: false,
+    configurable: false,
+});
+
 if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function') {
     Object.defineProperty(globalThis, '__wasm_rquickjs_load_commonjs_loader_source', {
         value: loadCommonJsLoaderSourceExports,
@@ -3777,11 +3840,15 @@ function createRequireContext(
     requireMainOverride,
     preparedTypeScriptGraph,
     hasRequireMainOverride,
+    moduleCacheOverride,
 ) {
     const parentFilename = parentFilenameOverride || (parentModule && parentModule.filename) || null;
     const parentLookupPaths = parentModule && Array.isArray(parentModule.paths)
         ? parentModule.paths.concat(globalPaths)
         : null;
+    const fixedModuleCache = moduleCacheOverride !== undefined
+        ? moduleCacheOverride
+        : parentModule && moduleCacheDomains.get(parentModule);
     return {
         parentDir,
         parentModule,
@@ -3789,8 +3856,15 @@ function createRequireContext(
         parentLookupPaths,
         preparedTypeScriptGraph,
         requireMain: hasRequireMainOverride ? requireMainOverride : mainModule,
-        moduleCache: currentModuleCache(),
+        moduleCache: fixedModuleCache === undefined ? currentModuleCache() : fixedModuleCache,
+        fixedModuleCache,
     };
+}
+
+function withRequireContextCache(context, callback) {
+    return context.fixedModuleCache === undefined
+        ? callback()
+        : withModuleCache(context.fixedModuleCache, callback);
 }
 
 function withActiveModuleLoadContext(request, parent, context, load) {
@@ -3817,6 +3891,16 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
         parentLookupPaths,
         preparedTypeScriptGraph,
     } = context;
+    const requireBuiltinForContext = builtinId => {
+        const canonicalId = builtinId === 'module' ? 'node:module' : builtinId;
+        if (
+            canonicalId === 'node:module' &&
+            context.fixedModuleCache === loaderHooksModuleCache
+        ) {
+            return getLoaderModuleFacade();
+        }
+        return requireBuiltinModule(builtinId);
+    };
 
     // Capture buffer.kMaxLength for zlib on first require, even when a module
     // mock will satisfy the request. This matches Node's CJS require timing.
@@ -3843,7 +3927,7 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
 
     // node:-prefixed requires always go to builtins, bypassing cache
     if (id.startsWith('node:')) {
-        const builtin = requireBuiltinModule(id);
+        const builtin = requireBuiltinForContext(id);
         if (builtin !== undefined) {
             return builtin;
         }
@@ -3851,7 +3935,10 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
 
     // Check require.cache before builtins for non-node: specifiers
     // (allows shadowing builtins via require.cache)
-    const cached = context.moduleCache[id];
+    const loadCache = context.fixedModuleCache === undefined
+        ? currentModuleCache()
+        : context.fixedModuleCache;
+    const cached = loadCache[id];
     if (cached !== undefined) {
         throwIfRequireEsmGraphCycle(id);
         if (cached.__wasmRequireEsmInProgress) {
@@ -3863,7 +3950,7 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
     }
 
     // Builtin modules
-    const builtin = requireBuiltinModule(id);
+    const builtin = requireBuiltinForContext(id);
     if (builtin !== undefined) {
         return builtin;
     }
@@ -3900,7 +3987,7 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
     if (id.startsWith('#')) {
         const resolution = makeCjsResolutionState();
         const importsResolved = resolveCjsPackageImportOrNodeModules(id, parentDir, parentFilename, parentLookupPaths, resolution);
-        if (importsResolved.builtin) return requireBuiltinModule(importsResolved.builtin);
+        if (importsResolved.builtin) return requireBuiltinForContext(importsResolved.builtin);
         const mod = loadFilesystemCommonJs(
             importsResolved.filename,
             parentModule || null,
@@ -3962,7 +4049,7 @@ function decorateRequire(localRequire, context) {
     return localRequire;
 }
 
-function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph) {
+function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph, moduleCacheOverride) {
     const context = createRequireContext(
         parentDir,
         parentModule,
@@ -3970,19 +4057,20 @@ function makeRequire(parentDir, parentModule, parentFilenameOverride, requireMai
         requireMainOverride,
         preparedTypeScriptGraph,
         arguments.length >= 4,
+        moduleCacheOverride,
     );
     function localRequire(id) {
         return withActiveModuleLoadContext(
             id,
             parentModule,
             context,
-            () => withModuleCache(context.moduleCache, () => parentModule.require(id)),
+            () => withRequireContextCache(context, () => parentModule.require(id)),
         );
     }
     return decorateRequire(localRequire, context);
 }
 
-function makeInternalRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph) {
+function makeInternalRequire(parentDir, parentModule, parentFilenameOverride, requireMainOverride, preparedTypeScriptGraph, moduleCacheOverride) {
     const context = createRequireContext(
         parentDir,
         parentModule,
@@ -3990,10 +4078,11 @@ function makeInternalRequire(parentDir, parentModule, parentFilenameOverride, re
         requireMainOverride,
         preparedTypeScriptGraph,
         arguments.length >= 4,
+        moduleCacheOverride,
     );
     function localRequire(id) {
-        return withModuleCache(
-            context.moduleCache,
+        return withRequireContextCache(
+            context,
             () => traceModuleRequire(
                 id,
                 context.parentFilename,
@@ -4009,7 +4098,7 @@ const globalRequire = makeRequire('/', mainModule);
 
 export let require = globalRequire;
 
-export let createRequire = function createRequire(filename) {
+function createRequireWithCache(filename, moduleCacheOverride) {
     let filepath;
     const isUrlObj = filename instanceof URL ||
         (filename !== null && typeof filename === 'object' &&
@@ -4043,8 +4132,26 @@ export let createRequire = function createRequire(filename) {
     syntheticParent.path = dir;
     syntheticParent.loaded = true;
     syntheticParent.paths = _nodeModulePaths(dir);
-    return makeRequire(dir, syntheticParent, filepath, currentRequireMain());
+    if (moduleCacheOverride !== undefined) {
+        moduleCacheDomains.set(syntheticParent, moduleCacheOverride);
+    }
+    return makeRequire(
+        dir,
+        syntheticParent,
+        filepath,
+        currentRequireMain(),
+        undefined,
+        moduleCacheOverride,
+    );
+}
+
+export let createRequire = function createRequire(filename) {
+    return createRequireWithCache(filename, undefined);
 };
+
+function createLoaderHooksRequire(filename) {
+    return createRequireWithCache(filename, loaderHooksModuleCache);
+}
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_create_require', {
     value: createRequire,
@@ -4222,9 +4329,7 @@ export let register = function register(specifier, parentURL, options) {
     parent = parent === undefined ? undefined : String(parent);
     const loaders = globalThis.__wasm_rquickjs_registered_loaders ||
         (globalThis.__wasm_rquickjs_registered_loaders = []);
-    const realm = globalThis.__wasm_rquickjs_registered_loader_realm_counter =
-        (globalThis.__wasm_rquickjs_registered_loader_realm_counter || 0) + 1;
-    const loader = { url, parent, data, realm, module: undefined, initialized: false, initializing: undefined };
+    const loader = { url, parent, data, module: undefined, initialized: false, initializing: undefined };
     loaders.push(loader);
     globalThis.__wasm_rquickjs_registered_loader_generation =
         (globalThis.__wasm_rquickjs_registered_loader_generation || 0) + 1;
@@ -4236,16 +4341,11 @@ export let register = function register(specifier, parentURL, options) {
 };
 
 if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
+    const registeredLoaderImportAttributes = Symbol('registeredLoaderImportAttributes');
+
     function normalizeLoaderResolvedUrl(url) {
         if (url.startsWith('/')) {
-            const query = url.indexOf('?');
-            const hash = url.indexOf('#');
-            const end = query < 0 ? hash : (hash < 0 ? query : Math.min(query, hash));
-            if (end >= 0) {
-                url = nodeUrl.pathToFileURL(url.slice(0, end)).href + url.slice(end);
-            } else {
-                url = nodeUrl.pathToFileURL(url).href;
-            }
+            url = new URL(url, 'file:///').href;
         }
         return url;
     }
@@ -4256,25 +4356,18 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             : loader.url;
         if (!url.startsWith('file://')) return url;
         const publicUrl = resultForEsmFileUrl(new URL(url), loader.parent).url;
-        const realmParam = loaderRealmParam(loader.realm);
+        const realmParam = loaderRealmParam();
         return fsNative.fs_register_esm_file_url(
             loaderRealmUrlWithParam(publicUrl, realmParam),
             publicUrl,
             realmParam,
+            undefined,
+            true,
         );
     }
 
-    function loaderRealmParam(realm) {
-        return '__wasm_rquickjs_loader_realm=' + encodeURIComponent(String(realm));
-    }
-
-    function loaderRealmUrlWithParam(url, realmParam) {
-        if (!url.startsWith('file://')) return url;
-        const hashIndex = url.indexOf('#');
-        const beforeHash = hashIndex < 0 ? url : url.slice(0, hashIndex);
-        const hash = hashIndex < 0 ? '' : url.slice(hashIndex);
-        const separator = beforeHash.includes('?') ? '&' : '?';
-        return beforeHash + separator + realmParam + hash;
+    function loaderRealmParam() {
+        return loaderHooksRealmParam;
     }
 
     function startRegisteredLoader(loader) {
@@ -4417,6 +4510,16 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             ),
         };
         if (registeredLoaderHasSource(loaded)) result.source = loaded.source;
+        const importAttributes = Object.create(null);
+        const resolvedImportAttributes = resolvedState.loadContext.importAttributes;
+        if (resolvedImportAttributes && typeof resolvedImportAttributes === 'object') {
+            for (const key of Object.keys(resolvedImportAttributes)) {
+                importAttributes[key] = resolvedImportAttributes[key];
+            }
+        }
+        Object.defineProperty(result, registeredLoaderImportAttributes, {
+            value: Object.freeze(importAttributes),
+        });
         return Object.freeze(result);
     }
 
@@ -4428,6 +4531,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             value,
         };
         if (registeredLoaderHasSource(result)) cached.source = result.source;
+        if (result && result[registeredLoaderImportAttributes] !== undefined) {
+            Object.defineProperty(cached, registeredLoaderImportAttributes, {
+                value: result[registeredLoaderImportAttributes],
+            });
+        }
         if (error !== undefined) cached.error = error;
         return Object.freeze(cached);
     }
@@ -4437,29 +4545,67 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return url.startsWith('file://') ? loaderFileUrlSource(url) : undefined;
     }
 
-    function registeredLoaderModuleSourceReturn(source, url) {
+    function registeredLoaderModuleSourceReturn(source, url, loaderRealmParam) {
         return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
             'data:text/javascript,' + encodeURIComponent(loaderSourceToString(source)),
             String(url),
+            loaderRealmParam === undefined || loaderRealmParam === null
+                ? undefined
+                : String(loaderRealmParam),
         );
     }
 
-    function registeredLoaderFileUrlReturn(url, loaderRealmParam) {
+    function registeredLoaderFileUrlReturn(url, loaderRealmParam, format, attributesValidated) {
         const publicUrl = new URL(String(url)).href;
+        const inferredFormat = defaultLoaderFormatForFilename(new URL(publicUrl).pathname);
+        const validatedJson = attributesValidated === true && format === 'json';
+        const storedFormat = validatedJson
+            ? format
+            : loaderRealmParam === undefined || loaderRealmParam === null
+            ? (format === inferredFormat ? undefined : format)
+            : format;
         if (loaderRealmParam !== undefined && loaderRealmParam !== null) {
             return fsNative.fs_register_esm_file_url(
                 loaderRealmUrlWithParam(publicUrl, String(loaderRealmParam)),
                 publicUrl,
                 String(loaderRealmParam),
+                storedFormat,
+                validatedJson,
             );
         }
-        return fsNative.fs_register_esm_file_url(publicUrl, publicUrl, undefined);
+        return fsNative.fs_register_esm_file_url(
+            publicUrl,
+            publicUrl,
+            undefined,
+            storedFormat,
+            validatedJson,
+        );
     }
 
-    function registeredLoaderJsonSourceReturn(source, url) {
+    function registeredLoaderDataUrlReturn(url, loaderRealmParam, format) {
+        let target = String(url);
+        if (loaderRealmParam !== undefined && loaderRealmParam !== null) {
+            target = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
+                target,
+                target,
+                String(loaderRealmParam),
+            );
+        }
+        return format === 'json'
+            ? wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(
+                target,
+                'json',
+            )
+            : target;
+    }
+
+    function registeredLoaderJsonSourceReturn(source, url, loaderRealmParam) {
         const registered = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
             'data:application/json,' + encodeURIComponent(loaderSourceToString(source)),
             String(url),
+            loaderRealmParam === undefined || loaderRealmParam === null
+                ? undefined
+                : String(loaderRealmParam),
         );
         return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(
             registered,
@@ -4472,28 +4618,60 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return loaderCommonJsSourceModule(loaded.source, url, loaderRealmParam);
         }
         return String(url).startsWith('file://')
-            ? registeredLoaderPathOrUrlReturn(url, true)
+            ? registeredLoaderFileUrlReturn(url, loaderRealmParam, 'commonjs', true)
             : missingSourceReturn;
     }
 
-    function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
-        if (specifier.startsWith('data:')) {
-            return registeredLoaderUrlResult(specifier);
+    function makeImportAttributeMissingError(url) {
+        const err = new TypeError(`Module "${String(url)}" needs an import attribute of "type: json"`);
+        err.code = 'ERR_IMPORT_ATTRIBUTE_MISSING';
+        return err;
+    }
+
+    function makeImportAttributeIncompatibleError(url, type) {
+        const err = new TypeError(`Module "${String(url)}" is not of type "${String(type)}"`);
+        err.code = 'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE';
+        return err;
+    }
+
+    function validateRegisteredLoaderImportAttributes(loaded, attrs) {
+        if (!loaded || !loaded.url) return;
+        const effectiveAttrs = loaded[registeredLoaderImportAttributes] !== undefined
+            ? loaded[registeredLoaderImportAttributes]
+            : attrs;
+        const typeValue = effectiveAttrs && effectiveAttrs.typeValue !== undefined
+            ? String(effectiveAttrs.typeValue)
+            : effectiveAttrs && effectiveAttrs.type !== undefined
+                ? String(effectiveAttrs.type)
+                : '';
+        if (loaded.format === 'json') {
+            if (typeValue !== 'json') throw makeImportAttributeMissingError(loaded.url);
+        } else if (typeValue === 'json') {
+            throw makeImportAttributeIncompatibleError(loaded.url, 'json');
         }
-        const builtin = registeredLoaderBuiltinResolve(specifier, false);
-        if (builtin) return builtin;
+    }
+
+    function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         const preprocessedSpecifier = preprocessEsmUrlInput(specifier);
+        if (preprocessedSpecifier.startsWith('data:')) {
+            return registeredLoaderUrlFormatResult(
+                preprocessedSpecifier,
+                defaultLoaderFormatForDataUrl(preprocessedSpecifier),
+            );
+        }
+        const builtin = registeredLoaderBuiltinResolve(preprocessedSpecifier, false);
+        if (builtin) return builtin;
         let parsedFileSpecifier;
         if (preprocessedSpecifier.startsWith('file://')) {
             try {
-                parsedFileSpecifier = new URL(specifier);
+                parsedFileSpecifier = new URL(preprocessedSpecifier);
             } catch (_) {
                 if (specifier.startsWith('file://')) throw makeEsmInvalidUrlError(specifier);
             }
         }
         const fileSpecifier = parsedFileSpecifier && parsedFileSpecifier.protocol === 'file:';
-        const rootedSpecifier = specifier.startsWith('/');
-        const pathSpecifier = fileSpecifier || rootedSpecifier || rustClassifiesPathSpecifier(specifier);
+        const rootedSpecifier = preprocessedSpecifier.startsWith('/');
+        const pathSpecifier = fileSpecifier || rootedSpecifier || rustClassifiesPathSpecifier(preprocessedSpecifier);
         if (fileSpecifier) {
             return resultForEsmFileUrl(parsedFileSpecifier, parentURL);
         }
@@ -4503,22 +4681,22 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 if (missingAsUndefined) return undefined;
                 throw makeEsmModuleNotFoundError(specifier);
             }
-            return resultForEsmFileUrl(parseEsmUrl(specifier, 'file:///'), parentURL);
+            return resultForEsmFileUrl(parseEsmUrl(preprocessedSpecifier, 'file:///'), parentURL);
         }
 
         if (parentFilename !== null && pathSpecifier) {
-            return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
+            return resultForRelativeOrAbsoluteSpecifier(preprocessedSpecifier, parentURL);
         }
 
         if (parentFilename !== null) {
-            const packageResolved = resolveEsmPackageDefaultForLoader(specifier, parentURL, context);
+            const packageResolved = resolveEsmPackageDefaultForLoader(preprocessedSpecifier, parentURL, context);
             if (packageResolved) return packageResolved;
             if (missingAsUndefined) return undefined;
-            throw makeEsmModuleNotFoundError(specifier);
+            throw makeEsmModuleNotFoundError(preprocessedSpecifier);
         }
         if (missingAsUndefined) return undefined;
 
-        let url = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(parentURL, specifier);
+        let url = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(parentURL, preprocessedSpecifier);
         return registeredLoaderUrlResult(normalizeLoaderResolvedUrl(url));
     }
 
@@ -4595,6 +4773,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
         if (mode !== 'static-raw') {
+            validateRegisteredLoaderImportAttributes(result, attrs);
             cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result);
         }
         const loadedHasSource = registeredLoaderHasSource(result);
@@ -4608,12 +4787,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         if (!loadedHasSource && loadedFormat === 'module') {
             if (String(normalizedResolved.url).startsWith('file://')) {
-                if (shouldPreserveSymlinks(false)) {
-                    return registeredLoaderFileUrlReturn(normalizedResolved.url);
-                }
-                try {
-                    if (nodeUrl.fileURLToPath(normalizedResolved.url).endsWith('.mjs')) return normalizedResolved.url;
-                } catch (_) {}
+                return registeredLoaderFileUrlReturn(
+                    normalizedResolved.url,
+                    undefined,
+                    'module',
+                    true,
+                );
+            }
+            if (String(normalizedResolved.url).startsWith('data:')) {
+                return registeredLoaderDataUrlReturn(
+                    normalizedResolved.url,
+                    undefined,
+                    loadedFormat,
+                );
             }
             const fileSource = registeredLoaderFileSourceFallback(normalizedResolved.url);
             if (fileSource !== null && fileSource !== undefined) {
@@ -4626,8 +4812,20 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (loadedHasSource && loadedFormat === 'json') {
             return registeredLoaderJsonSourceReturn(result.source, normalizedResolved.url);
         }
-        if (resolvedState.loadContext.importAttributes && resolvedState.loadContext.importAttributes.type === 'json') {
-            return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(normalizedResolved.url, 'json');
+        if (!loadedHasSource && loadedFormat === 'json' && String(normalizedResolved.url).startsWith('file://')) {
+            return registeredLoaderFileUrlReturn(
+                normalizedResolved.url,
+                undefined,
+                'json',
+                true,
+            );
+        }
+        if (!loadedHasSource && loadedFormat === 'json' && String(normalizedResolved.url).startsWith('data:')) {
+            return registeredLoaderDataUrlReturn(
+                normalizedResolved.url,
+                undefined,
+                loadedFormat,
+            );
         }
         return undefined;
     }
@@ -4650,7 +4848,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return value;
     }
 
-    function runRegisteredLoadersSync(baseUrl, specifier, resolveOnly, mode, publicParentURL) {
+    function runRegisteredLoadersSync(baseUrl, specifier, resolveOnly, mode, publicParentURL, attrs) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
@@ -4691,21 +4889,25 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const baseContext = registeredLoaderBaseContext(
             isImportMode ? loaderHookConditions() : cjsPackageConditions(),
-            {},
+            attrs && attrs.typeValue !== undefined ? { type: attrs.typeValue } : {},
             hookParentURL,
         );
 
         const defaultResolve = (nextSpecifier, context) => {
             const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);
-            const resolutionParentURL = inputs.parentURL === hookParentURL
-                ? internalBaseUrl
-                : inputs.parentURL;
             const builtin = registeredLoaderBuiltinResolve(inputs.specifier, !isImportMode);
             if (builtin) return builtin;
             if (isImportMode) {
-                return resolveEsmDefaultForLoader(inputs.specifier, resolutionParentURL, context, internalBaseUrl, true, false);
+                return resolveEsmDefaultForLoader(
+                    inputs.specifier,
+                    inputs.parentURL,
+                    context,
+                    hookParentURL,
+                    true,
+                    false,
+                );
             }
-            return resolveCjsDefaultForLoader(inputs.specifier, resolutionParentURL, context);
+            return resolveCjsDefaultForLoader(inputs.specifier, inputs.parentURL, context);
         };
 
         const runResolve = (index, nextSpecifier, context) => {
@@ -4728,7 +4930,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const initialSpecifier = specifier;
+        const initialSpecifier = isImportMode && typeof specifier === 'string'
+            ? normalizeLoaderResolvedUrl(specifier)
+            : specifier;
         const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
         const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
         if (!resolvedState) return undefined;
@@ -4813,26 +5017,27 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return registeredLoaderPathOrUrlReturn(url, true);
     }
 
-    function staticRegisteredLoaderReturn(loaded, loaderRealmParam) {
+    function staticRegisteredLoaderReturn(loaded, loaderRealmParam, attrs) {
         if (!loaded || !loaded.url) return undefined;
+        validateRegisteredLoaderImportAttributes(loaded, attrs);
         const url = String(loaded.url);
         const format = loaderFormatOrUndefined(loaded.format);
         const hasSource = registeredLoaderHasSource(loaded);
         if (hasSource && (format === undefined || format === 'module')) {
-            return registeredLoaderModuleSourceReturn(loaded.source, url);
+            return registeredLoaderModuleSourceReturn(loaded.source, url, loaderRealmParam);
         }
         if (!hasSource && format === 'module') {
-            if (url.startsWith('file://') && loaderRealmParam !== undefined && loaderRealmParam !== null) {
-                return registeredLoaderFileUrlReturn(url, loaderRealmParam);
+            if (url.startsWith('file://')) {
+                return registeredLoaderFileUrlReturn(url, loaderRealmParam, format, true);
             }
-            if (url.startsWith('file://') && shouldPreserveSymlinks(false)) {
-                return registeredLoaderFileUrlReturn(url);
+            if (url.startsWith('data:')) {
+                return registeredLoaderDataUrlReturn(url, loaderRealmParam, format);
             }
             return staticRegisteredLoaderPathReturn(url);
         }
         if (format === 'commonjs') {
-            if (!hasSource && url.startsWith('file://') && loaderRealmParam !== undefined && loaderRealmParam !== null) {
-                return registeredLoaderFileUrlReturn(url, loaderRealmParam);
+            if (!hasSource && url.startsWith('file://')) {
+                return registeredLoaderFileUrlReturn(url, loaderRealmParam, format, true);
             }
             return registeredLoaderCommonJsReturn(
                 loaded,
@@ -4842,37 +5047,29 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             );
         }
         if (hasSource && format === 'json') {
-            return registeredLoaderJsonSourceReturn(loaded.source, url);
+            return registeredLoaderJsonSourceReturn(loaded.source, url, loaderRealmParam);
+        }
+        if (!hasSource && format === 'json' && url.startsWith('file://')) {
+            return registeredLoaderFileUrlReturn(url, loaderRealmParam, format, true);
+        }
+        if (!hasSource && format === 'json' && url.startsWith('data:')) {
+            return registeredLoaderDataUrlReturn(url, loaderRealmParam, format);
+        }
+        if (
+            url.startsWith('file://') &&
+            (loaderRealmParam !== undefined && loaderRealmParam !== null || shouldPreserveSymlinks(false))
+        ) {
+            return registeredLoaderFileUrlReturn(url, loaderRealmParam, format, true);
         }
         return staticRegisteredLoaderPathReturn(url);
     }
 
     function staticRegisteredLoaderReturnForEdge(loaded, attrs, loaderRealmParam) {
-        if (
-            attrs &&
-            attrs.typeValue === 'json' &&
-            loaded &&
-            loaded.format === 'json' &&
-            !registeredLoaderHasOwnSource(loaded) &&
-            loaded.url &&
-            typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite === 'function'
-        ) {
-            const url = String(loaded.url);
-            if (url.startsWith('file://') && loaderRealmParam !== undefined && loaderRealmParam !== null) {
-                const attributedUrl = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(
-                    url,
-                    'json',
-                );
-                return registeredLoaderFileUrlReturn(attributedUrl, loaderRealmParam);
-            }
-            const target = staticRegisteredLoaderPathReturn(url);
-            return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(target, 'json');
-        }
-        return staticRegisteredLoaderReturn(loaded, loaderRealmParam);
+        return staticRegisteredLoaderReturn(loaded, loaderRealmParam, attrs);
     }
 
     function cacheDynamicRegisteredLoaderResult(parentUrl, specifier, attrs, loaded) {
-        if (loaded && loaded.format === 'json') return;
+        if (loaded && loaded.format === 'json' && registeredLoaderHasSource(loaded)) return;
         if (
             typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_has_import_mock === 'function' &&
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_has_import_mock(specifier, parentUrl)
@@ -4888,7 +5085,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             try {
                 cache[key] = normalizedRegisteredLoaderCacheResult(
                     loaded,
-                    staticRegisteredLoaderReturn(loaded),
+                    staticRegisteredLoaderReturn(loaded, undefined, attrs),
                     undefined,
                 );
             } catch (error) {
@@ -4949,7 +5146,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 const loaded = await wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');
                 const value = edgeReturn
                     ? staticRegisteredLoaderReturnForEdge(loaded, attrs)
-                    : staticRegisteredLoaderReturn(loaded);
+                    : staticRegisteredLoaderReturn(loaded, undefined, attrs);
                 cache[key] = normalizedRegisteredLoaderCacheResult(loaded, value, undefined);
             } catch (error) {
                 cache[key] = normalizedRegisteredLoaderCacheResult(undefined, undefined, error);
@@ -4987,6 +5184,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
+        let graphUrl = entryUrl;
         if (entrySpecifier !== undefined && entryParentUrl !== undefined) {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
             const specifier = String(entrySpecifier);
@@ -4994,14 +5192,27 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached, created } = cacheEntry;
             if (created && cached && cached.error) return;
+            graphUrl = staticRegisteredLoaderChildUrl(cached, entryUrl);
             const aliases = staticRegisteredLoaderParentAliases(parentUrl);
-            for (let i = 1; i < aliases.length; i++) {
-                wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache[
-                    staticRegisteredLoaderCacheKey(aliases[i], specifier, entryAttrs)
-                ] = cached;
+            const specifierAliases = [specifier];
+            if (cached && cached.url && String(cached.url).startsWith('file://')) {
+                const pathAlias = registeredLoaderPathOrUrlReturn(cached.url, true);
+                if (!specifierAliases.includes(pathAlias)) specifierAliases.push(pathAlias);
+            }
+            for (let parentIndex = 0; parentIndex < aliases.length; parentIndex++) {
+                for (let specifierIndex = 0; specifierIndex < specifierAliases.length; specifierIndex++) {
+                    if (parentIndex === 0 && specifierIndex === 0) continue;
+                    wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache[
+                        staticRegisteredLoaderCacheKey(
+                            aliases[parentIndex],
+                            specifierAliases[specifierIndex],
+                            entryAttrs,
+                        )
+                    ] = cached;
+                }
             }
         }
-        await prepareStaticRegisteredLoaderGraph(entryUrl, Object.create(null));
+        await prepareStaticRegisteredLoaderGraph(graphUrl, Object.create(null));
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_prepare_static_registered_loader_graph', {
         value: prepareStaticRegisteredLoaderEntry,
@@ -5011,14 +5222,16 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function resolveStaticRegisteredLoader(baseUrl, specifier, publicParentURL, loaderRealmParam) {
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
-        const key = staticRegisteredLoaderCacheKey(baseUrl, specifier);
+        const parts = staticRegisteredLoaderCacheParts(specifier);
+        const attrs = parts.typeValue === '' ? undefined : { typeValue: parts.typeValue };
+        const key = staticRegisteredLoaderCacheKey(baseUrl, parts.specifier, attrs);
         if (cache && Object.prototype.hasOwnProperty.call(cache, key)) {
             const cached = cache[key];
             if (cached.error) throw cached.error;
             if (loaderRealmParam !== undefined && loaderRealmParam !== null) {
                 return staticRegisteredLoaderReturnForEdge(
                     cached,
-                    staticRegisteredLoaderCacheParts(specifier),
+                    parts,
                     loaderRealmParam,
                 );
             }
@@ -5026,14 +5239,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         const loaded = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(
             baseUrl,
-            specifier,
+            parts.specifier,
             false,
             'import',
             publicParentURL,
+            attrs,
         );
         return staticRegisteredLoaderReturnForEdge(
             loaded,
-            staticRegisteredLoaderCacheParts(specifier),
+            parts,
             loaderRealmParam,
         );
     }
@@ -5380,6 +5594,83 @@ const moduleExports = Object.assign(Module, {
     stripTypeScriptTypes,
 });
 moduleExportsInitialized = true;
+
+let loaderModuleFacade;
+let loaderModuleFacadeSpecifier;
+
+function getLoaderModuleFacade() {
+    if (loaderModuleFacade === undefined) {
+        loaderModuleFacade = Object.create(moduleExports);
+        Object.defineProperties(loaderModuleFacade, {
+            createRequire: {
+                value: createLoaderHooksRequire,
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            },
+            require: {
+                value: createLoaderHooksRequire('/__wasm_rquickjs_loader_hooks__.cjs'),
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            },
+        });
+    }
+    return loaderModuleFacade;
+}
+
+function loaderModuleFacadeModule() {
+    if (loaderModuleFacadeSpecifier === undefined) {
+        const source = [
+            'const m = globalThis.__wasm_rquickjs_get_loader_module_facade();',
+            'export const require = m.require;',
+            'export const createRequire = m.createRequire;',
+            'export const findPackageJSON = m.findPackageJSON;',
+            'export const builtinModules = m.builtinModules;',
+            'export const isBuiltin = m.isBuiltin;',
+            'export const register = m.register;',
+            'export const syncBuiltinESMExports = m.syncBuiltinESMExports;',
+            'export const stripTypeScriptTypes = m.stripTypeScriptTypes;',
+            'export default m;',
+        ].join('\n');
+        loaderModuleFacadeSpecifier = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
+            'data:text/javascript,' + encodeURIComponent(source),
+            'node:module',
+            loaderHooksRealmParam,
+        );
+    }
+    return loaderModuleFacadeSpecifier;
+}
+
+function registerHooksEsmIdentity(filename) {
+    const publicUrl = nodeUrl.pathToFileURL(String(filename)).href;
+    return fsNative.fs_register_esm_file_url(
+        loaderRealmUrlWithParam(publicUrl, loaderHooksRealmParam),
+        publicUrl,
+        loaderHooksRealmParam,
+        'module',
+        true,
+    );
+}
+
+Object.defineProperties(globalThis, {
+    __wasm_rquickjs_get_loader_module_facade: {
+        value: getLoaderModuleFacade,
+        writable: false,
+        configurable: false,
+    },
+    __wasm_rquickjs_loader_module_facade: {
+        value: loaderModuleFacadeModule,
+        writable: false,
+        configurable: false,
+    },
+    __wasm_rquickjs_register_hooks_esm_identity: {
+        value: registerHooksEsmIdentity,
+        writable: false,
+        configurable: false,
+    },
+});
+
 Object.defineProperties(moduleExports, {
     __wasm_rquickjs_cjs_facade_has_own: {
         value: cjsFacadeHasOwnProperty,
