@@ -1688,12 +1688,21 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_loader_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        fs_loader_realpath_for_domain(ctx, path, super::ModuleLoaderRealpathDomain::CommonJs)
+    }
+
+    #[rquickjs::function]
+    pub fn fs_esm_loader_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        fs_loader_realpath_for_domain(ctx, path, super::ModuleLoaderRealpathDomain::Esm)
+    }
+
+    fn fs_loader_realpath_for_domain(
+        ctx: Ctx<'_>,
+        path: String,
+        domain: super::ModuleLoaderRealpathDomain,
+    ) -> Object<'_> {
         let result = Object::new(ctx.clone()).unwrap();
-        match super::realpath_for_module_resolution(
-            &ctx,
-            &path,
-            super::ModuleLoaderRealpathDomain::CommonJs,
-        ) {
+        match super::realpath_for_module_resolution(&ctx, &path, domain) {
             Ok(resolved) => result.set("result", resolved).unwrap(),
             Err(error) => result
                 .set(

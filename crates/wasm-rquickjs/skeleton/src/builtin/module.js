@@ -2673,6 +2673,38 @@ function makeEsmUnsupportedDirImportError(filename) {
     return err;
 }
 
+function makeEsmInvalidEncodedSeparatorError(pathname) {
+    const err = new TypeError(
+        `Invalid module "${pathname}" must not include encoded "/" or "\\" characters`,
+    );
+    err.code = 'ERR_INVALID_MODULE_SPECIFIER';
+    return err;
+}
+
+function validateEsmPathSpecifier(specifier) {
+    specifier = String(specifier);
+    if (
+        !specifier.startsWith('file://') &&
+        !specifier.startsWith('/') &&
+        !specifier.startsWith('./') &&
+        !specifier.startsWith('../')
+    ) {
+        return;
+    }
+    const query = specifier.indexOf('?');
+    const hash = specifier.indexOf('#');
+    const end = query < 0 ? (hash < 0 ? specifier.length : hash) :
+        (hash < 0 ? query : Math.min(query, hash));
+    let start = 0;
+    if (specifier.startsWith('file://')) {
+        start = specifier.indexOf('/', 7);
+        if (start < 0 || start >= end) return;
+    }
+    if (/%2f|%5c/i.test(specifier.slice(start, end))) {
+        throw makeEsmInvalidEncodedSeparatorError(specifier);
+    }
+}
+
 function rustClassifiesPathSpecifier(specifier) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_classify_module_specifier(specifier);
 }
@@ -2703,11 +2735,23 @@ function registeredLoaderUrlFormatSourceResult(url, format, source) {
 }
 
 function resultForEsmFileUrl(url) {
+    if (/%2f|%5c/i.test(url.pathname)) {
+        throw makeEsmInvalidEncodedSeparatorError(url.pathname);
+    }
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
     if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
     if (stat !== 0) throw makeEsmModuleNotFoundError(url.href);
-    return registeredLoaderUrlFormatResult(url.href, defaultLoaderFormatForFilename(filename));
+    if (shouldPreserveSymlinks(false)) {
+        return registeredLoaderUrlFormatResult(url.href, defaultLoaderFormatForFilename(filename));
+    }
+    const outcome = fsNative.fs_esm_loader_realpath(filename);
+    if (outcome.error) throw createFsSystemError(outcome.error);
+    const canonicalUrl = nodeUrl.pathToFileURL(outcome.result).href + url.search + url.hash;
+    return registeredLoaderUrlFormatResult(
+        canonicalUrl,
+        defaultLoaderFormatForFilename(outcome.result),
+    );
 }
 
 function parentFilenameForLoaderResolve(parentURL, baseUrl) {
@@ -4324,6 +4368,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         );
     }
 
+    function registeredLoaderFileUrlReturn(url) {
+        return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_file_url(String(url));
+    }
+
     function registeredLoaderJsonSourceReturn(source, url) {
         const registered = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
             'data:application/json,' + encodeURIComponent(loaderSourceToString(source)),
@@ -4345,24 +4393,28 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
+        validateEsmPathSpecifier(specifier);
         if (specifier.startsWith('data:')) {
             return registeredLoaderUrlResult(specifier);
         }
         const builtin = registeredLoaderBuiltinResolve(specifier, false);
         if (builtin) return builtin;
-        if (specifier.startsWith('file://')) {
+        const fileSpecifier = specifier.startsWith('file://');
+        const rootedSpecifier = specifier.startsWith('/');
+        const pathSpecifier = fileSpecifier || rootedSpecifier || rustClassifiesPathSpecifier(specifier);
+        if (fileSpecifier) {
             return resultForEsmFileUrl(new URL(specifier));
         }
         const parentFilename = parentFilenameForLoaderResolve(parentURL, baseUrl);
-        if (specifier.startsWith('/')) {
+        if (rootedSpecifier) {
             if (parentFilename === null && !allowRootedWithoutFileParent) {
                 if (missingAsUndefined) return undefined;
                 throw makeEsmModuleNotFoundError(specifier);
             }
-            return resultForEsmFileUrl(new URL(normalizeLoaderResolvedUrl(specifier)));
+            return resultForEsmFileUrl(new URL(specifier, 'file:///'));
         }
 
-        if (parentFilename !== null && rustClassifiesPathSpecifier(specifier)) {
+        if (parentFilename !== null && pathSpecifier) {
             return resultForRelativeOrAbsoluteSpecifier(specifier, parentURL);
         }
 
@@ -4464,6 +4516,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         if (!loadedHasSource && loadedFormat === 'module') {
             if (String(normalizedResolved.url).startsWith('file://')) {
+                if (shouldPreserveSymlinks(false)) {
+                    return registeredLoaderFileUrlReturn(normalizedResolved.url);
+                }
                 try {
                     if (nodeUrl.fileURLToPath(normalizedResolved.url).endsWith('.mjs')) return normalizedResolved.url;
                 } catch (_) {}
@@ -4507,6 +4562,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
+        if (isImportMode) {
+            validateEsmPathSpecifier(specifier);
+        }
         const useLoadCache = !resolveOnly && !isImportMode;
         const loadCacheKey = useLoadCache
             ? String(globalThis.__wasm_rquickjs_registered_loader_generation || 0) +
@@ -4574,9 +4632,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const initialSpecifier = isImportMode && typeof specifier === 'string'
-            ? normalizeLoaderResolvedUrl(specifier)
-            : specifier;
+        const initialSpecifier = specifier;
         const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
         const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
         if (!resolvedState) return undefined;
@@ -4670,6 +4726,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderModuleSourceReturn(loaded.source, url);
         }
         if (!hasSource && format === 'module') {
+            if (url.startsWith('file://') && shouldPreserveSymlinks(false)) {
+                return registeredLoaderFileUrlReturn(url);
+            }
             return staticRegisteredLoaderPathReturn(url);
         }
         if (format === 'commonjs') {

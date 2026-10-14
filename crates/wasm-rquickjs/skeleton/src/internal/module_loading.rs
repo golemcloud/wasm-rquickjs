@@ -3531,6 +3531,10 @@ fn static_registered_file_url_from_id(id: &str) -> Option<String> {
 
 impl Resolver for RegisteredLoaderResolver {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+        if static_registered_file_url_from_id(name).is_some() {
+            return Ok(name.to_string());
+        }
+
         // Registered user hooks may observe public builtin requests, but the
         // runtime-private implementation graph must remain loader-owned. A
         // public facade imports its private implementation only after a user
@@ -12121,6 +12125,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             .expect("Failed to create loader source URL registrar"),
         )
         .expect("Failed to initialize loader source URL registrar");
+
+        set_non_replaceable_global(
+            &global,
+            "__wasm_rquickjs_register_loader_file_url",
+            Function::new(ctx.clone(), |url: String| static_registered_file_url_id(&url))
+                .expect("Failed to create loader file URL registrar"),
+        )
+        .expect("Failed to initialize loader file URL registrar");
 
         set_non_replaceable_global(
             &global,

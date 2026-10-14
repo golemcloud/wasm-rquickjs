@@ -51,6 +51,7 @@ export const testRustBridgeGlobalsNonReplaceable = () => {
         '__wasm_rquickjs_register_import_attr_rewrite',
         '__wasm_rquickjs_discard_import_attr_rewrite',
         '__wasm_rquickjs_register_loader_source_url',
+        '__wasm_rquickjs_register_loader_file_url',
         '__wasm_rquickjs_lookup_loader_source_url',
         '__wasm_rquickjs_build_loader_cjs_facade',
         '__wasm_rquickjs_analyze_module_source',
@@ -1030,6 +1031,10 @@ export const testEsmEncodedRelativePaths = async () => {
         fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-comma,.mjs', 'export default "comma";');
         fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-double-encoding-native%20.mjs', 'export default "percent";');
         fs.writeFileSync('/esm-encoded-relative-app/sub/blocked.mjs', 'export default "blocked";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub\\blocked.mjs', 'export default "literal-backslash";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub%2Fallowed.mjs', 'export default "encoded-slash-name";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub%5Callowed.mjs', 'export default "encoded-backslash-name";');
+        fs.writeFileSync('/esm-encoded-relative-app/query-separators.mjs', 'export default true;');
         fs.writeFileSync('/esm-encoded-relative-app/entry.mjs', [
             'import ok from "./sub/test-%65%73%6d-ok.mjs";',
             'import comma from "./sub/test-esm-comma%2c.mjs";',
@@ -1042,8 +1047,75 @@ export const testEsmEncodedRelativePaths = async () => {
             comma: 'comma',
             percent: 'percent',
         });
+
+        const canonicalRoot = '/esm-encoded-relative-app/canonical';
+        fs.mkdirSync(canonicalRoot, { recursive: true });
+        for (const name of ['path', 'file', 'preserve']) {
+            fs.writeFileSync(`${canonicalRoot}/${name}-target.mjs`, 'export default import.meta.url;');
+            fs.symlinkSync(`${name}-target.mjs`, `${canonicalRoot}/${name}-link.mjs`);
+            fs.writeFileSync(
+                `${canonicalRoot}/${name}-parent.mjs`,
+                `export default (await import("./${name}-link%2Emjs?canonical=${name}#fragment")).default;`,
+            );
+        }
+        globalThis.__esmCanonicalLoadUrls = [];
+        const { register } = await import('node:module');
+        register('data:text/javascript,' + encodeURIComponent([
+            'export function load(url, context, next) {',
+            '  if (url.includes("?canonical=")) globalThis.__esmCanonicalLoadUrls.push(url);',
+            '  return next(url, context);',
+            '}',
+        ].join('\n')));
+
+        const pathExpected = pathToFileURL(`${canonicalRoot}/path-target.mjs`).href +
+            '?canonical=path#fragment';
+        const pathResult = (await import(`${canonicalRoot}/path-parent.mjs`)).default;
+        assert.strictEqual(pathResult, pathExpected);
+        assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), pathExpected);
+
+        const fileExpected = pathToFileURL(`${canonicalRoot}/file-target.mjs`).href +
+            '?canonical=file#fragment';
+        const fileParent = pathToFileURL(`${canonicalRoot}/file-parent.mjs`).href;
+        const fileResult = (await import(fileParent)).default;
+        assert.strictEqual(fileResult, fileExpected);
+        assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), fileExpected);
+
+        const originalExecArgv = process.execArgv.slice();
+        try {
+            process.execArgv.push('--preserve-symlinks');
+            const preserveExpected = pathToFileURL(`${canonicalRoot}/preserve-link`).href +
+                '%2Emjs?canonical=preserve#fragment';
+            const preserveResult = (await import(`${canonicalRoot}/preserve-parent.mjs`)).default;
+            assert.strictEqual(preserveResult, preserveExpected);
+            assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), preserveExpected);
+        } finally {
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) process.execArgv.push(arg);
+            delete globalThis.__esmCanonicalLoadUrls;
+        }
+
         await expectImportRejectsCode('/esm-encoded-relative-app/sub%2Fblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportRejectsCode('/esm-encoded-relative-app/sub%5Cblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        assert.strictEqual(
+            (await import('/esm-encoded-relative-app/sub%252Fallowed.mjs')).default,
+            'encoded-slash-name',
+        );
+        assert.strictEqual(
+            (await import('/esm-encoded-relative-app/sub%255Callowed.mjs')).default,
+            'encoded-backslash-name',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/sub%2Fblocked.mjs',
+            'ERR_INVALID_MODULE_SPECIFIER',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/sub/blocked.mjs',
+            'ERR_INVALID_FILE_URL_HOST',
+        );
+        assert.strictEqual(
+            (await import('/esm-encoded-relative-app/query-separators.mjs?slash=%2F&backslash=%5C')).default,
+            true,
+        );
         return true;
     } catch (error) {
         console.error(error);
