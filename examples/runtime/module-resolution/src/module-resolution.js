@@ -2951,8 +2951,7 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/grand#literal.mjs`, 'export default "literal-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
-            '  if (specifier.startsWith("/")) throw new Error("static loader received absolute path: " + specifier);',
-            '  if (specifier.startsWith("file://") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
+            '  if (specifier.startsWith("/") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
             '  }',
             '  if (specifier === "virtual:static-child-query") {',
@@ -3011,7 +3010,7 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         );
         assert.strictEqual(
             globalThis.__static_loader_absolute_entry_seen,
-            `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
+            `${root}/entry.mjs?cache#frag`,
         );
         assert.strictEqual(
             (await import('data:text/javascript,' + encodeURIComponent(
@@ -3187,7 +3186,7 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
                 'import packageEsm from "loader-realm-esm-pkg";',
                 'import config from "./config.json" with { type: "json" };',
                 'import requiredEsm from "./esm-reader.cjs";',
-                'import { createRequire } from "node:module";',
+                'import Module, { createRequire } from "node:module";',
                 'if (import.meta.url.includes("__wasm_rquickjs_loader_realm")) {',
                 '  throw new Error("loader realm marker leaked through import.meta.url");',
                 '}',
@@ -3196,6 +3195,9 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
                 'config.loaderMutation = true;',
                 'requiredEsm.loaderMutation = true;',
                 'const loaderRequire = createRequire(import.meta.url);',
+                'const loaderModule = loaderRequire("module");',
+                'const constructedModule = new Module("loader-module-oracle");',
+                'const requiredPackageEsm = loaderRequire("loader-realm-esm-pkg");',
                 '(globalThis.__loaderRealmCjsEvaluations ||= []).push(relativeCjs.evaluation);',
                 'const loaderFormats = {',
                 '  relativeCjs: relativeCjs.named,',
@@ -3210,6 +3212,11 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
                 '  jsonMutation: config.loaderMutation,',
                 '  jsonRequireIdentity: loaderRequire("./config.json") === config,',
                 '  requiredEsmMutation: requiredEsm.loaderMutation,',
+                '  moduleType: typeof Module,',
+                '  moduleConstructible: constructedModule instanceof Module,',
+                '  moduleCacheIdentity: Module._cache === loaderRequire.cache,',
+                '  cjsModuleIdentity: loaderModule === Module,',
+                '  requiredPackageEsm: requiredPackageEsm.default,',
                 '};',
                 'export function resolve(specifier, context, next) {',
                 '  if (specifier.startsWith("virtual:loader-realm-count")) {',
@@ -3361,6 +3368,11 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             '    jsonMutation: true,',
             '    jsonRequireIdentity: true,',
             '    requiredEsmMutation: true,',
+            '    moduleType: "function",',
+            '    moduleConstructible: true,',
+            '    moduleCacheIdentity: true,',
+            '    cjsModuleIdentity: true,',
+            '    requiredPackageEsm: "package-esm",',
             '  },',
             '});',
             `const userState = await import(${JSON.stringify(pathToFileURL(`${root}/stateful.mjs`).href)});`,
@@ -3505,11 +3517,20 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             '};',
             'export function resolve(specifier, context, next) {',
             '  globalThis.__forcedFormatHookRecords.push({ hook: "resolve", specifier, attrs: { ...context.importAttributes } });',
+            '  if (specifier === "virtual:short-json" || specifier === "virtual:short-module") {',
+            '    return { shortCircuit: true, url: specifier };',
+            '  }',
             '  if (targets[specifier]) return { shortCircuit: true, url: targets[specifier], format: formats[specifier] };',
             '  return next(specifier, context);',
             '}',
             'export function load(url, context, next) {',
             '  globalThis.__forcedFormatHookRecords.push({ hook: "load", url, attrs: { ...context.importAttributes } });',
+            '  if (url === "virtual:short-json") {',
+            '    return { shortCircuit: true, format: "json", source: "{\\"shortJson\\":true}" };',
+            '  }',
+            '  if (url === "virtual:short-module") {',
+            '    return { shortCircuit: true, format: "module", source: "export default \'short-module\'" };',
+            '  }',
             '  return next(url, context);',
             '}',
         ].join('\n');
@@ -3530,6 +3551,11 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             'let untypedError;',
             `try { await import(${JSON.stringify(`${formatRoot}/untyped-entry.mjs`)}); } catch (error) { untypedError = error; }`,
             'assert.strictEqual(untypedError && untypedError.code, "ERR_IMPORT_ATTRIBUTE_MISSING");',
+            'assert.deepStrictEqual((await import("virtual:short-json")).default, { shortJson: true });',
+            'assert.strictEqual(',
+            '  (await import("virtual:short-module", { with: { type: "json" } })).default,',
+            '  "short-module",',
+            ');',
         ].join('\n')));
         assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
             record.hook === 'resolve' &&

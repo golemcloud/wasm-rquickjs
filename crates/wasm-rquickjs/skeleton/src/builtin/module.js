@@ -3848,7 +3848,9 @@ function createRequireContext(
         : null;
     const fixedModuleCache = moduleCacheOverride !== undefined
         ? moduleCacheOverride
-        : parentModule && moduleCacheDomains.get(parentModule);
+        : parentModule
+            ? moduleCacheDomains.get(parentModule)
+            : undefined;
     return {
         parentDir,
         parentModule,
@@ -4752,8 +4754,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!resolvedState) return undefined;
         const normalizedResolved = resolvedState.normalizedResolved;
 
+        let defaultLoadValidation;
         const runLoad = async (index, nextUrl, context) => {
-            if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
+            if (index < 0) {
+                const defaultLoaded = registeredLoaderDefaultLoad(nextUrl, context);
+                defaultLoadValidation = {
+                    url: String(nextUrl),
+                    importAttributes: context && context.importAttributes,
+                    loaded: defaultLoaded,
+                };
+                return defaultLoaded;
+            }
             const module = entries[index].module;
             if (typeof module.load === 'function') {
                 let nextCalled = false;
@@ -4772,8 +4783,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
+        if (defaultLoadValidation) {
+            validateRegisteredLoaderImportAttributes(
+                {
+                    url: defaultLoadValidation.url,
+                    format: registeredLoaderFinalLoadFormat(
+                        defaultLoadValidation.loaded,
+                        resolvedState.resolvedFormat,
+                    ),
+                },
+                defaultLoadValidation.importAttributes,
+            );
+        }
         if (mode !== 'static-raw') {
-            validateRegisteredLoaderImportAttributes(result, attrs);
             cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result);
         }
         const loadedHasSource = registeredLoaderHasSource(result);
@@ -4930,9 +4952,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const initialSpecifier = isImportMode && typeof specifier === 'string'
-            ? normalizeLoaderResolvedUrl(specifier)
-            : specifier;
+        const initialSpecifier = specifier;
         const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
         const resolvedState = registeredLoaderResolvedState(baseContext, resolved);
         if (!resolvedState) return undefined;
@@ -4940,8 +4960,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const resolvedFormat = resolvedState.resolvedFormat;
         if (resolveOnly) return registeredLoaderUrlFormatResult(normalizedResolved.url, resolvedFormat);
 
+        let defaultLoadValidation;
         const runLoad = (index, nextUrl, context) => {
-            if (index < 0) return registeredLoaderDefaultLoad(nextUrl, context);
+            if (index < 0) {
+                const defaultLoaded = registeredLoaderDefaultLoad(nextUrl, context);
+                defaultLoadValidation = {
+                    url: String(nextUrl),
+                    importAttributes: context && context.importAttributes,
+                    loaded: defaultLoaded,
+                };
+                return defaultLoaded;
+            }
             const module = entries[index].module;
             if (typeof module.load === 'function') {
                 let nextCalled = false;
@@ -4964,6 +4993,18 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
+        if (defaultLoadValidation) {
+            validateRegisteredLoaderImportAttributes(
+                {
+                    url: defaultLoadValidation.url,
+                    format: registeredLoaderFinalLoadFormat(
+                        defaultLoadValidation.loaded,
+                        resolvedState.resolvedFormat,
+                    ),
+                },
+                defaultLoadValidation.importAttributes,
+            );
+        }
         if (loadCache) loadCache[loadCacheKey] = result;
         return result;
     }
@@ -5017,9 +5058,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return registeredLoaderPathOrUrlReturn(url, true);
     }
 
-    function staticRegisteredLoaderReturn(loaded, loaderRealmParam, attrs) {
+    function staticRegisteredLoaderReturn(loaded, loaderRealmParam) {
         if (!loaded || !loaded.url) return undefined;
-        validateRegisteredLoaderImportAttributes(loaded, attrs);
         const url = String(loaded.url);
         const format = loaderFormatOrUndefined(loaded.format);
         const hasSource = registeredLoaderHasSource(loaded);
@@ -5600,8 +5640,46 @@ let loaderModuleFacadeSpecifier;
 
 function getLoaderModuleFacade() {
     if (loaderModuleFacade === undefined) {
-        loaderModuleFacade = Object.create(moduleExports);
-        Object.defineProperties(loaderModuleFacade, {
+        function LoaderModule(id, parent) {
+            const newTarget = new.target || LoaderModule;
+            return Reflect.construct(Module, [id, parent], newTarget);
+        }
+        LoaderModule.prototype = Object.create(Module.prototype, {
+            constructor: {
+                value: LoaderModule,
+                writable: true,
+                configurable: true,
+            },
+            require: {
+                value(id) {
+                    const override = moduleRequireOverrides.get(this);
+                    if (override) return override(id);
+                    validateRequireId(id);
+                    const parentFilename = this && typeof this.filename === 'string'
+                        ? this.filename
+                        : null;
+                    return traceModuleRequire(
+                        id,
+                        parentFilename,
+                        () => LoaderModule._load(id, this || null, false),
+                    );
+                },
+                writable: true,
+                configurable: true,
+            },
+            _compile: {
+                value(...args) {
+                    return withLoaderRealmModuleCache(
+                        loaderHooksRealmParam,
+                        () => Module.prototype._compile.apply(this, args),
+                    );
+                },
+                writable: true,
+                configurable: true,
+            },
+        });
+        Object.assign(LoaderModule, moduleExports);
+        Object.defineProperties(LoaderModule, {
             createRequire: {
                 value: createLoaderHooksRequire,
                 writable: true,
@@ -5614,7 +5692,36 @@ function getLoaderModuleFacade() {
                 configurable: true,
                 enumerable: true,
             },
+            _cache: {
+                value: loaderHooksModuleCache,
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            },
+            _load: {
+                value(request, parent, isMain) {
+                    return withLoaderRealmModuleCache(
+                        loaderHooksRealmParam,
+                        () => moduleLoad(request, parent, isMain),
+                    );
+                },
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            },
+            _resolveFilename: {
+                value(request, parent, isMain, options) {
+                    return withLoaderRealmModuleCache(
+                        loaderHooksRealmParam,
+                        () => moduleResolveFilename(request, parent, isMain, options),
+                    );
+                },
+                writable: true,
+                configurable: true,
+                enumerable: true,
+            },
         });
+        loaderModuleFacade = LoaderModule;
     }
     return loaderModuleFacade;
 }
@@ -5648,8 +5755,8 @@ function registerHooksEsmIdentity(filename) {
         loaderRealmUrlWithParam(publicUrl, loaderHooksRealmParam),
         publicUrl,
         loaderHooksRealmParam,
-        'module',
-        true,
+        undefined,
+        false,
     );
 }
 
