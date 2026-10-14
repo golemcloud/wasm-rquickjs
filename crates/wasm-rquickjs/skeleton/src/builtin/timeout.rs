@@ -44,7 +44,7 @@ pub mod native_module {
             .insert(key, abort_handle);
         drop(services);
         let task_ctx = ctx.clone();
-        ctx.spawn(async move {
+        let task = async move {
             let _ = task.await;
             // Clean up after the task completes naturally
             let services = task_ctx
@@ -52,7 +52,11 @@ pub mod native_module {
                 .expect("runtime services not initialized");
             services.timers.abort_handles.borrow_mut().remove(&key);
             services.timers.unrefed_timers.borrow_mut().remove(&key);
-        });
+        };
+        #[cfg(feature = "terminal-process")]
+        crate::internal::terminal_process::spawn(&ctx, task);
+        #[cfg(not(feature = "terminal-process"))]
+        ctx.spawn(task);
         key
     }
 
@@ -143,14 +147,28 @@ async fn scheduled_task(
         #[cfg(feature = "p3")]
         wasip3::clocks::monotonic_clock::wait_for(duration_ns).await;
 
+        #[cfg(feature = "terminal-process")]
+        if crate::internal::terminal_runtime::stopped(&ctx) {
+            break;
+        }
+
         run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone(), timer_key)
             .catch(&ctx)
             .unwrap_or_else(|e| {
+                #[cfg(feature = "terminal-process")]
+                if crate::internal::terminal_runtime::stopped(&ctx) {
+                    return;
+                }
                 eprintln!(
                     "Timer callback error escaped JS uncaught handler: {}",
                     format_caught_error(e)
                 )
             });
+
+        #[cfg(feature = "terminal-process")]
+        if crate::internal::terminal_runtime::stopped(&ctx) {
+            break;
+        }
 
         if !periodic {
             break;

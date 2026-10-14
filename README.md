@@ -710,6 +710,24 @@ Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(opti
 `{ value, overflowed, stdout, stderr }`. `value` crosses the runtime boundary through structured
 clone.
 
+With the opt-in `terminal-process` feature, `startProcess(options)` runs a JavaScript
+process in an owned child runtime. It returns stdout/stderr readable streams, a
+`result` promise resolving to `{ exitCode, overflowed }`, and `cancel()`.
+`runProcess(options)` collects output as binary `Buffer` values. Output is bounded
+and buffered until the child stops. A nonzero exit code is a completed process;
+cancellation, timeout, and terminating output overflow reject the result.
+The child waits for referenced work on natural completion and stops queued
+JavaScript work after explicit exit. The parent runtime remains usable.
+
+Process mode accepts the same limits, cwd, argv and explicit environment as value
+jobs, with JavaScript script `source` or a CommonJS `entry` loaded for its side
+effects. Source is a script, not an async function body: top-level return/await and
+static imports are not accepted. Exported functions are not called automatically.
+Default argv starts with `wasm-rquickjs-process`. Nested execution jobs remain
+disabled. This opt-in API does not change `node:child_process`, `spawnSync`, or
+the component runtime's process lifetime. Each child initializes its own runtime;
+Wizer does not preinitialize these child instances.
+
 Options accept exactly one of `entry: string` or inline `source: string`, plus `cwd`, `argv`,
 `env`, `timeoutMs`, `maxBytes` (1 MiB per stream by default, 64 MiB maximum), and `overflow`
 (`terminate` by default or `truncate`). `language: "javascript" | "typescript"` applies only to
@@ -1650,6 +1668,10 @@ Compatibility stubs — workers are not supported in single-threaded WASM.
 - `Proxy`
 
 ## Developing
+
+The disabled-by-default `terminal-process` skeleton feature enables the experimental
+owned process API described above. Its controller drives only the private child
+runtime; ordinary component exports keep their existing runtime lifecycle.
 
 There are a few important things to keep in mind when working on the project:
 

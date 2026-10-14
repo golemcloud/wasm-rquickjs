@@ -3,6 +3,9 @@ use crate::internal::runtime_services::{ExecutionProfile, ExecutionProfileSnapsh
 use crate::internal::runtime_services::{
     OwnedJsRuntime, RuntimeOutputSink, RuntimeServices, normalize_absolute_path,
 };
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
@@ -27,9 +30,27 @@ const MAX_OUTPUT_BYTES: usize = 64 * 1024 * 1024;
 
 pub const EXECUTION_JS: &str = include_str!("execution.js");
 
+pub(crate) fn source() -> &'static str {
+    #[cfg(not(all(feature = "terminal-process", feature = "internal-test-execution")))]
+    {
+        EXECUTION_JS
+    }
+    #[cfg(all(feature = "terminal-process", feature = "internal-test-execution"))]
+    {
+        static SOURCE: std::sync::LazyLock<String> = std::sync::LazyLock::new(|| {
+            format!(
+                "import {{ terminal_probe }} from '__wasm_rquickjs_builtin/terminal_process_native';\nexport {{ terminal_probe as terminalProbe }};\n{EXECUTION_JS}"
+            )
+        });
+        &SOURCE
+    }
+}
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct ExecutionOptions {
+    #[serde(default)]
+    mode: ExecutionMode,
     entry: Option<String>,
     source: Option<String>,
     language: ExecutionLanguage,
@@ -40,6 +61,22 @@ struct ExecutionOptions {
     timeout_ms: Option<u64>,
     max_bytes: usize,
     overflow: OverflowPolicy,
+}
+
+#[derive(Deserialize, Default, Copy, Clone, PartialEq)]
+#[serde(rename_all = "lowercase")]
+enum ExecutionMode {
+    #[default]
+    Value,
+    Process,
+}
+
+#[derive(serde::Serialize)]
+#[serde(untagged)]
+enum OutputChunk {
+    Text(String),
+    #[cfg(feature = "terminal-process")]
+    Bytes(Vec<u8>),
 }
 
 #[derive(Deserialize, Copy, Clone, PartialEq)]
@@ -58,8 +95,8 @@ enum ExecutionLanguage {
 
 pub(crate) struct ExecutionJob {
     options: RefCell<Option<ExecutionOptions>>,
-    stdout: RefCell<VecDeque<String>>,
-    stderr: RefCell<VecDeque<String>>,
+    stdout: RefCell<VecDeque<OutputChunk>>,
+    stderr: RefCell<VecDeque<OutputChunk>>,
     stdout_bytes: Cell<usize>,
     stderr_bytes: Cell<usize>,
     max_bytes: usize,
@@ -124,7 +161,7 @@ impl ExecutionJob {
             return;
         }
         count.set(count.get() + accepted);
-        let chunk = data[..accepted].to_string();
+        let chunk = OutputChunk::Text(data[..accepted].to_string());
         if stdout {
             self.stdout.borrow_mut().push_back(chunk);
         } else {
@@ -204,8 +241,8 @@ fn execution_source_maps_enabled(_ctx: &Ctx<'_>) -> bool {
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 struct PollResult {
-    stdout: Vec<String>,
-    stderr: Vec<String>,
+    stdout: Vec<OutputChunk>,
+    stderr: Vec<OutputChunk>,
     done: bool,
     value: Option<String>,
     error: Option<String>,
@@ -218,6 +255,9 @@ struct PollResult {
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     use super::*;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     #[rquickjs::function]
     pub fn create_job(ctx: Ctx<'_>, options_json: String) -> rquickjs::Result<usize> {
@@ -225,6 +265,20 @@ pub mod native_module {
         // checks defend the private native protocol against direct callers.
         let options: ExecutionOptions = serde_json::from_str(&options_json)
             .map_err(|error| rquickjs::Exception::throw_type(&ctx, &error.to_string()))?;
+        if options.mode == ExecutionMode::Process {
+            if !cfg!(feature = "terminal-process") {
+                return Err(rquickjs::Exception::throw_type(
+                    &ctx,
+                    "process execution requires the terminal-process feature",
+                ));
+            }
+            if options.language != ExecutionLanguage::Javascript {
+                return Err(rquickjs::Exception::throw_type(
+                    &ctx,
+                    "process execution accepts JavaScript only",
+                ));
+            }
+        }
         if options.entry.is_some() == options.source.is_some() {
             return Err(rquickjs::Exception::throw_type(
                 &ctx,
@@ -274,7 +328,11 @@ pub mod native_module {
     /// Async native callbacks are owned and driven by rquickjs's promise
     /// machinery. Unlike a detached `Ctx::spawn` task, this remains live while
     /// the parent export awaits JavaScript promises on the P2 executor.
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     pub async fn start_job(ctx: Ctx<'_>, id: usize) -> rquickjs::Result<()> {
         let job = {
             let services = ctx
@@ -291,7 +349,11 @@ pub mod native_module {
         Ok(())
     }
 
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     pub async fn wait_job_event(ctx: Ctx<'_>, id: usize) -> rquickjs::Result<String> {
         let job = {
             let services = ctx
@@ -369,6 +431,11 @@ pub mod native_module {
 }
 
 async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
+    #[cfg(feature = "terminal-process")]
+    if options.mode == ExecutionMode::Process {
+        run_process_job(options, job).await;
+        return;
+    }
     if job.cancel.load(Ordering::Relaxed) {
         job.complete(Err("execution job cancelled".to_string()));
         return;
@@ -506,9 +573,10 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             if cancelled.load(Ordering::Relaxed) {
                 return true;
             }
-            if timeout_sampler.as_mut().is_some_and(|sampler| {
-                sampler.expired(Instant::now)
-            }) {
+            if timeout_sampler
+                .as_mut()
+                .is_some_and(|sampler| sampler.expired(Instant::now))
+            {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
             }
@@ -658,6 +726,170 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     };
     mark_profile!("resultFormatting");
     complete_job!(result);
+}
+
+#[cfg(feature = "terminal-process")]
+impl crate::internal::terminal_process::output::OutputTransport for ExecutionJob {
+    async fn finish(&self, stdout: Vec<u8>, stderr: Vec<u8>) -> Result<(), String> {
+        if !stdout.is_empty() {
+            self.stdout
+                .borrow_mut()
+                .push_back(OutputChunk::Bytes(stdout));
+        }
+        if !stderr.is_empty() {
+            self.stderr
+                .borrow_mut()
+                .push_back(OutputChunk::Bytes(stderr));
+        }
+        self.event_waker.wake();
+        Ok(())
+    }
+}
+
+/// The parent owns this child runtime; no component export or parent driver can
+/// enter it. Only the termination-aware controller polls its JavaScript jobs.
+#[cfg(feature = "terminal-process")]
+async fn run_process_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
+    use crate::internal::terminal_runtime::{self, Control};
+    if job.cancel.load(Ordering::Relaxed) {
+        job.complete(Err("execution job cancelled".into()));
+        return;
+    }
+    let runtime = OwnedJsRuntime::new().await;
+    let control =
+        Control::with_output_limit(job.max_bytes, job.overflow == OverflowPolicy::Terminate);
+    runtime.disable_execution().await;
+    runtime.ctx.with(|ctx| control.install(&ctx)).await;
+    let result = async {
+        let cwd =
+            normalize_absolute_path(Path::new(&options.cwd)).map_err(|error| error.to_string())?;
+        let entry = options
+            .entry
+            .map(|entry| {
+                normalize_absolute_path(&cwd.join(entry)).map_err(|error| error.to_string())
+            })
+            .transpose()?;
+        let mut argv = options.argv;
+        if argv.is_empty() {
+            argv.push("wasm-rquickjs-process".into());
+            if let Some(entry) = &entry {
+                argv.push(entry.to_string_lossy().into_owned());
+            }
+        }
+        runtime.configure_process(argv, options.env, cwd).await?;
+        runtime.initialize_node_builtins().await?;
+        if job.cancel.load(Ordering::Relaxed) {
+            return Err("execution job cancelled".into());
+        }
+
+        let timeout = options.timeout_ms.and_then(|ms| {
+            let started = Instant::now();
+            let duration = Duration::from_millis(ms);
+            started
+                .checked_add(duration)
+                .map(|deadline| (started, deadline, duration))
+        });
+        let deadline = timeout.map(|(_, deadline, _)| deadline);
+        let mut sampler = timeout.map(|(started, deadline, duration)| {
+            ExecutionTimeoutSampler::new(started, deadline, duration)
+        });
+        let cancelled = job.cancel.clone();
+        let timed_out = job.timed_out.clone();
+        runtime
+            .rt
+            .set_interrupt_handler(Some(Box::new(move || {
+                if cancelled.load(Ordering::Relaxed) {
+                    return true;
+                }
+                if sampler
+                    .as_mut()
+                    .is_some_and(|sampler| sampler.expired(Instant::now))
+                {
+                    timed_out.store(true, Ordering::Relaxed);
+                    return true;
+                }
+                false
+            })))
+            .await;
+        let execution = async {
+            runtime
+                .ctx
+                .with(|ctx| {
+                    control.start(&ctx)?;
+                    let evaluated = if let Some(entry) = &entry {
+                        ctx.globals()
+                            .get::<_, Function>("require")
+                            .and_then(|require| {
+                                require.call::<_, Value>((entry.to_string_lossy().as_ref(),))
+                            })
+                    } else {
+                        ctx.eval::<Value, _>(options.source.unwrap_or_default())
+                    };
+                    if let Err(error) = evaluated {
+                        if job.cancel.load(Ordering::Relaxed)
+                            || job.timed_out.load(Ordering::Relaxed)
+                        {
+                            control.stop(1);
+                            let _ = ctx.catch();
+                        } else {
+                            terminal_runtime::script_error(&ctx, &control, error);
+                        }
+                    }
+                    Ok::<(), rquickjs::Error>(())
+                })
+                .await
+                .map_err(|error| error.to_string())?;
+            terminal_runtime::finish(&runtime.rt, &runtime.ctx, &control).await;
+            Ok::<(), String>(())
+        };
+        let cancellation = poll_fn(|cx| {
+            job.control_waker.register(cx.waker());
+            if job.cancel.load(Ordering::Relaxed) {
+                Poll::Ready(Err("execution job cancelled".to_string()))
+            } else {
+                Poll::Pending
+            }
+        });
+        let timeout = async {
+            if let Some(deadline) = deadline {
+                sleep_until_execution_deadline(deadline).await;
+                job.timed_out.store(true, Ordering::Relaxed);
+                Err("execution job timed out".to_string())
+            } else {
+                pending().await
+            }
+        };
+        futures::pin_mut!(execution, cancellation, timeout);
+        let stop = select(cancellation, timeout);
+        futures::pin_mut!(stop);
+        let result = match select(execution, stop).await {
+            Either::Left((result, _)) => result,
+            Either::Right((Either::Left((result, _)), _)) => result,
+            Either::Right((Either::Right((result, _)), _)) => result,
+        };
+        if job.timed_out.load(Ordering::Relaxed) {
+            Err("execution job timed out".into())
+        } else if job.cancel.load(Ordering::Relaxed) {
+            Err("execution job cancelled".into())
+        } else if control.output.overflowed() && job.overflow == OverflowPolicy::Terminate {
+            Err("execution output exceeded maxBytes".into())
+        } else {
+            result
+        }
+    }
+    .await;
+    control.stop(control.exit_code().unwrap_or(1));
+    job.overflowed
+        .store(control.output.overflowed(), Ordering::Relaxed);
+    drop(runtime);
+    let completion = match control.output.begin(control.exit_code().unwrap_or(1)) {
+        Ok(completion) => completion
+            .finish(job.as_ref())
+            .await
+            .map(|status| status.exit_code.to_string()),
+        Err(error) => Err(error.to_owned()),
+    };
+    job.complete(result.and(completion));
 }
 
 async fn sleep_until_execution_deadline(deadline: Instant) {

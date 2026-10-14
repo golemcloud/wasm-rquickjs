@@ -60,7 +60,18 @@ function normalize(options) {
 }
 
 export function startJavaScript(options) {
-  const optionsJson = JSON.stringify(normalize(options));
+  return startExecution(options, false);
+}
+
+export function startProcess(options) {
+  if (options?.language !== undefined && options.language !== 'javascript') {
+    throw new TypeError('process execution accepts JavaScript only');
+  }
+  return startExecution(options, true);
+}
+
+function startExecution(options, processMode) {
+  const optionsJson = JSON.stringify({ ...normalize(options), mode: processMode ? 'process' : 'value' });
   const id = create_job(optionsJson);
   const stdout = new PassThrough();
   const stderr = new PassThrough();
@@ -84,15 +95,17 @@ export function startJavaScript(options) {
   const drain = async () => {
     while (!settled) {
       const state = JSON.parse(await wait_job_event(id));
-      for (const chunk of state.stdout) stdout.write(chunk);
-      for (const chunk of state.stderr) stderr.write(chunk);
+      for (const chunk of state.stdout) stdout.write(typeof chunk === 'string' ? chunk : Buffer.from(chunk));
+      for (const chunk of state.stderr) stderr.write(typeof chunk === 'string' ? chunk : Buffer.from(chunk));
       if (!state.done) continue;
       settled = true;
       stdout.end(); stderr.end(); forget_job(id);
       if (state.error !== null) rejectResult(new Error(state.error));
       else {
         try {
-          const completed = { value: deserializeFromTransport(state.value), overflowed: state.overflowed };
+          const completed = processMode
+            ? { exitCode: JSON.parse(state.value), overflowed: state.overflowed }
+            : { value: deserializeFromTransport(state.value), overflowed: state.overflowed };
           if (state.profile !== undefined) completed.profile = state.profile;
           resolveResult(completed);
         }
@@ -115,4 +128,14 @@ export async function runJavaScript(options) {
   return { stdout, stderr, ...structured };
 }
 
-export default { startJavaScript, runJavaScript };
+export async function runProcess(options) {
+  const job = startProcess(options);
+  const stdout = [];
+  const stderr = [];
+  job.stdout.on('data', chunk => stdout.push(chunk));
+  job.stderr.on('data', chunk => stderr.push(chunk));
+  const [status] = await Promise.all([job.result, finished(job.stdout), finished(job.stderr)]);
+  return { stdout: Buffer.concat(stdout), stderr: Buffer.concat(stderr), ...status };
+}
+
+export default { startJavaScript, runJavaScript, startProcess, runProcess };

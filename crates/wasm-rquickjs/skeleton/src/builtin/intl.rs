@@ -1,9 +1,15 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use std::cmp::Ordering;
 
 use chrono::{DateTime, Datelike, Timelike, Utc};
 
 #[rquickjs::module]
 pub mod native_module {
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
     use rquickjs::prelude::*;
 
     // Returns flat tuple: (year, month, day, hour, minute, second, weekday, utc_offset_minutes, error)
@@ -49,7 +55,11 @@ pub mod native_module {
     // granularity: "grapheme" | "word" | "sentence"
     // For "grapheme" and "sentence", is_word_like is always false.
     // For "word", is_word_like indicates whether the segment is word-like (letters/numbers).
-    #[rquickjs::function]
+    #[cfg_attr(
+        feature = "terminal-process",
+        rquickjs::function(crate = "terminal_rquickjs")
+    )]
+    #[cfg_attr(not(feature = "terminal-process"), rquickjs::function)]
     pub fn intl_segment(text: String, granularity: String) -> String {
         super::segment_impl(&text, &granularity)
     }

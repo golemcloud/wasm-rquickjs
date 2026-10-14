@@ -1,3 +1,6 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 #[cfg(feature = "encoding")]
 use encoding_rs::{CoderResult, Decoder, DecoderResult, Encoding, UTF_8, UTF_16BE, UTF_16LE};
 use rquickjs::JsLifetime;
@@ -10,6 +13,9 @@ use std::ptr::NonNull;
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
     pub use super::NativeTextDecoder;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
     use rquickjs::convert::Coerced;
     use rquickjs::prelude::*;
     use rquickjs::{Ctx, TypedArray};
@@ -124,7 +130,11 @@ pub struct NativeTextDecoder {
 }
 
 #[cfg(feature = "encoding")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl NativeTextDecoder {
     #[qjs(constructor)]
     pub fn new(

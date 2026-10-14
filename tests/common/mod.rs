@@ -3775,6 +3775,7 @@ pub enum FeatureCombination {
     Lite,
     Normal,
     InternalTestExecution,
+    TerminalProcess,
     NetWriteProfiling,
     NodeCompatNetWriteProfiling,
     TypeScriptRuntime,
@@ -3799,6 +3800,7 @@ impl FeatureCombination {
             Self::Lite => "lite",
             Self::Normal => "normal",
             Self::InternalTestExecution => "internal-test-execution",
+            Self::TerminalProcess => "terminal-process",
             Self::NetWriteProfiling => "net-write-profiling",
             Self::NodeCompatNetWriteProfiling => "node-compat-net-write-profiling",
             Self::TypeScriptRuntime => "typescript-runtime",
@@ -3824,6 +3826,9 @@ impl FeatureCombination {
             FeatureCombination::Normal => vec![],
             FeatureCombination::InternalTestExecution => {
                 vec!["--features", "internal-test-execution"]
+            }
+            FeatureCombination::TerminalProcess => {
+                vec!["--features", "terminal-process,internal-test-execution"]
             }
             FeatureCombination::NetWriteProfiling => {
                 vec!["--features", "net-write-profiling"]
@@ -3888,6 +3893,9 @@ impl FeatureCombination {
                     FeatureCombination::Normal => "normal-p3",
                     FeatureCombination::InternalTestExecution => {
                         "normal-p3,internal-test-execution"
+                    }
+                    FeatureCombination::TerminalProcess => {
+                        "normal-p3,terminal-process,internal-test-execution"
                     }
                     FeatureCombination::NetWriteProfiling => "normal-p3,net-write-profiling",
                     FeatureCombination::NodeCompatNetWriteProfiling => {

@@ -1,0 +1,7 @@
+package quickjs:terminal-process;
+
+world terminal-process {
+  export run: func(source: string) -> string;
+  export process-run: func(options: string) -> string;
+  export process-recovery: func() -> string;
+}

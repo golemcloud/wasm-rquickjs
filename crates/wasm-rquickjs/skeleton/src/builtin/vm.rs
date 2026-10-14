@@ -67,12 +67,7 @@ pub mod native_module {
             &specifier,
         )
         .ok_or(rquickjs::Error::Unknown)?;
-        super::require_module_namespace_impl(
-            ctx,
-            &specifier,
-            &implementation,
-            "require-builtin",
-        )
+        super::require_module_namespace_impl(ctx, &specifier, &implementation, "require-builtin")
     }
 
     /// Return the canonical public builtin inventory used by the generated

@@ -1,3 +1,6 @@
+#[cfg(feature = "terminal-process")]
+#[allow(unused_imports)]
+use crate::internal::terminal_bindings as terminal_rquickjs;
 use std::cell::RefCell;
 #[cfg(feature = "p2")]
 use std::time::Duration;
@@ -60,6 +63,9 @@ use super::socket_helpers::{
 pub mod native_module {
     pub use super::TcpListener;
     pub use super::TcpSocket;
+    #[cfg(feature = "terminal-process")]
+    #[allow(unused_imports)]
+    use crate::internal::terminal_bindings as terminal_rquickjs;
 
     #[rquickjs::function]
     pub fn create_tcp_socket(
@@ -313,7 +319,11 @@ pub struct TcpSocket {
 }
 
 #[cfg(feature = "p2")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl TcpSocket {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {
@@ -1162,7 +1172,11 @@ impl TcpSocket {
 }
 
 #[cfg(feature = "p3")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl TcpSocket {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {
@@ -1929,7 +1943,11 @@ pub struct TcpListener {
 }
 
 #[cfg(feature = "p2")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl TcpListener {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {
@@ -2450,7 +2468,11 @@ impl TcpListener {
 }
 
 #[cfg(feature = "p3")]
-#[rquickjs::methods]
+#[cfg_attr(
+    feature = "terminal-process",
+    rquickjs::methods(crate = "terminal_rquickjs")
+)]
+#[cfg_attr(not(feature = "terminal-process"), rquickjs::methods)]
 impl TcpListener {
     #[qjs(constructor)]
     pub fn new(ctx: Ctx<'_>) -> rquickjs::Result<Self> {
