@@ -2952,7 +2952,7 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/grand#literal.mjs`, 'export default "literal-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
-            '  if (specifier.startsWith("file:") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
+            '  if (specifier.startsWith("/") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
             '  }',
             '  if (specifier === "virtual:static-child-query") {',
@@ -3011,7 +3011,7 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         );
         assert.strictEqual(
             globalThis.__static_loader_absolute_entry_seen,
-            `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
+            `${root}/entry.mjs?cache#frag`,
         );
         assert.strictEqual(
             (await import('data:text/javascript,' + encodeURIComponent(

@@ -4956,9 +4956,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return runResolve(index - 1, nextSpecifier, context);
         };
 
-        const initialSpecifier = isImportMode && typeof specifier === 'string'
-            ? normalizeLoaderResolvedUrl(specifier)
-            : specifier;
+        const initialSpecifier = specifier;
         const resolved = runResolve(entries.length - 1, initialSpecifier, baseContext);
         const resolvedState = registeredLoaderResolvedState(baseContext, resolved, importAttributes);
         if (!resolvedState) return undefined;

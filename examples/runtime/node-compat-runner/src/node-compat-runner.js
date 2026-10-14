@@ -263,9 +263,11 @@ async function prepareStaticRegisteredLoaderGraph(testPath) {
     }
     globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
     var urlBuiltin = require('node:url');
+    // Node converts the CLI entry path to a file URL before loader hooks see it.
+    var testUrl = urlBuiltin.pathToFileURL(testPath).href;
     await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(
-        urlBuiltin.pathToFileURL(testPath).href,
-        testPath,
+        testUrl,
+        testUrl,
         import.meta.url,
     );
 }
