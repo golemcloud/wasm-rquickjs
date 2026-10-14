@@ -1697,8 +1697,18 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
-    pub fn fs_register_esm_file_url(ctx: Ctx<'_>, url: String) -> String {
-        crate::internal::module_loading::register_static_file_url(&ctx, &url)
+    pub fn fs_register_esm_file_url(
+        ctx: Ctx<'_>,
+        identity_url: String,
+        public_url: Option<String>,
+        loader_realm_param: Option<String>,
+    ) -> String {
+        crate::internal::module_loading::preserved_file_url_identity_with_public(
+            &ctx,
+            &identity_url,
+            public_url.as_deref().unwrap_or(&identity_url),
+            loader_realm_param.as_deref(),
+        )
     }
 
     fn fs_loader_realpath_for_domain(

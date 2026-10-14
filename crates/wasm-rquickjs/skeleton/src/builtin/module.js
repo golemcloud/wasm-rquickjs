@@ -2673,35 +2673,40 @@ function makeEsmUnsupportedDirImportError(filename) {
     return err;
 }
 
-function makeEsmInvalidEncodedSeparatorError(pathname) {
+function makeEsmInvalidEncodedSeparatorError(pathname, parentURL) {
+    let importedFrom = '';
+    if (parentURL) {
+        let importer = String(parentURL);
+        try {
+            if (importer.startsWith('file://')) importer = nodeUrl.fileURLToPath(importer);
+        } catch (_) {}
+        importedFrom = ` imported from ${importer}`;
+    }
     const err = new TypeError(
-        `Invalid module "${pathname}" must not include encoded "/" or "\\" characters`,
+        `Invalid module "${pathname}" must not include encoded "/" or "\\" characters${importedFrom}`,
     );
     err.code = 'ERR_INVALID_MODULE_SPECIFIER';
     return err;
 }
 
-function validateEsmPathSpecifier(specifier) {
-    specifier = String(specifier);
-    if (
-        !specifier.startsWith('file://') &&
-        !specifier.startsWith('/') &&
-        !specifier.startsWith('./') &&
-        !specifier.startsWith('../')
-    ) {
-        return;
-    }
-    const query = specifier.indexOf('?');
-    const hash = specifier.indexOf('#');
-    const end = query < 0 ? (hash < 0 ? specifier.length : hash) :
-        (hash < 0 ? query : Math.min(query, hash));
-    let start = 0;
-    if (specifier.startsWith('file://')) {
-        start = specifier.indexOf('/', 7);
-        if (start < 0 || start >= end) return;
-    }
-    if (/%2f|%5c/i.test(specifier.slice(start, end))) {
-        throw makeEsmInvalidEncodedSeparatorError(specifier);
+function makeEsmInvalidUrlError(input) {
+    const err = new TypeError('Invalid URL');
+    err.code = 'ERR_INVALID_URL';
+    err.input = String(input);
+    return err;
+}
+
+function preprocessEsmUrlInput(input) {
+    return String(input)
+        .replace(/^[\x00-\x20]+|[\x00-\x20]+$/g, '')
+        .replace(/[\t\n\r]/g, '');
+}
+
+function parseEsmUrl(input, base) {
+    try {
+        return base === undefined ? new URL(input) : new URL(input, base);
+    } catch (_) {
+        throw makeEsmInvalidUrlError(input);
     }
 }
 
@@ -2734,9 +2739,20 @@ function registeredLoaderUrlFormatSourceResult(url, format, source) {
     return result;
 }
 
-function resultForEsmFileUrl(url) {
+function defaultFileUrlSuffix(url) {
+    const href = url.href;
+    const queryStart = href.indexOf('?');
+    const fragmentStart = href.indexOf('#');
+    const query = queryStart < 0
+        ? ''
+        : href.slice(queryStart + 1, fragmentStart < 0 ? href.length : fragmentStart);
+    const fragment = fragmentStart < 0 ? '' : href.slice(fragmentStart + 1);
+    return (query ? '?' + query : '') + (fragment ? '#' + fragment : '');
+}
+
+function resultForEsmFileUrl(url, parentURL) {
     if (/%2f|%5c/i.test(url.pathname)) {
-        throw makeEsmInvalidEncodedSeparatorError(url.pathname);
+        throw makeEsmInvalidEncodedSeparatorError(url.pathname, parentURL);
     }
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
@@ -2747,7 +2763,7 @@ function resultForEsmFileUrl(url) {
     }
     const outcome = fsNative.fs_esm_loader_realpath(filename);
     if (outcome.error) throw createFsSystemError(outcome.error);
-    const canonicalUrl = nodeUrl.pathToFileURL(outcome.result).href + url.search + url.hash;
+    const canonicalUrl = nodeUrl.pathToFileURL(outcome.result).href + defaultFileUrlSuffix(url);
     return registeredLoaderUrlFormatResult(
         canonicalUrl,
         defaultLoaderFormatForFilename(outcome.result),
@@ -2873,7 +2889,7 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function resultForRelativeOrAbsoluteSpecifier(specifier, parentURL) {
-        return resultForEsmFileUrl(new URL(specifier, parentURL));
+        return resultForEsmFileUrl(new URL(specifier, parentURL), parentURL);
     }
 
 function isLoaderSourceValue(value) {
@@ -2984,11 +3000,16 @@ function loaderFileUrlSource(url) {
 function registeredLoaderPathOrUrlReturn(url, preserveFileUrlSuffix) {
     url = String(url);
     if (!url.startsWith('file://')) return url;
-    const path = nodeUrl.fileURLToPath(url);
+    const parsed = new URL(url);
+    const path = nodeUrl.fileURLToPath(parsed);
     if (!preserveFileUrlSuffix) return path;
     if (/[?#]/.test(path)) return url;
     const suffixStart = url.search(/[?#]/);
-    return suffixStart < 0 ? path : path + url.slice(suffixStart);
+    if (suffixStart < 0) return path;
+    const suffix = shouldPreserveSymlinks(false)
+        ? url.slice(suffixStart)
+        : defaultFileUrlSuffix(parsed);
+    return path + suffix;
 }
 
 function loaderCommonJsFilename(url) {
@@ -4189,16 +4210,27 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const url = loader.parent !== undefined
             ? normalizeLoaderResolvedUrl(wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(loader.parent, loader.url))
             : loader.url;
-        return loaderRealmUrl(url, loader.realm);
+        if (!url.startsWith('file://')) return url;
+        const publicUrl = resultForEsmFileUrl(new URL(url), loader.parent).url;
+        const realmParam = loaderRealmParam(loader.realm);
+        return fsNative.fs_register_esm_file_url(
+            loaderRealmUrlWithParam(publicUrl, realmParam),
+            publicUrl,
+            realmParam,
+        );
     }
 
-    function loaderRealmUrl(url, realm) {
+    function loaderRealmParam(realm) {
+        return '__wasm_rquickjs_loader_realm=' + encodeURIComponent(String(realm));
+    }
+
+    function loaderRealmUrlWithParam(url, realmParam) {
         if (!url.startsWith('file://')) return url;
         const hashIndex = url.indexOf('#');
         const beforeHash = hashIndex < 0 ? url : url.slice(0, hashIndex);
         const hash = hashIndex < 0 ? '' : url.slice(hashIndex);
         const separator = beforeHash.includes('?') ? '&' : '?';
-        return beforeHash + separator + '__wasm_rquickjs_loader_realm=' + encodeURIComponent(String(realm)) + hash;
+        return beforeHash + separator + realmParam + hash;
     }
 
     function startRegisteredLoader(loader) {
@@ -4368,15 +4400,16 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         );
     }
 
-    function registeredLoaderFileUrlReturn(url) {
-        const resolved = new URL(String(url));
-        const href = resolved.href;
-        const suffixStart = href.search(/[?#]/);
-        const suffix = suffixStart < 0 ? '' : href.slice(suffixStart);
-        const canonical = nodeUrl.pathToFileURL(nodeUrl.fileURLToPath(resolved)).href + suffix;
-        return canonical === href
-            ? registeredLoaderPathOrUrlReturn(href, true)
-            : fsNative.fs_register_esm_file_url(href);
+    function registeredLoaderFileUrlReturn(url, loaderRealmParam) {
+        const publicUrl = new URL(String(url)).href;
+        if (loaderRealmParam !== undefined && loaderRealmParam !== null) {
+            return fsNative.fs_register_esm_file_url(
+                loaderRealmUrlWithParam(publicUrl, String(loaderRealmParam)),
+                publicUrl,
+                String(loaderRealmParam),
+            );
+        }
+        return fsNative.fs_register_esm_file_url(publicUrl, publicUrl, undefined);
     }
 
     function registeredLoaderJsonSourceReturn(source, url) {
@@ -4400,17 +4433,17 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
-        validateEsmPathSpecifier(specifier);
         if (specifier.startsWith('data:')) {
             return registeredLoaderUrlResult(specifier);
         }
         const builtin = registeredLoaderBuiltinResolve(specifier, false);
         if (builtin) return builtin;
-        const fileSpecifier = specifier.startsWith('file://');
+        const preprocessedSpecifier = preprocessEsmUrlInput(specifier);
+        const fileSpecifier = preprocessedSpecifier.startsWith('file://');
         const rootedSpecifier = specifier.startsWith('/');
         const pathSpecifier = fileSpecifier || rootedSpecifier || rustClassifiesPathSpecifier(specifier);
         if (fileSpecifier) {
-            return resultForEsmFileUrl(new URL(specifier));
+            return resultForEsmFileUrl(parseEsmUrl(specifier), parentURL);
         }
         const parentFilename = parentFilenameForLoaderResolve(parentURL, baseUrl);
         if (rootedSpecifier) {
@@ -4418,7 +4451,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 if (missingAsUndefined) return undefined;
                 throw makeEsmModuleNotFoundError(specifier);
             }
-            return resultForEsmFileUrl(new URL(specifier, 'file:///'));
+            return resultForEsmFileUrl(parseEsmUrl(specifier, 'file:///'), parentURL);
         }
 
         if (parentFilename !== null && pathSpecifier) {
@@ -4565,14 +4598,18 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return value;
     }
 
-    function runRegisteredLoadersSync(baseUrl, specifier, resolveOnly, mode) {
+    function runRegisteredLoadersSync(baseUrl, specifier, resolveOnly, mode, publicParentURL) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
         const isImportMode = mode === 'import';
+        const internalBaseUrl = baseUrl || fileUrlForPath('/');
+        const hookParentURL = publicParentURL === undefined
+            ? internalBaseUrl
+            : String(publicParentURL);
         const useLoadCache = !resolveOnly && !isImportMode;
         const loadCacheKey = useLoadCache
             ? String(globalThis.__wasm_rquickjs_registered_loader_generation || 0) +
-                '\0' + String(baseUrl || fileUrlForPath('/')) + '\0' + String(specifier)
+                '\0' + String(internalBaseUrl) + '\0' + String(specifier)
             : undefined;
         const loadCache = useLoadCache
             ? (globalThis.__wasm_rquickjs_sync_registered_loader_cache ||
@@ -4603,17 +4640,20 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const baseContext = registeredLoaderBaseContext(
             isImportMode ? loaderHookConditions() : cjsPackageConditions(),
             {},
-            baseUrl || fileUrlForPath('/'),
+            hookParentURL,
         );
 
         const defaultResolve = (nextSpecifier, context) => {
             const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);
+            const resolutionParentURL = inputs.parentURL === hookParentURL
+                ? internalBaseUrl
+                : inputs.parentURL;
             const builtin = registeredLoaderBuiltinResolve(inputs.specifier, !isImportMode);
             if (builtin) return builtin;
             if (isImportMode) {
-                return resolveEsmDefaultForLoader(inputs.specifier, inputs.parentURL, context, baseContext.parentURL, true, false);
+                return resolveEsmDefaultForLoader(inputs.specifier, resolutionParentURL, context, internalBaseUrl, true, false);
             }
-            return resolveCjsDefaultForLoader(inputs.specifier, inputs.parentURL, context);
+            return resolveCjsDefaultForLoader(inputs.specifier, resolutionParentURL, context);
         };
 
         const runResolve = (index, nextSpecifier, context) => {
@@ -4721,7 +4761,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return registeredLoaderPathOrUrlReturn(url, true);
     }
 
-    function staticRegisteredLoaderReturn(loaded) {
+    function staticRegisteredLoaderReturn(loaded, loaderRealmParam) {
         if (!loaded || !loaded.url) return undefined;
         const url = String(loaded.url);
         const format = loaderFormatOrUndefined(loaded.format);
@@ -4730,6 +4770,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             return registeredLoaderModuleSourceReturn(loaded.source, url);
         }
         if (!hasSource && format === 'module') {
+            if (url.startsWith('file://') && loaderRealmParam !== undefined && loaderRealmParam !== null) {
+                return registeredLoaderFileUrlReturn(url, loaderRealmParam);
+            }
             if (url.startsWith('file://') && shouldPreserveSymlinks(false)) {
                 return registeredLoaderFileUrlReturn(url);
             }
@@ -4899,7 +4942,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         configurable: false,
     });
 
-    function resolveStaticRegisteredLoader(baseUrl, specifier) {
+    function resolveStaticRegisteredLoader(baseUrl, specifier, publicParentURL, loaderRealmParam) {
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
         const key = staticRegisteredLoaderCacheKey(baseUrl, specifier);
         if (cache && Object.prototype.hasOwnProperty.call(cache, key)) {
@@ -4907,8 +4950,14 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (cached.error) throw cached.error;
             return cached.value;
         }
-        const loaded = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(baseUrl, specifier, false, 'import');
-        return staticRegisteredLoaderReturn(loaded);
+        const loaded = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders_sync(
+            baseUrl,
+            specifier,
+            false,
+            'import',
+            publicParentURL,
+        );
+        return staticRegisteredLoaderReturn(loaded, loaderRealmParam);
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_resolve_static_registered_loader', {
         value: resolveStaticRegisteredLoader,
