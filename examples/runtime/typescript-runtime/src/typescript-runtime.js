@@ -699,7 +699,6 @@ export async function run() {
             '}',
         ].join('\n'),
     );
-    globalThis.__wasm_rquickjs_registered_loaders = [];
     globalThis.__typescriptRuntimeRegister = (await import('node:module')).register;
     globalThis.__typescriptRuntimeLoaderUrl =
         pathToFileURL('/typescript-runtime/registered-loader.mjs').href;

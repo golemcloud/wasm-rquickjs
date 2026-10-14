@@ -4754,15 +4754,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!resolvedState) return undefined;
         const normalizedResolved = resolvedState.normalizedResolved;
 
-        let defaultLoadValidation;
         const runLoad = async (index, nextUrl, context) => {
             if (index < 0) {
                 const defaultLoaded = registeredLoaderDefaultLoad(nextUrl, context);
-                defaultLoadValidation = {
-                    url: String(nextUrl),
-                    importAttributes: context && context.importAttributes,
-                    loaded: defaultLoaded,
-                };
+                validateRegisteredLoaderImportAttributes(
+                    {
+                        url: String(nextUrl),
+                        format: registeredLoaderFinalLoadFormat(
+                            defaultLoaded,
+                            resolvedState.resolvedFormat,
+                        ),
+                    },
+                    context && context.importAttributes,
+                );
                 return defaultLoaded;
             }
             const module = entries[index].module;
@@ -4783,18 +4787,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
-        if (defaultLoadValidation) {
-            validateRegisteredLoaderImportAttributes(
-                {
-                    url: defaultLoadValidation.url,
-                    format: registeredLoaderFinalLoadFormat(
-                        defaultLoadValidation.loaded,
-                        resolvedState.resolvedFormat,
-                    ),
-                },
-                defaultLoadValidation.importAttributes,
-            );
-        }
         if (mode !== 'static-raw') {
             cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result);
         }
@@ -4960,15 +4952,21 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const resolvedFormat = resolvedState.resolvedFormat;
         if (resolveOnly) return registeredLoaderUrlFormatResult(normalizedResolved.url, resolvedFormat);
 
-        let defaultLoadValidation;
         const runLoad = (index, nextUrl, context) => {
             if (index < 0) {
                 const defaultLoaded = registeredLoaderDefaultLoad(nextUrl, context);
-                defaultLoadValidation = {
-                    url: String(nextUrl),
-                    importAttributes: context && context.importAttributes,
-                    loaded: defaultLoaded,
-                };
+                if (isImportMode) {
+                    validateRegisteredLoaderImportAttributes(
+                        {
+                            url: String(nextUrl),
+                            format: registeredLoaderFinalLoadFormat(
+                                defaultLoaded,
+                                resolvedState.resolvedFormat,
+                            ),
+                        },
+                        context && context.importAttributes,
+                    );
+                }
                 return defaultLoaded;
             }
             const module = entries[index].module;
@@ -4993,18 +4991,6 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
         const loaded = runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
-        if (defaultLoadValidation) {
-            validateRegisteredLoaderImportAttributes(
-                {
-                    url: defaultLoadValidation.url,
-                    format: registeredLoaderFinalLoadFormat(
-                        defaultLoadValidation.loaded,
-                        resolvedState.resolvedFormat,
-                    ),
-                },
-                defaultLoadValidation.importAttributes,
-            );
-        }
         if (loadCache) loadCache[loadCacheKey] = result;
         return result;
     }

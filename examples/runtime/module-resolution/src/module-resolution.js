@@ -3491,6 +3491,15 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             `${formatRoot}/data.odd`,
             JSON.stringify({ kind: 'forced-json' }),
         );
+        fs.writeFileSync(`${formatRoot}/source-commonjs.cjs`, 'throw new Error("unreplaced");');
+        fs.writeFileSync(
+            `${formatRoot}/source-required.json`,
+            JSON.stringify({ kind: 'source-required-json' }),
+        );
+        fs.writeFileSync(
+            `${formatRoot}/catch-default.odd`,
+            JSON.stringify({ kind: 'uncaught-default-json' }),
+        );
         fs.writeFileSync(
             `${formatRoot}/typed-entry.mjs`,
             'import value from "virtual:forced-json" with { type: "json" }; export default value;',
@@ -3509,11 +3518,13 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             `  "virtual:forced-module": ${JSON.stringify(pathToFileURL(`${formatRoot}/module.odd`).href)},`,
             `  "virtual:forced-commonjs": ${JSON.stringify(pathToFileURL(`${formatRoot}/commonjs.odd`).href)},`,
             `  "virtual:forced-json": ${JSON.stringify(pathToFileURL(`${formatRoot}/data.odd`).href)},`,
+            `  "virtual:source-commonjs-json": ${JSON.stringify(pathToFileURL(`${formatRoot}/source-commonjs.cjs`).href)},`,
             '};',
             'const formats = {',
             '  "virtual:forced-module": "module",',
             '  "virtual:forced-commonjs": "commonjs",',
             '  "virtual:forced-json": "json",',
+            '  "virtual:source-commonjs-json": "commonjs",',
             '};',
             'export function resolve(specifier, context, next) {',
             '  globalThis.__forcedFormatHookRecords.push({ hook: "resolve", specifier, attrs: { ...context.importAttributes } });',
@@ -3530,6 +3541,9 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             '  }',
             '  if (url === "virtual:short-module") {',
             '    return { shortCircuit: true, format: "module", source: "export default \'short-module\'" };',
+            '  }',
+            `  if (url === ${JSON.stringify(pathToFileURL(`${formatRoot}/source-commonjs.cjs`).href)}) {`,
+            '    return { shortCircuit: true, format: "commonjs", source: "module.exports = require(\'./source-required.json\');" };',
             '  }',
             '  return next(url, context);',
             '}',
@@ -3555,6 +3569,10 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             'assert.strictEqual(',
             '  (await import("virtual:short-module", { with: { type: "json" } })).default,',
             '  "short-module",',
+            ');',
+            'assert.deepStrictEqual(',
+            '  (await import("virtual:source-commonjs-json")).default,',
+            '  { kind: "source-required-json" },',
             ');',
         ].join('\n')));
         assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
@@ -3590,6 +3608,41 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             Module._cache = originalCache;
         }
 
+        globalThis.__caughtDefaultLoadAttributeError = undefined;
+        const catchDefaultLoadLoader = [
+            `const target = ${JSON.stringify(pathToFileURL(`${formatRoot}/catch-default.odd`).href)};`,
+            'export function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:catch-default-json") {',
+            '    return { shortCircuit: true, url: target, format: "json" };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'export function load(url, context, next) {',
+            '  if (url === target && context.importAttributes.type === undefined) {',
+            '    return next(url, context).catch(error => {',
+            '      globalThis.__caughtDefaultLoadAttributeError = error.code;',
+            '      return { shortCircuit: true, format: "module", source: "export default \'caught-default-load\'" };',
+            '    });',
+            '  }',
+            '  return next(url, context);',
+            '}',
+        ].join('\n');
+        const catchDefaultLoadLoaderUrl =
+            'data:text/javascript,' + encodeURIComponent(catchDefaultLoadLoader);
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(catchDefaultLoadLoaderUrl)});`,
+            'assert.strictEqual(',
+            '  (await import("virtual:catch-default-json")).default,',
+            '  "caught-default-load",',
+            ');',
+        ].join('\n')));
+        assert.strictEqual(
+            globalThis.__caughtDefaultLoadAttributeError,
+            'ERR_IMPORT_ATTRIBUTE_MISSING',
+        );
+
         delete globalThis.__wasm_rquickjs_module_resolution_assert;
         delete globalThis.__wasm_rquickjs_module_resolution_register;
         delete globalThis.__registeredLoaderObservedParents;
@@ -3599,6 +3652,7 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
         delete globalThis.__loaderRealmLazyCjsEvaluation;
         delete globalThis.__forcedFormatHookRecords;
         delete globalThis.__moduleCacheReplacementEvaluations;
+        delete globalThis.__caughtDefaultLoadAttributeError;
         return true;
     } catch (error) {
         process.execArgv.length = 0;
@@ -3612,6 +3666,7 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
         delete globalThis.__loaderRealmLazyCjsEvaluation;
         delete globalThis.__forcedFormatHookRecords;
         delete globalThis.__moduleCacheReplacementEvaluations;
+        delete globalThis.__caughtDefaultLoadAttributeError;
         console.error(error);
         throw error;
     }
