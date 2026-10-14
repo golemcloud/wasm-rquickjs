@@ -39,6 +39,9 @@ run_clippy() {
 run_clippy p2-default
 run_clippy p2-process --features terminal-process
 run_clippy p2-terminal --features terminal-process,internal-test-execution
+run_clippy p2-process-maximal \
+    --no-default-features \
+    --features full,golem,typescript-transform-runtime,terminal-process
 run_clippy p2-maximal \
     --no-default-features \
     --features full,golem,typescript-transform-runtime
@@ -61,6 +64,9 @@ run_clippy p3-terminal \
 run_clippy p3-process \
     --no-default-features \
     --features normal-p3,terminal-process
+run_clippy p3-process-maximal \
+    --no-default-features \
+    --features full-p3,golem,typescript-transform-runtime,terminal-process
 run_clippy p3-maximal \
     --no-default-features \
     --features full-p3,golem,typescript-transform-runtime
