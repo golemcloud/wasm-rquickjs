@@ -589,7 +589,10 @@ impl PrivateBuiltinResolverGuard {
 
 impl Resolver for PrivateBuiltinResolverGuard {
     fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
-        if !Self::is_private_builtin(name) || !Self::is_user_referrer(base) {
+        let registered_user_referrer = registered_file_url_from_id(ctx, base).is_some();
+        if !Self::is_private_builtin(name)
+            || (!Self::is_user_referrer(base) && !registered_user_referrer)
+        {
             return Err(Error::new_resolving(base, name));
         }
 
@@ -3548,6 +3551,9 @@ impl Resolver for FileUrlResolver {
         let preprocessed_name = Self::preprocess_url_input(name);
         let file_url_host_status = Self::file_url_host_status(&preprocessed_name);
         if file_url_host_status == Some(FileUrlHostStatus::InvalidUrl) {
+            if !name.starts_with("file://") && preprocessed_name.as_ref() != name {
+                return Err(Error::new_resolving(base, name));
+            }
             return NodeFileResolver::throw_invalid_url(ctx, name);
         }
         let normalized_file_url = preprocessed_name
@@ -3644,7 +3650,24 @@ struct RegisteredFileUrl {
 #[derive(Default)]
 pub(crate) struct RegisteredFileUrlRegistry {
     by_id: HashMap<String, RegisteredFileUrl>,
-    by_url: HashMap<(String, String), String>,
+    by_url: HashMap<(String, String, Option<String>), String>,
+}
+
+fn transfer_registered_import_type_rewrite_token(id: &str, identity_url: &str, public_url: &str) {
+    for registered_url in [identity_url, public_url] {
+        let Some(token) = import_type_rewrite_token(registered_url) else {
+            continue;
+        };
+        IMPORT_ATTR_REWRITE_TOKENS.with(|tokens| {
+            let mut tokens = tokens.borrow_mut();
+            if tokens
+                .get(token)
+                .is_some_and(|specifier| specifier == registered_url)
+            {
+                tokens.insert(token.to_string(), id.to_string());
+            }
+        });
+    }
 }
 
 fn register_static_file_url(
@@ -3657,8 +3680,13 @@ fn register_static_file_url(
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized");
     let mut registry = services.registered_file_urls.borrow_mut();
-    let key = (identity_url.to_string(), public_url.to_string());
+    let key = (
+        identity_url.to_string(),
+        public_url.to_string(),
+        loader_realm_param.map(str::to_string),
+    );
     if let Some(id) = registry.by_url.get(&key) {
+        transfer_registered_import_type_rewrite_token(id, identity_url, public_url);
         return id.clone();
     }
     let id = loop {
@@ -3679,6 +3707,7 @@ fn register_static_file_url(
         },
     );
     registry.by_url.insert(key, id.clone());
+    transfer_registered_import_type_rewrite_token(&id, identity_url, public_url);
     id
 }
 
@@ -3700,6 +3729,52 @@ fn registered_file_url_from_id(ctx: &Ctx<'_>, id: &str) -> Option<RegisteredFile
 fn registered_file_url_base_path(registered: &RegisteredFileUrl) -> Option<String> {
     let (path, suffix) = FileUrlResolver::file_url_to_path_parts(&registered.public_url)?;
     Some(format!("{path}{suffix}"))
+}
+
+struct FileModuleLoadContext {
+    logical_path: String,
+    fs_path: String,
+    source_path: String,
+    public_url: String,
+    registered_identity_url: Option<String>,
+    loader_realm_param: Option<String>,
+}
+
+impl FileModuleLoadContext {
+    fn for_module(ctx: &Ctx<'_>, module_id: &str) -> Option<Self> {
+        if let Some(registered) = registered_file_url_from_id(ctx, module_id) {
+            let logical_path = registered_file_url_base_path(&registered)?;
+            let fs_path = module_filesystem_path(&logical_path).to_string();
+            let source_path = module_source_filesystem_path(ctx, &logical_path);
+            return Some(Self {
+                logical_path,
+                fs_path,
+                source_path,
+                public_url: registered.public_url,
+                registered_identity_url: Some(registered.identity_url),
+                loader_realm_param: registered.loader_realm_param,
+            });
+        }
+
+        let logical_path = module_id.to_string();
+        Some(Self {
+            fs_path: module_filesystem_path(module_id).to_string(),
+            source_path: module_source_filesystem_path(ctx, module_id),
+            public_url: path_to_file_url(module_id),
+            logical_path,
+            registered_identity_url: None,
+            loader_realm_param: None,
+        })
+    }
+
+    fn consume_import_attr_type(&self, module_id: &str) -> Option<String> {
+        if let Some(identity_url) = &self.registered_identity_url {
+            let token = import_type_rewrite_token(identity_url)?;
+            consume_import_type_rewrite_token(token, module_id)
+        } else {
+            import_attr_type_from_path(module_id)
+        }
+    }
 }
 
 pub(crate) fn preserved_file_url_identity(ctx: &Ctx<'_>, identity_url: &str) -> String {
@@ -3787,43 +3862,12 @@ impl Resolver for RegisteredLoaderResolver {
             loader_realm_param,
         ))?;
         match resolved {
-            Some(resolved) if !resolved.is_empty() => Ok(resolved),
+            Some(resolved) if !resolved.is_empty() => {
+                transfer_import_type_rewrite_token(name, &resolved);
+                Ok(resolved)
+            }
             _ => Err(Error::new_resolving(base, name)),
         }
-    }
-}
-
-struct StaticRegisteredFileUrlLoader;
-
-impl Loader for StaticRegisteredFileUrlLoader {
-    fn load<'js>(
-        &mut self,
-        ctx: &Ctx<'js>,
-        path: &str,
-    ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let Some(registered) = registered_file_url_from_id(ctx, path) else {
-            return Err(Error::new_loading(path));
-        };
-        let Some((file_path, _suffix)) =
-            FileUrlResolver::file_url_to_path_parts(&registered.public_url)
-        else {
-            return Err(Error::new_loading(path));
-        };
-        let fs_path = CjsEvalResolver::normalize_path(std::path::Path::new(&file_path));
-        let source_path = if NodeFileResolver::has_exec_argv_flag(ctx, "--preserve-symlinks") {
-            fs_path.clone()
-        } else {
-            crate::builtin::realpath_for_esm_module_resolution(ctx, &fs_path)
-                .unwrap_or_else(|_| fs_path.clone())
-        };
-        declare_esm_file_module(
-            ctx,
-            path,
-            &fs_path,
-            &source_path,
-            registered.public_url,
-            EsmFilePreflightMode::RequireOnly,
-        )
     }
 }
 
@@ -4531,7 +4575,13 @@ impl Resolver for NodeModuleErrorResolver {
             return throw_native_coded_error(ctx, &msg, "ERR_UNKNOWN_BUILTIN_MODULE", true);
         }
 
-        if let Some(scheme_end) = name.find("://") {
+        if let Some(scheme_end) = name.find("://")
+            && scheme_end > 0
+            && name[..scheme_end].bytes().enumerate().all(|(index, byte)| {
+                byte.is_ascii_alphabetic()
+                    || (index > 0 && (byte.is_ascii_digit() || matches!(byte, b'+' | b'-' | b'.')))
+            })
+        {
             let scheme = &name[..scheme_end];
             if scheme != "file" && scheme != "data" {
                 let msg = format!(
@@ -10323,6 +10373,7 @@ fn build_loader_cjs_facade(
     source_url: String,
     cache_key: String,
     source: String,
+    loader_realm: String,
 ) -> String {
     let cjs_conditions = NodeModulesResolver::conditions_from_global(
         &ctx,
@@ -10335,13 +10386,20 @@ fn build_loader_cjs_facade(
         &mut HashSet::new(),
         &cjs_conditions,
     );
-    let default_member_expression = format!(
-        "__wasm_rquickjs_load_commonjs_loader_source(\"{}\",\"{}\",\"{}\",\"{}\")",
-        escape_js_string(&filename),
-        escape_js_string(&source),
-        escape_js_string(&source_url),
-        escape_js_string(&cache_key),
-    );
+    let filename = escape_js_string(&filename);
+    let source = escape_js_string(&source);
+    let source_url = escape_js_string(&source_url);
+    let cache_key = escape_js_string(&cache_key);
+    let default_member_expression = if loader_realm.is_empty() {
+        format!(
+            "__wasm_rquickjs_load_commonjs_loader_source(\"{filename}\",\"{source}\",\"{source_url}\",\"{cache_key}\")",
+        )
+    } else {
+        let loader_realm = escape_js_string(&loader_realm);
+        format!(
+            "__wasm_rquickjs_load_commonjs_loader_source(\"{filename}\",\"{source}\",\"{source_url}\",\"{cache_key}\",null,\"{loader_realm}\")",
+        )
+    };
     registry.register(build_cjs_facade_source(
         &default_member_expression,
         &analysis.exports,
@@ -10354,7 +10412,10 @@ impl Loader for CjsCompatLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let fs_path = module_filesystem_path(path);
+        let Some(target) = FileModuleLoadContext::for_module(ctx, path) else {
+            return Err(Error::new_loading(path));
+        };
+        let fs_path = target.fs_path.as_str();
         let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
         let is_cjs_ext = fs_path.ends_with(".cjs");
         #[cfg(feature = "typescript-runtime")]
@@ -10364,7 +10425,7 @@ impl Loader for CjsCompatLoader {
         if !fs_path.ends_with(".js") && !is_cjs_ext && !is_extensionless && !is_typescript {
             return Err(Error::new_loading(path));
         }
-        if import_attr_type_from_path(path).as_deref() == Some("json") {
+        if target.consume_import_attr_type(path).as_deref() == Some("json") {
             return throw_import_attr_type_incompatible(ctx);
         }
 
@@ -10385,12 +10446,11 @@ impl Loader for CjsCompatLoader {
                     .as_ref()
                     .is_some_and(|scope| scope.is_node_modules_package));
 
-        let url = path_to_file_url(path);
+        let url = target.public_url.clone();
         let source = if let Some(source) = require_esm_source_override(ctx, &fs_abs_path, &url) {
             source
         } else {
-            let source_path = module_source_filesystem_path(ctx, path);
-            read_module_source_or_throw(ctx, path, &source_path)?
+            read_module_source_or_throw(ctx, &target.public_url, &target.source_path)?
         };
         #[cfg(feature = "typescript-runtime")]
         let original_source_for_cache = source.clone();
@@ -10525,16 +10585,25 @@ impl Loader for CjsCompatLoader {
         if !prepared_typescript.is_empty() {
             init.prepared_cjs_typescript = Some(prepared_typescript);
         }
-        let default_member_expression = if init.prepared_cjs_typescript.is_some() {
-            format!(
-                "__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\",__wasm_rquickjs_take_prepared_cjs_typescript(import.meta))",
-                escape_js_string(&fs_abs_path),
-            )
-        } else {
-            format!(
-                "__wasm_rquickjs_load_cjs_esm_facade_default(\"{}\")",
-                escape_js_string(&fs_abs_path),
-            )
+        let escaped_filename = escape_js_string(&fs_abs_path);
+        let loader_realm = target
+            .loader_realm_param
+            .as_ref()
+            .map(|realm| escape_js_string(realm));
+        let default_member_expression = match (init.prepared_cjs_typescript.is_some(), loader_realm)
+        {
+            (true, Some(loader_realm)) => format!(
+                "__wasm_rquickjs_load_cjs_esm_facade_default(\"{escaped_filename}\",__wasm_rquickjs_take_prepared_cjs_typescript(import.meta),\"{loader_realm}\")",
+            ),
+            (true, None) => format!(
+                "__wasm_rquickjs_load_cjs_esm_facade_default(\"{escaped_filename}\",__wasm_rquickjs_take_prepared_cjs_typescript(import.meta))",
+            ),
+            (false, Some(loader_realm)) => format!(
+                "__wasm_rquickjs_load_cjs_esm_facade_default(\"{escaped_filename}\",undefined,\"{loader_realm}\")",
+            ),
+            (false, None) => {
+                format!("__wasm_rquickjs_load_cjs_esm_facade_default(\"{escaped_filename}\")",)
+            }
         };
         let wrapped =
             build_cjs_facade_source(&default_member_expression, &detected_analysis.exports);
@@ -12437,7 +12506,6 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             crate::builtin::module_loader(),
             LoaderCjsFacadeLoader(loader_cjs_facades.clone()),
             DataUrlLoader,
-            StaticRegisteredFileUrlLoader,
         ),
         (JsonFileLoader, CjsCompatLoader, ImportMetaLoader),
     );
@@ -12505,7 +12573,7 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
             "__wasm_rquickjs_build_loader_cjs_facade",
             Function::new(ctx.clone(), {
                 let loader_cjs_facades = loader_cjs_facades.clone();
-                move |ctx, filename, source_url, cache_key, source| {
+                move |ctx, filename, source_url, cache_key, source, loader_realm| {
                     build_loader_cjs_facade(
                         &loader_cjs_facades,
                         ctx,
@@ -12513,6 +12581,7 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
                         source_url,
                         cache_key,
                         source,
+                        loader_realm,
                     )
                 }
             })
@@ -12955,7 +13024,10 @@ impl Loader for ImportMetaLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let fs_path = module_filesystem_path(path);
+        let Some(target) = FileModuleLoadContext::for_module(ctx, path) else {
+            return Err(Error::new_loading(path));
+        };
+        let fs_path = target.fs_path.as_str();
         let is_extensionless = std::path::Path::new(fs_path).extension().is_none();
         if !fs_path.ends_with(".mjs") && !is_extensionless {
             let ext = std::path::Path::new(fs_path)
@@ -12970,17 +13042,16 @@ impl Loader for ImportMetaLoader {
             error_obj.set("code", "ERR_UNKNOWN_FILE_EXTENSION")?;
             return Err(ctx.throw(error_obj.into_value()));
         }
-        if import_attr_type_from_path(path).as_deref() == Some("json") {
+        if target.consume_import_attr_type(path).as_deref() == Some("json") {
             return throw_import_attr_type_incompatible(ctx);
         }
 
-        let source_path = module_source_filesystem_path(ctx, path);
         declare_esm_file_module(
             ctx,
             path,
             fs_path,
-            &source_path,
-            path_to_file_url(path),
+            &target.source_path,
+            target.public_url,
             EsmFilePreflightMode::RequireOnly,
         )
     }
@@ -12996,19 +13067,24 @@ impl Loader for JsonFileLoader {
         ctx: &Ctx<'js>,
         path: &str,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
-        let fs_path = module_filesystem_path(path);
+        let Some(target) = FileModuleLoadContext::for_module(ctx, path) else {
+            return Err(Error::new_loading(path));
+        };
+        let fs_path = target.fs_path.as_str();
         if !fs_path.ends_with(".json") {
             return Err(Error::new_loading(path));
         }
 
-        let import_attr_type = import_attr_type_from_path(path);
-        let source_path = module_source_filesystem_path(ctx, path);
-        let source = std::fs::read_to_string(&source_path).map_err(|_| Error::new_loading(path))?;
+        let import_attr_type = target.consume_import_attr_type(path);
+        let source = std::fs::read_to_string(&target.source_path)
+            .map_err(|_| Error::new_loading(&target.public_url))?;
         let module_source = if import_attr_type.as_deref() != Some("json") {
-            json_import_attribute_missing_module_source(path)
+            json_import_attribute_missing_module_source(&target.public_url)
         } else {
-            let original_path = strip_import_type_rewrite_token(path);
-            let cjs_cache = if split_module_path_suffix(&original_path).1.is_empty() {
+            let original_path = strip_import_type_rewrite_token(&target.logical_path);
+            let cjs_cache = if target.loader_realm_param.is_none()
+                && split_module_path_suffix(&original_path).1.is_empty()
+            {
                 Some(JsonModuleCjsCache {
                     filename: fs_path,
                     dirname: std::path::Path::new(fs_path)
@@ -13021,7 +13097,7 @@ impl Loader for JsonFileLoader {
             };
             json_module_source(&source, cjs_cache)
         };
-        let init = file_import_meta_init(path_to_file_url(path), fs_path.to_string());
+        let init = file_import_meta_init(target.public_url, fs_path.to_string());
         declare_module_with_import_meta(ctx, path, &module_source, &init)
     }
 }

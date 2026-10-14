@@ -1102,6 +1102,18 @@ export const testEsmEncodedRelativePaths = async () => {
             'export default true;',
         ].join('\n'));
         fs.writeFileSync(
+            `${canonicalRoot}/preserve-format.cjs`,
+            'exports.named = "preserve-cjs";',
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/preserve-format.json`,
+            JSON.stringify({ value: 'preserve-json' }),
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/preserve-private.mjs`,
+            'import "__wasm_rquickjs_builtin/vm_native"; export default true;',
+        );
+        fs.writeFileSync(
             `${canonicalRoot}/hook-static-parent.mjs`,
             'import value from "./hook%2Fintercept.mjs"; export default value;',
         );
@@ -1328,6 +1340,10 @@ export const testEsmEncodedRelativePaths = async () => {
         ]) {
             await assertInvalidFileAuthority(`file://${authority}${invalidAuthorityPath}`);
         }
+        await expectImportRejectsCode(
+            ` file://local%09host${invalidAuthorityPath}`,
+            'ERR_MODULE_NOT_FOUND',
+        );
         const identityLiteralUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href +
             '?canonical=identity#fragment';
         const identityEmptyQueryUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href + '?';
@@ -1460,6 +1476,10 @@ export const testEsmEncodedRelativePaths = async () => {
         }
         await assertInvalidFileAuthority(`file://local%3Ehost${invalidAuthorityPath}`);
         await assertInvalidFileAuthority(`file://local%09host${invalidAuthorityPath} `);
+        await expectImportRejectsCode(
+            ` file://local%09host${invalidAuthorityPath}`,
+            'ERR_MODULE_NOT_FOUND',
+        );
 
         const pathExpected = pathToFileURL(`${canonicalRoot}/path-target.mjs`).href +
             '?canonical=path#fragment';
@@ -1570,6 +1590,33 @@ export const testEsmEncodedRelativePaths = async () => {
             assert.strictEqual(userRealmBeforeRegister.default.child, 'user-child');
             assert.strictEqual(userRealmBeforeRegister.default.evaluation, 1);
             assert.strictEqual(globalThis.__esmUserRealmIdentityEvaluations, 1);
+            const preserveCjsUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-format`,
+            ).href + '%2Ecjs';
+            const preserveCjs = await import(preserveCjsUrl);
+            assert.strictEqual(preserveCjs.default.named, 'preserve-cjs');
+            assert.strictEqual(preserveCjs.named, 'preserve-cjs');
+            assert.strictEqual(await import(preserveCjsUrl), preserveCjs);
+            const preserveJsonUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-format`,
+            ).href + '%2Ejson';
+            fs.writeFileSync(
+                `${canonicalRoot}/preserve-json-parent.mjs`,
+                [
+                    `const first = await import(${JSON.stringify(preserveJsonUrl)}, { with: { type: "json" } });`,
+                    `const second = await import(${JSON.stringify(preserveJsonUrl)}, { with: { type: "json" } });`,
+                    'export default { value: first.default, shared: first === second };',
+                ].join('\n'),
+            );
+            assert.deepStrictEqual(
+                (await import(`${canonicalRoot}/preserve-json-parent.mjs`)).default,
+                { value: { value: 'preserve-json' }, shared: true },
+            );
+            await expectImportRejectsCode(preserveJsonUrl, 'ERR_IMPORT_ATTRIBUTE_MISSING');
+            const preservePrivateUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-private`,
+            ).href + '%2Emjs';
+            await expectImportRejectsCode(preservePrivateUrl, 'ERR_MODULE_NOT_FOUND');
         } finally {
             process.execArgv.length = 0;
             for (const arg of originalExecArgv) process.execArgv.push(arg);
@@ -3033,6 +3080,63 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             ].join('\n'),
         );
         fs.writeFileSync(
+            `${root}/relative.cjs`,
+            [
+                'globalThis.__loaderRealmCjsEvaluation =',
+                '  (globalThis.__loaderRealmCjsEvaluation || 0) + 1;',
+                'exports.named = "relative-cjs";',
+                'exports.evaluation = globalThis.__loaderRealmCjsEvaluation;',
+                'exports.nested = require("./nested.cjs");',
+                'exports.lazy = () => require("./lazy.cjs");',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/nested.cjs`,
+            [
+                'globalThis.__loaderRealmNestedCjsEvaluation =',
+                '  (globalThis.__loaderRealmNestedCjsEvaluation || 0) + 1;',
+                'exports.evaluation = globalThis.__loaderRealmNestedCjsEvaluation;',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/lazy.cjs`,
+            [
+                'globalThis.__loaderRealmLazyCjsEvaluation =',
+                '  (globalThis.__loaderRealmLazyCjsEvaluation || 0) + 1;',
+                'exports.evaluation = globalThis.__loaderRealmLazyCjsEvaluation;',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/config.json`,
+            JSON.stringify({ kind: 'loader-json' }),
+        );
+        fs.mkdirSync(`${root}/node_modules/loader-realm-cjs-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-cjs-pkg/package.json`,
+            JSON.stringify({
+                name: 'loader-realm-cjs-pkg',
+                type: 'commonjs',
+                exports: './index.js',
+            }),
+        );
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-cjs-pkg/index.js`,
+            'exports.named = "package-cjs";',
+        );
+        fs.mkdirSync(`${root}/node_modules/loader-realm-esm-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-esm-pkg/package.json`,
+            JSON.stringify({
+                name: 'loader-realm-esm-pkg',
+                type: 'module',
+                exports: './index.js',
+            }),
+        );
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-esm-pkg/index.js`,
+            'export default "package-esm";',
+        );
+        fs.writeFileSync(
             `${root}/app.mjs`,
             [
                 'import { count as stateCount } from "./stateful.mjs";',
@@ -3045,20 +3149,91 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             [
                 'import { count } from "./stateful.mjs";',
                 'import { count as packageCount } from "loader-realm-pkg";',
+                'import relativeCjs, { named as relativeCjsNamed } from "./relative.cjs";',
+                'import relativeCjsOne from "./relative.cjs?one";',
+                'import relativeCjsTwo from "./relative.cjs?two";',
+                'import packageCjs, { named as packageCjsNamed } from "loader-realm-cjs-pkg";',
+                'import packageEsm from "loader-realm-esm-pkg";',
+                'import config from "./config.json" with { type: "json" };',
                 'if (import.meta.url.includes("__wasm_rquickjs_loader_realm")) {',
                 '  throw new Error("loader realm marker leaked through import.meta.url");',
                 '}',
                 'const loaderCount = count();',
                 'const loaderPackageCount = packageCount();',
+                'config.loaderMutation = true;',
+                '(globalThis.__loaderRealmCjsEvaluations ||= []).push(relativeCjs.evaluation);',
+                'const loaderFormats = {',
+                '  relativeCjs: relativeCjs.named,',
+                '  relativeCjsNamed,',
+                '  relativeCjsEvaluation: relativeCjs.evaluation,',
+                '  nestedCjsEvaluation: relativeCjs.nested.evaluation,',
+                '  queryVariantsShareExports: relativeCjsOne === relativeCjs && relativeCjsTwo === relativeCjs,',
+                '  packageCjs: packageCjs.named,',
+                '  packageCjsNamed,',
+                '  packageEsm,',
+                '  json: config.kind,',
+                '  jsonMutation: config.loaderMutation,',
+                '};',
                 'export function resolve(specifier, context, next) {',
-                '  if (specifier === "virtual:loader-realm-count") {',
+                '  if (specifier.startsWith("virtual:loader-realm-count")) {',
                 '    return { shortCircuit: true, url: "virtual:loader-realm-count-json", format: "json" };',
                 '  }',
                 '  return next(specifier, context);',
                 '}',
                 'export function load(url, context, next) {',
                 '  if (url === "virtual:loader-realm-count-json") {',
-                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ loaderCount, loaderPackageCount }) };',
+                '    const formats = { ...loaderFormats, lazyCjsEvaluation: relativeCjs.lazy().evaluation };',
+                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ loaderCount, loaderPackageCount, loaderFormats: formats }) };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/private-loader.mjs`,
+            [
+                'import "__wasm_rquickjs_builtin/vm_native";',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:private-loader-trigger") {',
+                '    return { shortCircuit: true, url: "data:text/javascript,export default true" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/source-interceptor.mjs`,
+            [
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:loader-source-cjs") {',
+                '    return { shortCircuit: true, url: "loader-source:shared", format: "commonjs" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "loader-source:shared") {',
+                '    return { shortCircuit: true, format: "commonjs", source: "module.exports = { mutations: 0 };" };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/source-consumer-loader.mjs`,
+            [
+                'import shared from "virtual:loader-source-cjs";',
+                'shared.mutations++;',
+                'let id;',
+                'export function initialize(data) { id = data.id; }',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:source-consumer-" + id) {',
+                '    return { shortCircuit: true, url: "loader-source-state:" + id, format: "json" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "loader-source-state:" + id) {',
+                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ mutations: shared.mutations }) };',
                 '  }',
                 '  return next(url, context);',
                 '}',
@@ -3128,11 +3303,77 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
             'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             `register(${JSON.stringify(pathToFileURL(`${root}/loader.mjs`).href)});`,
-            'assert.deepStrictEqual((await import("virtual:loader-realm-count", { with: { type: "json" } })).default, { loaderCount: 1, loaderPackageCount: 1 });',
+            'assert.deepStrictEqual((await import("virtual:loader-realm-count", { with: { type: "json" } })).default, {',
+            '  loaderCount: 1,',
+            '  loaderPackageCount: 1,',
+            '  loaderFormats: {',
+            '    relativeCjs: "relative-cjs",',
+            '    relativeCjsNamed: "relative-cjs",',
+            '    relativeCjsEvaluation: 1,',
+            '    nestedCjsEvaluation: 1,',
+            '    lazyCjsEvaluation: 1,',
+            '    queryVariantsShareExports: true,',
+            '    packageCjs: "package-cjs",',
+            '    packageCjsNamed: "package-cjs",',
+            '    packageEsm: "package-esm",',
+            '    json: "loader-json",',
+            '    jsonMutation: true,',
+            '  },',
+            '});',
             `const userState = await import(${JSON.stringify(pathToFileURL(`${root}/stateful.mjs`).href)});`,
             'assert.strictEqual(userState.count(), 1);',
             `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL(`${root}/app.mjs`).href)})).default, [2, 1]);`,
         ].join('\n')));
+        assert.deepStrictEqual(globalThis.__loaderRealmCjsEvaluations, [1]);
+
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(pathToFileURL(`${root}/loader.mjs`).href)});`,
+            'const state = (await import("virtual:loader-realm-count-second", { with: { type: "json" } })).default;',
+            'assert.strictEqual(state.loaderFormats.relativeCjsEvaluation, 2);',
+            'assert.strictEqual(state.loaderFormats.nestedCjsEvaluation, 2);',
+            'assert.strictEqual(state.loaderFormats.lazyCjsEvaluation, 2);',
+            'assert.strictEqual(state.loaderFormats.queryVariantsShareExports, true);',
+            'assert.strictEqual(state.loaderFormats.jsonMutation, true);',
+        ].join('\n')));
+        assert.deepStrictEqual(globalThis.__loaderRealmCjsEvaluations, [1, 2]);
+        const appRequire = createRequire(`${root}/app.cjs`);
+        assert.strictEqual(
+            Object.keys(appRequire.cache).some(key => key.startsWith('__wasm_rquickjs_static_file_url__:')),
+            false,
+        );
+        const appRelativeCjs = appRequire('./relative.cjs');
+        assert.strictEqual(appRelativeCjs.evaluation, 3);
+        assert.strictEqual(appRelativeCjs.nested.evaluation, 3);
+        assert.strictEqual(appRelativeCjs.lazy().evaluation, 3);
+        assert.deepStrictEqual(appRequire('./config.json'), { kind: 'loader-json' });
+
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(pathToFileURL(`${root}/source-interceptor.mjs`).href)});`,
+            'await import("data:text/javascript,export default true#source-interceptor-ready");',
+            `register(${JSON.stringify(pathToFileURL(`${root}/source-consumer-loader.mjs`).href)}, { data: { id: "one" } });`,
+            'const one = (await import("virtual:source-consumer-one", { with: { type: "json" } })).default;',
+            'if (one.mutations !== 1) throw new Error("first source-backed CJS loader realm was not isolated");',
+            `register(${JSON.stringify(pathToFileURL(`${root}/source-consumer-loader.mjs`).href)}, { data: { id: "two" } });`,
+            'const two = (await import("virtual:source-consumer-two", { with: { type: "json" } })).default;',
+            'if (two.mutations !== 1) throw new Error("second source-backed CJS loader realm was not isolated");',
+        ].join('\n')));
+        assert.strictEqual(
+            Object.keys(appRequire.cache).some(key => key.includes('loader-source:shared')),
+            false,
+        );
+
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        globalThis.__wasm_rquickjs_module_resolution_register(
+            pathToFileURL(`${root}/private-loader.mjs`).href,
+        );
+        await expectImportRejectsCode(
+            'virtual:private-loader-trigger',
+            'ERR_MODULE_NOT_FOUND',
+        );
 
         const encodedDefaultLoaderUrl = pathToFileURL(`${root}/alias/encoded-loader`).href +
             '%2Emjs';
@@ -3181,6 +3422,10 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
         delete globalThis.__wasm_rquickjs_module_resolution_assert;
         delete globalThis.__wasm_rquickjs_module_resolution_register;
         delete globalThis.__registeredLoaderObservedParents;
+        delete globalThis.__loaderRealmCjsEvaluation;
+        delete globalThis.__loaderRealmCjsEvaluations;
+        delete globalThis.__loaderRealmNestedCjsEvaluation;
+        delete globalThis.__loaderRealmLazyCjsEvaluation;
         return true;
     } catch (error) {
         process.execArgv.length = 0;
@@ -3188,6 +3433,10 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
         delete globalThis.__wasm_rquickjs_module_resolution_assert;
         delete globalThis.__wasm_rquickjs_module_resolution_register;
         delete globalThis.__registeredLoaderObservedParents;
+        delete globalThis.__loaderRealmCjsEvaluation;
+        delete globalThis.__loaderRealmCjsEvaluations;
+        delete globalThis.__loaderRealmNestedCjsEvaluation;
+        delete globalThis.__loaderRealmLazyCjsEvaluation;
         console.error(error);
         throw error;
     }
