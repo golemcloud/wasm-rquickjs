@@ -4388,6 +4388,7 @@ export let register = function register(specifier, parentURL, options) {
 
 if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     const registeredLoaderImportAttributes = Symbol('registeredLoaderImportAttributes');
+    const registeredLoaderDataUrlIdentities = Object.create(null);
 
     function normalizeLoaderResolvedUrl(url) {
         if (url.startsWith('/')) {
@@ -4668,18 +4669,27 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     function registeredLoaderDataUrlReturn(url, loaderRealmParam, format) {
         const publicUrl = String(url);
         const canonicalUrl = canonicalLoaderResolvedUrl(publicUrl);
+        const realmParam = loaderRealmParam === undefined || loaderRealmParam === null
+            ? undefined
+            : String(loaderRealmParam);
         let target = canonicalUrl;
-        if (
-            canonicalUrl !== publicUrl ||
-            loaderRealmParam !== undefined && loaderRealmParam !== null
-        ) {
-            target = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
-                canonicalUrl,
-                publicUrl,
-                loaderRealmParam === undefined || loaderRealmParam === null
-                    ? undefined
-                    : String(loaderRealmParam),
-            );
+        if (canonicalUrl !== publicUrl || realmParam !== undefined) {
+            const identityKey =
+                canonicalUrl.length + ':' + canonicalUrl +
+                publicUrl.length + ':' + publicUrl +
+                (realmParam === undefined
+                    ? '-'
+                    : realmParam.length + ':' + realmParam);
+            if (objectPrototypeHasOwnProperty(registeredLoaderDataUrlIdentities, identityKey)) {
+                target = registeredLoaderDataUrlIdentities[identityKey];
+            } else {
+                target = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
+                    canonicalUrl,
+                    publicUrl,
+                    realmParam,
+                );
+                registeredLoaderDataUrlIdentities[identityKey] = target;
+            }
         }
         return format === 'json'
             ? wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_import_attr_rewrite(

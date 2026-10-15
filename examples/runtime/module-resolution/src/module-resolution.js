@@ -3117,13 +3117,27 @@ export const testRegisteredLoaderUppercaseFileUrl = async () => {
     const targetUrl = pathToFileURL(`${root}/target.mjs`).href;
     const childUrl = pathToFileURL(`${root}/child.mjs`).href;
     const uppercaseTargetUrl = `FILE:${targetUrl.slice('file:'.length)}`;
-    const uppercaseDataUrl = 'DATA:text/javascript,export default import.meta.url';
+    const uppercaseDataSource = [
+        'export const evaluations =',
+        '  globalThis.__uppercaseDataEvaluations =',
+        '    (globalThis.__uppercaseDataEvaluations || 0) + 1;',
+        'export default import.meta.url;',
+    ].join('\n');
+    const uppercaseDataUrl = `DATA:text/javascript,${encodeURIComponent(uppercaseDataSource)}`;
+    fs.writeFileSync(
+        `${root}/data-parent-a.mjs`,
+        'import * as shared from "virtual:uppercase-data-url"; export default shared;',
+    );
+    fs.writeFileSync(
+        `${root}/data-parent-b.mjs`,
+        'import * as shared from "virtual:uppercase-data-url-alias"; export default shared;',
+    );
     const hookSource = [
         'export function resolve(specifier, context, nextResolve) {',
         '  if (specifier === "virtual:uppercase-file-url") {',
         `    return { shortCircuit: true, url: ${JSON.stringify(uppercaseTargetUrl)}, format: "module" };`,
         '  }',
-        '  if (specifier === "virtual:uppercase-data-url") {',
+        '  if (specifier === "virtual:uppercase-data-url" || specifier === "virtual:uppercase-data-url-alias") {',
         `    return { shortCircuit: true, url: ${JSON.stringify(uppercaseDataUrl)}, format: "module" };`,
         '  }',
         `  if (specifier === "./child.mjs" && context.parentURL === ${JSON.stringify(uppercaseTargetUrl)}) {`,
@@ -3156,10 +3170,16 @@ export const testRegisteredLoaderUppercaseFileUrl = async () => {
         assert.strictEqual(fileResult.dirname, undefined);
         assert.strictEqual(globalThis.__uppercaseFileLoaderUrl, uppercaseTargetUrl);
         assert.strictEqual(globalThis.__uppercaseFileLoaderParentUrl, uppercaseTargetUrl);
-        assert.strictEqual(
-            (await import('virtual:uppercase-data-url')).default,
-            uppercaseDataUrl,
-        );
+        const firstData = await import('virtual:uppercase-data-url');
+        const secondData = await import('virtual:uppercase-data-url-alias');
+        const parentAData = (await import(`${root}/data-parent-a.mjs`)).default;
+        const parentBData = (await import(`${root}/data-parent-b.mjs`)).default;
+        assert.strictEqual(firstData, secondData);
+        assert.strictEqual(parentAData, firstData);
+        assert.strictEqual(parentBData, firstData);
+        assert.strictEqual(firstData.default, uppercaseDataUrl);
+        assert.strictEqual(firstData.evaluations, 1);
+        assert.strictEqual(globalThis.__uppercaseDataEvaluations, 1);
         assert.strictEqual(globalThis.__uppercaseDataLoaderUrl, uppercaseDataUrl);
         return true;
     } finally {
@@ -3167,6 +3187,7 @@ export const testRegisteredLoaderUppercaseFileUrl = async () => {
         delete globalThis.__uppercaseFileLoaderParentUrl;
         delete globalThis.__uppercaseFileLoaderChildUrl;
         delete globalThis.__uppercaseDataLoaderUrl;
+        delete globalThis.__uppercaseDataEvaluations;
         globalThis.__wasm_rquickjs_registered_loaders = [];
     }
 };
