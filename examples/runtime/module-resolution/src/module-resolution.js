@@ -3099,7 +3099,7 @@ export const testRegisteredLoaderUppercaseFileUrl = async () => {
     fs.mkdirSync(root, { recursive: true });
     fs.writeFileSync(
         `${root}/target.mjs`,
-        'export default "uppercase-file-url";',
+        'export default import.meta.url;',
     );
     const targetUrl = pathToFileURL(`${root}/target.mjs`).href;
     const uppercaseTargetUrl = `FILE:${targetUrl.slice('file:'.length)}`;
@@ -3111,7 +3111,7 @@ export const testRegisteredLoaderUppercaseFileUrl = async () => {
         '  return nextResolve(specifier, context);',
         '}',
         'export function load(url, context, nextLoad) {',
-        `  if (url === ${JSON.stringify(targetUrl)}) globalThis.__uppercaseFileLoaderUrl = url;`,
+        `  if (url === ${JSON.stringify(uppercaseTargetUrl)}) globalThis.__uppercaseFileLoaderUrl = url;`,
         '  return nextLoad(url, context);',
         '}',
     ].join('\n');
@@ -3123,9 +3123,9 @@ export const testRegisteredLoaderUppercaseFileUrl = async () => {
         await import('data:text/javascript,export default true#uppercase-loader-ready');
         assert.strictEqual(
             (await import('virtual:uppercase-file-url')).default,
-            'uppercase-file-url',
+            uppercaseTargetUrl,
         );
-        assert.strictEqual(globalThis.__uppercaseFileLoaderUrl, targetUrl);
+        assert.strictEqual(globalThis.__uppercaseFileLoaderUrl, uppercaseTargetUrl);
         return true;
     } finally {
         delete globalThis.__uppercaseFileLoaderUrl;
@@ -3154,6 +3154,12 @@ export const testRegisteredLoaderModuleCacheReplacement = async () => {
             'Module._cache = secondCache;',
             'const secondRequire = createRequire(import.meta.url);',
             'const second = secondRequire("./dep.cjs");',
+            'Module._cache = undefined;',
+            'let undefinedCacheThrows = false;',
+            'try { createRequire(import.meta.url)("./dep.cjs"); } catch (error) { undefinedCacheThrows = error instanceof TypeError; }',
+            'delete Module._cache;',
+            'let deletedCacheThrows = false;',
+            'try { createRequire(import.meta.url)("./dep.cjs"); } catch (error) { deletedCacheThrows = error instanceof TypeError; }',
             'const state = {',
             '  evaluations: [first, firstAgain, second],',
             '  firstCacheLive: firstRequire.cache === firstCache,',
@@ -3161,6 +3167,8 @@ export const testRegisteredLoaderModuleCacheReplacement = async () => {
             '  cachesDistinct: firstCache !== secondCache,',
             '  firstCached: Object.keys(firstCache).some(key => key.endsWith("/dep.cjs")),',
             '  secondCached: Object.keys(secondCache).some(key => key.endsWith("/dep.cjs")),',
+            '  undefinedCacheThrows,',
+            '  deletedCacheThrows,',
             '};',
             'Module._cache = originalCache;',
             'export function resolve(specifier, context, nextResolve) {',
@@ -3192,6 +3200,8 @@ export const testRegisteredLoaderModuleCacheReplacement = async () => {
             cachesDistinct: true,
             firstCached: true,
             secondCached: true,
+            undefinedCacheThrows: true,
+            deletedCacheThrows: true,
         });
         const appRequire = createRequire(`${root}/app.cjs`);
         assert.strictEqual(

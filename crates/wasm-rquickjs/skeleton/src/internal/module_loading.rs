@@ -3777,7 +3777,9 @@ pub(crate) fn is_registered_file_url_id(ctx: &Ctx<'_>, id: &str) -> bool {
 }
 
 fn registered_file_url_base_path(registered: &RegisteredFileUrl) -> Option<String> {
-    FileUrlResolver::file_url_to_path_parts(&registered.public_url).map(|(path, _)| path)
+    FileUrlResolver::file_url_to_path_parts(&registered.public_url)
+        .or_else(|| FileUrlResolver::file_url_to_path_parts(&registered.identity_url))
+        .map(|(path, _)| path)
 }
 
 struct FileModuleLoadContext {
