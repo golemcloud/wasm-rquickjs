@@ -19,7 +19,7 @@ import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
-import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 import {
     eval_with_filename as _evalWithFilename,
     require_builtin as _requireBuiltin,
@@ -651,9 +651,28 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_import_meta_resolve_builtin',
 const moduleCache = Object.create(null);
 let moduleExportsInitialized = false;
 let activeModuleCacheOverride;
-const loaderHooksModuleCache = Object.create(null);
+const initialLoaderHooksModuleCache = Object.create(null);
 const moduleCacheDomains = createPrivateWeakMap();
+const loaderHooksModuleCaches = createPrivateWeakSet();
 const loaderHooksRealmParam = '__wasm_rquickjs_loader_realm=hooks';
+let loaderModuleFacade;
+
+loaderHooksModuleCaches.add(initialLoaderHooksModuleCache);
+
+function currentLoaderHooksModuleCache() {
+    const cache = loaderModuleFacade === undefined
+        ? initialLoaderHooksModuleCache
+        : loaderModuleFacade._cache;
+    if ((typeof cache === 'object' && cache !== null) || typeof cache === 'function') {
+        loaderHooksModuleCaches.add(cache);
+    }
+    return cache;
+}
+
+function isLoaderHooksModuleCache(cache) {
+    return ((typeof cache === 'object' && cache !== null) || typeof cache === 'function') &&
+        loaderHooksModuleCaches.has(cache);
+}
 
 function currentModuleCache() {
     if (activeModuleCacheOverride !== undefined) {
@@ -673,7 +692,7 @@ function withModuleCache(cache, callback) {
 }
 
 function withLoaderRealmModuleCache(_realm, callback) {
-    return withModuleCache(loaderHooksModuleCache, callback);
+    return withModuleCache(currentLoaderHooksModuleCache(), callback);
 }
 
 function loaderRealmUrlWithParam(url, realmParam) {
@@ -3163,7 +3182,7 @@ function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOver
     let esmIdentity = resolvedFilename;
     if (
         sourceOverride === undefined &&
-        moduleCacheDomains.get(mod) === loaderHooksModuleCache &&
+        isLoaderHooksModuleCache(moduleCacheDomains.get(mod)) &&
         typeof wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_hooks_esm_identity === 'function'
     ) {
         esmIdentity = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_hooks_esm_identity(
@@ -3897,7 +3916,7 @@ function loadModuleRequest(id, context, parentModule, isMain = false) {
         const canonicalId = builtinId === 'module' ? 'node:module' : builtinId;
         if (
             canonicalId === 'node:module' &&
-            context.fixedModuleCache === loaderHooksModuleCache
+            isLoaderHooksModuleCache(context.fixedModuleCache)
         ) {
             return getLoaderModuleFacade();
         }
@@ -4152,7 +4171,7 @@ export let createRequire = function createRequire(filename) {
 };
 
 function createLoaderHooksRequire(filename) {
-    return createRequireWithCache(filename, loaderHooksModuleCache);
+    return createRequireWithCache(filename, currentLoaderHooksModuleCache());
 }
 
 Object.defineProperty(globalThis, '__wasm_rquickjs_create_require', {
@@ -4347,9 +4366,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function normalizeLoaderResolvedUrl(url) {
         if (url.startsWith('/')) {
-            url = new URL(url, 'file:///').href;
+            return new URL(url, 'file:///').href;
         }
-        return url;
+        return new URL(url).href;
     }
 
     function resolveRegisteredLoaderUrl(loader) {
@@ -5639,7 +5658,6 @@ const moduleExports = Object.assign(Module, {
 });
 moduleExportsInitialized = true;
 
-let loaderModuleFacade;
 let loaderModuleFacadeSpecifier;
 
 function getLoaderModuleFacade() {
@@ -5697,7 +5715,7 @@ function getLoaderModuleFacade() {
                 enumerable: true,
             },
             _cache: {
-                value: loaderHooksModuleCache,
+                value: initialLoaderHooksModuleCache,
                 writable: true,
                 configurable: true,
                 enumerable: true,

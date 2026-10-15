@@ -3094,6 +3094,118 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
     }
 };
 
+export const testRegisteredLoaderUppercaseFileUrl = async () => {
+    const root = '/registered-loader-uppercase-file-app';
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(
+        `${root}/target.mjs`,
+        'export default "uppercase-file-url";',
+    );
+    const targetUrl = pathToFileURL(`${root}/target.mjs`).href;
+    const uppercaseTargetUrl = `FILE:${targetUrl.slice('file:'.length)}`;
+    const hookSource = [
+        'export function resolve(specifier, context, nextResolve) {',
+        '  if (specifier === "virtual:uppercase-file-url") {',
+        `    return { shortCircuit: true, url: ${JSON.stringify(uppercaseTargetUrl)}, format: "module" };`,
+        '  }',
+        '  return nextResolve(specifier, context);',
+        '}',
+        'export function load(url, context, nextLoad) {',
+        `  if (url === ${JSON.stringify(targetUrl)}) globalThis.__uppercaseFileLoaderUrl = url;`,
+        '  return nextLoad(url, context);',
+        '}',
+    ].join('\n');
+
+    globalThis.__wasm_rquickjs_registered_loaders = [];
+    try {
+        const { register } = await import('node:module');
+        register(`data:text/javascript,${encodeURIComponent(hookSource)}`);
+        await import('data:text/javascript,export default true#uppercase-loader-ready');
+        assert.strictEqual(
+            (await import('virtual:uppercase-file-url')).default,
+            'uppercase-file-url',
+        );
+        assert.strictEqual(globalThis.__uppercaseFileLoaderUrl, targetUrl);
+        return true;
+    } finally {
+        delete globalThis.__uppercaseFileLoaderUrl;
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+    }
+};
+
+export const testRegisteredLoaderModuleCacheReplacement = async () => {
+    const root = '/registered-loader-cache-replacement-app';
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(
+        `${root}/dep.cjs`,
+        'module.exports = ++globalThis.__loaderCacheReplacementEvaluations;',
+    );
+    fs.writeFileSync(
+        `${root}/loader.mjs`,
+        [
+            'import Module, { createRequire } from "node:module";',
+            'const originalCache = Module._cache;',
+            'const firstCache = Object.create(null);',
+            'Module._cache = firstCache;',
+            'const firstRequire = createRequire(import.meta.url);',
+            'const first = firstRequire("./dep.cjs");',
+            'const firstAgain = firstRequire("./dep.cjs");',
+            'const secondCache = Object.create(null);',
+            'Module._cache = secondCache;',
+            'const secondRequire = createRequire(import.meta.url);',
+            'const second = secondRequire("./dep.cjs");',
+            'const state = {',
+            '  evaluations: [first, firstAgain, second],',
+            '  firstCacheLive: firstRequire.cache === firstCache,',
+            '  secondCacheLive: secondRequire.cache === secondCache,',
+            '  cachesDistinct: firstCache !== secondCache,',
+            '  firstCached: Object.keys(firstCache).some(key => key.endsWith("/dep.cjs")),',
+            '  secondCached: Object.keys(secondCache).some(key => key.endsWith("/dep.cjs")),',
+            '};',
+            'Module._cache = originalCache;',
+            'export function resolve(specifier, context, nextResolve) {',
+            '  if (specifier === "virtual:loader-cache-replacement") {',
+            '    return { shortCircuit: true, url: specifier, format: "module" };',
+            '  }',
+            '  return nextResolve(specifier, context);',
+            '}',
+            'export function load(url, context, nextLoad) {',
+            '  if (url === "virtual:loader-cache-replacement") {',
+            '    return { shortCircuit: true, format: "module", source: "export default " + JSON.stringify(state) };',
+            '  }',
+            '  return nextLoad(url, context);',
+            '}',
+        ].join('\n'),
+    );
+
+    globalThis.__loaderCacheReplacementEvaluations = 0;
+    globalThis.__wasm_rquickjs_registered_loaders = [];
+    try {
+        const { register } = await import('node:module');
+        register(pathToFileURL(`${root}/loader.mjs`).href);
+        await import('data:text/javascript,export default true#cache-replacement-loader-ready');
+        const state = (await import('virtual:loader-cache-replacement')).default;
+        assert.deepStrictEqual(state, {
+            evaluations: [1, 1, 2],
+            firstCacheLive: true,
+            secondCacheLive: true,
+            cachesDistinct: true,
+            firstCached: true,
+            secondCached: true,
+        });
+        const appRequire = createRequire(`${root}/app.cjs`);
+        assert.strictEqual(
+            Object.keys(appRequire.cache).some(key => key.endsWith('/dep.cjs')),
+            false,
+        );
+        assert.strictEqual(appRequire('./dep.cjs'), 3);
+        return true;
+    } finally {
+        delete globalThis.__loaderCacheReplacementEvaluations;
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+    }
+};
+
 export const testRegisteredLoaderModuleRealmIsolation = async () => {
     const originalExecArgv = process.execArgv.slice();
     try {
