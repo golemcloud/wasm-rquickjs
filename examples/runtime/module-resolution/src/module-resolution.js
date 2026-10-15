@@ -1570,6 +1570,61 @@ export const testEsmDataUrlImportAttributes = async () => {
             'assert.deepStrictEqual(dataTyped.default, { ofLife: 42 });',
             'globalThis.__assertionlessJsonEnabled = false;',
         ].join('\n')));
+        resetRegisteredLoaders();
+        const loaderJsonHandoffRoot = '/registered-loader-json-handoff';
+        fs.mkdirSync(loaderJsonHandoffRoot, { recursive: true });
+        fs.writeFileSync(
+            `${loaderJsonHandoffRoot}/path-data.json`,
+            '{"parent":"path"}',
+        );
+        fs.writeFileSync(
+            `${loaderJsonHandoffRoot}/file-data.json`,
+            '{"parent":"file"}',
+        );
+        fs.writeFileSync(
+            `${loaderJsonHandoffRoot}/path-parent.mjs`,
+            'export default (await import("./path-data%2Ejson", { with: { type: "json" } })).default;',
+        );
+        fs.writeFileSync(
+            `${loaderJsonHandoffRoot}/file-parent.mjs`,
+            'export default (await import("./file-data%2Ejson", { with: { type: "json" } })).default;',
+        );
+        globalThis.__loaderJsonHandoffCounts = {
+            path: { resolve: 0, load: 0 },
+            file: { resolve: 0, load: 0 },
+        };
+        const loaderJsonHandoffSource = [
+            'function target(value) {',
+            '  value = decodeURIComponent(String(value));',
+            '  if (value.includes("/path-data.json")) return "path";',
+            '  if (value.includes("/file-data.json")) return "file";',
+            '}',
+            'export function resolve(specifier, context, next) {',
+            '  const name = target(specifier);',
+            '  if (name) globalThis.__loaderJsonHandoffCounts[name].resolve++;',
+            '  return next(specifier, context);',
+            '}',
+            'export function load(url, context, next) {',
+            '  const name = target(url);',
+            '  if (name) globalThis.__loaderJsonHandoffCounts[name].load++;',
+            '  return next(url, context);',
+            '}',
+        ].join('\n');
+        register('data:text/javascript,' + encodeURIComponent(loaderJsonHandoffSource));
+        assert.deepStrictEqual(
+            (await import(`${loaderJsonHandoffRoot}/path-parent.mjs`)).default,
+            { parent: 'path' },
+        );
+        assert.deepStrictEqual(
+            (await import(pathToFileURL(`${loaderJsonHandoffRoot}/file-parent.mjs`).href)).default,
+            { parent: 'file' },
+        );
+        assert.deepStrictEqual(globalThis.__loaderJsonHandoffCounts, {
+            path: { resolve: 1, load: 1 },
+            file: { resolve: 1, load: 1 },
+        });
+        resetRegisteredLoaders();
+        delete globalThis.__loaderJsonHandoffCounts;
         for (let token = 1; token <= 100; token++) {
             await expectReject(
                 `assertionless JSON superseded rewrite token should not authorize import: ${token}`,
