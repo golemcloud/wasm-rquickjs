@@ -2786,10 +2786,16 @@ function defaultLoaderFormatForFilename(filename) {
 }
 
 function defaultLoaderFormatForDataUrl(url) {
-    if (!url.startsWith('data:')) return undefined;
-    const comma = url.indexOf(',');
+    let canonicalUrl;
+    try {
+        canonicalUrl = new URL(String(url)).href;
+    } catch (_) {
+        return undefined;
+    }
+    if (!canonicalUrl.startsWith('data:')) return undefined;
+    const comma = canonicalUrl.indexOf(',');
     if (comma < 0) return undefined;
-    const metadata = url.slice(5, comma);
+    const metadata = canonicalUrl.slice(5, comma);
     const semicolon = metadata.indexOf(';');
     const mime = (semicolon < 0 ? metadata : metadata.slice(0, semicolon)).trim();
     if (mime === 'application/json') return 'json';
@@ -4394,8 +4400,29 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return new URL(normalizeLoaderResolvedUrl(String(url))).href;
     }
 
+    function internalLoaderBaseUrl(url) {
+        const normalized = normalizeLoaderResolvedUrl(String(url));
+        try {
+            return new URL(normalized).href;
+        } catch (_) {
+            return normalized;
+        }
+    }
+
+    function loaderUrlProtocol(url) {
+        try {
+            return new URL(normalizeLoaderResolvedUrl(String(url))).protocol;
+        } catch (_) {
+            return undefined;
+        }
+    }
+
     function isLoaderFileUrl(url) {
-        return new URL(normalizeLoaderResolvedUrl(String(url))).protocol === 'file:';
+        return loaderUrlProtocol(url) === 'file:';
+    }
+
+    function isLoaderDataUrl(url) {
+        return loaderUrlProtocol(url) === 'data:';
     }
 
     function resolveRegisteredLoaderUrl(loader) {
@@ -4639,12 +4666,19 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     }
 
     function registeredLoaderDataUrlReturn(url, loaderRealmParam, format) {
-        let target = String(url);
-        if (loaderRealmParam !== undefined && loaderRealmParam !== null) {
+        const publicUrl = String(url);
+        const canonicalUrl = canonicalLoaderResolvedUrl(publicUrl);
+        let target = canonicalUrl;
+        if (
+            canonicalUrl !== publicUrl ||
+            loaderRealmParam !== undefined && loaderRealmParam !== null
+        ) {
             target = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_register_loader_source_url(
-                target,
-                target,
-                String(loaderRealmParam),
+                canonicalUrl,
+                publicUrl,
+                loaderRealmParam === undefined || loaderRealmParam === null
+                    ? undefined
+                    : String(loaderRealmParam),
             );
         }
         return format === 'json'
@@ -4709,10 +4743,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function resolveEsmDefaultForLoader(specifier, parentURL, context, baseUrl, missingAsUndefined, allowRootedWithoutFileParent) {
         const preprocessedSpecifier = preprocessEsmUrlInput(specifier);
-        if (preprocessedSpecifier.startsWith('data:')) {
+        if (isLoaderDataUrl(preprocessedSpecifier)) {
+            const canonicalUrl = canonicalLoaderResolvedUrl(preprocessedSpecifier);
             return registeredLoaderUrlFormatResult(
-                preprocessedSpecifier,
-                defaultLoaderFormatForDataUrl(preprocessedSpecifier),
+                canonicalUrl,
+                defaultLoaderFormatForDataUrl(canonicalUrl),
             );
         }
         const builtin = registeredLoaderBuiltinResolve(preprocessedSpecifier, false);
@@ -4731,32 +4766,33 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (fileSpecifier) {
             return resultForEsmFileUrl(parsedFileSpecifier, parentURL);
         }
-        const parentFilename = parentFilenameForLoaderResolve(parentURL, baseUrl);
+        const internalParentURL = canonicalLoaderResolvedUrl(parentURL || baseUrl);
+        const parentFilename = parentFilenameForLoaderResolve(internalParentURL, baseUrl);
         if (rootedSpecifier) {
             if (parentFilename === null && !allowRootedWithoutFileParent) {
                 if (missingAsUndefined) return undefined;
                 throw makeEsmModuleNotFoundError(specifier);
             }
-            return resultForEsmFileUrl(parseEsmUrl(preprocessedSpecifier, 'file:///'), parentURL);
+            return resultForEsmFileUrl(parseEsmUrl(preprocessedSpecifier, 'file:///'), internalParentURL);
         }
 
         if (parentFilename !== null && pathSpecifier) {
-            return resultForRelativeOrAbsoluteSpecifier(preprocessedSpecifier, parentURL);
+            return resultForRelativeOrAbsoluteSpecifier(preprocessedSpecifier, internalParentURL);
         }
 
         if (parentFilename !== null) {
-            const packageResolved = resolveEsmPackageDefaultForLoader(preprocessedSpecifier, parentURL, context);
+            const packageResolved = resolveEsmPackageDefaultForLoader(preprocessedSpecifier, internalParentURL, context);
             if (packageResolved) return packageResolved;
             if (missingAsUndefined) return undefined;
             throw makeEsmModuleNotFoundError(preprocessedSpecifier);
         }
         if (missingAsUndefined) return undefined;
 
-        let url = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(parentURL, preprocessedSpecifier);
+        let url = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_import_meta_resolve(internalParentURL, preprocessedSpecifier);
         return registeredLoaderUrlResult(normalizeLoaderResolvedUrl(url));
     }
 
-    async function runRegisteredLoaders(baseUrl, specifier, attrs, mode) {
+    async function runRegisteredLoaders(baseUrl, specifier, attrs, mode, publicParentURL) {
         const loaders = globalThis.__wasm_rquickjs_registered_loaders;
         if (!loaders || loaders.length === 0) return undefined;
 
@@ -4780,11 +4816,11 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const baseContext = registeredLoaderBaseContext(
             loaderHookConditions(),
             Object.assign({}, importAttributes),
-            baseUrl,
+            publicParentURL === undefined ? baseUrl : publicParentURL,
         );
 
         const defaultResolve = async (nextSpecifier, context) => {
-            const inputs = registeredLoaderResolveInputs(nextSpecifier, context, String(baseUrl));
+            const inputs = registeredLoaderResolveInputs(nextSpecifier, context, baseContext.parentURL);
             return resolveEsmDefaultForLoader(inputs.specifier, inputs.parentURL, context, baseUrl, false, true);
         };
 
@@ -4846,7 +4882,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const loaded = await runLoad(entries.length - 1, normalizedResolved.url, resolvedState.loadContext);
         const result = normalizedRegisteredLoaderResult(resolvedState, resolved, loaded);
         if (mode !== 'static-raw') {
-            cacheDynamicRegisteredLoaderResult(baseUrl, specifier, attrs, result);
+            cacheDynamicRegisteredLoaderResult(internalLoaderBaseUrl(baseUrl), specifier, attrs, result);
         }
         const loadedHasSource = registeredLoaderHasSource(result);
         const loadedFormat = result.format;
@@ -4866,7 +4902,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     true,
                 );
             }
-            if (String(normalizedResolved.url).startsWith('data:')) {
+            if (isLoaderDataUrl(normalizedResolved.url)) {
                 return registeredLoaderDataUrlReturn(
                     normalizedResolved.url,
                     undefined,
@@ -4892,7 +4928,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 true,
             );
         }
-        if (!loadedHasSource && loadedFormat === 'json' && String(normalizedResolved.url).startsWith('data:')) {
+        if (!loadedHasSource && loadedFormat === 'json' && isLoaderDataUrl(normalizedResolved.url)) {
             return registeredLoaderDataUrlReturn(
                 normalizedResolved.url,
                 undefined,
@@ -5123,7 +5159,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             if (isLoaderFileUrl(url)) {
                 return registeredLoaderFileUrlReturn(url, loaderRealmParam, format, true);
             }
-            if (url.startsWith('data:')) {
+            if (isLoaderDataUrl(url)) {
                 return registeredLoaderDataUrlReturn(url, loaderRealmParam, format);
             }
             return staticRegisteredLoaderPathReturn(url);
@@ -5145,7 +5181,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!hasSource && format === 'json' && isLoaderFileUrl(url)) {
             return registeredLoaderFileUrlReturn(url, loaderRealmParam, format, true);
         }
-        if (!hasSource && format === 'json' && url.startsWith('data:')) {
+        if (!hasSource && format === 'json' && isLoaderDataUrl(url)) {
             return registeredLoaderDataUrlReturn(url, loaderRealmParam, format);
         }
         if (
@@ -5172,7 +5208,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (!wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache) {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
-        const key = staticRegisteredLoaderCacheKey(normalizeLoaderResolvedUrl(String(parentUrl)), specifier, attrs);
+        const key = staticRegisteredLoaderCacheKey(internalLoaderBaseUrl(parentUrl), specifier, attrs);
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
         if (!Object.prototype.hasOwnProperty.call(cache, key)) {
             try {
@@ -5195,7 +5231,8 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (url.startsWith('/')) {
             return tryReadFile(url);
         }
-        if (url.startsWith('data:')) {
+        if (isLoaderDataUrl(url)) {
+            url = canonicalLoaderResolvedUrl(url);
             const comma = url.indexOf(',');
             if (comma < 0) return null;
             const meta = url.slice(5, comma).toLowerCase();
@@ -5214,7 +5251,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     function staticRegisteredLoaderChildUrl(loaded, fallback) {
         fallback = String(fallback);
-        if (fallback.startsWith('data:')) return fallback;
+        if (isLoaderDataUrl(fallback)) return canonicalLoaderResolvedUrl(fallback);
         if (loaded && loaded.url) return String(loaded.url);
         return normalizeLoaderResolvedUrl(fallback);
     }
@@ -5228,7 +5265,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return aliases;
     }
 
-    function staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, edgeReturn) {
+    function staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, edgeReturn, publicParentUrl) {
         const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
         if (Object.prototype.hasOwnProperty.call(cache, key)) {
@@ -5236,7 +5273,13 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         }
         return (async () => {
             try {
-                const loaded = await wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders(parentUrl, specifier, attrs, 'static-raw');
+                const loaded = await wasmRquickjsModuleGlobalThis.__wasm_rquickjs_run_registered_loaders(
+                    parentUrl,
+                    specifier,
+                    attrs,
+                    'static-raw',
+                    publicParentUrl,
+                );
                 const value = edgeReturn
                     ? staticRegisteredLoaderReturnForEdge(loaded, attrs)
                     : staticRegisteredLoaderReturn(loaded, undefined, attrs);
@@ -5250,9 +5293,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     async function prepareStaticRegisteredLoaderGraph(parentUrl, seen) {
         parentUrl = normalizeLoaderResolvedUrl(String(parentUrl));
+        const internalParentUrl = internalLoaderBaseUrl(parentUrl);
         seen = seen || Object.create(null);
-        if (seen[parentUrl]) return;
-        seen[parentUrl] = true;
+        if (seen[internalParentUrl]) return;
+        seen[internalParentUrl] = true;
 
         const source = staticRegisteredLoaderSourceForUrl(parentUrl);
         if (source === null) return;
@@ -5260,7 +5304,13 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         for (let i = 0; i < edges.length; i++) {
             const specifier = edges[i].specifier;
             const attrs = edges[i].attrs;
-            let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, true);
+            let cacheEntry = staticRegisteredLoaderCacheEntry(
+                internalParentUrl,
+                specifier,
+                attrs,
+                true,
+                parentUrl,
+            );
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached } = cacheEntry;
             if (cached && cached.error) continue;
@@ -5280,13 +5330,20 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         let graphUrl = entryUrl;
         if (entrySpecifier !== undefined && entryParentUrl !== undefined) {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
+            const internalParentUrl = internalLoaderBaseUrl(parentUrl);
             const specifier = String(entrySpecifier);
-            let cacheEntry = staticRegisteredLoaderCacheEntry(parentUrl, specifier, entryAttrs, false);
+            let cacheEntry = staticRegisteredLoaderCacheEntry(
+                internalParentUrl,
+                specifier,
+                entryAttrs,
+                false,
+                parentUrl,
+            );
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached, created } = cacheEntry;
             if (created && cached && cached.error) return;
             graphUrl = staticRegisteredLoaderChildUrl(cached, entryUrl);
-            const aliases = staticRegisteredLoaderParentAliases(parentUrl);
+            const aliases = staticRegisteredLoaderParentAliases(internalParentUrl);
             const specifierAliases = [specifier];
             if (cached && cached.url && isLoaderFileUrl(cached.url)) {
                 const pathAlias = registeredLoaderPathOrUrlReturn(cached.url, true);

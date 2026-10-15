@@ -47,6 +47,7 @@ pub(crate) const IMPORT_META_RESOLVE_JS: &str = r#"const __wasm_rquickjs_import_
 function __wasm_rquickjs_import_meta_resolve_impl(baseUrl, specifier) {
   baseUrl = String(baseUrl);
   specifier = String(specifier);
+  try { baseUrl = new URL(baseUrl).href; } catch (_) {}
   if (/^[a-zA-Z][a-zA-Z0-9+\-.]*:/.test(specifier)) return specifier;
   var builtinResolved = typeof __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin === 'function'
     ? __wasm_rquickjs_import_meta_resolve_global.__wasm_rquickjs_import_meta_resolve_builtin(specifier)
@@ -3577,7 +3578,7 @@ impl Resolver for FileUrlResolver {
         let registered_base = registered_file_url_from_id(ctx, base);
         let resolution_base = registered_base.as_ref().map_or_else(
             || base.to_string(),
-            |registered| registered.public_url.clone(),
+            |registered| registered.identity_url.clone(),
         );
         let loader_realm_param = registered_base
             .as_ref()
@@ -4516,7 +4517,7 @@ impl Resolver for NodeFileResolver {
         let registered_base = registered_file_url_from_id(ctx, base);
         let resolution_base = registered_base.as_ref().map_or_else(
             || base.to_string(),
-            |registered| registered.public_url.clone(),
+            |registered| registered.identity_url.clone(),
         );
         let loader_realm_param = registered_base
             .as_ref()
@@ -10870,6 +10871,9 @@ fn url_only_import_meta_init(url: String) -> ImportMetaInit {
 }
 
 fn file_import_meta_init(url: String, filename: String) -> ImportMetaInit {
+    if !url.starts_with("file:") {
+        return url_only_import_meta_init(url);
+    }
     let dirname = std::path::Path::new(&filename)
         .parent()
         .map(|p| p.to_string_lossy().into_owned());
