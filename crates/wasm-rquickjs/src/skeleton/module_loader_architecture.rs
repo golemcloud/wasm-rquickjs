@@ -639,8 +639,8 @@ fn module_loader_architecture() {
     }
     for (contract, implementation) in [
         (
-            "bound require must dispatch through the current module instance hook",
-            "() => parentModule.require(id),",
+            "bound require must select its cache domain before dispatching through the current module instance hook",
+            "() => withRequireContextCache(context, () => parentModule.require(id)),",
         ),
         (
             "Module.prototype.require must dispatch through the current static load hook",

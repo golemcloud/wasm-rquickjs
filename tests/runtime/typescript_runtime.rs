@@ -58,6 +58,7 @@ async fn strip_typescript_types_matches_node_contract(
             "ERR_INVALID_ARG_VALUE",
         ])
     );
+    assert_eq!(report["registeredLoaderTypeScript"], "loader-typescript");
     assert_eq!(report["moduleTs"], 42);
     assert_eq!(report["moduleMts"], 42);
     assert_eq!(report["commonJsCts"], 42);

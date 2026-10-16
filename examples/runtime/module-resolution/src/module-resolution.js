@@ -1030,6 +1030,10 @@ export const testEsmEncodedRelativePaths = async () => {
         fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-comma,.mjs', 'export default "comma";');
         fs.writeFileSync('/esm-encoded-relative-app/sub/test-esm-double-encoding-native%20.mjs', 'export default "percent";');
         fs.writeFileSync('/esm-encoded-relative-app/sub/blocked.mjs', 'export default "blocked";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub\\blocked.mjs', 'export default "literal-backslash";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub%2Fallowed.mjs', 'export default "encoded-slash-name";');
+        fs.writeFileSync('/esm-encoded-relative-app/sub%5Callowed.mjs', 'export default "encoded-backslash-name";');
+        fs.writeFileSync('/esm-encoded-relative-app/query-separators.mjs', 'export default true;');
         fs.writeFileSync('/esm-encoded-relative-app/entry.mjs', [
             'import ok from "./sub/test-%65%73%6d-ok.mjs";',
             'import comma from "./sub/test-esm-comma%2c.mjs";',
@@ -1042,8 +1046,674 @@ export const testEsmEncodedRelativePaths = async () => {
             comma: 'comma',
             percent: 'percent',
         });
+
+        const canonicalRoot = '/esm-encoded-relative-app/canonical';
+        fs.mkdirSync(canonicalRoot, { recursive: true });
+        for (const name of ['path', 'file', 'preserve']) {
+            fs.writeFileSync(`${canonicalRoot}/${name}-target.mjs`, 'export default import.meta.url;');
+            fs.symlinkSync(`${name}-target.mjs`, `${canonicalRoot}/${name}-link.mjs`);
+            fs.writeFileSync(
+                `${canonicalRoot}/${name}-parent.mjs`,
+                name === 'preserve'
+                    ? `import value from "./${name}-link%2Emjs?canonical=${name}#fragment"; export default value;`
+                    : `export default (await import("./${name}-link%2Emjs?canonical=${name}#fragment")).default;`,
+            );
+        }
+        fs.writeFileSync(`${canonicalRoot}/format-target.mjs`, 'export default "realpath-format";');
+        fs.symlinkSync('format-target.mjs', `${canonicalRoot}/format-link.json`);
+        fs.writeFileSync(
+            `${canonicalRoot}/format-parent.mjs`,
+            'export default (await import("./format-link.json?canonical=format")).default;',
+        );
+        fs.mkdirSync(`${canonicalRoot}/node_modules/identity-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${canonicalRoot}/node_modules/identity-pkg/package.json`,
+            JSON.stringify({ name: 'identity-pkg', type: 'module', exports: './index.mjs' }),
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/node_modules/identity-pkg/index.mjs`,
+            'export default "bare-child";',
+        );
+        fs.writeFileSync(`${canonicalRoot}/identity-child.mjs`, 'export default "relative-child";');
+        fs.writeFileSync(`${canonicalRoot}/identity-target.mjs`, [
+            'import relativeChild from "./identity-child.mjs";',
+            'import bareChild from "identity-pkg";',
+            'globalThis.__esmPreservedIdentityEvaluations =',
+            '  (globalThis.__esmPreservedIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmPreservedIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '  relativeChild,',
+            '  bareChild,',
+            '};',
+        ].join('\n'));
+        fs.symlinkSync('identity-target.mjs', `${canonicalRoot}/identity-link.mjs`);
+        fs.writeFileSync(`${canonicalRoot}/punctuation-target.mjs`, [
+            'globalThis.__esmPunctuationIdentityEvaluations =',
+            '  (globalThis.__esmPunctuationIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmPunctuationIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        fs.symlinkSync('punctuation-target.mjs', `${canonicalRoot}/identity,punct@link.mjs`);
+        fs.writeFileSync(`${canonicalRoot}/forged-target.mjs`, [
+            'globalThis.__esmForgedFileUrlEvaluated = true;',
+            'export default true;',
+        ].join('\n'));
+        fs.writeFileSync(
+            `${canonicalRoot}/preserve-format.cjs`,
+            'exports.named = "preserve-cjs";',
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/preserve-esm.cjs`,
+            'export const named = "preserve-esm"; export default named;',
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/preserve-format.json`,
+            JSON.stringify({ value: 'preserve-json' }),
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/preserve-private.mjs`,
+            'import "__wasm_rquickjs_builtin/vm_native"; export default true;',
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/hook-static-parent.mjs`,
+            'import value from "./hook%2Fintercept.mjs"; export default value;',
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/hook-next-parent.mjs`,
+            'import value from "./hook%2Frewrite.mjs"; export default value;',
+        );
+        const hookFilePrefix = pathToFileURL(`${canonicalRoot}/hook`).href;
+        fs.writeFileSync(
+            `${canonicalRoot}/hook-file-static-parent.mjs`,
+            `import value from ${JSON.stringify(`${hookFilePrefix}%2Fintercept.mjs`)}; export default value;`,
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/hook-file-next-parent.mjs`,
+            `import value from ${JSON.stringify(`${hookFilePrefix}%2Fnext.mjs`)}; export default value;`,
+        );
+        fs.writeFileSync(`${canonicalRoot}/dot-cancel.mjs`, 'export default "dot-cancelled";');
+        const absoluteDotCancelUrl = pathToFileURL(`${canonicalRoot}/`).href +
+            'a%2Fb/../dot-cancel.mjs';
+        fs.writeFileSync(
+            `${canonicalRoot}/dot-cancel-before-loader-parent.mjs`,
+            [
+                'import relative from "./a%2Fb/../dot-cancel.mjs";',
+                'import encodedDot from "./a%2Fb/%2E%2E/dot-cancel.mjs";',
+                `import absolute from ${JSON.stringify(absoluteDotCancelUrl)};`,
+                'export default [relative, encodedDot, absolute];',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/dot-cancel-parent.mjs`,
+            'import value from "./a%2Fb/../dot-cancel.mjs"; export default value;',
+        );
+        fs.writeFileSync(`${canonicalRoot}/suffix-target.mjs`, [
+            'globalThis.__esmSuffixIdentityEvaluations =',
+            '  (globalThis.__esmSuffixIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmSuffixIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync(`${canonicalRoot}/caret^target.mjs`, [
+            'globalThis.__esmCaretIdentityEvaluations =',
+            '  (globalThis.__esmCaretIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmCaretIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync(`${canonicalRoot}/double-slash-target.mjs`, [
+            'globalThis.__esmDoubleSlashIdentityEvaluations =',
+            '  (globalThis.__esmDoubleSlashIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmDoubleSlashIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync(`${canonicalRoot}/user-realm-child.mjs`, 'export default "user-child";');
+        fs.writeFileSync(`${canonicalRoot}/user-realm-target.mjs`, [
+            'import child from "./user-realm-child.mjs";',
+            'globalThis.__esmUserRealmIdentityEvaluations =',
+            '  (globalThis.__esmUserRealmIdentityEvaluations || 0) + 1;',
+            'export default {',
+            '  child,',
+            '  evaluation: globalThis.__esmUserRealmIdentityEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        fs.writeFileSync(`${canonicalRoot}/default-empty-target.mjs`, [
+            'globalThis.__esmDefaultEmptySuffixEvaluations =',
+            '  (globalThis.__esmDefaultEmptySuffixEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmDefaultEmptySuffixEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        const defaultEmptyParentSource = [
+            'import base from "./default-empty-target.mjs";',
+            'import emptyQuery from "./default-empty-target.mjs?";',
+            'import emptyHash from "./default-empty-target.mjs#";',
+            'import emptyBoth from "./default-empty-target.mjs?#";',
+            'import query from "./default-empty-target.mjs?query";',
+            'import queryEmptyHash from "./default-empty-target.mjs?query#";',
+            'import fragment from "./default-empty-target.mjs#frag";',
+            'import emptyQueryFragment from "./default-empty-target.mjs?#frag";',
+            'export default {',
+            '  sharedEmpty: base === emptyQuery && base === emptyHash && base === emptyBoth,',
+            '  sharedQuery: query === queryEmptyHash,',
+            '  sharedFragment: fragment === emptyQueryFragment,',
+            '  urls: [base.url, query.url, fragment.url],',
+            '};',
+        ].join('\n');
+        fs.writeFileSync(
+            `${canonicalRoot}/default-empty-before-parent.mjs`,
+            defaultEmptyParentSource,
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/default-empty-after-parent.mjs`,
+            defaultEmptyParentSource,
+        );
+        fs.writeFileSync(`${canonicalRoot}/default-suffix-target.mjs`, [
+            'globalThis.__esmDefaultSuffixEvaluations =',
+            '  (globalThis.__esmDefaultSuffixEvaluations || 0) + 1;',
+            'export default {',
+            '  evaluation: globalThis.__esmDefaultSuffixEvaluations,',
+            '  url: import.meta.url,',
+            '};',
+        ].join('\n'));
+        const defaultSuffixRawSpecifier =
+            './default-suffix-target.mjs?apostrophe=\'&space= &quote="#backtick=`';
+        const defaultSuffixParentSource =
+            `import value from ${JSON.stringify(defaultSuffixRawSpecifier)}; export default value;`;
+        fs.writeFileSync(
+            `${canonicalRoot}/default-suffix-before-parent.mjs`,
+            defaultSuffixParentSource,
+        );
+        fs.writeFileSync(
+            `${canonicalRoot}/default-suffix-after-parent.mjs`,
+            defaultSuffixParentSource,
+        );
+
+        assert.deepStrictEqual(
+            (await import(`${canonicalRoot}/dot-cancel-before-loader-parent.mjs`)).default,
+            ['dot-cancelled', 'dot-cancelled', 'dot-cancelled'],
+        );
+
+        const originalExecArgv = process.execArgv.slice();
+        const defaultEmptyFileUrl = pathToFileURL(
+            `${canonicalRoot}/default-empty-target.mjs`,
+        ).href;
+        const defaultEmptyBase = await import(defaultEmptyFileUrl);
+        assert.strictEqual(await import(`${defaultEmptyFileUrl}?`), defaultEmptyBase);
+        assert.strictEqual(await import(`${defaultEmptyFileUrl}#`), defaultEmptyBase);
+        assert.strictEqual(await import(`${defaultEmptyFileUrl}?#`), defaultEmptyBase);
+        const defaultQuery = await import(`${defaultEmptyFileUrl}?query`);
+        assert.strictEqual(await import(`${defaultEmptyFileUrl}?query#`), defaultQuery);
+        const defaultFragment = await import(`${defaultEmptyFileUrl}#frag`);
+        assert.strictEqual(await import(`${defaultEmptyFileUrl}?#frag`), defaultFragment);
+        assert.strictEqual(defaultEmptyBase.default.url, defaultEmptyFileUrl);
+        assert.strictEqual(defaultQuery.default.url, `${defaultEmptyFileUrl}?query`);
+        assert.strictEqual(defaultFragment.default.url, `${defaultEmptyFileUrl}#frag`);
+        const expectedDefaultEmptyParent = {
+            sharedEmpty: true,
+            sharedQuery: true,
+            sharedFragment: true,
+            urls: [
+                defaultEmptyFileUrl,
+                `${defaultEmptyFileUrl}?query`,
+                `${defaultEmptyFileUrl}#frag`,
+            ],
+        };
+        assert.deepStrictEqual(
+            (await import(`${canonicalRoot}/default-empty-before-parent.mjs`)).default,
+            expectedDefaultEmptyParent,
+        );
+        assert.strictEqual(globalThis.__esmDefaultEmptySuffixEvaluations, 3);
+        const defaultSuffixCanonicalUrl = pathToFileURL(
+            `${canonicalRoot}/default-suffix-target.mjs`,
+        ).href + '?apostrophe=%27&space=%20&quote=%22#backtick=%60';
+        const defaultSuffixBeforeRegister = (
+            await import(`${canonicalRoot}/default-suffix-before-parent.mjs`)
+        ).default;
+        const defaultSuffixFileBeforeRegister = (await import(defaultSuffixCanonicalUrl)).default;
+        assert.strictEqual(defaultSuffixBeforeRegister, defaultSuffixFileBeforeRegister);
+        assert.strictEqual(defaultSuffixBeforeRegister.url, defaultSuffixCanonicalUrl);
+        assert.strictEqual(defaultSuffixBeforeRegister.evaluation, 1);
+        assert.strictEqual(globalThis.__esmDefaultSuffixEvaluations, 1);
+
+        const invalidAuthorityPath = '/esm-encoded-relative-app/sub/test-esm-ok.mjs';
+        const localAuthorityTarget = `file://${invalidAuthorityPath}`;
+        const localAuthorityModule = await import(localAuthorityTarget);
+        const preprocessedFileSpecifiers = [
+            ' ' + localAuthorityTarget,
+            '\x1f' + localAuthorityTarget,
+            localAuthorityTarget + '\0',
+            localAuthorityTarget + '\x1f',
+            localAuthorityTarget + ' ',
+        ];
+        for (const specifier of preprocessedFileSpecifiers) {
+            try {
+                assert.strictEqual(await import(specifier), localAuthorityModule);
+            } catch (error) {
+                throw new Error(
+                    `Failed preprocessed file URL ${JSON.stringify(specifier)}: ${error.message}`,
+                );
+            }
+        }
+        for (const character of ['\t', '\n', '\r']) {
+            assert.strictEqual(
+                await import(`file://local${character}host${invalidAuthorityPath}`),
+                localAuthorityModule,
+            );
+        }
+        const assertInvalidFileAuthority = async (specifier) => {
+            try {
+                await import(specifier);
+            } catch (error) {
+                assert.strictEqual(error && error.name, 'TypeError');
+                assert.strictEqual(error && error.message, 'Invalid URL');
+                assert.strictEqual(error && error.code, 'ERR_INVALID_URL');
+                assert.strictEqual(error && error.input, specifier);
+                assert.strictEqual(
+                    Object.prototype.propertyIsEnumerable.call(error, 'code'),
+                    true,
+                );
+                assert.strictEqual(
+                    Object.prototype.propertyIsEnumerable.call(error, 'input'),
+                    true,
+                );
+                return;
+            }
+            throw new Error(`Expected invalid file URL authority: ${specifier}`);
+        };
+        for (const authority of [
+            'local%3Ahost',
+            'local%23host',
+            'local%3Fhost',
+            'local%40host',
+            'local%20host',
+            'local%7Chost',
+            'local%09host',
+            'local%0Ahost',
+            'local%0Dhost',
+            '%5B::1%5D',
+        ]) {
+            await assertInvalidFileAuthority(`file://${authority}${invalidAuthorityPath}`);
+        }
+        await expectImportRejectsCode(
+            ` file://local%09host${invalidAuthorityPath}`,
+            'ERR_MODULE_NOT_FOUND',
+        );
+        for (const specifier of [
+            ' https://example.invalid/module.mjs',
+            '\thttp://example.invalid/module.mjs',
+            '\nhttps://example.invalid/module.mjs',
+        ]) {
+            await expectImportRejectsCode(specifier, 'ERR_UNSUPPORTED_ESM_URL_SCHEME');
+        }
+        assert.strictEqual(
+            (await import(' data:text/javascript,export default "preprocessed-data" ')).default,
+            'preprocessed-data',
+        );
+        const identityLiteralUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href +
+            '?canonical=identity#fragment';
+        const identityEmptyQueryUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href + '?';
+        const identityEmptyHashUrl = pathToFileURL(`${canonicalRoot}/identity-link.mjs`).href + '#';
+        const identityEncodedUrl = pathToFileURL(`${canonicalRoot}/identity-link`).href +
+            '%2Emjs?canonical=identity#fragment';
+        const punctuationLiteralUrl = pathToFileURL(
+            `${canonicalRoot}/identity,punct@link.mjs`,
+        ).href;
+        const punctuationEncodedUrl = punctuationLiteralUrl
+            .replace(',', '%2c')
+            .replace('@', '%40');
+        const suffixRawUrl = pathToFileURL(`${canonicalRoot}/suffix-target.mjs`).href +
+            "?apostrophe='&backtick=`#apostrophe='&backtick=`";
+        const suffixExpectedUrl = pathToFileURL(`${canonicalRoot}/suffix-target.mjs`).href +
+            "?apostrophe=%27&backtick=`#apostrophe='&backtick=%60";
+        const caretEncodedUrl = pathToFileURL(`${canonicalRoot}/caret^target.mjs`).href;
+        const caretLiteralUrl = caretEncodedUrl.replace('%5E', '^');
+        const doubleSlashUrl = pathToFileURL(`${canonicalRoot}/`).href +
+            '/double-slash-target.mjs';
+        const userRealmUrl = pathToFileURL(`${canonicalRoot}/user-realm-target`).href +
+            '%2Emjs?__wasm_rquickjs_loader_realm=user#frag';
+        let identityBeforeRegister;
+        let identityEmptyQueryBeforeRegister;
+        let identityEmptyHashBeforeRegister;
+        let identityEncodedBeforeRegister;
+        let punctuationLiteralBeforeRegister;
+        let punctuationEncodedBeforeRegister;
+        let suffixBeforeRegister;
+        let caretLiteralBeforeRegister;
+        let caretEncodedBeforeRegister;
+        let doubleSlashBeforeRegister;
+        let userRealmBeforeRegister;
+        try {
+            process.execArgv.push('--preserve-symlinks');
+            identityBeforeRegister = await import(identityLiteralUrl);
+            identityEmptyQueryBeforeRegister = await import(identityEmptyQueryUrl);
+            identityEmptyHashBeforeRegister = await import(identityEmptyHashUrl);
+            identityEncodedBeforeRegister = await import(identityEncodedUrl);
+            punctuationLiteralBeforeRegister = await import(punctuationLiteralUrl);
+            punctuationEncodedBeforeRegister = await import(punctuationEncodedUrl);
+            suffixBeforeRegister = await import(suffixRawUrl);
+            caretLiteralBeforeRegister = await import(caretLiteralUrl);
+            caretEncodedBeforeRegister = await import(caretEncodedUrl);
+            doubleSlashBeforeRegister = await import(doubleSlashUrl);
+            userRealmBeforeRegister = await import(userRealmUrl);
+        } finally {
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) process.execArgv.push(arg);
+        }
+
+        globalThis.__esmCanonicalLoadUrls = [];
+        globalThis.__esmCanonicalResolveSpecifiers = [];
+        const { register } = await import('node:module');
+        const interceptedUrl = 'data:text/javascript,' +
+            encodeURIComponent('export default "intercepted";');
+        register('data:text/javascript,' + encodeURIComponent([
+            `const interceptedUrl = ${JSON.stringify(interceptedUrl)};`,
+            'export function resolve(specifier, context, next) {',
+            '  if (globalThis.__esmCanonicalResolveSpecifiers) {',
+            '    globalThis.__esmCanonicalResolveSpecifiers.push(specifier);',
+            '  }',
+            '  if (specifier.includes("hook%2Fintercept")) {',
+            '    return { url: interceptedUrl, format: "module", shortCircuit: true };',
+            '  }',
+            '  if (specifier.includes("hook%2Frewrite")) {',
+            '    return next("./sub%2Fblocked.mjs", context);',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'export function load(url, context, next) {',
+            '  if (url.includes("?canonical=")) globalThis.__esmCanonicalLoadUrls.push(url);',
+            '  return next(url, context);',
+            '}',
+        ].join('\n')));
+
+        assert.strictEqual(
+            await import(`${defaultEmptyFileUrl}?`),
+            defaultEmptyBase,
+            'loader empty query',
+        );
+        assert.strictEqual(
+            await import(`${defaultEmptyFileUrl}#`),
+            defaultEmptyBase,
+            'loader empty fragment',
+        );
+        assert.strictEqual(
+            await import(`${defaultEmptyFileUrl}?#`),
+            defaultEmptyBase,
+            'loader empty query and fragment',
+        );
+        assert.strictEqual(
+            await import(`${defaultEmptyFileUrl}?query#`),
+            defaultQuery,
+            'loader empty fragment after query',
+        );
+        assert.strictEqual(
+            await import(`${defaultEmptyFileUrl}?#frag`),
+            defaultFragment,
+            'loader empty query before fragment',
+        );
+        assert.deepStrictEqual(
+            (await import(`${canonicalRoot}/default-empty-after-parent.mjs`)).default,
+            expectedDefaultEmptyParent,
+        );
+        assert.strictEqual(globalThis.__esmDefaultEmptySuffixEvaluations, 3);
+        const defaultSuffixAfterRegister = (
+            await import(`${canonicalRoot}/default-suffix-after-parent.mjs`)
+        ).default;
+        assert.strictEqual(defaultSuffixAfterRegister, defaultSuffixBeforeRegister);
+        assert.strictEqual(
+            (await import(defaultSuffixCanonicalUrl)).default,
+            defaultSuffixBeforeRegister,
+        );
+        assert.strictEqual(globalThis.__esmDefaultSuffixEvaluations, 1);
+        for (const specifier of preprocessedFileSpecifiers) {
+            try {
+                assert.strictEqual(await import(specifier), localAuthorityModule);
+            } catch (error) {
+                throw new Error(
+                    `Failed loader preprocessed file URL ${JSON.stringify(specifier)}: ${error.message}`,
+                );
+            }
+        }
+        for (const character of ['\t', '\n', '\r']) {
+            assert.strictEqual(
+                await import(`file://local${character}host${invalidAuthorityPath}`),
+                localAuthorityModule,
+            );
+        }
+        await assertInvalidFileAuthority(`file://local%3Ehost${invalidAuthorityPath}`);
+        await assertInvalidFileAuthority(`file://local%09host${invalidAuthorityPath} `);
+        await expectImportRejectsCode(
+            ` file://local%09host${invalidAuthorityPath}`,
+            'ERR_MODULE_NOT_FOUND',
+        );
+
+        const pathExpected = pathToFileURL(`${canonicalRoot}/path-target.mjs`).href +
+            '?canonical=path#fragment';
+        const pathResult = (await import(`${canonicalRoot}/path-parent.mjs`)).default;
+        assert.strictEqual(pathResult, pathExpected);
+        assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), pathExpected);
+        assert.ok(globalThis.__esmCanonicalResolveSpecifiers.includes(
+            './path-link%2Emjs?canonical=path#fragment',
+        ));
+
+        const fileExpected = pathToFileURL(`${canonicalRoot}/file-target.mjs`).href +
+            '?canonical=file#fragment';
+        const fileParent = pathToFileURL(`${canonicalRoot}/file-parent.mjs`).href;
+        const fileResult = (await import(fileParent)).default;
+        assert.strictEqual(fileResult, fileExpected);
+        assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), fileExpected);
+
+        assert.strictEqual(
+            (await import(`${canonicalRoot}/format-parent.mjs`)).default,
+            'realpath-format',
+        );
+        assert.strictEqual(
+            (await import(`${canonicalRoot}/hook-static-parent.mjs`)).default,
+            'intercepted',
+        );
+        assert.strictEqual(
+            (await import(`${canonicalRoot}/hook-file-static-parent.mjs`)).default,
+            'intercepted',
+        );
+        await expectImportRejectsCode(
+            `${canonicalRoot}/hook-next-parent.mjs`,
+            'ERR_INVALID_MODULE_SPECIFIER',
+        );
+        await expectImportRejectsCode(
+            `${canonicalRoot}/hook-file-next-parent.mjs`,
+            'ERR_INVALID_MODULE_SPECIFIER',
+        );
+        assert.strictEqual(
+            (await import(`${canonicalRoot}/dot-cancel-parent.mjs`)).default,
+            'dot-cancelled',
+        );
+
+        try {
+            process.execArgv.push('--preserve-symlinks');
+            const preserveExpected = pathToFileURL(`${canonicalRoot}/preserve-link`).href +
+                '%2Emjs?canonical=preserve#fragment';
+            const preserveResult = (await import(`${canonicalRoot}/preserve-parent.mjs`)).default;
+            assert.strictEqual(preserveResult, preserveExpected);
+            assert.strictEqual(globalThis.__esmCanonicalLoadUrls.at(-1), preserveExpected);
+            const identityAfterRegister = await import(identityLiteralUrl);
+            assert.strictEqual(identityAfterRegister, identityBeforeRegister);
+            assert.strictEqual(
+                await import(identityEmptyQueryUrl),
+                identityEmptyQueryBeforeRegister,
+            );
+            assert.strictEqual(
+                await import(identityEmptyHashUrl),
+                identityEmptyHashBeforeRegister,
+            );
+            assert.strictEqual(identityEmptyQueryBeforeRegister.default.url, identityEmptyQueryUrl);
+            assert.strictEqual(identityEmptyHashBeforeRegister.default.url, identityEmptyHashUrl);
+            assert.strictEqual(identityEncodedBeforeRegister.default.relativeChild, 'relative-child');
+            assert.strictEqual(identityEncodedBeforeRegister.default.bareChild, 'bare-child');
+            assert.strictEqual(globalThis.__esmPreservedIdentityEvaluations, 4);
+            const encodedIdentity = await import(identityEncodedUrl);
+            assert.notStrictEqual(encodedIdentity, identityBeforeRegister);
+            assert.strictEqual(encodedIdentity, identityEncodedBeforeRegister);
+            assert.strictEqual(encodedIdentity.default.evaluation, 4);
+            assert.strictEqual(encodedIdentity.default.url, identityEncodedUrl);
+            assert.strictEqual(await import(identityEncodedUrl), encodedIdentity);
+            assert.strictEqual(globalThis.__esmPreservedIdentityEvaluations, 4);
+            assert.strictEqual(
+                await import(punctuationLiteralUrl),
+                punctuationLiteralBeforeRegister,
+            );
+            assert.strictEqual(
+                await import(punctuationEncodedUrl),
+                punctuationEncodedBeforeRegister,
+            );
+            assert.notStrictEqual(
+                punctuationLiteralBeforeRegister,
+                punctuationEncodedBeforeRegister,
+            );
+            assert.strictEqual(punctuationLiteralBeforeRegister.default.evaluation, 1);
+            assert.strictEqual(punctuationLiteralBeforeRegister.default.url, punctuationLiteralUrl);
+            assert.strictEqual(punctuationEncodedBeforeRegister.default.evaluation, 2);
+            assert.strictEqual(punctuationEncodedBeforeRegister.default.url, punctuationEncodedUrl);
+            assert.strictEqual(globalThis.__esmPunctuationIdentityEvaluations, 2);
+            assert.strictEqual(suffixBeforeRegister.default.url, suffixExpectedUrl);
+            assert.strictEqual(suffixBeforeRegister.default.evaluation, 1);
+            assert.strictEqual(await import(suffixRawUrl), suffixBeforeRegister);
+            assert.strictEqual(await import(suffixExpectedUrl), suffixBeforeRegister);
+            assert.strictEqual(globalThis.__esmSuffixIdentityEvaluations, 1);
+            assert.notStrictEqual(caretLiteralBeforeRegister, caretEncodedBeforeRegister);
+            assert.strictEqual(caretLiteralBeforeRegister.default.evaluation, 1);
+            assert.strictEqual(caretLiteralBeforeRegister.default.url, caretLiteralUrl);
+            assert.strictEqual(caretEncodedBeforeRegister.default.evaluation, 2);
+            assert.strictEqual(caretEncodedBeforeRegister.default.url, caretEncodedUrl);
+            assert.strictEqual(await import(caretLiteralUrl), caretLiteralBeforeRegister);
+            assert.strictEqual(await import(caretEncodedUrl), caretEncodedBeforeRegister);
+            assert.strictEqual(globalThis.__esmCaretIdentityEvaluations, 2);
+            assert.strictEqual(await import(doubleSlashUrl), doubleSlashBeforeRegister);
+            assert.strictEqual(doubleSlashBeforeRegister.default.url, doubleSlashUrl);
+            assert.strictEqual(doubleSlashBeforeRegister.default.evaluation, 1);
+            assert.strictEqual(globalThis.__esmDoubleSlashIdentityEvaluations, 1);
+            assert.strictEqual(await import(userRealmUrl), userRealmBeforeRegister);
+            assert.strictEqual(userRealmBeforeRegister.default.url, userRealmUrl);
+            assert.strictEqual(userRealmBeforeRegister.default.child, 'user-child');
+            assert.strictEqual(userRealmBeforeRegister.default.evaluation, 1);
+            assert.strictEqual(globalThis.__esmUserRealmIdentityEvaluations, 1);
+            const preserveCjsUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-format`,
+            ).href + '%2Ecjs';
+            const preserveCjs = await import(preserveCjsUrl);
+            assert.strictEqual(preserveCjs.default.named, 'preserve-cjs');
+            assert.strictEqual(preserveCjs.named, 'preserve-cjs');
+            assert.strictEqual(await import(preserveCjsUrl), preserveCjs);
+            const preserveEsmUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-esm`,
+            ).href + '%2Ecjs';
+            const preserveEsm = await import(preserveEsmUrl);
+            assert.strictEqual(preserveEsm.default, 'preserve-esm');
+            assert.strictEqual(preserveEsm.named, 'preserve-esm');
+            const preserveJsonUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-format`,
+            ).href + '%2Ejson';
+            fs.writeFileSync(
+                `${canonicalRoot}/preserve-json-parent.mjs`,
+                `import value from ${JSON.stringify(preserveJsonUrl)} with { type: "json" }; export default value;`,
+            );
+            await expectImportRejectsCode(
+                `${canonicalRoot}/preserve-json-parent.mjs`,
+                'ERR_IMPORT_ATTRIBUTE_TYPE_INCOMPATIBLE',
+            );
+            const untypedPreserveJson = await import(preserveJsonUrl);
+            assert.deepStrictEqual(untypedPreserveJson.default, {
+                value: 'preserve-json',
+            });
+            const preservePrivateUrl = pathToFileURL(
+                `${canonicalRoot}/preserve-private`,
+            ).href + '%2Emjs';
+            await expectImportRejectsCode(preservePrivateUrl, 'ERR_MODULE_NOT_FOUND');
+        } finally {
+            process.execArgv.length = 0;
+            for (const arg of originalExecArgv) process.execArgv.push(arg);
+            delete globalThis.__esmCanonicalLoadUrls;
+            delete globalThis.__esmCanonicalResolveSpecifiers;
+            delete globalThis.__esmPreservedIdentityEvaluations;
+            delete globalThis.__esmPunctuationIdentityEvaluations;
+            delete globalThis.__esmSuffixIdentityEvaluations;
+            delete globalThis.__esmCaretIdentityEvaluations;
+            delete globalThis.__esmDoubleSlashIdentityEvaluations;
+            delete globalThis.__esmUserRealmIdentityEvaluations;
+            delete globalThis.__esmDefaultEmptySuffixEvaluations;
+            delete globalThis.__esmDefaultSuffixEvaluations;
+        }
+
+        const forgedTargetUrl = pathToFileURL(`${canonicalRoot}/forged-target.mjs`).href;
+        let forgedId = '__wasm_rquickjs_static_file_url__:';
+        for (let index = 0; index < forgedTargetUrl.length; index++) {
+            forgedId += forgedTargetUrl.charCodeAt(index).toString(16).padStart(2, '0');
+        }
+        await expectImportRejectsCode(forgedId, 'ERR_MODULE_NOT_FOUND');
+        await expectImportRejectsCode(
+            '__wasm_rquickjs_static_file_url__:1',
+            'ERR_MODULE_NOT_FOUND',
+        );
+        assert.strictEqual(globalThis.__esmForgedFileUrlEvaluated, undefined);
+
         await expectImportRejectsCode('/esm-encoded-relative-app/sub%2Fblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
         await expectImportRejectsCode('/esm-encoded-relative-app/sub%5Cblocked.mjs', 'ERR_INVALID_MODULE_SPECIFIER');
+        assert.strictEqual(
+            (await import('/esm-encoded-relative-app/sub%252Fallowed.mjs')).default,
+            'encoded-slash-name',
+        );
+        assert.strictEqual(
+            (await import('/esm-encoded-relative-app/sub%255Callowed.mjs')).default,
+            'encoded-backslash-name',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/sub%2Fblocked.mjs',
+            'ERR_INVALID_MODULE_SPECIFIER',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/sub/blocked.mjs',
+            'ERR_INVALID_FILE_URL_HOST',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/a%2Fb/../sub/blocked.mjs',
+            'ERR_INVALID_FILE_URL_HOST',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/a%2Fb/%2E%2E/sub/blocked.mjs',
+            'ERR_INVALID_FILE_URL_HOST',
+        );
+        assert.strictEqual(
+            (await import('file:///esm-encoded-relative-app/sub\\test-esm-ok.mjs')).default,
+            'ok',
+        );
+        assert.strictEqual(
+            (await import('file://local%68ost/esm-encoded-relative-app/sub/test-esm-ok.mjs')).default,
+            'ok',
+        );
+        await expectImportRejectsCode(
+            'file://example%2Finvalid/esm-encoded-relative-app/sub/blocked.mjs',
+            'ERR_INVALID_URL',
+        );
+        await expectImportRejectsCode(
+            'file://example%5Cinvalid/esm-encoded-relative-app/sub/blocked.mjs',
+            'ERR_INVALID_URL',
+        );
+        await expectImportRejectsCode(
+            'file://example.invalid/esm-encoded-relative-app/sub\\blocked.mjs',
+            'ERR_INVALID_FILE_URL_HOST',
+        );
+        assert.strictEqual(
+            (await import('/esm-encoded-relative-app/query-separators.mjs?slash=%2F&backslash=%5C')).default,
+            true,
+        );
         return true;
     } catch (error) {
         console.error(error);
@@ -1533,6 +2203,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             'globalThis.__assertionlessJsonSeen = [];',
             'function resolve(specifier, context, next) {',
             '  const noType = context.importAttributes.type == null;',
+            '  context.importAttributes.type = "whatever";',
             '  const result = next(specifier, context);',
             '  const finish = (result) => {',
             '  const resultUrl = String(result.url);',
@@ -2226,6 +2897,14 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.mkdirSync(`${root}/node_modules/static-condition-pkg`, { recursive: true });
         fs.writeFileSync(`${root}/entry.mjs`, 'export default true;');
         fs.writeFileSync(
+            `${root}/importer.mjs`,
+            `import value from ${JSON.stringify(`${root}/entry.mjs?cache#frag`)}; export default value;`,
+        );
+        fs.writeFileSync(`${root}/cli-entry.mjs`, 'export default "original-entry";');
+        fs.writeFileSync(`${root}/redirected-entry.mjs`, 'export default "redirected-entry";');
+        const cliEntryUrl = pathToFileURL(`${root}/cli-entry.mjs`).href;
+        const redirectedEntryUrl = pathToFileURL(`${root}/redirected-entry.mjs`).href;
+        fs.writeFileSync(
             `${root}/node_modules/static-condition-pkg/package.json`,
             JSON.stringify({
                 name: 'static-condition-pkg',
@@ -2281,8 +2960,11 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         fs.writeFileSync(`${root}/grand#literal.mjs`, 'export default "literal-grandchild";');
         const loaderUrl = 'data:text/javascript,' + encodeURIComponent([
             'export function resolve(specifier, context, next) {',
-            '  if (specifier.startsWith("/")) throw new Error("static loader received absolute path: " + specifier);',
-            '  if (specifier.startsWith("file://") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
+            `  if (specifier === ${JSON.stringify(cliEntryUrl)}) {`,
+            '    globalThis.__static_loader_cli_entry_calls = (globalThis.__static_loader_cli_entry_calls || 0) + 1;',
+            `    return { shortCircuit: true, url: ${JSON.stringify(redirectedEntryUrl)}, format: "module" };`,
+            '  }',
+            '  if (specifier.startsWith("/") && specifier.includes("/static-loader-absolute-entry-app/entry.mjs?cache#frag")) {',
             '    globalThis.__static_loader_absolute_entry_seen = specifier;',
             '  }',
             '  if (specifier === "virtual:static-child-query") {',
@@ -2333,15 +3015,20 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         const { register } = await import('node:module');
         register(loaderUrl);
         await import('data:text/javascript,export default 0');
+        await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(
+            cliEntryUrl,
+            cliEntryUrl,
+            import.meta.url,
+        );
+        assert.strictEqual((await import(cliEntryUrl)).default, 'redirected-entry');
+        assert.strictEqual(globalThis.__static_loader_cli_entry_calls, 1);
         assert.strictEqual(
-            (await import('data:text/javascript,' + encodeURIComponent(
-                `import value from ${JSON.stringify(`${root}/entry.mjs?cache#frag`)}; export default value;`,
-            ))).default,
+            (await import(pathToFileURL(`${root}/importer.mjs`).href)).default,
             true,
         );
         assert.strictEqual(
             globalThis.__static_loader_absolute_entry_seen,
-            `${pathToFileURL(`${root}/entry.mjs`).href}?cache#frag`,
+            `${root}/entry.mjs?cache#frag`,
         );
         assert.strictEqual(
             (await import('data:text/javascript,' + encodeURIComponent(
@@ -2396,16 +3083,200 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         );
         delete globalThis.__static_loader_absolute_entry_seen;
         delete globalThis.__static_loader_child_query_seen;
+        delete globalThis.__static_loader_cli_entry_calls;
         return true;
     } catch (error) {
         delete globalThis.__static_loader_absolute_entry_seen;
         delete globalThis.__static_loader_child_query_seen;
+        delete globalThis.__static_loader_cli_entry_calls;
         console.error(error);
         throw error;
     }
 };
 
+export const testRegisteredLoaderUppercaseFileUrl = async () => {
+    const root = '/registered-loader-uppercase-file-app';
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(
+        `${root}/child.mjs`,
+        'export default import.meta.url;',
+    );
+    fs.writeFileSync(
+        `${root}/target.mjs`,
+        [
+            'import childUrl from "./child.mjs";',
+            'export default {',
+            '  url: import.meta.url,',
+            '  resolved: import.meta.resolve("./child.mjs"),',
+            '  childUrl,',
+            '  filename: import.meta.filename,',
+            '  dirname: import.meta.dirname,',
+            '};',
+        ].join('\n'),
+    );
+    const targetUrl = pathToFileURL(`${root}/target.mjs`).href;
+    const childUrl = pathToFileURL(`${root}/child.mjs`).href;
+    const uppercaseTargetUrl = `FILE:${targetUrl.slice('file:'.length)}`;
+    const uppercaseDataSource = [
+        'export const evaluations =',
+        '  globalThis.__uppercaseDataEvaluations =',
+        '    (globalThis.__uppercaseDataEvaluations || 0) + 1;',
+        'export default import.meta.url;',
+    ].join('\n');
+    const uppercaseDataUrl = `DATA:text/javascript,${encodeURIComponent(uppercaseDataSource)}`;
+    fs.writeFileSync(
+        `${root}/data-parent-a.mjs`,
+        'import * as shared from "virtual:uppercase-data-url"; export default shared;',
+    );
+    fs.writeFileSync(
+        `${root}/data-parent-b.mjs`,
+        'import * as shared from "virtual:uppercase-data-url-alias"; export default shared;',
+    );
+    const hookSource = [
+        'export function resolve(specifier, context, nextResolve) {',
+        '  if (specifier === "virtual:uppercase-file-url") {',
+        `    return { shortCircuit: true, url: ${JSON.stringify(uppercaseTargetUrl)}, format: "module" };`,
+        '  }',
+        '  if (specifier === "virtual:uppercase-data-url" || specifier === "virtual:uppercase-data-url-alias") {',
+        `    return { shortCircuit: true, url: ${JSON.stringify(uppercaseDataUrl)}, format: "module" };`,
+        '  }',
+        `  if (specifier === "./child.mjs" && context.parentURL === ${JSON.stringify(uppercaseTargetUrl)}) {`,
+        '    globalThis.__uppercaseFileLoaderParentUrl = context.parentURL;',
+        '    const resolved = nextResolve(specifier, context);',
+        '    globalThis.__uppercaseFileLoaderChildUrl = resolved && resolved.url;',
+        '    return resolved;',
+        '  }',
+        '  return nextResolve(specifier, context);',
+        '}',
+        'export function load(url, context, nextLoad) {',
+        `  if (url === ${JSON.stringify(uppercaseTargetUrl)}) globalThis.__uppercaseFileLoaderUrl = url;`,
+        `  if (url === ${JSON.stringify(uppercaseDataUrl)}) globalThis.__uppercaseDataLoaderUrl = url;`,
+        '  return nextLoad(url, context);',
+        '}',
+    ].join('\n');
+
+    globalThis.__wasm_rquickjs_registered_loaders = [];
+    try {
+        assert.strictEqual(new URL(uppercaseTargetUrl).href, targetUrl);
+        const { register } = await import('node:module');
+        register(`data:text/javascript,${encodeURIComponent(hookSource)}`);
+        await import('data:text/javascript,export default true#uppercase-loader-ready');
+        const fileResult = (await import('virtual:uppercase-file-url')).default;
+        assert.strictEqual(fileResult.url, uppercaseTargetUrl);
+        assert.strictEqual(fileResult.resolved, childUrl);
+        assert.strictEqual(fileResult.childUrl, childUrl);
+        assert.strictEqual(globalThis.__uppercaseFileLoaderChildUrl, childUrl);
+        assert.strictEqual(fileResult.filename, undefined);
+        assert.strictEqual(fileResult.dirname, undefined);
+        assert.strictEqual(globalThis.__uppercaseFileLoaderUrl, uppercaseTargetUrl);
+        assert.strictEqual(globalThis.__uppercaseFileLoaderParentUrl, uppercaseTargetUrl);
+        const firstData = await import('virtual:uppercase-data-url');
+        const secondData = await import('virtual:uppercase-data-url-alias');
+        const parentAData = (await import(`${root}/data-parent-a.mjs`)).default;
+        const parentBData = (await import(`${root}/data-parent-b.mjs`)).default;
+        assert.strictEqual(firstData, secondData);
+        assert.strictEqual(parentAData, firstData);
+        assert.strictEqual(parentBData, firstData);
+        assert.strictEqual(firstData.default, uppercaseDataUrl);
+        assert.strictEqual(firstData.evaluations, 1);
+        assert.strictEqual(globalThis.__uppercaseDataEvaluations, 1);
+        assert.strictEqual(globalThis.__uppercaseDataLoaderUrl, uppercaseDataUrl);
+        return true;
+    } finally {
+        delete globalThis.__uppercaseFileLoaderUrl;
+        delete globalThis.__uppercaseFileLoaderParentUrl;
+        delete globalThis.__uppercaseFileLoaderChildUrl;
+        delete globalThis.__uppercaseDataLoaderUrl;
+        delete globalThis.__uppercaseDataEvaluations;
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+    }
+};
+
+export const testRegisteredLoaderModuleCacheReplacement = async () => {
+    const root = '/registered-loader-cache-replacement-app';
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(
+        `${root}/dep.cjs`,
+        'module.exports = ++globalThis.__loaderCacheReplacementEvaluations;',
+    );
+    fs.writeFileSync(
+        `${root}/loader.mjs`,
+        [
+            'import Module, { createRequire } from "node:module";',
+            'const originalCache = Module._cache;',
+            'const firstCache = Object.create(null);',
+            'Module._cache = firstCache;',
+            'const firstRequire = createRequire(import.meta.url);',
+            'const first = firstRequire("./dep.cjs");',
+            'const firstAgain = firstRequire("./dep.cjs");',
+            'const secondCache = Object.create(null);',
+            'Module._cache = secondCache;',
+            'const secondRequire = createRequire(import.meta.url);',
+            'const second = secondRequire("./dep.cjs");',
+            'Module._cache = undefined;',
+            'let undefinedCacheThrows = false;',
+            'try { createRequire(import.meta.url)("./dep.cjs"); } catch (error) { undefinedCacheThrows = error instanceof TypeError; }',
+            'delete Module._cache;',
+            'let deletedCacheThrows = false;',
+            'try { createRequire(import.meta.url)("./dep.cjs"); } catch (error) { deletedCacheThrows = error instanceof TypeError; }',
+            'const state = {',
+            '  evaluations: [first, firstAgain, second],',
+            '  firstCacheLive: firstRequire.cache === firstCache,',
+            '  secondCacheLive: secondRequire.cache === secondCache,',
+            '  cachesDistinct: firstCache !== secondCache,',
+            '  firstCached: Object.keys(firstCache).some(key => key.endsWith("/dep.cjs")),',
+            '  secondCached: Object.keys(secondCache).some(key => key.endsWith("/dep.cjs")),',
+            '  undefinedCacheThrows,',
+            '  deletedCacheThrows,',
+            '};',
+            'Module._cache = originalCache;',
+            'export function resolve(specifier, context, nextResolve) {',
+            '  if (specifier === "virtual:loader-cache-replacement") {',
+            '    return { shortCircuit: true, url: specifier, format: "module" };',
+            '  }',
+            '  return nextResolve(specifier, context);',
+            '}',
+            'export function load(url, context, nextLoad) {',
+            '  if (url === "virtual:loader-cache-replacement") {',
+            '    return { shortCircuit: true, format: "module", source: "export default " + JSON.stringify(state) };',
+            '  }',
+            '  return nextLoad(url, context);',
+            '}',
+        ].join('\n'),
+    );
+
+    globalThis.__loaderCacheReplacementEvaluations = 0;
+    globalThis.__wasm_rquickjs_registered_loaders = [];
+    try {
+        const { register } = await import('node:module');
+        register(pathToFileURL(`${root}/loader.mjs`).href);
+        await import('data:text/javascript,export default true#cache-replacement-loader-ready');
+        const state = (await import('virtual:loader-cache-replacement')).default;
+        assert.deepStrictEqual(state, {
+            evaluations: [1, 1, 2],
+            firstCacheLive: true,
+            secondCacheLive: true,
+            cachesDistinct: true,
+            firstCached: true,
+            secondCached: true,
+            undefinedCacheThrows: true,
+            deletedCacheThrows: true,
+        });
+        const appRequire = createRequire(`${root}/app.cjs`);
+        assert.strictEqual(
+            Object.keys(appRequire.cache).some(key => key.endsWith('/dep.cjs')),
+            false,
+        );
+        assert.strictEqual(appRequire('./dep.cjs'), 3);
+        return true;
+    } finally {
+        delete globalThis.__loaderCacheReplacementEvaluations;
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+    }
+};
+
 export const testRegisteredLoaderModuleRealmIsolation = async () => {
+    const originalExecArgv = process.execArgv.slice();
     try {
         const root = '/registered-loader-realm-app';
         fs.mkdirSync(root, { recursive: true });
@@ -2429,6 +3300,74 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             ].join('\n'),
         );
         fs.writeFileSync(
+            `${root}/relative.cjs`,
+            [
+                'globalThis.__loaderRealmCjsEvaluation =',
+                '  (globalThis.__loaderRealmCjsEvaluation || 0) + 1;',
+                'exports.named = "relative-cjs";',
+                'exports.evaluation = globalThis.__loaderRealmCjsEvaluation;',
+                'exports.nested = require("./nested.cjs");',
+                'exports.lazy = () => require("./lazy.cjs");',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/nested.cjs`,
+            [
+                'globalThis.__loaderRealmNestedCjsEvaluation =',
+                '  (globalThis.__loaderRealmNestedCjsEvaluation || 0) + 1;',
+                'exports.evaluation = globalThis.__loaderRealmNestedCjsEvaluation;',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/lazy.cjs`,
+            [
+                'globalThis.__loaderRealmLazyCjsEvaluation =',
+                '  (globalThis.__loaderRealmLazyCjsEvaluation || 0) + 1;',
+                'exports.evaluation = globalThis.__loaderRealmLazyCjsEvaluation;',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/config.json`,
+            JSON.stringify({ kind: 'loader-json' }),
+        );
+        fs.writeFileSync(
+            `${root}/required-esm.mjs`,
+            [
+                'const value = { loaderMutation: false };',
+                'export default value;',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/esm-reader.cjs`,
+            'module.exports = require("./required-esm.mjs").default;',
+        );
+        fs.mkdirSync(`${root}/node_modules/loader-realm-cjs-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-cjs-pkg/package.json`,
+            JSON.stringify({
+                name: 'loader-realm-cjs-pkg',
+                type: 'commonjs',
+                exports: './index.js',
+            }),
+        );
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-cjs-pkg/index.js`,
+            'exports.named = "package-cjs";',
+        );
+        fs.mkdirSync(`${root}/node_modules/loader-realm-esm-pkg`, { recursive: true });
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-esm-pkg/package.json`,
+            JSON.stringify({
+                name: 'loader-realm-esm-pkg',
+                type: 'module',
+                exports: './index.js',
+            }),
+        );
+        fs.writeFileSync(
+            `${root}/node_modules/loader-realm-esm-pkg/index.js`,
+            'export default "package-esm";',
+        );
+        fs.writeFileSync(
             `${root}/app.mjs`,
             [
                 'import { count as stateCount } from "./stateful.mjs";',
@@ -2441,24 +3380,170 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             [
                 'import { count } from "./stateful.mjs";',
                 'import { count as packageCount } from "loader-realm-pkg";',
+                'import relativeCjs, { named as relativeCjsNamed } from "./relative.cjs";',
+                'import relativeCjsOne from "./relative.cjs?one";',
+                'import relativeCjsTwo from "./relative.cjs?two";',
+                'import packageCjs, { named as packageCjsNamed } from "loader-realm-cjs-pkg";',
+                'import packageEsm from "loader-realm-esm-pkg";',
+                'import config from "./config.json" with { type: "json" };',
+                'import requiredEsm from "./esm-reader.cjs";',
+                'import Module, { createRequire } from "node:module";',
                 'if (import.meta.url.includes("__wasm_rquickjs_loader_realm")) {',
                 '  throw new Error("loader realm marker leaked through import.meta.url");',
                 '}',
                 'const loaderCount = count();',
                 'const loaderPackageCount = packageCount();',
+                'config.loaderMutation = true;',
+                'requiredEsm.loaderMutation = true;',
+                'const loaderRequire = createRequire(import.meta.url);',
+                'const loaderModule = loaderRequire("module");',
+                'const constructedModule = new Module("loader-module-oracle");',
+                'const requiredPackageEsm = loaderRequire("loader-realm-esm-pkg");',
+                '(globalThis.__loaderRealmCjsEvaluations ||= []).push(relativeCjs.evaluation);',
+                'const loaderFormats = {',
+                '  relativeCjs: relativeCjs.named,',
+                '  relativeCjsNamed,',
+                '  relativeCjsEvaluation: relativeCjs.evaluation,',
+                '  nestedCjsEvaluation: relativeCjs.nested.evaluation,',
+                '  queryVariantsShareExports: relativeCjsOne === relativeCjs && relativeCjsTwo === relativeCjs,',
+                '  packageCjs: packageCjs.named,',
+                '  packageCjsNamed,',
+                '  packageEsm,',
+                '  json: config.kind,',
+                '  jsonMutation: config.loaderMutation,',
+                '  jsonRequireIdentity: loaderRequire("./config.json") === config,',
+                '  requiredEsmMutation: requiredEsm.loaderMutation,',
+                '  moduleType: typeof Module,',
+                '  moduleConstructible: constructedModule instanceof Module,',
+                '  moduleCacheIdentity: Module._cache === loaderRequire.cache,',
+                '  cjsModuleIdentity: loaderModule === Module,',
+                '  requiredPackageEsm: requiredPackageEsm.default,',
+                '};',
                 'export function resolve(specifier, context, next) {',
-                '  if (specifier === "virtual:loader-realm-count") {',
+                '  if (specifier.startsWith("virtual:loader-realm-count")) {',
                 '    return { shortCircuit: true, url: "virtual:loader-realm-count-json", format: "json" };',
                 '  }',
                 '  return next(specifier, context);',
                 '}',
                 'export function load(url, context, next) {',
                 '  if (url === "virtual:loader-realm-count-json") {',
-                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ loaderCount, loaderPackageCount }) };',
+                '    const formats = { ...loaderFormats, lazyCjsEvaluation: relativeCjs.lazy().evaluation };',
+                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ loaderCount, loaderPackageCount, loaderFormats: formats }) };',
                 '  }',
                 '  return next(url, context);',
                 '}',
             ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/private-loader.mjs`,
+            [
+                'import "__wasm_rquickjs_builtin/vm_native";',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:private-loader-trigger") {',
+                '    return { shortCircuit: true, url: "data:text/javascript,export default true" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/source-interceptor.mjs`,
+            [
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:loader-source-cjs") {',
+                '    return { shortCircuit: true, url: "loader-source:shared", format: "commonjs" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "loader-source:shared") {',
+                '    return { shortCircuit: true, format: "commonjs", source: "module.exports = { mutations: 0 };" };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/source-consumer-loader.mjs`,
+            [
+                'import shared from "virtual:loader-source-cjs";',
+                'shared.mutations++;',
+                'let id;',
+                'export function initialize(data) { id = data.id; }',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:source-consumer-" + id) {',
+                '    return { shortCircuit: true, url: "loader-source-state:" + id, format: "json" };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+                'export function load(url, context, next) {',
+                '  if (url === "loader-source-state:" + id) {',
+                '    return { shortCircuit: true, format: "json", source: JSON.stringify({ mutations: shared.mutations }) };',
+                '  }',
+                '  return next(url, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/source-consumer-loader-b.mjs`,
+            fs.readFileSync(`${root}/source-consumer-loader.mjs`, 'utf8'),
+        );
+        fs.writeFileSync(
+            `${root}/public-parent-observer.mjs`,
+            [
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "./public-parent-child.mjs") {',
+                '    globalThis.__registeredLoaderObservedParents.push(context.parentURL);',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.writeFileSync(
+            `${root}/public-parent-child.mjs`,
+            'let value = 0; export function count() { return ++value; }',
+        );
+        fs.writeFileSync(
+            `${root}/public-parent-loader.mjs`,
+            [
+                'import { count } from "./public-parent-child.mjs";',
+                'const loaderChildCount = count();',
+                'const loaderState = JSON.stringify({ loaderChildCount, url: import.meta.url });',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:public-parent-ready") {',
+                '    return {',
+                '      shortCircuit: true,',
+                '      format: "module",',
+                '      url: "data:text/javascript," + encodeURIComponent("export default " + loaderState),',
+                '    };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.mkdirSync(`${root}/real`, { recursive: true });
+        fs.mkdirSync(`${root}/alias`, { recursive: true });
+        fs.writeFileSync(`${root}/real/default-child.mjs`, 'export default "real-child";');
+        fs.writeFileSync(
+            `${root}/real/default-loader.mjs`,
+            [
+                'import child from "./default-child.mjs";',
+                'const loaderState = JSON.stringify({ child, url: import.meta.url });',
+                'export function resolve(specifier, context, next) {',
+                '  if (specifier === "virtual:default-loader-ready") {',
+                '    return {',
+                '      shortCircuit: true,',
+                '      format: "module",',
+                '      url: "data:text/javascript," + encodeURIComponent("export default " + loaderState),',
+                '    };',
+                '  }',
+                '  return next(specifier, context);',
+                '}',
+            ].join('\n'),
+        );
+        fs.symlinkSync(
+            '../real/default-loader.mjs',
+            `${root}/alias/encoded-loader.mjs`,
         );
         globalThis.__wasm_rquickjs_registered_loaders = [];
         globalThis.__wasm_rquickjs_module_resolution_assert = assert;
@@ -2467,17 +3552,337 @@ export const testRegisteredLoaderModuleRealmIsolation = async () => {
             'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
             'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
             `register(${JSON.stringify(pathToFileURL(`${root}/loader.mjs`).href)});`,
-            'assert.deepStrictEqual((await import("virtual:loader-realm-count", { with: { type: "json" } })).default, { loaderCount: 1, loaderPackageCount: 1 });',
+            'assert.deepStrictEqual((await import("virtual:loader-realm-count", { with: { type: "json" } })).default, {',
+            '  loaderCount: 1,',
+            '  loaderPackageCount: 1,',
+            '  loaderFormats: {',
+            '    relativeCjs: "relative-cjs",',
+            '    relativeCjsNamed: "relative-cjs",',
+            '    relativeCjsEvaluation: 1,',
+            '    nestedCjsEvaluation: 1,',
+            '    lazyCjsEvaluation: 1,',
+            '    queryVariantsShareExports: true,',
+            '    packageCjs: "package-cjs",',
+            '    packageCjsNamed: "package-cjs",',
+            '    packageEsm: "package-esm",',
+            '    json: "loader-json",',
+            '    jsonMutation: true,',
+            '    jsonRequireIdentity: true,',
+            '    requiredEsmMutation: true,',
+            '    moduleType: "function",',
+            '    moduleConstructible: true,',
+            '    moduleCacheIdentity: true,',
+            '    cjsModuleIdentity: true,',
+            '    requiredPackageEsm: "package-esm",',
+            '  },',
+            '});',
             `const userState = await import(${JSON.stringify(pathToFileURL(`${root}/stateful.mjs`).href)});`,
             'assert.strictEqual(userState.count(), 1);',
             `assert.deepStrictEqual((await import(${JSON.stringify(pathToFileURL(`${root}/app.mjs`).href)})).default, [2, 1]);`,
         ].join('\n')));
+        assert.deepStrictEqual(globalThis.__loaderRealmCjsEvaluations, [1]);
+
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(pathToFileURL(`${root}/loader.mjs`).href)});`,
+            'const state = (await import("virtual:loader-realm-count-second", { with: { type: "json" } })).default;',
+            'assert.strictEqual(state.loaderFormats.relativeCjsEvaluation, 1);',
+            'assert.strictEqual(state.loaderFormats.nestedCjsEvaluation, 1);',
+            'assert.strictEqual(state.loaderFormats.lazyCjsEvaluation, 1);',
+            'assert.strictEqual(state.loaderFormats.queryVariantsShareExports, true);',
+            'assert.strictEqual(state.loaderFormats.jsonMutation, true);',
+            'assert.strictEqual(state.loaderFormats.jsonRequireIdentity, true);',
+        ].join('\n')));
+        assert.deepStrictEqual(globalThis.__loaderRealmCjsEvaluations, [1]);
+        const appRequire = createRequire(`${root}/app.cjs`);
+        assert.strictEqual(
+            Object.keys(appRequire.cache).some(key => key.startsWith('__wasm_rquickjs_static_file_url__:')),
+            false,
+        );
+        const appRelativeCjs = appRequire('./relative.cjs');
+        assert.strictEqual(appRelativeCjs.evaluation, 2);
+        assert.strictEqual(appRelativeCjs.nested.evaluation, 2);
+        assert.strictEqual(appRelativeCjs.lazy().evaluation, 2);
+        assert.deepStrictEqual(appRequire('./config.json'), { kind: 'loader-json' });
+        assert.deepStrictEqual(appRequire('./required-esm.mjs').default, { loaderMutation: false });
+
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(pathToFileURL(`${root}/source-interceptor.mjs`).href)});`,
+            'await import("data:text/javascript,export default true#source-interceptor-ready");',
+            `register(${JSON.stringify(pathToFileURL(`${root}/source-consumer-loader.mjs`).href)}, { data: { id: "one" } });`,
+            'const one = (await import("virtual:source-consumer-one", { with: { type: "json" } })).default;',
+            'if (one.mutations !== 1) throw new Error("first source-backed CJS loader realm was not isolated");',
+            `register(${JSON.stringify(pathToFileURL(`${root}/source-consumer-loader-b.mjs`).href)}, { data: { id: "two" } });`,
+            'const two = (await import("virtual:source-consumer-two", { with: { type: "json" } })).default;',
+            'if (two.mutations !== 2) throw new Error("source-backed CJS was not shared across loader modules");',
+        ].join('\n')));
+        assert.strictEqual(
+            Object.keys(appRequire.cache).some(key => key.includes('loader-source:shared')),
+            false,
+        );
+
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        globalThis.__wasm_rquickjs_module_resolution_register(
+            pathToFileURL(`${root}/private-loader.mjs`).href,
+        );
+        await expectImportRejectsCode(
+            'virtual:private-loader-trigger',
+            'ERR_MODULE_NOT_FOUND',
+        );
+
+        const encodedDefaultLoaderUrl = pathToFileURL(`${root}/alias/encoded-loader`).href +
+            '%2Emjs';
+        const realDefaultLoaderUrl = pathToFileURL(`${root}/real/default-loader.mjs`).href;
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(encodedDefaultLoaderUrl)});`,
+            'assert.deepStrictEqual(',
+            '  (await import("virtual:default-loader-ready")).default,',
+            `  { child: "real-child", url: ${JSON.stringify(realDefaultLoaderUrl)} },`,
+            ');',
+        ].join('\n')));
+
+        const observerUrl = pathToFileURL(`${root}/public-parent-observer.mjs`).href;
+        const publicParentLoaderUrl = pathToFileURL(`${root}/public-parent-loader`).href +
+            '%2Emjs';
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        globalThis.__registeredLoaderObservedParents = [];
+        process.execArgv.push('--preserve-symlinks');
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(observerUrl)});`,
+            'await import("data:text/javascript,export default \'observer-ready\'");',
+            `register(${JSON.stringify(publicParentLoaderUrl)});`,
+            'assert.deepStrictEqual(',
+            '  (await import("virtual:public-parent-ready")).default,',
+            `  { loaderChildCount: 1, url: ${JSON.stringify(publicParentLoaderUrl)} },`,
+            ');',
+        ].join('\n')));
+        assert.deepStrictEqual(
+            globalThis.__registeredLoaderObservedParents,
+            [publicParentLoaderUrl],
+        );
+        assert.ok(!globalThis.__registeredLoaderObservedParents[0].includes(
+            '__wasm_rquickjs_loader_realm',
+        ));
+        assert.strictEqual(
+            (await import(pathToFileURL(`${root}/public-parent-child.mjs`).href)).count(),
+            1,
+        );
+        process.execArgv.length = 0;
+        for (const arg of originalExecArgv) process.execArgv.push(arg);
+
+        const formatRoot = `${root}/forced-formats`;
+        fs.mkdirSync(formatRoot, { recursive: true });
+        fs.writeFileSync(
+            `${formatRoot}/module.odd`,
+            'export default "forced-module"; export const named = "forced-module";',
+        );
+        fs.writeFileSync(
+            `${formatRoot}/commonjs.odd`,
+            'exports.named = "forced-commonjs";',
+        );
+        fs.writeFileSync(
+            `${formatRoot}/data.odd`,
+            JSON.stringify({ kind: 'forced-json' }),
+        );
+        fs.writeFileSync(`${formatRoot}/source-commonjs.cjs`, 'throw new Error("unreplaced");');
+        fs.writeFileSync(
+            `${formatRoot}/source-required.json`,
+            JSON.stringify({ kind: 'source-required-json' }),
+        );
+        fs.writeFileSync(
+            `${formatRoot}/source-required.odd`,
+            JSON.stringify({ kind: 'invalid-json-format-target' }),
+        );
+        fs.writeFileSync(
+            `${formatRoot}/catch-default.odd`,
+            JSON.stringify({ kind: 'uncaught-default-json' }),
+        );
+        fs.writeFileSync(
+            `${formatRoot}/typed-entry.mjs`,
+            'import value from "virtual:forced-json" with { type: "json" }; export default value;',
+        );
+        fs.writeFileSync(
+            `${formatRoot}/typed-entry-two.mjs`,
+            'import value from "virtual:forced-json" with { type: "json" }; export default value;',
+        );
+        fs.writeFileSync(
+            `${formatRoot}/untyped-entry.mjs`,
+            'import value from "virtual:forced-json"; export default value;',
+        );
+        globalThis.__forcedFormatHookRecords = [];
+        const forcedFormatLoader = [
+            'const targets = {',
+            `  "virtual:forced-module": ${JSON.stringify(pathToFileURL(`${formatRoot}/module.odd`).href)},`,
+            `  "virtual:forced-commonjs": ${JSON.stringify(pathToFileURL(`${formatRoot}/commonjs.odd`).href)},`,
+            `  "virtual:forced-json": ${JSON.stringify(pathToFileURL(`${formatRoot}/data.odd`).href)},`,
+            `  "virtual:source-commonjs-json": ${JSON.stringify(pathToFileURL(`${formatRoot}/source-commonjs.cjs`).href)},`,
+            '};',
+            'const formats = {',
+            '  "virtual:forced-module": "module",',
+            '  "virtual:forced-commonjs": "commonjs",',
+            '  "virtual:forced-json": "json",',
+            '  "virtual:source-commonjs-json": "commonjs",',
+            '};',
+            'export function resolve(specifier, context, next) {',
+            '  globalThis.__forcedFormatHookRecords.push({ hook: "resolve", specifier, attrs: { ...context.importAttributes } });',
+            '  if (specifier === "virtual:short-json" || specifier === "virtual:short-module") {',
+            '    return { shortCircuit: true, url: specifier };',
+            '  }',
+            '  if (specifier === "./source-required.odd") {',
+            `    return { shortCircuit: true, url: ${JSON.stringify(pathToFileURL(`${formatRoot}/source-required.odd`).href)}, format: "json" };`,
+            '  }',
+            '  if (targets[specifier]) return { shortCircuit: true, url: targets[specifier], format: formats[specifier] };',
+            '  return next(specifier, context);',
+            '}',
+            'export function load(url, context, next) {',
+            '  globalThis.__forcedFormatHookRecords.push({ hook: "load", url, attrs: { ...context.importAttributes } });',
+            '  if (url === "virtual:short-json") {',
+            '    return { shortCircuit: true, format: "json", source: "{\\"shortJson\\":true}" };',
+            '  }',
+            '  if (url === "virtual:short-module") {',
+            '    return { shortCircuit: true, format: "module", source: "export default \'short-module\'" };',
+            '  }',
+            `  if (url === ${JSON.stringify(pathToFileURL(`${formatRoot}/source-commonjs.cjs`).href)}) {`,
+            '    return { shortCircuit: true, format: "commonjs", source: "const value = require(\'./source-required.json\'); let invalidCode; try { require(\'./source-required.odd\'); } catch (error) { invalidCode = error.code; } module.exports = { value, invalidCode };" };',
+            '  }',
+            '  return next(url, context);',
+            '}',
+        ].join('\n');
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+        globalThis.__wasm_rquickjs_module_resolution_register(
+            'data:text/javascript,' + encodeURIComponent(forcedFormatLoader),
+        );
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const forcedModule = await import("virtual:forced-module");',
+            'assert.strictEqual(forcedModule.default, "forced-module");',
+            'assert.strictEqual(forcedModule.named, "forced-module");',
+            'const forcedCommonJs = await import("virtual:forced-commonjs");',
+            'assert.strictEqual(forcedCommonJs.default.named, "forced-commonjs");',
+            `const forcedJson = (await import(${JSON.stringify(`${formatRoot}/typed-entry.mjs`)})).default;`,
+            'assert.deepStrictEqual(forcedJson, { kind: "forced-json" });',
+            `assert.strictEqual((await import(${JSON.stringify(`${formatRoot}/typed-entry-two.mjs`)})).default, forcedJson);`,
+            'let untypedError;',
+            `try { await import(${JSON.stringify(`${formatRoot}/untyped-entry.mjs`)}); } catch (error) { untypedError = error; }`,
+            'assert.strictEqual(untypedError && untypedError.code, "ERR_IMPORT_ATTRIBUTE_MISSING");',
+            'assert.deepStrictEqual((await import("virtual:short-json")).default, { shortJson: true });',
+            'assert.strictEqual(',
+            '  (await import("virtual:short-module", { with: { type: "json" } })).default,',
+            '  "short-module",',
+            ');',
+            'assert.deepStrictEqual(',
+            '  (await import("virtual:source-commonjs-json")).default,',
+            '  {',
+            '    value: { kind: "source-required-json" },',
+            '    invalidCode: "ERR_IMPORT_ATTRIBUTE_MISSING",',
+            '  },',
+            ');',
+        ].join('\n')));
+        assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
+            record.hook === 'resolve' &&
+            record.specifier === 'virtual:forced-json' &&
+            record.attrs.type === 'json'
+        ));
+        assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
+            record.hook === 'load' &&
+            record.url === pathToFileURL(`${formatRoot}/data.odd`).href &&
+            record.attrs.type === 'json'
+        ));
+        assert.ok(globalThis.__forcedFormatHookRecords.some(record =>
+            record.hook === 'load' &&
+            record.url === pathToFileURL(`${formatRoot}/source-required.json`).href &&
+            record.attrs.type === 'json'
+        ));
+
+        const cacheRoot = `${root}/cache-replacement`;
+        fs.mkdirSync(cacheRoot, { recursive: true });
+        fs.writeFileSync(
+            `${cacheRoot}/dep.cjs`,
+            'module.exports = ++globalThis.__moduleCacheReplacementEvaluations;',
+        );
+        globalThis.__moduleCacheReplacementEvaluations = 0;
+        const existingRequire = createRequire(`${cacheRoot}/entry.cjs`);
+        const oldCache = existingRequire.cache;
+        const Module = (await import('node:module')).default;
+        const originalCache = Module._cache;
+        assert.strictEqual(existingRequire('./dep.cjs'), 1);
+        try {
+            Module._cache = Object.create(null);
+            assert.strictEqual(existingRequire('./dep.cjs'), 2);
+            assert.notStrictEqual(existingRequire.cache, Module._cache);
+            assert.strictEqual(existingRequire.cache, oldCache);
+            assert.ok(Object.keys(Module._cache).some(key => key.endsWith('/dep.cjs')));
+        } finally {
+            Module._cache = originalCache;
+        }
+
+        globalThis.__caughtDefaultLoadAttributeError = undefined;
+        const catchDefaultLoadLoader = [
+            `const target = ${JSON.stringify(pathToFileURL(`${formatRoot}/catch-default.odd`).href)};`,
+            'export function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:catch-default-json") {',
+            '    return { shortCircuit: true, url: target, format: "json" };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'export function load(url, context, next) {',
+            '  if (url === target && context.importAttributes.type === undefined) {',
+            '    return next(url, context).catch(error => {',
+            '      globalThis.__caughtDefaultLoadAttributeError = error.code;',
+            '      return { shortCircuit: true, format: "module", source: "export default \'caught-default-load\'" };',
+            '    });',
+            '  }',
+            '  return next(url, context);',
+            '}',
+        ].join('\n');
+        const catchDefaultLoadLoaderUrl =
+            'data:text/javascript,' + encodeURIComponent(catchDefaultLoadLoader);
+        await import('data:text/javascript,' + encodeURIComponent([
+            'const assert = globalThis.__wasm_rquickjs_module_resolution_assert;',
+            'const register = globalThis.__wasm_rquickjs_module_resolution_register;',
+            `register(${JSON.stringify(catchDefaultLoadLoaderUrl)});`,
+            'assert.strictEqual(',
+            '  (await import("virtual:catch-default-json")).default,',
+            '  "caught-default-load",',
+            ');',
+        ].join('\n')));
+        assert.strictEqual(
+            globalThis.__caughtDefaultLoadAttributeError,
+            'ERR_IMPORT_ATTRIBUTE_MISSING',
+        );
+
         delete globalThis.__wasm_rquickjs_module_resolution_assert;
         delete globalThis.__wasm_rquickjs_module_resolution_register;
+        delete globalThis.__registeredLoaderObservedParents;
+        delete globalThis.__loaderRealmCjsEvaluation;
+        delete globalThis.__loaderRealmCjsEvaluations;
+        delete globalThis.__loaderRealmNestedCjsEvaluation;
+        delete globalThis.__loaderRealmLazyCjsEvaluation;
+        delete globalThis.__forcedFormatHookRecords;
+        delete globalThis.__moduleCacheReplacementEvaluations;
+        delete globalThis.__caughtDefaultLoadAttributeError;
         return true;
     } catch (error) {
+        process.execArgv.length = 0;
+        for (const arg of originalExecArgv) process.execArgv.push(arg);
         delete globalThis.__wasm_rquickjs_module_resolution_assert;
         delete globalThis.__wasm_rquickjs_module_resolution_register;
+        delete globalThis.__registeredLoaderObservedParents;
+        delete globalThis.__loaderRealmCjsEvaluation;
+        delete globalThis.__loaderRealmCjsEvaluations;
+        delete globalThis.__loaderRealmNestedCjsEvaluation;
+        delete globalThis.__loaderRealmLazyCjsEvaluation;
+        delete globalThis.__forcedFormatHookRecords;
+        delete globalThis.__moduleCacheReplacementEvaluations;
+        delete globalThis.__caughtDefaultLoadAttributeError;
         console.error(error);
         throw error;
     }

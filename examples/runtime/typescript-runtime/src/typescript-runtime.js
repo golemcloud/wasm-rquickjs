@@ -1,7 +1,7 @@
-import { stripTypeScriptTypes } from 'node:module';
-import { createRequire } from 'node:module';
+import { createRequire, stripTypeScriptTypes } from 'node:module';
 import fs from 'node:fs';
 import diagnosticsChannel from 'node:diagnostics_channel';
+import { pathToFileURL } from 'node:url';
 import { runJavaScript, startJavaScript } from 'wasm-rquickjs:execution';
 
 export async function run() {
@@ -672,6 +672,43 @@ export async function run() {
         !(new TypeError('base') instanceof NarrowTypeError) &&
         new NarrowTypeError('narrow') instanceof NarrowTypeError;
 
+    fs.writeFileSync(
+        '/typescript-runtime/registered-loader-required.mts',
+        'const value: string = "loader-typescript"; export default value;',
+    );
+    fs.writeFileSync(
+        '/typescript-runtime/registered-loader.mjs',
+        [
+            'import { createRequire } from "node:module";',
+            'const required = createRequire(import.meta.url)("./registered-loader-required.mts");',
+            'export function resolve(specifier, context, next) {',
+            '  if (specifier === "virtual:registered-loader-typescript") {',
+            '    return { shortCircuit: true, url: specifier, format: "module" };',
+            '  }',
+            '  return next(specifier, context);',
+            '}',
+            'export function load(url, context, next) {',
+            '  if (url === "virtual:registered-loader-typescript") {',
+            '    return {',
+            '      shortCircuit: true,',
+            '      format: "module",',
+            '      source: `export default ${JSON.stringify(required.default)};`,',
+            '    };',
+            '  }',
+            '  return next(url, context);',
+            '}',
+        ].join('\n'),
+    );
+    globalThis.__typescriptRuntimeRegister = (await import('node:module')).register;
+    globalThis.__typescriptRuntimeLoaderUrl =
+        pathToFileURL('/typescript-runtime/registered-loader.mjs').href;
+    const registeredLoaderTypeScript = (await import(
+        'data:text/javascript,' + encodeURIComponent([
+            'globalThis.__typescriptRuntimeRegister(globalThis.__typescriptRuntimeLoaderUrl);',
+            'export default (await import("virtual:registered-loader-typescript")).default;',
+        ].join('\n'))
+    )).default;
+
     return JSON.stringify({
         stripped,
         transformed,
@@ -679,6 +716,7 @@ export async function run() {
         unsupported,
         unsupportedCode,
         validationCodes,
+        registeredLoaderTypeScript,
         moduleTs,
         moduleMts,
         commonJsCts,

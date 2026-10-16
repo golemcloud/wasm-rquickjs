@@ -67,12 +67,7 @@ pub mod native_module {
             &specifier,
         )
         .ok_or(rquickjs::Error::Unknown)?;
-        super::require_module_namespace_impl(
-            ctx,
-            &specifier,
-            &implementation,
-            "require-builtin",
-        )
+        super::require_module_namespace_impl(ctx, &specifier, &implementation, "require-builtin")
     }
 
     /// Return the canonical public builtin inventory used by the generated
@@ -208,7 +203,9 @@ fn require_esm_impl<'js>(
 ) -> rquickjs::Result<rquickjs::Value<'js>> {
     // Build a file:// URL for the target module so it goes through
     // the FileUrlResolver → ImportMetaLoader chain.
-    let file_url = if filename.starts_with("file://") {
+    let file_url = if filename.starts_with("file://")
+        || crate::internal::module_loading::is_registered_file_url_id(&ctx, filename)
+    {
         filename.to_string()
     } else {
         path_to_file_url(filename)

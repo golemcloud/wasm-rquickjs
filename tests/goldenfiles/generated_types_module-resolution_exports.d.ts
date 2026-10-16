@@ -7,6 +7,8 @@ declare module 'module-resolution' {
   export function testEsmJsonUrlCacheKeys(): Promise<boolean>;
   export function testEsmJsonImportIgnoresGlobalThisProperty(): Promise<boolean>;
   export function testStaticLoaderAbsoluteEntrySpecifier(): Promise<boolean>;
+  export function testRegisteredLoaderUppercaseFileUrl(): Promise<boolean>;
+  export function testRegisteredLoaderModuleCacheReplacement(): Promise<boolean>;
   export function testRegisteredLoaderModuleRealmIsolation(): Promise<boolean>;
   export function testRegisteredLoaderResolveResultNotMutated(): Promise<boolean>;
   export function testEsmForbiddenCjsGlobals(): Promise<boolean>;

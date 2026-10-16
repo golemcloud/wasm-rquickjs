@@ -1688,12 +1688,40 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_loader_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
-        let result = Object::new(ctx.clone()).unwrap();
-        match super::realpath_for_module_resolution(
+        fs_loader_realpath_for_domain(ctx, path, super::ModuleLoaderRealpathDomain::CommonJs)
+    }
+
+    #[rquickjs::function]
+    pub fn fs_esm_loader_realpath(ctx: Ctx<'_>, path: String) -> Object<'_> {
+        fs_loader_realpath_for_domain(ctx, path, super::ModuleLoaderRealpathDomain::Esm)
+    }
+
+    #[rquickjs::function]
+    pub fn fs_register_esm_file_url(
+        ctx: Ctx<'_>,
+        identity_url: String,
+        public_url: Option<String>,
+        loader_realm_param: Option<String>,
+        format: Option<String>,
+        attributes_validated: Option<bool>,
+    ) -> String {
+        crate::internal::module_loading::preserved_file_url_identity_with_public(
             &ctx,
-            &path,
-            super::ModuleLoaderRealpathDomain::CommonJs,
-        ) {
+            &identity_url,
+            public_url.as_deref().unwrap_or(&identity_url),
+            loader_realm_param.as_deref(),
+            format.as_deref(),
+            attributes_validated.unwrap_or(false),
+        )
+    }
+
+    fn fs_loader_realpath_for_domain(
+        ctx: Ctx<'_>,
+        path: String,
+        domain: super::ModuleLoaderRealpathDomain,
+    ) -> Object<'_> {
+        let result = Object::new(ctx.clone()).unwrap();
+        match super::realpath_for_module_resolution(&ctx, &path, domain) {
             Ok(resolved) => result.set("result", resolved).unwrap(),
             Err(error) => result
                 .set(

@@ -113,6 +113,8 @@ pub(crate) struct RuntimeServices {
     pub(crate) cjs_module_probe_session: super::module_loading::CjsModuleProbeSession,
     pub(crate) cjs_loader_realpath_cache: RefCell<HashMap<String, String>>,
     pub(crate) esm_loader_realpath_cache: RefCell<HashMap<String, String>>,
+    pub(crate) registered_file_urls:
+        RefCell<super::module_loading::RegisteredFileUrlRegistry>,
     #[cfg(feature = "test-observability")]
     loader_realpath_cache_hit_count: Cell<u64>,
     #[cfg(feature = "test-observability")]
@@ -143,6 +145,7 @@ impl Default for RuntimeServices {
             cjs_module_probe_session: Default::default(),
             cjs_loader_realpath_cache: RefCell::default(),
             esm_loader_realpath_cache: RefCell::default(),
+            registered_file_urls: RefCell::default(),
             #[cfg(feature = "test-observability")]
             loader_realpath_cache_hit_count: Cell::new(0),
             #[cfg(feature = "test-observability")]
