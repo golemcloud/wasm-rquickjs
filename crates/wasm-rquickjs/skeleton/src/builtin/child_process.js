@@ -704,11 +704,9 @@ function runInline(command, args, options) {
     const oldEmitWarning = process.emitWarning;
     const oldExit = process.exit;
     const runExit = process._runExit;
+    const restoreParentModuleState =
+        moduleExports.__wasm_rquickjs_begin_inline_child_module_state();
     const runtimeRequire = moduleExports.require;
-    const oldModuleCache = moduleExports._cache;
-    const oldRuntimeRequireCache = runtimeRequire.cache;
-    const oldPathCache = moduleExports._pathCache;
-    const oldModuleWrapper = moduleExports.wrapper;
     let firstExitCode = null;
     let firstExitError = null;
     let hasFirstExitError = false;
@@ -755,6 +753,7 @@ function runInline(command, args, options) {
         process._eventsCount = 0;
         process._exiting = false;
         process.exitCode = undefined;
+        delete process.mainModule;
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
         globalThis.__wasm_rquickjs_sync_callbacks = true;
@@ -1051,12 +1050,14 @@ function runInline(command, args, options) {
             capturedStderr += formatErrorForStderr(err);
         }
     } finally {
+        try {
+            restoreParentModuleState();
+        } catch (error) {
+            status = 1;
+            capturedStderr += formatErrorForStderr(error);
+        }
         process.argv = oldArgv;
         process.execArgv = oldExecArgv;
-        moduleExports._cache = oldModuleCache;
-        runtimeRequire.cache = oldRuntimeRequireCache;
-        moduleExports._pathCache = oldPathCache;
-        moduleExports.wrapper = oldModuleWrapper;
         if (hadPackageConditions) {
             globalThis.__wasm_rquickjs_package_conditions = oldPackageConditions;
         } else {

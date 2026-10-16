@@ -772,6 +772,13 @@ const moduleRequireOverrides = createPrivateWeakMap();
 let activeModuleLoadContext = null;
 let activeModuleLoadParent = null;
 let activeModuleLoadRequest = null;
+let activeMainModuleOverride;
+
+function currentMainModuleRecord() {
+    return activeMainModuleOverride === undefined
+        ? mainModule
+        : activeMainModuleOverride;
+}
 
 function cjsPathCacheObject() {
     return moduleExports._pathCache;
@@ -3242,7 +3249,8 @@ function currentMainScriptFilename() {
 }
 
 function isMainEntryFilename(resolvedFilename) {
-    if (typeof mainModule === 'undefined' || mainModule.filename !== '/') return false;
+    const activeMainModule = currentMainModuleRecord();
+    if (activeMainModule.filename !== '/') return false;
     const mainScript = currentMainScriptFilename();
     if (!mainScript) return false;
     try {
@@ -3319,8 +3327,15 @@ function loadCommonJsTransaction(descriptor) {
 
     let mod;
     if (isMainModuleLoad) {
-        mod = mainModule;
+        mod = currentMainModuleRecord();
         initializeCjsModuleRecord(mod, '.', filename, dirname, null, dirname);
+        try {
+            globalRequire.main = mod;
+        } catch (_) {
+            // A parent can make this compatibility mirror read-only. Keep the
+            // public module/process main records correct when it cannot be
+            // updated in the in-process child emulator.
+        }
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
@@ -3466,7 +3481,7 @@ function loadCommonJsTransaction(descriptor) {
                 dirname,
                 mod,
                 undefined,
-                mainModule,
+                currentRequireMain(),
                 preparedTypeScriptGraph,
             );
             const shouldFallbackToEsm = canFallbackToEsm &&
@@ -3700,17 +3715,22 @@ if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function'
     });
 }
 
+function createMainModuleRecord() {
+    const record = Object.assign(Object.create(Module.prototype), {
+        id: '.',
+        filename: '/',
+        path: '/',
+        exports: {},
+        loaded: true,
+        parent: null,
+        children: [],
+    });
+    installCjsEsmDefaultSnapshotSlot(record);
+    return record;
+}
+
 // The root "main" module
-const mainModule = Object.assign(Object.create(Module.prototype), {
-    id: '.',
-    filename: '/',
-    path: '/',
-    exports: {},
-    loaded: true,
-    parent: null,
-    children: [],
-});
-installCjsEsmDefaultSnapshotSlot(mainModule);
+const mainModule = createMainModuleRecord();
 
 function rustSplitPackageName(id) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_split_module_package_name(id);
@@ -3862,7 +3882,8 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
 }
 
 function currentRequireMain() {
-    return mainModule.filename === '/' ? undefined : mainModule;
+    const activeMainModule = currentMainModuleRecord();
+    return activeMainModule.filename === '/' ? undefined : activeMainModule;
 }
 
 function createRequireContext(
@@ -3892,7 +3913,9 @@ function createRequireContext(
         parentFilename,
         parentLookupPaths,
         preparedTypeScriptGraph,
-        requireMain: hasRequireMainOverride ? requireMainOverride : mainModule,
+        requireMain: hasRequireMainOverride
+            ? requireMainOverride
+            : currentRequireMain(),
         moduleCache: hasFixedModuleCache ? fixedModuleCache : currentModuleCache(),
         fixedModuleCache,
         hasFixedModuleCache,
@@ -5875,6 +5898,135 @@ const moduleExports = Object.assign(Module, {
 });
 moduleExportsInitialized = true;
 
+function snapshotOwnPropertyDescriptors(target) {
+    return Reflect.ownKeys(target).map(key => [
+        key,
+        Object.getOwnPropertyDescriptor(target, key),
+    ]);
+}
+
+function propertyDescriptorsEqual(left, right) {
+    if (left === undefined || right === undefined) return left === right;
+    return left.configurable === right.configurable &&
+        left.enumerable === right.enumerable &&
+        left.get === right.get &&
+        left.set === right.set &&
+        left.writable === right.writable &&
+        Object.is(left.value, right.value);
+}
+
+function restoreOwnPropertyDescriptors(target, descriptors) {
+    const errors = [];
+    const retained = new Set(descriptors.map(([key]) => key));
+    for (const key of Reflect.ownKeys(target)) {
+        if (retained.has(key)) continue;
+        try {
+            delete target[key];
+        } catch (error) {
+            errors.push(error);
+        }
+    }
+    for (let i = 0; i < descriptors.length; i++) {
+        const [key, descriptor] = descriptors[i];
+        const current = Object.getOwnPropertyDescriptor(target, key);
+        if (propertyDescriptorsEqual(current, descriptor)) continue;
+        try {
+            Object.defineProperty(target, key, descriptor);
+        } catch (error) {
+            errors.push(error);
+        }
+    }
+    return errors;
+}
+
+function snapshotInlineChildModuleState() {
+    const prototypeObject = moduleExports.prototype;
+    const resolveObject = globalRequire.resolve;
+    return {
+        moduleHooks: snapshotOwnPropertyDescriptors(moduleExports),
+        prototypeObject,
+        prototypeHooks: snapshotOwnPropertyDescriptors(prototypeObject),
+        extensions: snapshotOwnPropertyDescriptors(requireExtensions),
+        wrapper: snapshotOwnPropertyDescriptors(wrapper),
+        globalRequire: snapshotOwnPropertyDescriptors(globalRequire),
+        resolveObject,
+        resolveHooks: snapshotOwnPropertyDescriptors(resolveObject),
+        globalPaths: snapshotOwnPropertyDescriptors(globalPaths),
+        builtinModuleNames: snapshotOwnPropertyDescriptors(builtinModuleNames),
+    };
+}
+
+function restoreInlineChildModuleState(state) {
+    const errors = [];
+    const targets = [
+        [moduleExports, state.moduleHooks],
+        [state.prototypeObject, state.prototypeHooks],
+        [requireExtensions, state.extensions],
+        [wrapper, state.wrapper],
+        [globalRequire, state.globalRequire],
+        [state.resolveObject, state.resolveHooks],
+        [globalPaths, state.globalPaths],
+        [builtinModuleNames, state.builtinModuleNames],
+    ];
+    for (let i = 0; i < targets.length; i++) {
+        const [target, descriptors] = targets[i];
+        const targetErrors = restoreOwnPropertyDescriptors(target, descriptors);
+        for (let j = 0; j < targetErrors.length; j++) {
+            errors.push(targetErrors[j]);
+        }
+    }
+    return errors;
+}
+
+function makeInlineChildModuleRestoreError(errors) {
+    const error = new Error(
+        'Failed to restore ' + errors.length + ' inline child module state properties',
+    );
+    error.cause = errors[0];
+    error.errors = errors;
+    return error;
+}
+
+let inlineChildModuleBaseline;
+
+function beginInlineChildModuleState() {
+    const parentState = snapshotInlineChildModuleState();
+    const previousMainModuleOverride = activeMainModuleOverride;
+    let restored = false;
+    function restoreParentModuleState() {
+        if (restored) return;
+        activeMainModuleOverride = previousMainModuleOverride;
+        const errors = restoreInlineChildModuleState(parentState);
+        restored = true;
+        if (errors.length > 0) {
+            throw makeInlineChildModuleRestoreError(errors);
+        }
+    }
+
+    try {
+        // Some parent mutations cannot be undone in this shared realm (for
+        // example a non-configurable expando or a frozen array). Restore every
+        // other baseline property and leave only those irreversible values in
+        // place instead of making every later child fail to start.
+        restoreInlineChildModuleState(inlineChildModuleBaseline);
+        activeMainModuleOverride = createMainModuleRecord();
+        try {
+            globalRequire.main = currentRequireMain();
+        } catch (_) {
+            // Per-module require.main values still come from scoped contexts.
+        }
+    } catch (error) {
+        try {
+            restoreParentModuleState();
+        } catch (_) {
+            // Preserve the original setup error if restoring the parent also fails.
+        }
+        throw error;
+    }
+
+    return restoreParentModuleState;
+}
+
 let loaderModuleFacadeSpecifier;
 
 function getLoaderModuleFacade() {
@@ -6018,6 +6170,11 @@ Object.defineProperties(globalThis, {
 });
 
 Object.defineProperties(moduleExports, {
+    __wasm_rquickjs_begin_inline_child_module_state: {
+        value: beginInlineChildModuleState,
+        writable: false,
+        configurable: false,
+    },
     __wasm_rquickjs_cjs_facade_has_own: {
         value: cjsFacadeHasOwnProperty,
         writable: false,
@@ -6048,5 +6205,7 @@ publicBuiltinIdSet.add('module');
 if (!builtinModuleNames.includes('module')) {
     builtinModuleNames.push('module');
 }
+
+inlineChildModuleBaseline = snapshotInlineChildModuleState();
 
 export default moduleExports;

@@ -365,6 +365,117 @@ async fn npm_required_runtime_primitives(
 }
 
 #[test]
+async fn inline_child_module_state_is_isolated(
+    #[tagged_as("npm_compat")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = prepare_instance(compiled, Some("local-install")).await?;
+    let execution = instance
+        .invoke(None, "probe-inline-child-module-isolation", &[])
+        .await?;
+    let Some(Val::String(json)) = execution else {
+        anyhow::bail!("expected inline child module isolation JSON result")
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    let value = &report["value"];
+    assert_eq!(report["stdout"], "", "{report:#}");
+    assert_eq!(report["stderr"], "", "{report:#}");
+    assert_eq!(value["parentStatus"], 0, "{report:#}");
+    assert_eq!(value["parentStderr"], "", "{report:#}");
+    assert_eq!(value["parentProtectedStatePreserved"], true, "{report:#}");
+    assert_eq!(value["frozenPathsChildStatus"], 0, "{report:#}");
+    assert_eq!(value["frozenPathsChildStderr"], "", "{report:#}");
+    assert_eq!(
+        value["frozenPathsChild"]["hooksAreClean"], true,
+        "{report:#}"
+    );
+    assert_eq!(value["irreversibleChildStatus"], 1, "{report:#}");
+    assert!(
+        value["irreversibleChildStderr"]
+            .as_str()
+            .is_some_and(|value| value.contains("Failed to restore 1 inline child module state")),
+        "{report:#}"
+    );
+    assert_eq!(value["afterIrreversibleChildStatus"], 0, "{report:#}");
+    assert_eq!(value["afterIrreversibleChildStderr"], "", "{report:#}");
+    assert_eq!(
+        value["afterIrreversibleChild"]["reversibleHooksAreClean"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        value["afterIrreversibleChild"]["irreversibleHookPresent"], true,
+        "{report:#}"
+    );
+    let parent = &value["parent"];
+    assert_eq!(parent["parentMainRestored"], true, "{report:#}");
+    assert_eq!(parent["parentArgvRestored"], true, "{report:#}");
+    assert_eq!(parent["parentHooksRestored"], true, "{report:#}");
+    assert_eq!(parent["childStatus"], 0, "{report:#}");
+    assert_eq!(parent["childStderr"], "", "{report:#}");
+    assert_eq!(parent["laterStatus"], 0, "{report:#}");
+    assert_eq!(parent["laterStderr"], "", "{report:#}");
+    assert_eq!(parent["throwingChildStatus"], 1, "{report:#}");
+    assert!(
+        parent["throwingChildStderr"]
+            .as_str()
+            .is_some_and(|value| value.contains("inline child failure")),
+        "{report:#}"
+    );
+    assert_eq!(parent["exitingChildStatus"], 7, "{report:#}");
+    assert_eq!(parent["exitingChildStderr"], "", "{report:#}");
+    assert_eq!(parent["evalChildStatus"], 0, "{report:#}");
+    assert_eq!(parent["evalChildStderr"], "", "{report:#}");
+    assert_eq!(parent["evalChild"]["requireMain"], true, "{report:#}");
+    assert_eq!(parent["evalChild"]["processMain"], true, "{report:#}");
+    assert_eq!(
+        parent["evalChild"]["runtimeRequireMain"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        parent["evalChild"]["dependencyRequireMain"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        parent["evalChild"]["dependencyProcessMain"], true,
+        "{report:#}"
+    );
+    assert_eq!(parent["printChildStatus"], 0, "{report:#}");
+    assert_eq!(parent["printChildClean"], true, "{report:#}");
+    assert_eq!(parent["printChildStderr"], "", "{report:#}");
+    assert_eq!(parent["moduleEvalChildStatus"], 0, "{report:#}");
+    assert_eq!(parent["moduleEvalChildStderr"], "", "{report:#}");
+    assert_eq!(
+        parent["moduleEvalChild"]["requireIsUndefined"], true,
+        "{report:#}"
+    );
+    assert_eq!(parent["moduleEvalChild"]["processMain"], true, "{report:#}");
+    assert_eq!(
+        parent["moduleEvalChild"]["dependencyRequireMain"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        parent["moduleEvalChild"]["dependencyProcessMain"], true,
+        "{report:#}"
+    );
+    for child in [
+        parent,
+        &parent["child"],
+        &parent["child"]["nested"],
+        &parent["later"],
+    ] {
+        assert_eq!(child["requireMainIsModule"], true, "{report:#}");
+        assert_eq!(child["processMainIsModule"], true, "{report:#}");
+    }
+    assert_eq!(parent["child"]["nestedStatus"], 0, "{report:#}");
+    assert_eq!(parent["child"]["nestedStderr"], "", "{report:#}");
+    assert_eq!(
+        parent["child"]["nested"]["hooksAreClean"], true,
+        "{report:#}"
+    );
+    assert_eq!(parent["later"]["hooksAreClean"], true, "{report:#}");
+    Ok(())
+}
+
+#[test]
 async fn npm_cli_help_and_config(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
