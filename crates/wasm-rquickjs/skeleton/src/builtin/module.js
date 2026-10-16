@@ -3329,7 +3329,13 @@ function loadCommonJsTransaction(descriptor) {
     if (isMainModuleLoad) {
         mod = currentMainModuleRecord();
         initializeCjsModuleRecord(mod, '.', filename, dirname, null, dirname);
-        globalRequire.main = mod;
+        try {
+            globalRequire.main = mod;
+        } catch (_) {
+            // A parent can freeze the runtime-private require object. Keep the
+            // public module/process main records correct even when that mirror
+            // cannot be updated in the in-process child emulator.
+        }
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
@@ -5779,15 +5785,40 @@ function snapshotOwnPropertyDescriptors(target) {
     ]);
 }
 
+function propertyDescriptorsEqual(left, right) {
+    if (left === undefined || right === undefined) return left === right;
+    return left.configurable === right.configurable &&
+        left.enumerable === right.enumerable &&
+        left.get === right.get &&
+        left.set === right.set &&
+        left.writable === right.writable &&
+        Object.is(left.value, right.value);
+}
+
 function restoreOwnPropertyDescriptors(target, descriptors) {
+    const errors = [];
     const retained = new Set(descriptors.map(([key]) => key));
     for (const key of Reflect.ownKeys(target)) {
-        if (!retained.has(key)) delete target[key];
+        if (retained.has(key)) continue;
+        const current = Object.getOwnPropertyDescriptor(target, key);
+        if (current && !current.configurable) continue;
+        try {
+            delete target[key];
+        } catch (error) {
+            errors.push(error);
+        }
     }
     for (let i = 0; i < descriptors.length; i++) {
         const [key, descriptor] = descriptors[i];
-        Object.defineProperty(target, key, descriptor);
+        const current = Object.getOwnPropertyDescriptor(target, key);
+        if (propertyDescriptorsEqual(current, descriptor)) continue;
+        try {
+            Object.defineProperty(target, key, descriptor);
+        } catch (error) {
+            errors.push(error);
+        }
     }
+    return errors;
 }
 
 function snapshotInlineChildModuleState() {
@@ -5808,14 +5839,34 @@ function snapshotInlineChildModuleState() {
 }
 
 function restoreInlineChildModuleState(state) {
-    restoreOwnPropertyDescriptors(moduleExports, state.moduleHooks);
-    restoreOwnPropertyDescriptors(state.prototypeObject, state.prototypeHooks);
-    restoreOwnPropertyDescriptors(requireExtensions, state.extensions);
-    restoreOwnPropertyDescriptors(wrapper, state.wrapper);
-    restoreOwnPropertyDescriptors(globalRequire, state.globalRequire);
-    restoreOwnPropertyDescriptors(state.resolveObject, state.resolveHooks);
-    restoreOwnPropertyDescriptors(globalPaths, state.globalPaths);
-    restoreOwnPropertyDescriptors(builtinModuleNames, state.builtinModuleNames);
+    const errors = [];
+    const targets = [
+        [moduleExports, state.moduleHooks],
+        [state.prototypeObject, state.prototypeHooks],
+        [requireExtensions, state.extensions],
+        [wrapper, state.wrapper],
+        [globalRequire, state.globalRequire],
+        [state.resolveObject, state.resolveHooks],
+        [globalPaths, state.globalPaths],
+        [builtinModuleNames, state.builtinModuleNames],
+    ];
+    for (let i = 0; i < targets.length; i++) {
+        const [target, descriptors] = targets[i];
+        const targetErrors = restoreOwnPropertyDescriptors(target, descriptors);
+        for (let j = 0; j < targetErrors.length; j++) {
+            errors.push(targetErrors[j]);
+        }
+    }
+    return errors;
+}
+
+function makeInlineChildModuleRestoreError(errors) {
+    const error = new Error(
+        'Failed to restore ' + errors.length + ' inline child module state properties',
+    );
+    error.cause = errors[0];
+    error.errors = errors;
+    return error;
 }
 
 let inlineChildModuleBaseline;
@@ -5827,14 +5878,25 @@ function beginInlineChildModuleState() {
     function restoreParentModuleState() {
         if (restored) return;
         activeMainModuleOverride = previousMainModuleOverride;
-        restoreInlineChildModuleState(parentState);
+        const errors = restoreInlineChildModuleState(parentState);
         restored = true;
+        if (errors.length > 0) {
+            throw makeInlineChildModuleRestoreError(errors);
+        }
     }
 
     try {
+        // Some parent mutations cannot be undone in this shared realm (for
+        // example a non-configurable expando or a frozen array). Restore every
+        // other baseline property and leave only those irreversible values in
+        // place instead of making every later child fail to start.
         restoreInlineChildModuleState(inlineChildModuleBaseline);
         activeMainModuleOverride = createMainModuleRecord();
-        globalRequire.main = currentRequireMain();
+        try {
+            globalRequire.main = currentRequireMain();
+        } catch (_) {
+            // See the matching main-load mirror above.
+        }
     } catch (error) {
         try {
             restoreParentModuleState();

@@ -381,6 +381,13 @@ async fn inline_child_module_state_is_isolated(
     assert_eq!(report["stderr"], "", "{report:#}");
     assert_eq!(value["parentStatus"], 0, "{report:#}");
     assert_eq!(value["parentStderr"], "", "{report:#}");
+    assert_eq!(value["parentProtectedStatePreserved"], true, "{report:#}");
+    assert_eq!(value["frozenPathsChildStatus"], 0, "{report:#}");
+    assert_eq!(value["frozenPathsChildStderr"], "", "{report:#}");
+    assert_eq!(
+        value["frozenPathsChild"]["hooksAreClean"], true,
+        "{report:#}"
+    );
     let parent = &value["parent"];
     assert_eq!(parent["parentMainRestored"], true, "{report:#}");
     assert_eq!(parent["parentArgvRestored"], true, "{report:#}");
@@ -402,6 +409,10 @@ async fn inline_child_module_state_is_isolated(
     assert_eq!(parent["evalChildStderr"], "", "{report:#}");
     assert_eq!(parent["evalChild"]["requireMain"], true, "{report:#}");
     assert_eq!(parent["evalChild"]["processMain"], true, "{report:#}");
+    assert_eq!(
+        parent["evalChild"]["runtimeRequireMain"], true,
+        "{report:#}"
+    );
     assert_eq!(parent["printChildStatus"], 0, "{report:#}");
     assert_eq!(parent["printChildClean"], true, "{report:#}");
     assert_eq!(parent["printChildStderr"], "", "{report:#}");

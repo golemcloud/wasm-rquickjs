@@ -2,6 +2,8 @@ const Module = require('node:module');
 const { spawnSync } = require('node:child_process');
 const childScript = require.resolve('./inline-module-child.cjs');
 const observerScript = require.resolve('./inline-module-observer.cjs');
+const moduleLeakSymbol = Symbol.for('wasm-rquickjs:inline-module-child');
+const prototypeLeakSymbol = Symbol.for('wasm-rquickjs:inline-module-child-prototype');
 
 const parentMain = require.main;
 const parentMainExports = parentMain.exports;
@@ -31,6 +33,9 @@ const parentHooks = {
     requireCache: require.cache,
     requireExtensions: require.extensions,
     requireResolvePaths: require.resolve.paths,
+    runtimeRequireResolvePaths: Module.require && Module.require.resolve
+        ? Module.require.resolve.paths
+        : undefined,
 };
 
 const child = spawnSync(
@@ -54,7 +59,9 @@ const evalChild = spawnSync(
         '-e',
         'process.stdout.write(JSON.stringify({' +
             'requireMain: require.main === undefined,' +
-            'processMain: process.mainModule === undefined' +
+            'processMain: process.mainModule === undefined,' +
+            'runtimeRequireMain: !require("node:module").require || ' +
+                'require("node:module").require.main === undefined' +
         '}))',
     ],
     { encoding: 'utf8' },
@@ -129,9 +136,14 @@ process.stdout.write(JSON.stringify({
         require.cache === parentHooks.requireCache &&
         require.cache['/workspace/child-leak.cjs'] === undefined &&
         require.resolve.paths === parentHooks.requireResolvePaths &&
+        (!Module.require ||
+            !Module.require.resolve ||
+            Module.require.resolve.paths === parentHooks.runtimeRequireResolvePaths) &&
         Module.isBuiltin === parentHooks.isBuiltin &&
         !Object.prototype.hasOwnProperty.call(Module, 'childLeak') &&
+        !Object.prototype.hasOwnProperty.call(Module, moduleLeakSymbol) &&
         !Object.prototype.hasOwnProperty.call(Module.prototype, 'childLeak') &&
+        !Object.prototype.hasOwnProperty.call(Module.prototype, prototypeLeakSymbol) &&
         Module.globalPaths === parentHooks.globalPaths &&
         JSON.stringify(Module.globalPaths) === JSON.stringify(parentHooks.globalPathValues) &&
         Module.builtinModules === parentHooks.builtinModules &&

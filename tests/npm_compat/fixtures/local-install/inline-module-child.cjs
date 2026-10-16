@@ -10,6 +10,8 @@ const report = {
 const poison = function poisonedModuleHook() {
     throw new Error('inline child module hook leaked');
 };
+const moduleLeakSymbol = Symbol.for('wasm-rquickjs:inline-module-child');
+const prototypeLeakSymbol = Symbol.for('wasm-rquickjs:inline-module-child-prototype');
 Module._load = poison;
 Module._resolveFilename = poison;
 Module.createRequire = poison;
@@ -21,11 +23,16 @@ Module._extensions = { '.child-replacement': poison };
 Module.wrapper[0] = '(function poisonedWrapper() {';
 Module.isBuiltin = poison;
 Module.childLeak = poison;
+Module[moduleLeakSymbol] = poison;
 Module.prototype.childLeak = poison;
+Module.prototype[prototypeLeakSymbol] = poison;
 Module.globalPaths.push('/child-leak');
 Module.builtinModules = ['child:leak'];
 require.extensions['.local-child-leak'] = poison;
 require.resolve.paths = poison;
+if (Module.require && Module.require.resolve) {
+    Module.require.resolve.paths = poison;
+}
 require.cache['/workspace/child-leak.cjs'] = { exports: poison };
 module.filename = '/workspace/inline-child-mutated.cjs';
 module.exports = { childOnly: true };

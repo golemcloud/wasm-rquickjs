@@ -673,15 +673,41 @@ export async function probeInlineChildModuleIsolation() {
             const { createRequire } = await import('node:module');
             const require = createRequire('/workspace/inline-module-parent.cjs');
             const { spawnSync } = require('node:child_process');
+            const Module = require('node:module');
+            const protectedModuleKey = Symbol.for(
+                'wasm-rquickjs:inline-parent-protected',
+            );
+            Object.defineProperty(Module, protectedModuleKey, {
+                value: 'parent',
+            });
+            Object.defineProperty(
+                Module.prototype,
+                '__wasmRquickjsInlineParentProtected',
+                { value: 'parent' },
+            );
             const parent = spawnSync(
                 process.execPath,
                 ['/workspace/inline-module-parent.cjs'],
+                { encoding: 'utf8' },
+            );
+            Object.freeze(Module.globalPaths);
+            const frozenPathsChild = spawnSync(
+                process.execPath,
+                ['/workspace/inline-module-observer.cjs'],
                 { encoding: 'utf8' },
             );
             return {
                 parentStatus: parent.status,
                 parent: parent.status === 0 ? JSON.parse(parent.stdout) : null,
                 parentStderr: parent.stderr,
+                parentProtectedStatePreserved:
+                    Module[protectedModuleKey] === 'parent' &&
+                    Module.prototype.__wasmRquickjsInlineParentProtected === 'parent',
+                frozenPathsChildStatus: frozenPathsChild.status,
+                frozenPathsChild: frozenPathsChild.status === 0
+                    ? JSON.parse(frozenPathsChild.stdout)
+                    : null,
+                frozenPathsChildStderr: frozenPathsChild.stderr,
             };
             `,
         });
