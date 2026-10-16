@@ -57,11 +57,18 @@ const evalChild = spawnSync(
     process.execPath,
     [
         '-e',
-        'process.stdout.write(JSON.stringify({' +
+        'const dependencyMarker = Symbol.for(' +
+            '"wasm-rquickjs:inline-non-cjs-main-dependency");' +
+            'const dependency = ' +
+            'require("./inline-module-non-cjs-main-dependency.cjs");' +
+            'delete globalThis[dependencyMarker];' +
+            'process.stdout.write(JSON.stringify({' +
             'requireMain: require.main === undefined,' +
             'processMain: process.mainModule === undefined,' +
             'runtimeRequireMain: !require("node:module").require || ' +
-                'require("node:module").require.main === undefined' +
+                'require("node:module").require.main === undefined,' +
+            'dependencyRequireMain: dependency.requireMainIsUndefined,' +
+            'dependencyProcessMain: dependency.processMainIsUndefined' +
         '}))',
     ],
     { encoding: 'utf8' },
@@ -76,9 +83,16 @@ const moduleEvalChild = spawnSync(
     [
         '--input-type=module',
         '-e',
-        'process.stdout.write(JSON.stringify({' +
+        'import "./inline-module-non-cjs-main-dependency.cjs";\n' +
+            'const dependencyMarker = Symbol.for(' +
+                '"wasm-rquickjs:inline-non-cjs-main-dependency");' +
+            'const dependency = globalThis[dependencyMarker];' +
+            'delete globalThis[dependencyMarker];' +
+            'process.stdout.write(JSON.stringify({' +
             'requireIsUndefined: typeof require === "undefined",' +
-            'processMain: process.mainModule === undefined' +
+            'processMain: process.mainModule === undefined,' +
+            'dependencyRequireMain: dependency.requireMainIsUndefined,' +
+            'dependencyProcessMain: dependency.processMainIsUndefined' +
         '}))',
     ],
     { encoding: 'utf8' },

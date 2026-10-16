@@ -3481,7 +3481,7 @@ function loadCommonJsTransaction(descriptor) {
                 dirname,
                 mod,
                 undefined,
-                currentMainModuleRecord(),
+                currentRequireMain(),
                 preparedTypeScriptGraph,
             );
             const shouldFallbackToEsm = canFallbackToEsm &&
@@ -3915,7 +3915,7 @@ function createRequireContext(
         preparedTypeScriptGraph,
         requireMain: hasRequireMainOverride
             ? requireMainOverride
-            : currentMainModuleRecord(),
+            : currentRequireMain(),
         moduleCache: hasFixedModuleCache ? fixedModuleCache : currentModuleCache(),
         fixedModuleCache,
         hasFixedModuleCache,

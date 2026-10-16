@@ -430,6 +430,14 @@ async fn inline_child_module_state_is_isolated(
         parent["evalChild"]["runtimeRequireMain"], true,
         "{report:#}"
     );
+    assert_eq!(
+        parent["evalChild"]["dependencyRequireMain"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        parent["evalChild"]["dependencyProcessMain"], true,
+        "{report:#}"
+    );
     assert_eq!(parent["printChildStatus"], 0, "{report:#}");
     assert_eq!(parent["printChildClean"], true, "{report:#}");
     assert_eq!(parent["printChildStderr"], "", "{report:#}");
@@ -440,6 +448,14 @@ async fn inline_child_module_state_is_isolated(
         "{report:#}"
     );
     assert_eq!(parent["moduleEvalChild"]["processMain"], true, "{report:#}");
+    assert_eq!(
+        parent["moduleEvalChild"]["dependencyRequireMain"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        parent["moduleEvalChild"]["dependencyProcessMain"], true,
+        "{report:#}"
+    );
     for child in [
         parent,
         &parent["child"],
