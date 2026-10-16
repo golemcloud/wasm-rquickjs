@@ -13,6 +13,14 @@ process.stdout.write(JSON.stringify({
         typeof Module.createRequire === 'function' &&
         typeof Module._extensions['.js'] === 'function' &&
         Module._extensions['.child-leak'] === undefined &&
+        require.extensions['.local-child-leak'] === undefined &&
+        typeof require.resolve.paths === 'function' &&
+        require.cache['/workspace/child-leak.cjs'] === undefined &&
+        typeof Module.isBuiltin === 'function' &&
+        !Object.prototype.hasOwnProperty.call(Module, 'childLeak') &&
+        !Object.prototype.hasOwnProperty.call(Module.prototype, 'childLeak') &&
+        !Module.globalPaths.includes('/child-leak') &&
+        !Module.builtinModules.includes('child:leak') &&
         Array.isArray(Module.wrapper) &&
         Module.wrapper[0].startsWith('(function'),
 }));

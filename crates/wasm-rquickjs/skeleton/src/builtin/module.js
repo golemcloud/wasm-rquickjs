@@ -3329,6 +3329,7 @@ function loadCommonJsTransaction(descriptor) {
     if (isMainModuleLoad) {
         mod = currentMainModuleRecord();
         initializeCjsModuleRecord(mod, '.', filename, dirname, null, dirname);
+        globalRequire.main = mod;
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
         }
@@ -5771,56 +5772,21 @@ const moduleExports = Object.assign(Module, {
 });
 moduleExportsInitialized = true;
 
-const inlineChildModuleHookProperties = [
-    'require',
-    'createRequire',
-    'wrap',
-    'wrapper',
-    'runMain',
-    '_nodeModulePaths',
-    '_resolveLookupPaths',
-    '_resolveFilename',
-    '_load',
-    '_initPaths',
-    '_pathCache',
-    '_cache',
-    '_extensions',
-    '_stat',
-    'prototype',
-];
-const inlineChildPrototypeHookProperties = ['constructor', 'require', '_compile'];
-const inlineChildGlobalRequireProperties = ['cache', 'extensions', 'resolve', 'main'];
-
-function snapshotNamedPropertyDescriptors(target, names) {
-    return names.map(name => [name, Object.getOwnPropertyDescriptor(target, name)]);
-}
-
-function restoreNamedPropertyDescriptors(target, descriptors) {
-    for (let i = 0; i < descriptors.length; i++) {
-        const [name, descriptor] = descriptors[i];
-        if (descriptor === undefined) {
-            delete target[name];
-        } else {
-            Object.defineProperty(target, name, descriptor);
-        }
-    }
-}
-
 function snapshotOwnPropertyDescriptors(target) {
-    return Object.getOwnPropertyNames(target).map(name => [
-        name,
-        Object.getOwnPropertyDescriptor(target, name),
+    return Reflect.ownKeys(target).map(key => [
+        key,
+        Object.getOwnPropertyDescriptor(target, key),
     ]);
 }
 
 function restoreOwnPropertyDescriptors(target, descriptors) {
-    const retained = new Set(descriptors.map(([name]) => name));
-    for (const name of Object.getOwnPropertyNames(target)) {
-        if (!retained.has(name)) delete target[name];
+    const retained = new Set(descriptors.map(([key]) => key));
+    for (const key of Reflect.ownKeys(target)) {
+        if (!retained.has(key)) delete target[key];
     }
     for (let i = 0; i < descriptors.length; i++) {
-        const [name, descriptor] = descriptors[i];
-        Object.defineProperty(target, name, descriptor);
+        const [key, descriptor] = descriptors[i];
+        Object.defineProperty(target, key, descriptor);
     }
 }
 
@@ -5828,33 +5794,28 @@ function snapshotInlineChildModuleState() {
     const prototypeObject = moduleExports.prototype;
     const resolveObject = globalRequire.resolve;
     return {
-        moduleHooks: snapshotNamedPropertyDescriptors(
-            moduleExports,
-            inlineChildModuleHookProperties,
-        ),
+        moduleHooks: snapshotOwnPropertyDescriptors(moduleExports),
         prototypeObject,
-        prototypeHooks: snapshotNamedPropertyDescriptors(
-            prototypeObject,
-            inlineChildPrototypeHookProperties,
-        ),
+        prototypeHooks: snapshotOwnPropertyDescriptors(prototypeObject),
         extensions: snapshotOwnPropertyDescriptors(requireExtensions),
         wrapper: snapshotOwnPropertyDescriptors(wrapper),
-        globalRequire: snapshotNamedPropertyDescriptors(
-            globalRequire,
-            inlineChildGlobalRequireProperties,
-        ),
+        globalRequire: snapshotOwnPropertyDescriptors(globalRequire),
         resolveObject,
-        resolveHooks: snapshotNamedPropertyDescriptors(resolveObject, ['paths']),
+        resolveHooks: snapshotOwnPropertyDescriptors(resolveObject),
+        globalPaths: snapshotOwnPropertyDescriptors(globalPaths),
+        builtinModuleNames: snapshotOwnPropertyDescriptors(builtinModuleNames),
     };
 }
 
 function restoreInlineChildModuleState(state) {
-    restoreNamedPropertyDescriptors(moduleExports, state.moduleHooks);
-    restoreNamedPropertyDescriptors(state.prototypeObject, state.prototypeHooks);
+    restoreOwnPropertyDescriptors(moduleExports, state.moduleHooks);
+    restoreOwnPropertyDescriptors(state.prototypeObject, state.prototypeHooks);
     restoreOwnPropertyDescriptors(requireExtensions, state.extensions);
     restoreOwnPropertyDescriptors(wrapper, state.wrapper);
-    restoreNamedPropertyDescriptors(globalRequire, state.globalRequire);
-    restoreNamedPropertyDescriptors(state.resolveObject, state.resolveHooks);
+    restoreOwnPropertyDescriptors(globalRequire, state.globalRequire);
+    restoreOwnPropertyDescriptors(state.resolveObject, state.resolveHooks);
+    restoreOwnPropertyDescriptors(globalPaths, state.globalPaths);
+    restoreOwnPropertyDescriptors(builtinModuleNames, state.builtinModuleNames);
 }
 
 let inlineChildModuleBaseline;
@@ -5862,23 +5823,28 @@ let inlineChildModuleBaseline;
 function beginInlineChildModuleState() {
     const parentState = snapshotInlineChildModuleState();
     const previousMainModuleOverride = activeMainModuleOverride;
-    restoreInlineChildModuleState(inlineChildModuleBaseline);
-
-    const childMainModule = createMainModuleRecord();
-    activeMainModuleOverride = childMainModule;
-    const globalMainDescriptor = Object.getOwnPropertyDescriptor(globalRequire, 'main');
-    Object.defineProperty(globalRequire, 'main', {
-        ...globalMainDescriptor,
-        value: childMainModule,
-    });
-
     let restored = false;
-    return function restoreParentModuleState() {
+    function restoreParentModuleState() {
         if (restored) return;
-        restored = true;
         activeMainModuleOverride = previousMainModuleOverride;
         restoreInlineChildModuleState(parentState);
-    };
+        restored = true;
+    }
+
+    try {
+        restoreInlineChildModuleState(inlineChildModuleBaseline);
+        activeMainModuleOverride = createMainModuleRecord();
+        globalRequire.main = currentRequireMain();
+    } catch (error) {
+        try {
+            restoreParentModuleState();
+        } catch (_) {
+            // Preserve the original setup error if restoring the parent also fails.
+        }
+        throw error;
+    }
+
+    return restoreParentModuleState;
 }
 
 let loaderModuleFacadeSpecifier;

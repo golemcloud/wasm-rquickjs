@@ -383,11 +383,35 @@ async fn inline_child_module_state_is_isolated(
     assert_eq!(value["parentStderr"], "", "{report:#}");
     let parent = &value["parent"];
     assert_eq!(parent["parentMainRestored"], true, "{report:#}");
+    assert_eq!(parent["parentArgvRestored"], true, "{report:#}");
     assert_eq!(parent["parentHooksRestored"], true, "{report:#}");
     assert_eq!(parent["childStatus"], 0, "{report:#}");
     assert_eq!(parent["childStderr"], "", "{report:#}");
     assert_eq!(parent["laterStatus"], 0, "{report:#}");
     assert_eq!(parent["laterStderr"], "", "{report:#}");
+    assert_eq!(parent["throwingChildStatus"], 1, "{report:#}");
+    assert!(
+        parent["throwingChildStderr"]
+            .as_str()
+            .is_some_and(|value| value.contains("inline child failure")),
+        "{report:#}"
+    );
+    assert_eq!(parent["exitingChildStatus"], 7, "{report:#}");
+    assert_eq!(parent["exitingChildStderr"], "", "{report:#}");
+    assert_eq!(parent["evalChildStatus"], 0, "{report:#}");
+    assert_eq!(parent["evalChildStderr"], "", "{report:#}");
+    assert_eq!(parent["evalChild"]["requireMain"], true, "{report:#}");
+    assert_eq!(parent["evalChild"]["processMain"], true, "{report:#}");
+    assert_eq!(parent["printChildStatus"], 0, "{report:#}");
+    assert_eq!(parent["printChildClean"], true, "{report:#}");
+    assert_eq!(parent["printChildStderr"], "", "{report:#}");
+    assert_eq!(parent["moduleEvalChildStatus"], 0, "{report:#}");
+    assert_eq!(parent["moduleEvalChildStderr"], "", "{report:#}");
+    assert_eq!(
+        parent["moduleEvalChild"]["requireIsUndefined"], true,
+        "{report:#}"
+    );
+    assert_eq!(parent["moduleEvalChild"]["processMain"], true, "{report:#}");
     for child in [
         parent,
         &parent["child"],

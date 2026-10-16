@@ -753,6 +753,7 @@ function runInline(command, args, options) {
         process._eventsCount = 0;
         process._exiting = false;
         process.exitCode = undefined;
+        delete process.mainModule;
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
         globalThis.__wasm_rquickjs_sync_callbacks = true;
@@ -1049,7 +1050,12 @@ function runInline(command, args, options) {
             capturedStderr += formatErrorForStderr(err);
         }
     } finally {
-        restoreParentModuleState();
+        try {
+            restoreParentModuleState();
+        } catch (error) {
+            status = 1;
+            capturedStderr += formatErrorForStderr(error);
+        }
         process.argv = oldArgv;
         process.execArgv = oldExecArgv;
         if (hadPackageConditions) {

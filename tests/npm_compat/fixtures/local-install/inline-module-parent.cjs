@@ -5,6 +5,7 @@ const observerScript = require.resolve('./inline-module-observer.cjs');
 
 const parentMain = require.main;
 const parentMainExports = parentMain.exports;
+const parentArgv = process.argv.slice();
 const parentMainSnapshot = {
     id: parentMain.id,
     filename: parentMain.filename,
@@ -22,11 +23,57 @@ const parentHooks = {
     extensions: Module._extensions,
     jsExtension: Module._extensions['.js'],
     wrapperPrefix: Module.wrapper[0],
+    isBuiltin: Module.isBuiltin,
+    globalPaths: Module.globalPaths,
+    globalPathValues: Module.globalPaths.slice(),
+    builtinModules: Module.builtinModules,
+    builtinModuleValues: Module.builtinModules.slice(),
+    requireCache: require.cache,
+    requireExtensions: require.extensions,
+    requireResolvePaths: require.resolve.paths,
 };
 
 const child = spawnSync(
     process.execPath,
     [childScript],
+    { encoding: 'utf8' },
+);
+const throwingChild = spawnSync(
+    process.execPath,
+    [childScript, 'throw'],
+    { encoding: 'utf8' },
+);
+const exitingChild = spawnSync(
+    process.execPath,
+    [childScript, 'exit'],
+    { encoding: 'utf8' },
+);
+const evalChild = spawnSync(
+    process.execPath,
+    [
+        '-e',
+        'process.stdout.write(JSON.stringify({' +
+            'requireMain: require.main === undefined,' +
+            'processMain: process.mainModule === undefined' +
+        '}))',
+    ],
+    { encoding: 'utf8' },
+);
+const printChild = spawnSync(
+    process.execPath,
+    ['-p', 'require.main === undefined && process.mainModule === undefined'],
+    { encoding: 'utf8' },
+);
+const moduleEvalChild = spawnSync(
+    process.execPath,
+    [
+        '--input-type=module',
+        '-e',
+        'process.stdout.write(JSON.stringify({' +
+            'requireIsUndefined: typeof require === "undefined",' +
+            'processMain: process.mainModule === undefined' +
+        '}))',
+    ],
     { encoding: 'utf8' },
 );
 const later = spawnSync(
@@ -41,6 +88,21 @@ process.stdout.write(JSON.stringify({
     childStatus: child.status,
     child: child.status === 0 ? JSON.parse(child.stdout) : null,
     childStderr: child.stderr,
+    throwingChildStatus: throwingChild.status,
+    throwingChildStderr: throwingChild.stderr,
+    exitingChildStatus: exitingChild.status,
+    exitingChildStderr: exitingChild.stderr,
+    evalChildStatus: evalChild.status,
+    evalChild: evalChild.status === 0 ? JSON.parse(evalChild.stdout) : null,
+    evalChildStderr: evalChild.stderr,
+    printChildStatus: printChild.status,
+    printChildClean: printChild.stdout === 'true\n',
+    printChildStderr: printChild.stderr,
+    moduleEvalChildStatus: moduleEvalChild.status,
+    moduleEvalChild: moduleEvalChild.status === 0
+        ? JSON.parse(moduleEvalChild.stdout)
+        : null,
+    moduleEvalChildStderr: moduleEvalChild.stderr,
     laterStatus: later.status,
     later: later.status === 0 ? JSON.parse(later.stdout) : null,
     laterStderr: later.stderr,
@@ -53,6 +115,7 @@ process.stdout.write(JSON.stringify({
         parentMain.loaded === parentMainSnapshot.loaded &&
         parentMain.parent === parentMainSnapshot.parent &&
         parentMain.children === parentMainSnapshot.children,
+    parentArgvRestored: JSON.stringify(process.argv) === JSON.stringify(parentArgv),
     parentHooksRestored: Module._load === parentHooks.load &&
         Module._resolveFilename === parentHooks.resolveFilename &&
         Module.createRequire === parentHooks.createRequire &&
@@ -61,5 +124,17 @@ process.stdout.write(JSON.stringify({
         Module._extensions === parentHooks.extensions &&
         Module._extensions['.js'] === parentHooks.jsExtension &&
         Module._extensions['.child-leak'] === undefined &&
+        require.extensions === parentHooks.requireExtensions &&
+        require.extensions['.local-child-leak'] === undefined &&
+        require.cache === parentHooks.requireCache &&
+        require.cache['/workspace/child-leak.cjs'] === undefined &&
+        require.resolve.paths === parentHooks.requireResolvePaths &&
+        Module.isBuiltin === parentHooks.isBuiltin &&
+        !Object.prototype.hasOwnProperty.call(Module, 'childLeak') &&
+        !Object.prototype.hasOwnProperty.call(Module.prototype, 'childLeak') &&
+        Module.globalPaths === parentHooks.globalPaths &&
+        JSON.stringify(Module.globalPaths) === JSON.stringify(parentHooks.globalPathValues) &&
+        Module.builtinModules === parentHooks.builtinModules &&
+        JSON.stringify(Module.builtinModules) === JSON.stringify(parentHooks.builtinModuleValues) &&
         Module.wrapper[0] === parentHooks.wrapperPrefix,
 }));
