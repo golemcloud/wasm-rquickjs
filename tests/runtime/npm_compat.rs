@@ -365,6 +365,49 @@ async fn npm_required_runtime_primitives(
 }
 
 #[test]
+async fn inline_child_module_state_is_isolated(
+    #[tagged_as("npm_compat")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = prepare_instance(compiled, Some("local-install")).await?;
+    let execution = instance
+        .invoke(None, "probe-inline-child-module-isolation", &[])
+        .await?;
+    let Some(Val::String(json)) = execution else {
+        anyhow::bail!("expected inline child module isolation JSON result")
+    };
+    let report: serde_json::Value = serde_json::from_str(&json)?;
+    let value = &report["value"];
+    assert_eq!(report["stdout"], "", "{report:#}");
+    assert_eq!(report["stderr"], "", "{report:#}");
+    assert_eq!(value["parentStatus"], 0, "{report:#}");
+    assert_eq!(value["parentStderr"], "", "{report:#}");
+    let parent = &value["parent"];
+    assert_eq!(parent["parentMainRestored"], true, "{report:#}");
+    assert_eq!(parent["parentHooksRestored"], true, "{report:#}");
+    assert_eq!(parent["childStatus"], 0, "{report:#}");
+    assert_eq!(parent["childStderr"], "", "{report:#}");
+    assert_eq!(parent["laterStatus"], 0, "{report:#}");
+    assert_eq!(parent["laterStderr"], "", "{report:#}");
+    for child in [
+        parent,
+        &parent["child"],
+        &parent["child"]["nested"],
+        &parent["later"],
+    ] {
+        assert_eq!(child["requireMainIsModule"], true, "{report:#}");
+        assert_eq!(child["processMainIsModule"], true, "{report:#}");
+    }
+    assert_eq!(parent["child"]["nestedStatus"], 0, "{report:#}");
+    assert_eq!(parent["child"]["nestedStderr"], "", "{report:#}");
+    assert_eq!(
+        parent["child"]["nested"]["hooksAreClean"], true,
+        "{report:#}"
+    );
+    assert_eq!(parent["later"]["hooksAreClean"], true, "{report:#}");
+    Ok(())
+}
+
+#[test]
 async fn npm_cli_help_and_config(
     #[tagged_as("npm_compat")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

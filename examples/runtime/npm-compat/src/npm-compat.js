@@ -664,3 +664,35 @@ export async function probePrimitives() {
     };
     return JSON.stringify(result);
 }
+
+export async function probeInlineChildModuleIsolation() {
+    try {
+        const result = await runJavaScript({
+            cwd: '/workspace',
+            source: `
+            const { createRequire } = await import('node:module');
+            const require = createRequire('/workspace/inline-module-parent.cjs');
+            const { spawnSync } = require('node:child_process');
+            const parent = spawnSync(
+                process.execPath,
+                ['/workspace/inline-module-parent.cjs'],
+                { encoding: 'utf8' },
+            );
+            return {
+                parentStatus: parent.status,
+                parent: parent.status === 0 ? JSON.parse(parent.stdout) : null,
+                parentStderr: parent.stderr,
+            };
+            `,
+        });
+        return JSON.stringify(result);
+    } catch (error) {
+        return JSON.stringify({
+            runnerError: {
+                name: error && error.name,
+                message: error && error.message,
+                stack: error && error.stack,
+            },
+        });
+    }
+}

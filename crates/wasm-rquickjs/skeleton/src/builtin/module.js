@@ -772,6 +772,13 @@ const moduleRequireOverrides = createPrivateWeakMap();
 let activeModuleLoadContext = null;
 let activeModuleLoadParent = null;
 let activeModuleLoadRequest = null;
+let activeMainModuleOverride;
+
+function currentMainModuleRecord() {
+    return activeMainModuleOverride === undefined
+        ? mainModule
+        : activeMainModuleOverride;
+}
 
 function cjsPathCacheObject() {
     return moduleExports._pathCache;
@@ -3242,7 +3249,8 @@ function currentMainScriptFilename() {
 }
 
 function isMainEntryFilename(resolvedFilename) {
-    if (typeof mainModule === 'undefined' || mainModule.filename !== '/') return false;
+    const activeMainModule = currentMainModuleRecord();
+    if (activeMainModule.filename !== '/') return false;
     const mainScript = currentMainScriptFilename();
     if (!mainScript) return false;
     try {
@@ -3319,7 +3327,7 @@ function loadCommonJsTransaction(descriptor) {
 
     let mod;
     if (isMainModuleLoad) {
-        mod = mainModule;
+        mod = currentMainModuleRecord();
         initializeCjsModuleRecord(mod, '.', filename, dirname, null, dirname);
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
@@ -3466,7 +3474,7 @@ function loadCommonJsTransaction(descriptor) {
                 dirname,
                 mod,
                 undefined,
-                mainModule,
+                currentMainModuleRecord(),
                 preparedTypeScriptGraph,
             );
             const shouldFallbackToEsm = canFallbackToEsm &&
@@ -3700,17 +3708,22 @@ if (typeof globalThis.__wasm_rquickjs_load_commonjs_loader_source !== 'function'
     });
 }
 
+function createMainModuleRecord() {
+    const record = Object.assign(Object.create(Module.prototype), {
+        id: '.',
+        filename: '/',
+        path: '/',
+        exports: {},
+        loaded: true,
+        parent: null,
+        children: [],
+    });
+    installCjsEsmDefaultSnapshotSlot(record);
+    return record;
+}
+
 // The root "main" module
-const mainModule = Object.assign(Object.create(Module.prototype), {
-    id: '.',
-    filename: '/',
-    path: '/',
-    exports: {},
-    loaded: true,
-    parent: null,
-    children: [],
-});
-installCjsEsmDefaultSnapshotSlot(mainModule);
+const mainModule = createMainModuleRecord();
 
 function rustSplitPackageName(id) {
     return wasmRquickjsModuleGlobalThis.__wasm_rquickjs_split_module_package_name(id);
@@ -3862,7 +3875,8 @@ function resolveForRequire(id, options, parentDir, parentFilename, parentLookupP
 }
 
 function currentRequireMain() {
-    return mainModule.filename === '/' ? undefined : mainModule;
+    const activeMainModule = currentMainModuleRecord();
+    return activeMainModule.filename === '/' ? undefined : activeMainModule;
 }
 
 function createRequireContext(
@@ -3892,7 +3906,9 @@ function createRequireContext(
         parentFilename,
         parentLookupPaths,
         preparedTypeScriptGraph,
-        requireMain: hasRequireMainOverride ? requireMainOverride : mainModule,
+        requireMain: hasRequireMainOverride
+            ? requireMainOverride
+            : currentMainModuleRecord(),
         moduleCache: hasFixedModuleCache ? fixedModuleCache : currentModuleCache(),
         fixedModuleCache,
         hasFixedModuleCache,
@@ -5755,6 +5771,116 @@ const moduleExports = Object.assign(Module, {
 });
 moduleExportsInitialized = true;
 
+const inlineChildModuleHookProperties = [
+    'require',
+    'createRequire',
+    'wrap',
+    'wrapper',
+    'runMain',
+    '_nodeModulePaths',
+    '_resolveLookupPaths',
+    '_resolveFilename',
+    '_load',
+    '_initPaths',
+    '_pathCache',
+    '_cache',
+    '_extensions',
+    '_stat',
+    'prototype',
+];
+const inlineChildPrototypeHookProperties = ['constructor', 'require', '_compile'];
+const inlineChildGlobalRequireProperties = ['cache', 'extensions', 'resolve', 'main'];
+
+function snapshotNamedPropertyDescriptors(target, names) {
+    return names.map(name => [name, Object.getOwnPropertyDescriptor(target, name)]);
+}
+
+function restoreNamedPropertyDescriptors(target, descriptors) {
+    for (let i = 0; i < descriptors.length; i++) {
+        const [name, descriptor] = descriptors[i];
+        if (descriptor === undefined) {
+            delete target[name];
+        } else {
+            Object.defineProperty(target, name, descriptor);
+        }
+    }
+}
+
+function snapshotOwnPropertyDescriptors(target) {
+    return Object.getOwnPropertyNames(target).map(name => [
+        name,
+        Object.getOwnPropertyDescriptor(target, name),
+    ]);
+}
+
+function restoreOwnPropertyDescriptors(target, descriptors) {
+    const retained = new Set(descriptors.map(([name]) => name));
+    for (const name of Object.getOwnPropertyNames(target)) {
+        if (!retained.has(name)) delete target[name];
+    }
+    for (let i = 0; i < descriptors.length; i++) {
+        const [name, descriptor] = descriptors[i];
+        Object.defineProperty(target, name, descriptor);
+    }
+}
+
+function snapshotInlineChildModuleState() {
+    const prototypeObject = moduleExports.prototype;
+    const resolveObject = globalRequire.resolve;
+    return {
+        moduleHooks: snapshotNamedPropertyDescriptors(
+            moduleExports,
+            inlineChildModuleHookProperties,
+        ),
+        prototypeObject,
+        prototypeHooks: snapshotNamedPropertyDescriptors(
+            prototypeObject,
+            inlineChildPrototypeHookProperties,
+        ),
+        extensions: snapshotOwnPropertyDescriptors(requireExtensions),
+        wrapper: snapshotOwnPropertyDescriptors(wrapper),
+        globalRequire: snapshotNamedPropertyDescriptors(
+            globalRequire,
+            inlineChildGlobalRequireProperties,
+        ),
+        resolveObject,
+        resolveHooks: snapshotNamedPropertyDescriptors(resolveObject, ['paths']),
+    };
+}
+
+function restoreInlineChildModuleState(state) {
+    restoreNamedPropertyDescriptors(moduleExports, state.moduleHooks);
+    restoreNamedPropertyDescriptors(state.prototypeObject, state.prototypeHooks);
+    restoreOwnPropertyDescriptors(requireExtensions, state.extensions);
+    restoreOwnPropertyDescriptors(wrapper, state.wrapper);
+    restoreNamedPropertyDescriptors(globalRequire, state.globalRequire);
+    restoreNamedPropertyDescriptors(state.resolveObject, state.resolveHooks);
+}
+
+let inlineChildModuleBaseline;
+
+function beginInlineChildModuleState() {
+    const parentState = snapshotInlineChildModuleState();
+    const previousMainModuleOverride = activeMainModuleOverride;
+    restoreInlineChildModuleState(inlineChildModuleBaseline);
+
+    const childMainModule = createMainModuleRecord();
+    activeMainModuleOverride = childMainModule;
+    const globalMainDescriptor = Object.getOwnPropertyDescriptor(globalRequire, 'main');
+    Object.defineProperty(globalRequire, 'main', {
+        ...globalMainDescriptor,
+        value: childMainModule,
+    });
+
+    let restored = false;
+    return function restoreParentModuleState() {
+        if (restored) return;
+        restored = true;
+        activeMainModuleOverride = previousMainModuleOverride;
+        restoreInlineChildModuleState(parentState);
+    };
+}
+
 let loaderModuleFacadeSpecifier;
 
 function getLoaderModuleFacade() {
@@ -5898,6 +6024,11 @@ Object.defineProperties(globalThis, {
 });
 
 Object.defineProperties(moduleExports, {
+    __wasm_rquickjs_begin_inline_child_module_state: {
+        value: beginInlineChildModuleState,
+        writable: false,
+        configurable: false,
+    },
     __wasm_rquickjs_cjs_facade_has_own: {
         value: cjsFacadeHasOwnProperty,
         writable: false,
@@ -5928,5 +6059,7 @@ publicBuiltinIdSet.add('module');
 if (!builtinModuleNames.includes('module')) {
     builtinModuleNames.push('module');
 }
+
+inlineChildModuleBaseline = snapshotInlineChildModuleState();
 
 export default moduleExports;

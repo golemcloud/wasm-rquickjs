@@ -10,4 +10,5 @@ declare module 'npm-compat' {
   export function probeLinkedLayouts(): Promise<string>;
   export function probeRuntime(): Promise<string>;
   export function probePrimitives(): Promise<string>;
+  export function probeInlineChildModuleIsolation(): Promise<string>;
 }
