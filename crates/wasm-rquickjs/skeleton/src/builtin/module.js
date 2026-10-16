@@ -3332,9 +3332,9 @@ function loadCommonJsTransaction(descriptor) {
         try {
             globalRequire.main = mod;
         } catch (_) {
-            // A parent can freeze the runtime-private require object. Keep the
-            // public module/process main records correct even when that mirror
-            // cannot be updated in the in-process child emulator.
+            // A parent can make this compatibility mirror read-only. Keep the
+            // public module/process main records correct when it cannot be
+            // updated in the in-process child emulator.
         }
         if (globalThis.process) {
             globalThis.process.mainModule = mod;
@@ -5800,8 +5800,6 @@ function restoreOwnPropertyDescriptors(target, descriptors) {
     const retained = new Set(descriptors.map(([key]) => key));
     for (const key of Reflect.ownKeys(target)) {
         if (retained.has(key)) continue;
-        const current = Object.getOwnPropertyDescriptor(target, key);
-        if (current && !current.configurable) continue;
         try {
             delete target[key];
         } catch (error) {
@@ -5895,7 +5893,7 @@ function beginInlineChildModuleState() {
         try {
             globalRequire.main = currentRequireMain();
         } catch (_) {
-            // See the matching main-load mirror above.
+            // Per-module require.main values still come from scoped contexts.
         }
     } catch (error) {
         try {

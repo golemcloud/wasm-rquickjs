@@ -388,6 +388,23 @@ async fn inline_child_module_state_is_isolated(
         value["frozenPathsChild"]["hooksAreClean"], true,
         "{report:#}"
     );
+    assert_eq!(value["irreversibleChildStatus"], 1, "{report:#}");
+    assert!(
+        value["irreversibleChildStderr"]
+            .as_str()
+            .is_some_and(|value| value.contains("Failed to restore 1 inline child module state")),
+        "{report:#}"
+    );
+    assert_eq!(value["afterIrreversibleChildStatus"], 0, "{report:#}");
+    assert_eq!(value["afterIrreversibleChildStderr"], "", "{report:#}");
+    assert_eq!(
+        value["afterIrreversibleChild"]["reversibleHooksAreClean"], true,
+        "{report:#}"
+    );
+    assert_eq!(
+        value["afterIrreversibleChild"]["irreversibleHookPresent"], true,
+        "{report:#}"
+    );
     let parent = &value["parent"];
     assert_eq!(parent["parentMainRestored"], true, "{report:#}");
     assert_eq!(parent["parentArgvRestored"], true, "{report:#}");

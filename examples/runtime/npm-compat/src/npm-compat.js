@@ -696,6 +696,16 @@ export async function probeInlineChildModuleIsolation() {
                 ['/workspace/inline-module-observer.cjs'],
                 { encoding: 'utf8' },
             );
+            const irreversibleChild = spawnSync(
+                process.execPath,
+                ['/workspace/inline-module-child.cjs', 'nonconfig'],
+                { encoding: 'utf8' },
+            );
+            const afterIrreversibleChild = spawnSync(
+                process.execPath,
+                ['/workspace/inline-module-observer.cjs'],
+                { encoding: 'utf8' },
+            );
             return {
                 parentStatus: parent.status,
                 parent: parent.status === 0 ? JSON.parse(parent.stdout) : null,
@@ -708,6 +718,13 @@ export async function probeInlineChildModuleIsolation() {
                     ? JSON.parse(frozenPathsChild.stdout)
                     : null,
                 frozenPathsChildStderr: frozenPathsChild.stderr,
+                irreversibleChildStatus: irreversibleChild.status,
+                irreversibleChildStderr: irreversibleChild.stderr,
+                afterIrreversibleChildStatus: afterIrreversibleChild.status,
+                afterIrreversibleChild: afterIrreversibleChild.status === 0
+                    ? JSON.parse(afterIrreversibleChild.stdout)
+                    : null,
+                afterIrreversibleChildStderr: afterIrreversibleChild.stderr,
             };
             `,
         });
