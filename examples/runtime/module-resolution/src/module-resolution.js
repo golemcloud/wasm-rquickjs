@@ -12567,17 +12567,11 @@ export const testCjsNodeModuleLoadingCompat = async () => {
         const originalProcessMainModule = process.mainModule;
         const originalRunMainPrototypeRequire = Module.prototype.require;
         const originalRunMainLoad = Module._load;
-        const runMainRecord = Module.require.main;
-        const runMainRecordSnapshot = {
-            id: runMainRecord.id,
-            filename: runMainRecord.filename,
-            path: runMainRecord.path,
-            exports: runMainRecord.exports,
-            loaded: runMainRecord.loaded,
-            parent: runMainRecord.parent,
-            children: runMainRecord.children.slice(),
-            paths: runMainRecord.paths ? runMainRecord.paths.slice() : runMainRecord.paths,
-        };
+        assert.strictEqual(require.main, undefined);
+        assert.strictEqual(Module.require.main, undefined);
+        assert.strictEqual(globalThis.require.main, undefined);
+        assert.strictEqual(process.mainModule, undefined);
+        let runMainRecord;
         let runMainPrototypeRequireCalls = 0;
         const runMainLoadCalls = [];
         try {
@@ -12605,6 +12599,10 @@ export const testCjsNodeModuleLoadingCompat = async () => {
                 isMain: true,
                 argumentCount: 3,
             }]);
+            runMainRecord = process.mainModule;
+            assert(runMainRecord);
+            assert.strictEqual(Module.require.main, runMainRecord);
+            assert.strictEqual(globalThis.require.main, runMainRecord);
             assert.deepStrictEqual(Module._cache[runMainFile].exports, {
                 id: '.',
                 parent: null,
@@ -12615,8 +12613,20 @@ export const testCjsNodeModuleLoadingCompat = async () => {
             Module.prototype.require = originalRunMainPrototypeRequire;
             Module._load = originalRunMainLoad;
             delete Module._cache[runMainFile];
-            Object.assign(runMainRecord, runMainRecordSnapshot);
-            Module.require.main = runMainRecord;
+            const mainRecordToRestore = runMainRecord || process.mainModule;
+            if (mainRecordToRestore) {
+                Object.assign(mainRecordToRestore, {
+                    id: '.',
+                    filename: '/',
+                    path: '/',
+                    exports: {},
+                    loaded: true,
+                    parent: null,
+                    children: [],
+                });
+                delete mainRecordToRestore.paths;
+            }
+            Module.require.main = undefined;
             process.argv = originalArgv;
             process.mainModule = originalProcessMainModule;
         }
