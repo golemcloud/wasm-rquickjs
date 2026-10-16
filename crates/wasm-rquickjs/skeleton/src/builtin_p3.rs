@@ -679,6 +679,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", url::WIRE_JS).unwrap();
     writeln!(result, "{}", web_crypto::WIRE_JS).unwrap();
     writeln!(result, "{}", process::WIRE_JS).unwrap();
+    writeln!(result, "{}", perf_hooks::WIRE_JS).unwrap();
     writeln!(result, "{}", structured_clone::WIRE_JS).unwrap();
     writeln!(result, "{}", module::WIRE_JS).unwrap();
     writeln!(result, "{}", worker_threads::WIRE_JS).unwrap();

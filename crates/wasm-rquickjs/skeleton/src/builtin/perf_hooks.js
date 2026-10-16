@@ -1,6 +1,6 @@
 // node:perf_hooks - partial implementation
 
-import { time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
+import { monotonic_now, time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
 // Populate the runtime-owned cache on module load; restore clears it before JS runs.
 time_origin();
 const _marks = [];
@@ -60,7 +60,7 @@ const performance = {
     get timeOrigin() { return time_origin(); },
 
     now() {
-        return Date.now() - time_origin();
+        return monotonic_now();
     },
 
     mark(name, options) {
