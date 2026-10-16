@@ -62,3 +62,35 @@ async fn os_eol_constant(#[tagged_as("os")] compiled: &CompiledTest) -> anyhow::
 
     Ok(())
 }
+
+#[test]
+async fn global_performance_uses_monotonic_clock(
+    #[tagged_as("os")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-performance-clock", &[]).await;
+    let Some(Val::String(json)) = result? else {
+        anyhow::bail!("expected performance clock result");
+    };
+    let result: serde_json::Value = serde_json::from_str(&json)?;
+
+    for property in [
+        "globalAvailable",
+        "sharedWithPerfHooks",
+        "finiteTimeOrigin",
+        "stableTimeOrigin",
+        "startsNonNegative",
+        "firstReadingIsRecent",
+        "advances",
+        "originTracksWallClock",
+        "independentFromDateNow",
+        "nonDecreasing",
+    ] {
+        assert_eq!(
+            result[property], true,
+            "performance contract failed: {property}"
+        );
+    }
+
+    Ok(())
+}

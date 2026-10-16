@@ -7140,7 +7140,7 @@
         "block_05_regression_tests_for_https_github_com_nodejs_node_issues_406": { "reason": "inherited: performance.timerify function entries are not implemented" }
       }
     },
-    "parallel/test-performance-global.js": { "category": "known-gap", "reason": "global performance object lacks Node perf_hooks API surface" },
+    "parallel/test-performance-global.js": {},
     "parallel/test-performance-nodetiming-uvmetricsinfo.js": { "category": "known-gap", "reason": "perf_hooks nodeTiming.uvMetricsInfo is missing" },
     "parallel/test-performance-nodetiming.js": { "category": "known-gap", "reason": "perf_hooks nodeTiming milestones/duration semantics are incomplete" },
     "parallel/test-performance-resourcetimingbufferfull.js": { "category": "known-gap", "reason": "perf_hooks resource timing buffer/full-event behavior is incomplete" },
