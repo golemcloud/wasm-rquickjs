@@ -2,4 +2,5 @@ package quickjs:os;
 
 world os {
   export test: func() -> string;
+  export test-performance-clock: func() -> string;
 }

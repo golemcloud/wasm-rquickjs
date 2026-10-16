@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3186/4394 (72.5%)
+**Primary compatibility (CI-enforced):** 3187/4394 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3186 | 72.5% | 55.3% | 46.3% |
-| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3187 | 72.5% | 55.4% | 46.3% |
+| 🧩 known gap | 1207 | 27.5% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1196 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
 | **Total** | **6876** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3186/5757 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3187/5757 (55.4%)**.
 
 ## Inventory by Module
 
@@ -61,7 +61,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | other | 614 | 188 | 145 | 86 | 12 | 0 | 183 | 56.5% | 43.6% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| perf_hooks | 41 | 3 | 34 | 2 | 0 | 0 | 2 | 8.1% | 7.7% |
+| perf_hooks | 41 | 4 | 33 | 2 | 0 | 0 | 2 | 10.8% | 10.3% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
 | process | 93 | 45 | 34 | 4 | 0 | 0 | 10 | 57.0% | 54.2% |
 | promises | 23 | 4 | 12 | 0 | 7 | 0 | 0 | 25.0% | 17.4% |
@@ -687,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1208)
+### known gap (1207)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1106,7 +1106,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs.writeFile(fd, ...) on read-only descriptor does not callback with EBADF | 1 | `parallel/test-fs-writefile-with-fd.js#block_02_test_read_only_file_descriptor` |
 | fs.writeFileSync accepts invalid data types instead of ERR_INVALID_ARG_TYPE | 1 | `parallel/test-fs-write-file-sync.js#block_05_test_writefilesync_with_an_invalid_input` |
 | fs/promises FileHandle.readableWebStream support is missing or incomplete | 1 | `parallel/test-filehandle-readablestream.js` |
-| global performance object lacks Node perf_hooks API surface | 1 | `parallel/test-performance-global.js` |
 | global process/Buffer accessor setter semantics are incomplete | 1 | `parallel/test-global-setters.js` |
 | global web streams and node:stream/web exports are inconsistent | 1 | `parallel/test-global-webstreams.js` |
 | globalThis shape differs from Node.js | 1 | `parallel/test-global.js` |

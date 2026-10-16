@@ -3094,6 +3094,221 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
     }
 };
 
+export const testRegisteredLoaderResolvedModuleCache = async () => {
+    const root = '/registered-loader-resolved-cache-app';
+    fs.mkdirSync(root, { recursive: true });
+    for (const parent of ['a', 'b']) {
+        fs.writeFileSync(
+            `${root}/parent-${parent}.mjs`,
+            [
+                'export function loadJson() {',
+                '  return import("virtual:shared-json", { with: { type: "json" } });',
+                '}',
+                'export function loadEsm() {',
+                '  return import("virtual:shared-esm");',
+                '}',
+                'export function loadTypedModule() {',
+                '  return import("virtual:typed-module");',
+                '}',
+                'export function loadTypedJson() {',
+                '  return import("virtual:typed-json", { with: { type: "json" } });',
+                '}',
+                'export function loadChanging() {',
+                '  return import("virtual:changing-target");',
+                '}',
+                'export function loadRetry() {',
+                '  return import("virtual:retry-target");',
+                '}',
+                'export function loadFormatModule() {',
+                '  return import("virtual:format-module");',
+                '}',
+                'export function loadFormatCommonJs() {',
+                '  return import("virtual:format-commonjs");',
+                '}',
+            ].join('\n'),
+        );
+    }
+
+    globalThis.__resolvedLoaderCacheCounts = {
+        json: { resolve: 0, load: 0 },
+        esm: { resolve: 0, load: 0 },
+        changing: { resolve: 0, load: 0, seed: 0 },
+        retry: { resolve: 0, load: 0 },
+        format: { resolve: 0, load: 0 },
+        typed: { resolve: 0, load: 0 },
+    };
+    globalThis.__resolvedLoaderCacheEsmEvaluations = 0;
+    globalThis.__wasm_rquickjs_registered_loaders = [];
+    const hookSource = [
+        'export function resolve(specifier, context, nextResolve) {',
+        '  const counts = globalThis.__resolvedLoaderCacheCounts;',
+        '  if (specifier === "virtual:shared-json") {',
+        '    counts.json.resolve++;',
+        '    return { shortCircuit: true, url: "virtual:shared-json-target", format: "json" };',
+        '  }',
+        '  if (specifier === "virtual:shared-esm") {',
+        '    counts.esm.resolve++;',
+        '    return { shortCircuit: true, url: "virtual:shared-esm-target", format: "module" };',
+        '  }',
+        '  if (specifier === "virtual:changing-target") {',
+        '    counts.changing.resolve++;',
+        '    return { shortCircuit: true, url: "virtual:changing-target?seed=" + (++counts.changing.seed), format: "module" };',
+        '  }',
+        '  if (specifier === "virtual:retry-target") {',
+        '    counts.retry.resolve++;',
+        '    return { shortCircuit: true, url: "virtual:retry-target", format: "module" };',
+        '  }',
+        '  if (specifier === "virtual:format-module" || specifier === "virtual:format-commonjs") {',
+        '    counts.format.resolve++;',
+        '    return { shortCircuit: true, url: "virtual:format-target", format: specifier.endsWith("module") ? "module" : "commonjs" };',
+        '  }',
+        '  if (specifier === "virtual:typed-module" || specifier === "virtual:typed-json") {',
+        '    counts.typed.resolve++;',
+        '    return { shortCircuit: true, url: "virtual:typed-target", format: specifier.endsWith("json") ? "json" : "module", importAttributes: context.importAttributes };',
+        '  }',
+        '  return nextResolve(specifier, context);',
+        '}',
+        'export function load(url, context, nextLoad) {',
+        '  const counts = globalThis.__resolvedLoaderCacheCounts;',
+        '  if (url === "virtual:shared-json-target") {',
+        '    counts.json.load++;',
+        '    return { shortCircuit: true, format: "json", source: "{\\"value\\":\\"shared\\"}" };',
+        '  }',
+        '  if (url === "virtual:shared-esm-target") {',
+        '    counts.esm.load++;',
+        '    return { shortCircuit: true, format: "module", source: "globalThis.__resolvedLoaderCacheEsmEvaluations++; export const marker = {}; export default marker;" };',
+        '  }',
+        '  if (url.startsWith("virtual:changing-target?seed=")) {',
+        '    counts.changing.load++;',
+        '    return { shortCircuit: true, format: "module", source: "export default " + JSON.stringify(url) };',
+        '  }',
+        '  if (url === "virtual:retry-target") {',
+        '    counts.retry.load++;',
+        '    if (counts.retry.load === 1) throw new Error("retry registered loader load");',
+        '    return { shortCircuit: true, format: "module", source: "export default \\"retried\\";" };',
+        '  }',
+        '  if (url === "virtual:format-target") {',
+        '    counts.format.load++;',
+        '    return { shortCircuit: true, format: context.format, source: "export default {};" };',
+        '  }',
+        '  if (url === "virtual:typed-target") {',
+        '    counts.typed.load++;',
+        '    if (context.importAttributes.type === "json") return { shortCircuit: true, format: "json", source: "{\\"typed\\":true}" };',
+        '    return { shortCircuit: true, format: "module", source: "export default { typed: false };" };',
+        '  }',
+        '  return nextLoad(url, context);',
+        '}',
+    ].join('\n');
+
+    try {
+        const { register } = await import('node:module');
+        register(`data:text/javascript,${encodeURIComponent(hookSource)}`);
+        await import('data:text/javascript,export default true#resolved-cache-loader-ready');
+        const parentA = await import(`${root}/parent-a.mjs`);
+        const parentB = await import(`${root}/parent-b.mjs`);
+
+        const jsonA1 = await parentA.loadJson();
+        const jsonA2 = await parentA.loadJson();
+        const jsonB1 = await parentB.loadJson();
+        const jsonB2 = await parentB.loadJson();
+        assert.strictEqual(jsonA1, jsonA2);
+        assert.strictEqual(jsonA1, jsonB1);
+        assert.strictEqual(jsonA1, jsonB2);
+        assert.strictEqual(jsonA1.default, jsonB2.default);
+        assert.deepStrictEqual(jsonA1.default, { value: 'shared' });
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.json, {
+            resolve: 4,
+            load: 1,
+        });
+
+        const [esmA1, esmB1] = await Promise.all([parentA.loadEsm(), parentB.loadEsm()]);
+        const esmA2 = await parentA.loadEsm();
+        const esmB2 = await parentB.loadEsm();
+        assert.strictEqual(esmA1, esmA2);
+        assert.strictEqual(esmA1, esmB1);
+        assert.strictEqual(esmA1, esmB2);
+        assert.strictEqual(esmA1.default, esmB2.default);
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.esm, {
+            resolve: 4,
+            load: 1,
+        });
+        assert.strictEqual(globalThis.__resolvedLoaderCacheEsmEvaluations, 1);
+
+        const changing1 = await parentA.loadChanging();
+        const changing2 = await parentA.loadChanging();
+        assert.notStrictEqual(changing1, changing2);
+        assert.strictEqual(changing1.default, 'virtual:changing-target?seed=1');
+        assert.strictEqual(changing2.default, 'virtual:changing-target?seed=2');
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.changing, {
+            resolve: 2,
+            load: 2,
+            seed: 2,
+        });
+
+        let firstRetryError;
+        let secondRetryError;
+        try {
+            await parentA.loadRetry();
+        } catch (error) {
+            firstRetryError = error;
+        }
+        try {
+            await parentA.loadRetry();
+        } catch (error) {
+            secondRetryError = error;
+        }
+        assert.ok(firstRetryError, 'first registered-loader rejection was not retained');
+        assert.ok(secondRetryError, 'second registered-loader rejection was not retained');
+        assert.match(firstRetryError.message, /retry registered loader load/);
+        assert.match(secondRetryError.message, /retry registered loader load/);
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.retry, {
+            resolve: 2,
+            load: 1,
+        });
+
+        const formatModule = await parentA.loadFormatModule();
+        const formatCommonJsHint = await parentA.loadFormatCommonJs();
+        assert.strictEqual(formatModule, formatCommonJsHint);
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.format, {
+            resolve: 2,
+            load: 1,
+        });
+
+        const typedModule = await parentA.loadTypedModule();
+        const typedJson = await parentA.loadTypedJson();
+        assert.notStrictEqual(typedModule, typedJson);
+        assert.deepStrictEqual(typedModule.default, { typed: false });
+        assert.deepStrictEqual(typedJson.default, { typed: true });
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.typed, {
+            resolve: 2,
+            load: 2,
+        });
+
+        register('data:text/javascript,export function resolve(specifier, context, nextResolve) { return nextResolve(specifier, context); }');
+        const afterRegistration = await parentA.loadEsm();
+        assert.strictEqual(afterRegistration, esmA1);
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.esm, {
+            resolve: 5,
+            load: 1,
+        });
+
+        globalThis.__wasm_rquickjs_registered_loaders =
+            globalThis.__wasm_rquickjs_registered_loaders.slice();
+        const afterLoaderArrayReplacement = await parentA.loadEsm();
+        assert.strictEqual(afterLoaderArrayReplacement, afterRegistration);
+        assert.deepStrictEqual(globalThis.__resolvedLoaderCacheCounts.esm, {
+            resolve: 6,
+            load: 1,
+        });
+        assert.strictEqual(globalThis.__resolvedLoaderCacheEsmEvaluations, 1);
+        return true;
+    } finally {
+        delete globalThis.__resolvedLoaderCacheCounts;
+        delete globalThis.__resolvedLoaderCacheEsmEvaluations;
+        globalThis.__wasm_rquickjs_registered_loaders = [];
+    }
+};
+
 export const testRegisteredLoaderUppercaseFileUrl = async () => {
     const root = '/registered-loader-uppercase-file-app';
     fs.mkdirSync(root, { recursive: true });

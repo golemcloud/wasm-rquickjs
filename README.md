@@ -509,6 +509,15 @@ When the `timezone` feature is enabled (default), `DateTimeFormat` supports all 
 </details>
 
 <details>
+<summary><strong>Performance (global)</strong></summary>
+
+- `performance.now()` uses the WASI monotonic clock and is not affected by wall-clock adjustments.
+- `performance.timeOrigin` is the deployment wall-clock origin paired with that monotonic timeline.
+- The global object is shared with `node:perf_hooks`.
+
+</details>
+
+<details>
 <summary><strong>Structured Clone</strong></summary>
 
 Implemented by https://github.com/ungap/structured-clone — `structuredClone`
@@ -849,7 +858,7 @@ TCP sockets and servers built on WASI sockets.
 <details>
 <summary><strong><code>node:perf_hooks</code></strong></summary>
 
-- `performance` — `now()`, `timeOrigin`, `mark()`, `measure()`, `getEntries()`, `getEntriesByName()`, `getEntriesByType()`, `clearMarks()`, `clearMeasures()`, `toJSON()`
+- `performance` — monotonic `now()`, deployment `timeOrigin`, `mark()`, `measure()`, `getEntries()`, `getEntriesByName()`, `getEntriesByType()`, `clearMarks()`, `clearMeasures()`, `toJSON()`
 - `PerformanceEntry`, `PerformanceObserver`
 - `monitorEventLoopDelay`, `createHistogram`, `constants`
 
