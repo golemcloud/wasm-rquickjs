@@ -10,11 +10,12 @@ export function setProcessBackend(value) {
     if (typeof value !== 'object') throw new TypeError('Process backend must be an object');
     const installed = {};
     for (const name of ['spawn', 'spawnSync']) {
-        if (value[name] !== undefined) {
-            if (typeof value[name] !== 'function') {
+        const method = value[name];
+        if (method !== undefined) {
+            if (typeof method !== 'function') {
                 throw new TypeError(`Process backend ${name} must be a function`);
             }
-            installed[name] = value[name].bind(value);
+            installed[name] = method.bind(value);
         }
     }
     backend = Object.freeze(installed);

@@ -58,6 +58,19 @@ export async function run() {
     setProcessBackend(null);
     assert.equal(spawnSync('virtual-command').error.code, 'ENOSYS');
     assert.throws(() => execSync('virtual shell program'), error => error.code === 'ENOSYS');
+    let getterReads = 0;
+    setProcessBackend({
+        marker: 29,
+        get spawnSync() {
+            assert.equal(++getterReads, 1);
+            return function () { return { status: this.marker }; };
+        },
+    });
+    assert.equal(spawnSync('getter-command').status, 29);
+    assert.equal(spawnSync('getter-command').status, 29);
+    assert.equal(getterReads, 1);
+    setProcessBackend(undefined);
+    assert.equal(spawnSync('getter-command').error.code, 'ENOSYS');
     globalThis.parentProcessBackend = true;
     const job = await runJavaScript({
         source: `
