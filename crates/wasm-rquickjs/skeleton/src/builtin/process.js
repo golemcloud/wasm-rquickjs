@@ -883,6 +883,9 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     if (typeof warning === 'string') {
         createdWarning = true;
         obj = new Error(warning);
+        if (typeof Error.captureStackTrace === 'function') {
+            Error.captureStackTrace(obj, ctor || process.emitWarning);
+        }
         obj.name = (typeof typeOrOptions === 'string') ? typeOrOptions : 'Warning';
         if (typeof typeOrOptions === 'object' && typeOrOptions !== null) {
             if (typeOrOptions.type) obj.name = typeOrOptions.type;
@@ -900,19 +903,15 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     if (isDeprecationWarning && process.noDeprecation) {
         return;
     }
-    const warningHeader = warningName + ': ' + String(obj.message || obj);
-    let formattedStack;
-    if (typeof obj.stack === 'string') {
-        const newline = obj.stack.indexOf('\n');
-        const rest = newline === -1 ? '' : obj.stack.slice(newline);
-        formattedStack = obj.stack.startsWith(warningHeader)
-            ? obj.stack
-            : warningHeader + rest;
-    } else {
-        formattedStack = warningHeader;
-    }
     if (createdWarning) {
-        obj.stack = formattedStack;
+        const warningHeader = warningName + ': ' + String(obj.message || obj);
+        if (typeof obj.stack === 'string') {
+            const newline = obj.stack.indexOf('\n');
+            const rest = newline === -1 ? '' : obj.stack.slice(newline);
+            if (!obj.stack.startsWith(warningHeader)) obj.stack = warningHeader + rest;
+        } else {
+            obj.stack = warningHeader;
+        }
     }
 
     const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr
@@ -922,7 +921,9 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         if (shouldThrowDeprecation) {
             throw obj;
         }
-        if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
+        const deprecationSilenced = isDeprecationWarning && process.noDeprecation;
+        if (!suppressDefaultWarning && !deprecationSilenced
+            && process.stderr && typeof process.stderr.write === 'function') {
             process.stderr.write(_formatDefaultWarning(obj, isDeprecationWarning) + '\n');
         }
         process.emit('warning', obj);

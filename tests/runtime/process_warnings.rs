@@ -48,7 +48,24 @@ async fn default_warning_output_matches_node(
         traced.starts_with("(node:1) CustomWarning: traced\n    at "),
         "{traced}"
     );
-    for case in ["first", "detailed", "traced"] {
+    assert!(!traced.contains("at emitWarning"), "{traced}");
+    let traced_with_constructor = report["tracedWithConstructor"]["stderr"].as_str().unwrap();
+    assert!(
+        traced_with_constructor.starts_with("(node:1) Warning: from helper\n    at "),
+        "{traced_with_constructor}"
+    );
+    assert!(
+        !traced_with_constructor.contains("deprecatedHelper"),
+        "{traced_with_constructor}"
+    );
+    assert_eq!(report["silencedDeprecation"]["stderr"], "");
+    for case in [
+        "first",
+        "detailed",
+        "traced",
+        "tracedWithConstructor",
+        "silencedDeprecation",
+    ] {
         assert_eq!(
             report[case]["events"].as_array().unwrap().len(),
             1,

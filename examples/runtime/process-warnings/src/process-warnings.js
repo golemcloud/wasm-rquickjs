@@ -23,14 +23,35 @@ export async function test() {
     const detailed = await capture(() =>
         process.emitWarning('detailed', { code: 'CODE001', detail: 'more detail' }));
 
+    function deprecatedHelper() {
+        process.emitWarning('from helper', 'Warning', deprecatedHelper);
+    }
+    let traced;
+    let tracedWithConstructor;
     process.traceProcessWarnings = true;
-    const traced = await capture(() => process.emitWarning('traced', 'CustomWarning'));
-    process.traceProcessWarnings = false;
+    try {
+        traced = await capture(() => process.emitWarning('traced', 'CustomWarning'));
+        tracedWithConstructor = await capture(() => deprecatedHelper());
+    } finally {
+        process.traceProcessWarnings = false;
+    }
+
+    let silencedDeprecation;
+    try {
+        silencedDeprecation = await capture(() => {
+            process.emitWarning('late', 'DeprecationWarning');
+            process.noDeprecation = true;
+        });
+    } finally {
+        process.noDeprecation = false;
+    }
 
     return JSON.stringify({
         argv0: process.argv0,
         first,
         detailed,
         traced,
+        tracedWithConstructor,
+        silencedDeprecation,
     });
 }
