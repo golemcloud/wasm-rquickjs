@@ -1,0 +1,5 @@
+package quickjs:process-warnings;
+
+world process-warnings {
+  export test: func() -> string;
+}

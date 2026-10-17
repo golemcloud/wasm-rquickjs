@@ -900,9 +900,7 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
     if (isDeprecationWarning && process.noDeprecation) {
         return;
     }
-    const warningCode = obj.code ? ' [' + String(obj.code) + ']' : '';
     const warningHeader = warningName + ': ' + String(obj.message || obj);
-    const stderrHeader = warningName + warningCode + ': ' + String(obj.message || obj);
     let formattedStack;
     if (typeof obj.stack === 'string') {
         const newline = obj.stack.indexOf('\n');
@@ -917,27 +915,63 @@ process.emitWarning = function emitWarning(warning, typeOrOptions, code, ctor) {
         obj.stack = formattedStack;
     }
 
-    const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr;
+    const suppressDefaultWarning = !!globalThis.__wasm_rquickjs_suppress_warning_stderr
+        || _defaultWarningOutputDisabled();
     const shouldThrowDeprecation = isDeprecationWarning && !!process.throwDeprecation;
     process.nextTick(function() {
         if (shouldThrowDeprecation) {
             throw obj;
         }
         if (!suppressDefaultWarning && process.stderr && typeof process.stderr.write === 'function') {
-            let text = stderrHeader;
-            if (typeof formattedStack === 'string') {
-                text = formattedStack.indexOf(String(obj.message || obj)) >= 0
-                    ? formattedStack
-                    : stderrHeader + '\n' + formattedStack;
-                if (warningCode && text.startsWith(warningHeader)) {
-                    text = stderrHeader + text.slice(warningHeader.length);
-                }
-            }
-            process.stderr.write(text.endsWith('\n') ? text : text + '\n');
+            process.stderr.write(_formatDefaultWarning(obj, isDeprecationWarning) + '\n');
         }
         process.emit('warning', obj);
     });
 };
+
+let _traceWarningHelperShown = false;
+
+function _hasExecArgvFlag(flag) {
+    const flags = process.execArgv;
+    if (!Array.isArray(flags)) return false;
+    for (let i = 0; i < flags.length; i++) {
+        if (String(flags[i]) === flag) return true;
+    }
+    return false;
+}
+
+// Node writes no default warning output under NODE_NO_WARNINGS=1 or --no-warnings; the 'warning'
+// event is still emitted.
+function _defaultWarningOutputDisabled() {
+    if (process.env && process.env.NODE_NO_WARNINGS === '1') return true;
+    return _hasExecArgvFlag('--no-warnings');
+}
+
+// Mirrors Node's default writer (lib/internal/process/warning.js): one line with the process
+// prefix and code, the stack only when warnings are traced, the detail on its own line, and a
+// hint about tracing after the first untraced warning.
+function _formatDefaultWarning(warning, isDeprecationWarning) {
+    const trace = !!process.traceProcessWarnings
+        || _hasExecArgvFlag('--trace-warnings')
+        || (isDeprecationWarning && (!!process.traceDeprecation || _hasExecArgvFlag('--trace-deprecation')));
+    let msg = '(' + process.release.name + ':' + process.pid + ') ';
+    if (warning.code) msg += '[' + warning.code + '] ';
+    if (trace && warning.stack) {
+        msg += warning.stack;
+    } else {
+        msg += typeof warning.toString === 'function'
+            ? String(warning.toString())
+            : Error.prototype.toString.call(warning);
+    }
+    if (typeof warning.detail === 'string') msg += '\n' + warning.detail;
+    if (!trace && !_traceWarningHelperShown) {
+        const flag = isDeprecationWarning ? '--trace-deprecation' : '--trace-warnings';
+        const executable = String(process.argv0 || 'node').replace(/^.*\//, '').replace(/\.exe$/, '') || 'node';
+        msg += '\n(Use `' + executable + ' ' + flag + ' ...` to show where the warning was created)';
+        _traceWarningHelperShown = true;
+    }
+    return msg;
+}
 
 function runExit(code) {
     if (code !== undefined) {
