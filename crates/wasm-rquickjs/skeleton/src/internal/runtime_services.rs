@@ -113,8 +113,7 @@ pub(crate) struct RuntimeServices {
     pub(crate) cjs_module_probe_session: super::module_loading::CjsModuleProbeSession,
     pub(crate) cjs_loader_realpath_cache: RefCell<HashMap<String, String>>,
     pub(crate) esm_loader_realpath_cache: RefCell<HashMap<String, String>>,
-    pub(crate) registered_file_urls:
-        RefCell<super::module_loading::RegisteredFileUrlRegistry>,
+    pub(crate) registered_file_urls: RefCell<super::module_loading::RegisteredFileUrlRegistry>,
     #[cfg(feature = "test-observability")]
     loader_realpath_cache_hit_count: Cell<u64>,
     #[cfg(feature = "test-observability")]
@@ -856,7 +855,25 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
         })?;
         Ok::<(), String>(())
     })
-    .await
+    .await?;
+    // An embedding can supply this ordinary additional JS module to configure
+    // runtime-local adapters. Import after builtins but before entry code, also
+    // in fresh execution jobs. Registration must be lazy: Wizer evaluates it.
+    if crate::JS_ADDITIONAL_MODULES
+        .iter()
+        .any(|(name, _)| *name == "wasm-rquickjs-runtime-init")
+    {
+        async_with!(ctx => |ctx| {
+            Module::import(&ctx, "wasm-rquickjs-runtime-init")
+                .catch(&ctx)
+                .map_err(super::format_caught_error)?
+                .finish::<()>()
+                .catch(&ctx)
+                .map_err(super::format_caught_error)
+        })
+        .await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn initialize_exported_resource_id_map(

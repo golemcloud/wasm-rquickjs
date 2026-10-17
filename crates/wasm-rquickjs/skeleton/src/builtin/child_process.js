@@ -11,6 +11,7 @@ import { EventEmitter } from 'node:events';
 import process from 'node:process';
 import moduleExports from 'node:module';
 import { check_syntax_with_filename as checkSyntaxWithFilename } from '__wasm_rquickjs_builtin/vm_native';
+import { getProcessBackend } from '__wasm_rquickjs_builtin/child_process_backend';
 
 const FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
 
@@ -1769,6 +1770,18 @@ function resolveJavaScriptShellCommand(command, args, env, cwd) {
     };
 }
 
+function resolveBackendInlineCommand(command, args, options) {
+    if (command === process.execPath) return { command, args };
+    const env = options.env || process.env;
+    const shell = resolveJavaScriptShellCommand(command, args, env, options.cwd);
+    if (shell) return shell;
+    const entry = resolveNodeShebangCommand(command, env, options.cwd);
+    return entry === null ? null : {
+        command: process.execPath,
+        args: [entry].concat(args),
+    };
+}
+
 function createExecError(command, result) {
     if (!result) {
         return createNotSupportedError('exec');
@@ -2059,6 +2072,19 @@ export function fork(modulePath, args, options) {
 // spawn emulation — runs the target script inline (like fork/spawnSync) but
 // delivers results asynchronously through EventEmitter streams.
 export function spawn(command, args, options) {
+    const backend = getProcessBackend();
+    let inline;
+    if (backend && backend.spawn) {
+        const opts = options || {};
+        const cmd = String(command);
+        // A configured adapter is a fallback. Keep inline Node/shebang
+        // resolution ahead of host command lookup, including PATH precedence.
+        inline = !opts.shell && resolveBackendInlineCommand(cmd, args || [], opts);
+        if (!inline) {
+            const delegated = backend.spawn(cmd, args || [], opts);
+            if (delegated !== undefined) return delegated;
+        }
+    }
     const child = new EventEmitter();
     child.pid = 1;
     child.connected = false;
@@ -2090,7 +2116,7 @@ export function spawn(command, args, options) {
         }
         spawnOpts.encoding = 'buffer';
 
-        const result = spawnSync(String(command), args || [], spawnOpts);
+        const result = spawnSync(inline ? inline.command : String(command), inline ? inline.args : args || [], spawnOpts);
         const exitCode = typeof result.status === 'number' ? result.status : null;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
@@ -2132,8 +2158,8 @@ export function execFileSync(file, args, options) {
 
     const result = spawnSync(file, normalizedArgs, normalizedOptions);
 
-    if (result.status !== 0) {
-        const err = new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
+    if (result.error || result.status !== 0) {
+        const err = result.error || new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
         err.status = result.status;
         err.signal = result.signal;
         err.stdout = result.stdout;
@@ -2152,16 +2178,25 @@ export function execFileSync(file, args, options) {
 }
 
 export function execSync(command, options) {
-    throw createNotSupportedError('execSync');
+    const backend = getProcessBackend();
+    if (!backend || !backend.spawnSync) throw createNotSupportedError('execSync');
+    const opts = options || {};
+    return execFileSync(String(command), [], { ...opts, shell: opts.shell === undefined ? true : opts.shell });
 }
 
 export function spawnSync(command, args, options) {
     const normalizedArgs = args || [];
     const normalizedOptions = options || {};
     if (normalizedOptions.shell) {
-        return unsupportedSpawnSyncResult(String(command) + ' with shell option');
+        return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
+            unsupportedSpawnSyncResult(String(command) + ' with shell option');
     }
-    const shellCommand = resolveJavaScriptShellCommand(
+    const backend = getProcessBackend();
+    // The unconfigured path keeps its existing lookup cost. Only a registered
+    // fallback requires resolving direct Node shebangs before delegation.
+    const shellCommand = backend && backend.spawnSync
+        ? resolveBackendInlineCommand(String(command), normalizedArgs, normalizedOptions)
+        : resolveJavaScriptShellCommand(
         String(command),
         normalizedArgs,
         normalizedOptions.env || process.env,
@@ -2170,10 +2205,29 @@ export function spawnSync(command, args, options) {
     const cmd = shellCommand ? shellCommand.command : String(command);
     const resolvedArgs = shellCommand ? shellCommand.args : normalizedArgs;
     if (cmd !== process.execPath) {
-        return unsupportedSpawnSyncResult(cmd);
+        return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
+            unsupportedSpawnSyncResult(cmd);
     }
 
     return runInline(cmd, resolvedArgs, normalizedOptions);
+}
+
+function delegatedSpawnSync(command, args, options) {
+    const backend = getProcessBackend();
+    if (!backend || !backend.spawnSync) return undefined;
+    const result = backend.spawnSync(command, args, options);
+    if (result === undefined) return undefined;
+    if (!result || typeof result !== 'object' || typeof result.then === 'function') {
+        throw new TypeError('Synchronous process backend must return a result object or undefined');
+    }
+    const stdout = Buffer.from(result.stdout || []);
+    const stderr = Buffer.from(result.stderr || []);
+    return convertSpawnResultEncoding({
+        ...result,
+        stdout,
+        stderr,
+        output: [null, stdout, stderr],
+    }, options);
 }
 
 export default {

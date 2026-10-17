@@ -570,6 +570,9 @@ execution is not a fresh runtime or an operating-system subprocess.
 
 - `ChildProcess`, `exec`, `execFile`, `fork`, `spawn`, `execSync`, `execFileSync`, `spawnSync`
 
+An embedding may register command fallbacks through `wasm-rquickjs:child-process` (below).
+Without a backend, the unsupported-command behavior is unchanged.
+
 </details>
 
 <details>
@@ -736,6 +739,27 @@ usable, but they cannot route or isolate traffic; every outbound request still u
 Compatibility stubs — HTTP/2 is not supported.
 
 - `connect`, `createServer`, `createSecureServer`, `Http2ServerRequest`, `Http2ServerResponse`
+
+</details>
+
+<details>
+<summary><strong><code>wasm-rquickjs:child-process</code></strong></summary>
+
+`setProcessBackend({ spawn?, spawnSync? })` installs runtime-local command fallbacks; pass `null`
+or `undefined` to clear them. Methods receive `(command, args, options)` and return `undefined`
+when they do not handle a command. Inline Node and executable Node-shebang targets retain priority.
+`spawn` returns a ChildProcess-compatible object. `spawnSync` returns a synchronous Node-style
+result with byte stdout/stderr; the wrapper applies the requested output encoding. A Promise
+from `spawnSync` is rejected. `execFileSync` uses that fallback; `execSync` delegates with the
+shell option set. This hook does not itself execute host processes or implement a
+tool registry, permissions, or shell policy.
+
+Embeddings can supply an additional JS module named `wasm-rquickjs-runtime-init` using
+`--js-modules`. It is imported after builtin wiring and before entry code in both the main
+runtime and every fresh execution job. Use it to register adapters independently in each runtime.
+It also runs during Wizer initialization: registration must not discover tools, capture invocation
+authority, perform host I/O, or start background work. Do that lazily in backend methods instead.
+This configuration hook is not a security boundary; host capability checks remain authoritative.
 
 </details>
 

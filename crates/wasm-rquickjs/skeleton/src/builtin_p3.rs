@@ -251,6 +251,8 @@ pub fn add_module_resolvers(
         .with_module("querystring")
         .with_module("node:child_process")
         .with_module("child_process")
+        .with_module("__wasm_rquickjs_builtin/child_process_backend")
+        .with_module("wasm-rquickjs:child-process")
         .with_module("node:test")
         .with_module("node:module")
         .with_module("module")
@@ -531,6 +533,14 @@ pub fn module_loader() -> (
         .with_module("querystring", querystring::REEXPORT_JS)
         .with_syncable_module("node:child_process", child_process::CHILD_PROCESS_JS)
         .with_module("child_process", child_process::REEXPORT_JS)
+        .with_module(
+            "__wasm_rquickjs_builtin/child_process_backend",
+            child_process::BACKEND_JS,
+        )
+        .with_module(
+            "wasm-rquickjs:child-process",
+            child_process::PUBLIC_BACKEND_JS,
+        )
         .with_syncable_module("node:test", node_test::TEST_JS)
         .with_syncable_module("node:module", module::MODULE_JS)
         .with_module("module", module::REEXPORT_JS)
