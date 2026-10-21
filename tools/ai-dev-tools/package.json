@@ -28,6 +28,6 @@
     "@sourcegraph/amp-sdk": "^0.1.0-20260223122441-g31e6594",
     "jsonc-parser": "^3.3.1",
     "log-update": "^7.1.0",
-    "simple-git": "^3.32.2"
+    "simple-git": "^4.0.1"
   }
 }
