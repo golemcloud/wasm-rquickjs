@@ -1,10 +1,11 @@
 import assert from 'node:assert/strict';
-import { spawn, spawnSync, execFileSync, execSync } from 'node:child_process';
+import { spawn, spawnSync, exec, execFile, execFileSync, execSync } from 'node:child_process';
 import { once } from 'node:events';
 import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
 import { setProcessBackend } from 'wasm-rquickjs:child-process';
 import { runJavaScript } from 'wasm-rquickjs:execution';
 import { callCount } from 'wasm-rquickjs-runtime-init';
+import { promisify } from 'node:util';
 
 export async function run() {
     assert.equal(callCount(), 0, 'registration executed a command');
@@ -30,6 +31,24 @@ export async function run() {
     assert.throws(() => spawnSync('virtual-promise'), TypeError);
     assert.equal(execSync('virtual shell program', { encoding: 'utf8' }), 'shell output');
     assert.throws(() => execFileSync('virtual-unavailable'), error => error.code === 'EACCES');
+    const optionalArgv = Object.freeze({
+        cwd: '/virtual', env: Object.freeze({ MARKER: 'options' }), stdio: 'ignore',
+    });
+    assert.equal(spawnSync('virtual-options', optionalArgv).status, 0);
+    const optionalChild = spawn('virtual-options', optionalArgv);
+    assert.deepEqual(await once(optionalChild, 'close'), [7, null]);
+    for (const method of [spawn, spawnSync]) {
+        assert.throws(() => method('virtual-options', 'not-argv'), TypeError);
+        assert.throws(() => method('virtual-options', [], null), TypeError);
+        assert.throws(() => method('virtual-options', [], []), TypeError);
+    }
+    for (const encoding of ['buffer', 'utf8']) {
+        const ignored = spawnSync('virtual-ignored', [], { encoding, stdio: 'ignore' });
+        assert.equal(ignored.stdout, null);
+        assert.equal(ignored.stderr, null);
+        assert.deepEqual(ignored.output, [null, null, null]);
+        assert.equal(execFileSync('virtual-ignored', [], { encoding, stdio: 'ignore' }), null);
+    }
     const args = ['0', 'argument with spaces'];
     const options = { cwd: '/virtual', encoding: 'hex' };
     const result = spawnSync('virtual-command', args, options);
@@ -54,10 +73,111 @@ export async function run() {
     assert.deepEqual(await once(child, 'close'), [7, null]);
     assert.equal(stdout, 'async output');
     assert.equal(stderr, 'async diagnostic');
+    let returned = false;
+    await new Promise((resolve, reject) => {
+        const running = execFile('virtual-async', [], (error, out, err) => {
+            try {
+                assert.equal(returned, true, 'execFile blocked before returning its child');
+                assert.equal(error.code, 7);
+                assert.equal(out, 'async output');
+                assert.equal(err, 'async diagnostic');
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+        assert.ok(running.stdout && running.stderr && running.stdin);
+        returned = true;
+    });
+    await new Promise((resolve, reject) => {
+        exec('virtual shell program', (error, out, err) => {
+            try {
+                assert.equal(error, null);
+                assert.equal(out, 'async shell output');
+                assert.equal(err, 'async diagnostic');
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+    });
+    await new Promise((resolve, reject) => {
+        execFile('virtual-async', { encoding: 'buffer', maxBuffer: 5 }, (error, out, err) => {
+            try {
+                assert.equal(error.code, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+                assert.equal(error.killed, true);
+                assert.equal(Buffer.isBuffer(out), true);
+                assert.equal(out.toString(), 'async');
+                assert.equal(err.toString(), 'async');
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+    });
+    const beforeInlineExec = callCount();
+    await new Promise((resolve, reject) => {
+        execFile('local-script', ['exec-file'], { env: localEnv }, (error, out) => {
+            try {
+                assert.equal(error, null);
+                assert.equal(out, 'local:exec-file\n');
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+    });
+    assert.equal(callCount(), beforeInlineExec, 'execFile intercepted the local Node script');
+    let errorCallbacks = 0;
+    await new Promise((resolve, reject) => {
+        execFile('virtual-unavailable', (error, out, err) => {
+            try {
+                errorCallbacks++;
+                assert.equal(error.code, 'EACCES');
+                assert.equal(out, '');
+                assert.equal(err, '');
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+    });
+    assert.equal(errorCallbacks, 1);
+    await new Promise((resolve, reject) => {
+        execFile('virtual-async', { maxBuffer: 4, encoding: 'buffer' }, (error, out, err) => {
+            try {
+                assert.equal(error.code, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+                assert.equal(error.killed, true);
+                assert.deepEqual([...out], [97, 115, 121, 110]);
+                assert.deepEqual([...err], [97, 115, 121, 110]);
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+    });
+    await new Promise((resolve, reject) => {
+        execFile('virtual-pending', { timeout: 1 }, (error, out, err) => {
+            try {
+                assert.equal(error.signal, 'SIGTERM');
+                assert.equal(error.killed, true);
+                assert.equal(out, '');
+                assert.equal(err, '');
+                resolve();
+            } catch (failure) { reject(failure); }
+        });
+    });
+    const promised = promisify(exec)('virtual shell program');
+    assert.ok(promised.child.stdout);
+    assert.deepEqual(await promised, { stdout: 'async shell output', stderr: 'async diagnostic' });
+    await assert.rejects(promisify(execFile)('virtual-async'), error => {
+        assert.equal(error.code, 7);
+        assert.equal(error.stdout, 'async output');
+        assert.equal(error.stderr, 'async diagnostic');
+        return true;
+    });
+    const beforeInvalidOptions = callCount();
+    assert.throws(() => execFile('virtual-async', { maxBuffer: -1 }), RangeError);
+    assert.throws(() => exec('virtual shell program', { timeout: -1 }), RangeError);
+    assert.equal(callCount(), beforeInvalidOptions, 'invalid options started work');
     const parentCalls = callCount();
     setProcessBackend(null);
     assert.equal(spawnSync('virtual-command').error.code, 'ENOSYS');
     assert.throws(() => execSync('virtual shell program'), error => error.code === 'ENOSYS');
+    await assert.rejects(promisify(execFile)('missing-command'), error => {
+        assert.equal(error.code, 'ENOSYS');
+        assert.equal(error.stdout, '');
+        assert.equal(error.stderr, '');
+        return true;
+    });
     let getterReads = 0;
     setProcessBackend({
         marker: 29,
@@ -75,7 +195,7 @@ export async function run() {
     const job = await runJavaScript({
         source: `
             const assert = (await import('node:assert/strict')).default;
-            const { spawnSync } = await import('node:child_process');
+            const { spawnSync, execFile } = await import('node:child_process');
             const { callCount } = await import('wasm-rquickjs-runtime-init');
             assert.equal('parentProcessBackend' in globalThis, false);
             assert.equal(callCount(), 0);
@@ -88,6 +208,16 @@ export async function run() {
             assert.equal(result.status, 0);
             assert.deepEqual([...result.stdout], [0, 255, 1, 128]);
             assert.equal(callCount(), 1);
+            await new Promise((resolve, reject) => {
+                execFile('virtual-async', (error, out) => {
+                    try {
+                        assert.equal(error.code, 7);
+                        assert.equal(out, 'async output');
+                        resolve();
+                    } catch (failure) { reject(failure); }
+                });
+            });
+            assert.equal(callCount(), 2);
             return true;
         `,
         cwd: '/', timeoutMs: 3000, maxBytes: 1024,

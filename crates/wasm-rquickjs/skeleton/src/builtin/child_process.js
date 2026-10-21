@@ -1856,6 +1856,9 @@ function createExecFileError(file, args, result) {
 
 function createExecChildProcess() {
     const child = new EventEmitter();
+    // exec/execFile consume spawn failures through their callback even when
+    // the caller does not subscribe to the child process's error event.
+    child.on('error', () => {});
     child.pid = 1;
     child.stdin = null;
     child.stdout = null;
@@ -1978,8 +1981,93 @@ function getForkExecArgv(options) {
 }
 
 // Asynchronous process creation functions
+function normalizeBackendExecOptions(options) {
+    const normalized = cloneObject(options);
+    if (normalized.encoding === undefined) normalized.encoding = 'utf8';
+    if (normalized.encoding !== 'buffer' && !Buffer.isEncoding(normalized.encoding)) {
+        normalized.encoding = 'buffer';
+    }
+    if (normalized.maxBuffer === undefined) normalized.maxBuffer = 1024 * 1024;
+    if (typeof normalized.maxBuffer !== 'number' || normalized.maxBuffer < 0 ||
+        Number.isNaN(normalized.maxBuffer)) {
+        throw new RangeError('maxBuffer must be a non-negative number');
+    }
+    if (normalized.timeout !== undefined &&
+        (!Number.isInteger(normalized.timeout) || normalized.timeout < 0)) {
+        throw new RangeError('timeout must be a non-negative integer');
+    }
+    return normalized;
+}
+
+function collectExecChild(child, options, callback, makeError) {
+    const output = { stdout: [], stderr: [] };
+    const lengths = { stdout: 0, stderr: 0 };
+    let error;
+    let finished = false;
+    let killed = false;
+    let timer;
+    const finish = (status, signal) => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        const result = convertSpawnResultEncoding({
+            stdout: Buffer.concat(output.stdout),
+            stderr: Buffer.concat(output.stderr),
+            status: typeof status === 'number' ? status : null,
+            signal: signal || null,
+            error,
+        }, options);
+        const failure = makeError(result);
+        if (failure) failure.killed = child.killed || killed;
+        if (callback) callback(failure, result.stdout, result.stderr);
+    };
+    const kill = () => {
+        if (killed) return;
+        killed = true;
+        try {
+            child.kill(options.killSignal || 'SIGTERM');
+        } catch (failure) {
+            error = failure;
+            finish(child.exitCode, child.signalCode);
+        }
+    };
+    for (const channel of ['stdout', 'stderr']) {
+        if (!child[channel]) continue;
+        child[channel].on('data', chunk => {
+            if (finished) return;
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            const remaining = Math.max(0, options.maxBuffer - lengths[channel]);
+            if (remaining > 0) output[channel].push(bytes.subarray(0, remaining));
+            lengths[channel] += bytes.length;
+            if (lengths[channel] > options.maxBuffer) {
+                error ||= Object.assign(new RangeError(channel + ' maxBuffer length exceeded'), {
+                    code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+                });
+                kill();
+            }
+        });
+    }
+    child.once('error', failure => {
+        error = failure;
+        finish(child.exitCode, child.signalCode);
+    });
+    child.once('close', finish);
+    if (options.timeout > 0) timer = setTimeout(kill, options.timeout);
+    return child;
+}
+
 export function exec(command, options, callback) {
     const normalized = normalizeExecParams(options, callback);
+    const backend = getProcessBackend();
+    if (backend && backend.spawn) {
+        const resolvedOptions = normalizeBackendExecOptions(normalized.options);
+        resolvedOptions.shell = typeof resolvedOptions.shell === 'string' ? resolvedOptions.shell : true;
+        const delegated = backend.spawn(String(command), [], resolvedOptions);
+        if (delegated !== undefined) {
+            return collectExecChild(delegated, resolvedOptions, normalized.callback,
+                result => createExecError(command, result));
+        }
+    }
     const child = createExecChildProcess();
     const result = runExecCommand(command, normalized.options);
     const error = createExecError(command, result);
@@ -1990,6 +2078,13 @@ export function exec(command, options, callback) {
 
 export function execFile(file, args, options, callback) {
     const normalized = normalizeExecFileParams(args, options, callback);
+    const backend = getProcessBackend();
+    if (backend && backend.spawn) {
+        const resolvedOptions = normalizeBackendExecOptions(normalized.options);
+        return collectExecChild(spawn(String(file), normalized.args, resolvedOptions),
+            resolvedOptions, normalized.callback,
+            result => createExecFileError(file, normalized.args, result));
+    }
     const child = createExecChildProcess();
     const resolvedOptions = cloneObject(normalized.options);
 
@@ -2007,6 +2102,31 @@ export function execFile(file, args, options, callback) {
     finishExecChild(child, normalized.callback, error, result);
 
     return child;
+}
+
+function promisifyExec(fn) {
+    return function (...args) {
+        let child;
+        const result = new Promise((resolve, reject) => {
+            child = fn(...args, (error, stdout, stderr) => {
+                if (error) {
+                    error.stdout = stdout;
+                    error.stderr = stderr;
+                    reject(error);
+                } else {
+                    resolve({ stdout, stderr });
+                }
+            });
+        });
+        result.child = child;
+        return result;
+    };
+}
+
+for (const fn of [exec, execFile]) {
+    Object.defineProperty(fn, Symbol.for('nodejs.util.promisify.custom'), {
+        value: promisifyExec(fn),
+    });
 }
 
 export function fork(modulePath, args, options) {
@@ -2071,7 +2191,26 @@ export function fork(modulePath, args, options) {
 
 // spawn emulation — runs the target script inline (like fork/spawnSync) but
 // delivers results asynchronously through EventEmitter streams.
+function normalizeSpawnParams(args, options) {
+    if (Array.isArray(args)) {
+        args = args.slice();
+    } else if (args == null) {
+        args = [];
+    } else if (typeof args === 'object') {
+        options = args;
+        args = [];
+    } else {
+        throw new TypeError('args must be an array or an options object');
+    }
+    if (options === undefined) options = {};
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        throw new TypeError('options must be an object');
+    }
+    return { args, options: { ...options } };
+}
+
 export function spawn(command, args, options) {
+    ({ args, options } = normalizeSpawnParams(args, options));
     const backend = getProcessBackend();
     let inline;
     if (backend && backend.spawn) {
@@ -2169,6 +2308,7 @@ export function execFileSync(file, args, options) {
         throw err;
     }
 
+    if (result.stdout === null) return null;
     const encoding = getOutputEncoding(normalizedOptions);
     if (encoding && encoding !== 'buffer') {
         return result.stdout ? result.stdout.toString(encoding) : '';
@@ -2185,8 +2325,7 @@ export function execSync(command, options) {
 }
 
 export function spawnSync(command, args, options) {
-    const normalizedArgs = args || [];
-    const normalizedOptions = options || {};
+    const { args: normalizedArgs, options: normalizedOptions } = normalizeSpawnParams(args, options);
     if (normalizedOptions.shell) {
         return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
             unsupportedSpawnSyncResult(String(command) + ' with shell option');
@@ -2220,8 +2359,8 @@ function delegatedSpawnSync(command, args, options) {
     if (!result || typeof result !== 'object' || typeof result.then === 'function') {
         throw new TypeError('Synchronous process backend must return a result object or undefined');
     }
-    const stdout = Buffer.from(result.stdout || []);
-    const stderr = Buffer.from(result.stderr || []);
+    const stdout = result.stdout === null ? null : Buffer.from(result.stdout || []);
+    const stderr = result.stderr === null ? null : Buffer.from(result.stderr || []);
     return convertSpawnResultEncoding({
         ...result,
         stdout,

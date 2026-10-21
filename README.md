@@ -572,6 +572,11 @@ execution is not a fresh runtime or an operating-system subprocess.
 
 An embedding may register command fallbacks through `wasm-rquickjs:child-process` (below).
 Without a backend, the unsupported-command behavior is unchanged.
+`exec` and `execFile` collect the asynchronous backend child's output, preserve its
+error or exit status, and enforce their output limits and timeout. They do not use
+the synchronous backend when an asynchronous command is accepted.
+Promisified `exec` and `execFile` return both output channels and expose their child
+through the promise's `child` property.
 
 </details>
 
@@ -748,8 +753,10 @@ Compatibility stubs — HTTP/2 is not supported.
 `setProcessBackend({ spawn?, spawnSync? })` installs runtime-local command fallbacks; pass `null`
 or `undefined` to clear them. Methods receive `(command, args, options)` and return `undefined`
 when they do not handle a command. Inline Node and executable Node-shebang targets retain priority.
+The optional-argv forms `spawn(command, options)` and `spawnSync(command, options)` are
+normalized before dispatch, so adapters always receive an argv array and a separate options object.
 `spawn` returns a ChildProcess-compatible object. `spawnSync` returns a synchronous Node-style
-result with byte stdout/stderr; the wrapper applies the requested output encoding. A Promise
+result with byte stdout/stderr, or `null` for unpiped channels; the wrapper applies the requested output encoding. A Promise
 from `spawnSync` is rejected. `execFileSync` uses that fallback; `execSync` delegates with the
 shell option set. This hook does not itself execute host processes or implement a
 tool registry, permissions, or shell policy.
