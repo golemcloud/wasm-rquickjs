@@ -11,6 +11,7 @@ import { EventEmitter } from 'node:events';
 import process from 'node:process';
 import moduleExports from 'node:module';
 import { check_syntax_with_filename as checkSyntaxWithFilename } from '__wasm_rquickjs_builtin/vm_native';
+import { getProcessBackend } from '__wasm_rquickjs_builtin/child_process_backend';
 
 const FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
 
@@ -1769,6 +1770,18 @@ function resolveJavaScriptShellCommand(command, args, env, cwd) {
     };
 }
 
+function resolveBackendInlineCommand(command, args, options) {
+    if (command === process.execPath) return { command, args };
+    const env = options.env || process.env;
+    const shell = resolveJavaScriptShellCommand(command, args, env, options.cwd);
+    if (shell) return shell;
+    const entry = resolveNodeShebangCommand(command, env, options.cwd);
+    return entry === null ? null : {
+        command: process.execPath,
+        args: [entry].concat(args),
+    };
+}
+
 function createExecError(command, result) {
     if (!result) {
         return createNotSupportedError('exec');
@@ -1843,6 +1856,9 @@ function createExecFileError(file, args, result) {
 
 function createExecChildProcess() {
     const child = new EventEmitter();
+    // exec/execFile consume spawn failures through their callback even when
+    // the caller does not subscribe to the child process's error event.
+    child.on('error', () => {});
     child.pid = 1;
     child.stdin = null;
     child.stdout = null;
@@ -1965,8 +1981,93 @@ function getForkExecArgv(options) {
 }
 
 // Asynchronous process creation functions
+function normalizeBackendExecOptions(options) {
+    const normalized = cloneObject(options);
+    if (normalized.encoding === undefined) normalized.encoding = 'utf8';
+    if (normalized.encoding !== 'buffer' && !Buffer.isEncoding(normalized.encoding)) {
+        normalized.encoding = 'buffer';
+    }
+    if (normalized.maxBuffer === undefined) normalized.maxBuffer = 1024 * 1024;
+    if (typeof normalized.maxBuffer !== 'number' || normalized.maxBuffer < 0 ||
+        Number.isNaN(normalized.maxBuffer)) {
+        throw new RangeError('maxBuffer must be a non-negative number');
+    }
+    if (normalized.timeout !== undefined &&
+        (!Number.isInteger(normalized.timeout) || normalized.timeout < 0)) {
+        throw new RangeError('timeout must be a non-negative integer');
+    }
+    return normalized;
+}
+
+function collectExecChild(child, options, callback, makeError) {
+    const output = { stdout: [], stderr: [] };
+    const lengths = { stdout: 0, stderr: 0 };
+    let error;
+    let finished = false;
+    let killed = false;
+    let timer;
+    const finish = (status, signal) => {
+        if (finished) return;
+        finished = true;
+        if (timer !== undefined) clearTimeout(timer);
+        const result = convertSpawnResultEncoding({
+            stdout: Buffer.concat(output.stdout),
+            stderr: Buffer.concat(output.stderr),
+            status: typeof status === 'number' ? status : null,
+            signal: signal || null,
+            error,
+        }, options);
+        const failure = makeError(result);
+        if (failure) failure.killed = child.killed || killed;
+        if (callback) callback(failure, result.stdout, result.stderr);
+    };
+    const kill = () => {
+        if (killed) return;
+        killed = true;
+        try {
+            child.kill(options.killSignal || 'SIGTERM');
+        } catch (failure) {
+            error = failure;
+            finish(child.exitCode, child.signalCode);
+        }
+    };
+    for (const channel of ['stdout', 'stderr']) {
+        if (!child[channel]) continue;
+        child[channel].on('data', chunk => {
+            if (finished) return;
+            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            const remaining = Math.max(0, options.maxBuffer - lengths[channel]);
+            if (remaining > 0) output[channel].push(bytes.subarray(0, remaining));
+            lengths[channel] += bytes.length;
+            if (lengths[channel] > options.maxBuffer) {
+                error ||= Object.assign(new RangeError(channel + ' maxBuffer length exceeded'), {
+                    code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
+                });
+                kill();
+            }
+        });
+    }
+    child.once('error', failure => {
+        error = failure;
+        finish(child.exitCode, child.signalCode);
+    });
+    child.once('close', finish);
+    if (options.timeout > 0) timer = setTimeout(kill, options.timeout);
+    return child;
+}
+
 export function exec(command, options, callback) {
     const normalized = normalizeExecParams(options, callback);
+    const backend = getProcessBackend();
+    if (backend && backend.spawn) {
+        const resolvedOptions = normalizeBackendExecOptions(normalized.options);
+        resolvedOptions.shell = typeof resolvedOptions.shell === 'string' ? resolvedOptions.shell : true;
+        const delegated = backend.spawn(String(command), [], resolvedOptions);
+        if (delegated !== undefined) {
+            return collectExecChild(delegated, resolvedOptions, normalized.callback,
+                result => createExecError(command, result));
+        }
+    }
     const child = createExecChildProcess();
     const result = runExecCommand(command, normalized.options);
     const error = createExecError(command, result);
@@ -1977,6 +2078,13 @@ export function exec(command, options, callback) {
 
 export function execFile(file, args, options, callback) {
     const normalized = normalizeExecFileParams(args, options, callback);
+    const backend = getProcessBackend();
+    if (backend && backend.spawn) {
+        const resolvedOptions = normalizeBackendExecOptions(normalized.options);
+        return collectExecChild(spawn(String(file), normalized.args, resolvedOptions),
+            resolvedOptions, normalized.callback,
+            result => createExecFileError(file, normalized.args, result));
+    }
     const child = createExecChildProcess();
     const resolvedOptions = cloneObject(normalized.options);
 
@@ -1994,6 +2102,31 @@ export function execFile(file, args, options, callback) {
     finishExecChild(child, normalized.callback, error, result);
 
     return child;
+}
+
+function promisifyExec(fn) {
+    return function (...args) {
+        let child;
+        const result = new Promise((resolve, reject) => {
+            child = fn(...args, (error, stdout, stderr) => {
+                if (error) {
+                    error.stdout = stdout;
+                    error.stderr = stderr;
+                    reject(error);
+                } else {
+                    resolve({ stdout, stderr });
+                }
+            });
+        });
+        result.child = child;
+        return result;
+    };
+}
+
+for (const fn of [exec, execFile]) {
+    Object.defineProperty(fn, Symbol.for('nodejs.util.promisify.custom'), {
+        value: promisifyExec(fn),
+    });
 }
 
 export function fork(modulePath, args, options) {
@@ -2058,7 +2191,39 @@ export function fork(modulePath, args, options) {
 
 // spawn emulation — runs the target script inline (like fork/spawnSync) but
 // delivers results asynchronously through EventEmitter streams.
+function normalizeSpawnParams(args, options) {
+    if (Array.isArray(args)) {
+        args = args.slice();
+    } else if (args == null) {
+        args = [];
+    } else if (typeof args === 'object') {
+        options = args;
+        args = [];
+    } else {
+        throw new TypeError('args must be an array or an options object');
+    }
+    if (options === undefined) options = {};
+    if (options === null || typeof options !== 'object' || Array.isArray(options)) {
+        throw new TypeError('options must be an object');
+    }
+    return { args, options: { ...options } };
+}
+
 export function spawn(command, args, options) {
+    ({ args, options } = normalizeSpawnParams(args, options));
+    const backend = getProcessBackend();
+    let inline;
+    if (backend && backend.spawn) {
+        const opts = options || {};
+        const cmd = String(command);
+        // A configured adapter is a fallback. Keep inline Node/shebang
+        // resolution ahead of host command lookup, including PATH precedence.
+        inline = !opts.shell && resolveBackendInlineCommand(cmd, args || [], opts);
+        if (!inline) {
+            const delegated = backend.spawn(cmd, args || [], opts);
+            if (delegated !== undefined) return delegated;
+        }
+    }
     const child = new EventEmitter();
     child.pid = 1;
     child.connected = false;
@@ -2090,7 +2255,7 @@ export function spawn(command, args, options) {
         }
         spawnOpts.encoding = 'buffer';
 
-        const result = spawnSync(String(command), args || [], spawnOpts);
+        const result = spawnSync(inline ? inline.command : String(command), inline ? inline.args : args || [], spawnOpts);
         const exitCode = typeof result.status === 'number' ? result.status : null;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
@@ -2132,8 +2297,8 @@ export function execFileSync(file, args, options) {
 
     const result = spawnSync(file, normalizedArgs, normalizedOptions);
 
-    if (result.status !== 0) {
-        const err = new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
+    if (result.error || result.status !== 0) {
+        const err = result.error || new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
         err.status = result.status;
         err.signal = result.signal;
         err.stdout = result.stdout;
@@ -2143,6 +2308,7 @@ export function execFileSync(file, args, options) {
         throw err;
     }
 
+    if (result.stdout === null) return null;
     const encoding = getOutputEncoding(normalizedOptions);
     if (encoding && encoding !== 'buffer') {
         return result.stdout ? result.stdout.toString(encoding) : '';
@@ -2152,16 +2318,24 @@ export function execFileSync(file, args, options) {
 }
 
 export function execSync(command, options) {
-    throw createNotSupportedError('execSync');
+    const backend = getProcessBackend();
+    if (!backend || !backend.spawnSync) throw createNotSupportedError('execSync');
+    const opts = options || {};
+    return execFileSync(String(command), [], { ...opts, shell: opts.shell === undefined ? true : opts.shell });
 }
 
 export function spawnSync(command, args, options) {
-    const normalizedArgs = args || [];
-    const normalizedOptions = options || {};
+    const { args: normalizedArgs, options: normalizedOptions } = normalizeSpawnParams(args, options);
     if (normalizedOptions.shell) {
-        return unsupportedSpawnSyncResult(String(command) + ' with shell option');
+        return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
+            unsupportedSpawnSyncResult(String(command) + ' with shell option');
     }
-    const shellCommand = resolveJavaScriptShellCommand(
+    const backend = getProcessBackend();
+    // The unconfigured path keeps its existing lookup cost. Only a registered
+    // fallback requires resolving direct Node shebangs before delegation.
+    const shellCommand = backend && backend.spawnSync
+        ? resolveBackendInlineCommand(String(command), normalizedArgs, normalizedOptions)
+        : resolveJavaScriptShellCommand(
         String(command),
         normalizedArgs,
         normalizedOptions.env || process.env,
@@ -2170,10 +2344,29 @@ export function spawnSync(command, args, options) {
     const cmd = shellCommand ? shellCommand.command : String(command);
     const resolvedArgs = shellCommand ? shellCommand.args : normalizedArgs;
     if (cmd !== process.execPath) {
-        return unsupportedSpawnSyncResult(cmd);
+        return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
+            unsupportedSpawnSyncResult(cmd);
     }
 
     return runInline(cmd, resolvedArgs, normalizedOptions);
+}
+
+function delegatedSpawnSync(command, args, options) {
+    const backend = getProcessBackend();
+    if (!backend || !backend.spawnSync) return undefined;
+    const result = backend.spawnSync(command, args, options);
+    if (result === undefined) return undefined;
+    if (!result || typeof result !== 'object' || typeof result.then === 'function') {
+        throw new TypeError('Synchronous process backend must return a result object or undefined');
+    }
+    const stdout = result.stdout === null ? null : Buffer.from(result.stdout || []);
+    const stderr = result.stderr === null ? null : Buffer.from(result.stderr || []);
+    return convertSpawnResultEncoding({
+        ...result,
+        stdout,
+        stderr,
+        output: [null, stdout, stderr],
+    }, options);
 }
 
 export default {

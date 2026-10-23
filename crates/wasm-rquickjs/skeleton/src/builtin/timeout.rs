@@ -29,6 +29,33 @@ pub mod native_module {
             .last_abort_id
             .fetch_add(1, Ordering::Relaxed);
 
+        #[cfg(feature = "p3")]
+        if let Some(owner) = services
+            .timers
+            .child_owner
+            .borrow()
+            .as_ref()
+            .and_then(std::rc::Weak::upgrade)
+        {
+            let (handle, registration) = futures::future::AbortHandle::new_pair();
+            services
+                .timers
+                .abort_handles
+                .borrow_mut()
+                .insert(key, handle);
+            owner.schedule(
+                super::super::child_timers::ChildTimer {
+                    key,
+                    delay,
+                    periodic,
+                    callback: code_or_fn,
+                    args,
+                },
+                registration,
+            );
+            return key;
+        }
+
         let (task, abort_handle) = abortable(super::scheduled_task(
             ctx.clone(),
             code_or_fn,
@@ -77,11 +104,18 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        services
+        if services
             .timers
-            .unrefed_timers
-            .borrow_mut()
-            .insert(timeout_id);
+            .abort_handles
+            .borrow()
+            .contains_key(&timeout_id)
+        {
+            services
+                .timers
+                .unrefed_timers
+                .borrow_mut()
+                .insert(timeout_id);
+        }
     }
 
     #[rquickjs::function]
@@ -143,14 +177,7 @@ async fn scheduled_task(
         #[cfg(feature = "p3")]
         wasip3::clocks::monotonic_clock::wait_for(duration_ns).await;
 
-        run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone(), timer_key)
-            .catch(&ctx)
-            .unwrap_or_else(|e| {
-                eprintln!(
-                    "Timer callback error escaped JS uncaught handler: {}",
-                    format_caught_error(e)
-                )
-            });
+        dispatch_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone(), timer_key);
 
         if !periodic {
             break;
@@ -169,6 +196,22 @@ async fn scheduled_task(
             break;
         }
     }
+}
+
+pub(crate) fn dispatch_scheduled_task(
+    ctx: Ctx<'_>,
+    code_or_fn: Persistent<Value<'static>>,
+    args: Persistent<Vec<Value<'static>>>,
+    timer_key: usize,
+) {
+    run_scheduled_task(ctx.clone(), code_or_fn, args, timer_key)
+        .catch(&ctx)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "Timer callback error escaped JS uncaught handler: {}",
+                format_caught_error(e)
+            )
+        });
 }
 
 fn run_scheduled_task(
