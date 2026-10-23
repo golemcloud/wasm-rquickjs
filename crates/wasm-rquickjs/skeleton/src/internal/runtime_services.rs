@@ -918,6 +918,9 @@ unsafe impl<'js> JsLifetime<'js> for RuntimeServices {
 
 #[derive(Default)]
 pub(crate) struct TimerServices {
+    #[cfg(feature = "p3")]
+    pub(crate) child_owner:
+        RefCell<Option<std::rc::Weak<crate::builtin::child_timers::ChildTimers>>>,
     pub(crate) abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub(crate) last_abort_id: AtomicUsize,
     pub(crate) unrefed_timers: RefCell<HashSet<usize>>,

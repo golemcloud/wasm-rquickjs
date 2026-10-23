@@ -3,6 +3,7 @@ import { PassThrough } from 'node:stream';
 import { finished } from 'node:stream/promises';
 import { resolve } from 'node:path';
 import { deserializeFromTransport } from '__wasm_rquickjs_builtin/structured_clone';
+export { run_isolated_child as runIsolatedChild } from '__wasm_rquickjs_builtin/execution_native';
 
 const MAX_TIMEOUT_MS = 18_446_744_073_709;
 const MAX_OUTPUT_BYTES = 64 * 1024 * 1024;

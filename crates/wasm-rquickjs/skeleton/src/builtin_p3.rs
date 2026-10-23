@@ -45,6 +45,8 @@ mod base64;
 mod buffer;
 #[path = "builtin/child_process.rs"]
 mod child_process;
+#[path = "builtin/child_timers.rs"]
+pub(crate) mod child_timers;
 #[path = "builtin/cluster.rs"]
 mod cluster;
 #[path = "builtin/console.rs"]

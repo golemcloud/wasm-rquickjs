@@ -1,13 +1,202 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, exec, execFile, execFileSync, execSync } from 'node:child_process';
 import { once } from 'node:events';
-import { mkdirSync, symlinkSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { setProcessBackend } from 'wasm-rquickjs:child-process';
 import { runJavaScript } from 'wasm-rquickjs:execution';
 import { callCount } from 'wasm-rquickjs-runtime-init';
 import { promisify } from 'node:util';
 
+async function checkLocalChildLifetime(api) {
+    const parent = {
+        argv: [...process.argv],
+        cwd: process.cwd(),
+        marker: process.env.CHILD_LIFETIME_MARKER,
+        exitCode: process.exitCode,
+    };
+    const scripts = [
+        ["Promise.resolve().then(() => finish());", 'promise'],
+        ["setTimeout(finish, 20);", 'timer'],
+    ];
+    for (const [schedule, label] of scripts) {
+        const source = `
+            process.stdout.write('immediate\\n');
+            function finish() {
+                process.stdout.write('${label}:' + process.env.CHILD_LIFETIME_MARKER + '\\n');
+                process.stderr.write('${label}-stderr\\n');
+                process.exitCode = 7;
+            }
+            ${schedule}
+        `;
+        const options = {
+            encoding: 'utf8',
+            env: { ...process.env, CHILD_LIFETIME_MARKER: label },
+        };
+        const result = api === 'spawnSync'
+            ? spawnSync(process.execPath, ['-e', source], options)
+            : await new Promise(resolve => {
+                execFile(process.execPath, ['-e', source], options, (error, stdout, stderr) => {
+                    resolve({ status: error ? error.code : 0, stdout, stderr });
+                });
+            });
+        assert.equal(result.stdout, `immediate\n${label}:${label}\n`, `${api} returned before child ${label} output`);
+        assert.equal(result.stderr, `${label}-stderr\n`);
+        assert.equal(result.status, 7, `${api} lost the child's asynchronous exit code`);
+        assert.deepEqual(process.argv, parent.argv);
+        assert.equal(process.cwd(), parent.cwd);
+        assert.equal(process.env.CHILD_LIFETIME_MARKER, parent.marker);
+        assert.equal(process.exitCode, parent.exitCode);
+    }
+    return true;
+}
+
 export async function run() {
+    if (existsSync('/isolated-child-probe.json')) {
+        const { runIsolatedChild } = await import('wasm-rquickjs:execution');
+        const config = JSON.parse(readFileSync('/isolated-child-probe.json', 'utf8'));
+        if (config.mode === 'unsupported') {
+            assert.throws(() => runIsolatedChild(''), /require WASI Preview 3/);
+            return true;
+        }
+        const basic = `
+            process.stdout.write('immediate\\n');
+            Promise.resolve().then(() => process.stdout.write('promise\\n'));
+            setTimeout(() => {
+                process.stdout.write('timer\\n');
+                process.stderr.write('diagnostic\\n');
+                process.exitCode = 7;
+            }, 20);
+        `;
+        async function check(source, expected) {
+            const events = [];
+            const parent = { argv: [...process.argv], cwd: process.cwd(), env: { ...process.env }, exitCode: process.exitCode };
+            queueMicrotask(() => events.push('parent-promise'));
+            setTimeout(() => events.push('parent-timer'), 0);
+            const result = JSON.parse(runIsolatedChild(source));
+            assert.deepEqual(events, [], 'synchronous child advanced the parent');
+            assert.deepEqual(result, expected);
+            assert.deepEqual(process.argv, parent.argv);
+            assert.equal(process.cwd(), parent.cwd);
+            assert.deepEqual({ ...process.env }, parent.env);
+            assert.equal(process.exitCode, parent.exitCode);
+            await new Promise(resolve => setTimeout(resolve, 0));
+            assert.deepEqual(events, ['parent-promise', 'parent-timer']);
+        }
+        const expected = { status: 7, stdout: 'immediate\npromise\ntimer\n', stderr: 'diagnostic\n' };
+        if (config.mode === 'callback') {
+            await new Promise((resolve, reject) => {
+                setTimeout(() => check(basic, expected).then(resolve, reject), 0);
+            });
+        } else if (config.mode === 'nested') {
+            await check(`
+                import('wasm-rquickjs:execution').then(({ runIsolatedChild }) => {
+                    let parentRan = false;
+                    queueMicrotask(() => { parentRan = true; });
+                    setTimeout(() => { parentRan = true; }, 0);
+                    const nested = JSON.parse(runIsolatedChild(${JSON.stringify(basic)}));
+                    if (parentRan) throw new Error('nested child advanced its parent');
+                    process.stdout.write(nested.status + ':' + nested.stdout);
+                    process.stderr.write(nested.stderr);
+                    setTimeout(() => { process.stdout.write('outer\\n'); process.exitCode = 9; }, 10);
+                });
+            `, { status: 9, stdout: '7:' + expected.stdout + 'outer\n', stderr: expected.stderr });
+        } else if (config.mode === 'http') {
+            await check(`
+                fetch(${JSON.stringify(config.url)}).then(response => response.text()).then(body => {
+                    process.stdout.write(body + '\\n');
+                    process.exitCode = 7;
+                });
+            `, { status: 7, stdout: '[]\n', stderr: '' });
+        } else if (config.mode === 'unref') {
+            await check(`
+                setInterval(() => process.stdout.write('unexpected\\n'), 60_000).unref();
+                process.stdout.write('done\\n');
+            `, { status: 0, stdout: 'done\n', stderr: '' });
+        } else if (config.mode === 'unref-http' || config.mode === 'unref-http-after-ref') {
+            await check(`
+                fetch(${JSON.stringify(config.url + '/held')}).then(response => response.text()).then(body => {
+                    process.stdout.write(body + '\\n');
+                    process.exitCode = 7;
+                });
+                const release = () => setTimeout(() => {
+                    process.stdout.write('timer\\n');
+                    fetch(${JSON.stringify(config.url + '/release')}).then(response => response.text());
+                }, 20).unref();
+                if (${JSON.stringify(config.mode)} === 'unref-http-after-ref') setTimeout(release, 5);
+                else release();
+            `, { status: 7, stdout: 'timer\ndone\n', stderr: '' });
+        } else if (config.mode === 'timer-edges') {
+            for (const source of [
+                `const old = setTimeout(() => {}, 1000);
+                 clearTimeout(old); old.unref();
+                 setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 5);`,
+                `const old = setTimeout(() => {
+                    setTimeout(() => {
+                        old.unref();
+                        setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 5);
+                    }, 1);
+                 }, 1);`,
+                `const cancelled = setTimeout(() => process.stdout.write('unexpected'), 0);
+                 clearTimeout(cancelled);
+                 setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 5);`,
+                `let count = 0;
+                 const interval = setInterval(() => {
+                    if (++count === 3) { clearInterval(interval); process.stdout.write('done'); process.exitCode = 7; }
+                 }, 1);`,
+                `const interval = setInterval(() => {
+                    interval.unref(); process.stdout.write('done'); process.exitCode = 7;
+                 }, 1);`,
+                `const timer = setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 5);
+                 timer.unref(); timer.ref();`,
+                `setTimeout(() => {
+                    setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 5);
+                 }, 1);`,
+            ]) await check(source, { status: 7, stdout: 'done', stderr: '' });
+            await check(`setTimeout(() => process.stdout.write('unexpected'), 0).unref();`,
+                { status: 0, stdout: '', stderr: '' });
+        } else if (config.mode === 'checkpoint') {
+            await check(`
+                process.on('unhandledRejection', () => {
+                    setTimeout(() => { process.stdout.write('late\\n'); process.exitCode = 7; }, 20);
+                });
+                Promise.reject(new Error('probe'));
+            `, { status: 7, stdout: 'late\n', stderr: '' });
+        } else if (config.mode === 'cleanup') {
+            assert.throws(() => runIsolatedChild(`
+                setTimeout(() => process.stdout.write('unexpected\\n'), 20);
+                throw new Error('child failure');
+            `), /child failure/);
+            const original = process.env.ISOLATED_CHILD_MUTATION;
+            await check(`
+                process.env.ISOLATED_CHILD_MUTATION = 'child-only';
+                process.argv.push('child-only');
+                process.chdir('/test');
+                setTimeout(() => { process.stdout.write('child\\n'); process.exitCode = 7; }, 20);
+            `, { status: 7, stdout: 'child\n', stderr: '' });
+            await check(`
+                process.stdout.write(String(process.env.ISOLATED_CHILD_MUTATION) + '\\n');
+            `, { status: 0, stdout: String(original) + '\n', stderr: '' });
+        } else if (config.mode === 'benchmark') {
+            const samples = [];
+            for (let i = 0; i < 20; i++) {
+                const started = performance.now();
+                const result = config.runner === 'isolated'
+                    ? JSON.parse(runIsolatedChild("process.stdout.write('ok'); process.exitCode = 7;"))
+                    : spawnSync(process.execPath, ['-e', "process.stdout.write('ok'); process.exitCode = 7;"], { encoding: 'utf8' });
+                samples.push(performance.now() - started);
+                assert.equal(result.stdout, 'ok');
+                assert.equal(result.stderr, '');
+                assert.equal(result.status, 7);
+            }
+            writeFileSync('/child-benchmark-result.json', JSON.stringify(samples));
+        } else {
+            await check(basic, expected);
+        }
+        return true;
+    }
+    if (existsSync('/local-child-lifetime.json')) {
+        return checkLocalChildLifetime(JSON.parse(readFileSync('/local-child-lifetime.json', 'utf8')));
+    }
     assert.equal(callCount(), 0, 'registration executed a command');
     const local = spawnSync(process.execPath, ['-p', '40 + 2'], { encoding: 'utf8' });
     assert.equal(local.status, 0);

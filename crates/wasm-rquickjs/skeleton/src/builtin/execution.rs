@@ -220,6 +220,67 @@ pub mod native_module {
     use super::*;
 
     #[rquickjs::function]
+    pub fn run_isolated_child(ctx: Ctx<'_>, source: String) -> rquickjs::Result<String> {
+        #[cfg(feature = "p2")]
+        {
+            let _ = source;
+            Err(rquickjs::Exception::throw_message(
+                &ctx,
+                "Synchronous isolated children require WASI Preview 3",
+            ))
+        }
+        #[cfg(feature = "p3")]
+        {
+            let (argv, env, cwd) = {
+                let services = ctx.userdata::<RuntimeServices>().unwrap();
+                (
+                    services.process.args(),
+                    services.process.env(),
+                    services.process.cwd(),
+                )
+            };
+            let child = async move {
+                let runtime = OwnedJsRuntime::new().await;
+                runtime.disable_execution().await;
+                runtime.configure_process(argv, env, cwd).await?;
+                let output = Rc::new(ExecutionJob::new(ExecutionOptions {
+                    entry: None,
+                    source: None,
+                    language: ExecutionLanguage::Javascript,
+                    cwd: String::new(),
+                    argv: Vec::new(),
+                    env: HashMap::new(),
+                    timeout_ms: None,
+                    max_bytes: 1024 * 1024,
+                    overflow: OverflowPolicy::Truncate,
+                }));
+                runtime.set_output_sink(output.clone()).await;
+                runtime.initialize_node_builtins().await?;
+                let timers = super::super::child_timers::ChildTimers::install(&runtime).await;
+                async_with!(runtime.ctx => |ctx| {
+                    ctx.eval::<(), _>(source).catch(&ctx)
+                        .map_err(crate::internal::format_caught_error)
+                })
+                .await?;
+                timers.drain(&runtime).await?;
+                let status = async_with!(runtime.ctx => |ctx| {
+                    ctx.eval::<i32, _>("Number(process.exitCode || 0)").catch(&ctx)
+                        .map_err(crate::internal::format_caught_error)
+                })
+                .await?;
+                let stdout: String = output.stdout.borrow_mut().drain(..).collect();
+                let stderr: String = output.stderr.borrow_mut().drain(..).collect();
+                Ok::<_, String>(
+                    serde_json::json!({ "status": status, "stdout": stdout, "stderr": stderr })
+                        .to_string(),
+                )
+            };
+            let result = wasip3::wit_bindgen::rt::async_support::block_on(child);
+            result.map_err(|error| rquickjs::Exception::throw_message(&ctx, &error))
+        }
+    }
+
+    #[rquickjs::function]
     pub fn create_job(ctx: Ctx<'_>, options_json: String) -> rquickjs::Result<usize> {
         // The public JS wrapper owns option validation and defaults. These
         // checks defend the private native protocol against direct callers.
@@ -506,9 +567,10 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
             if cancelled.load(Ordering::Relaxed) {
                 return true;
             }
-            if timeout_sampler.as_mut().is_some_and(|sampler| {
-                sampler.expired(Instant::now)
-            }) {
+            if timeout_sampler
+                .as_mut()
+                .is_some_and(|sampler| sampler.expired(Instant::now))
+            {
                 timed_out.store(true, Ordering::Relaxed);
                 return true;
             }

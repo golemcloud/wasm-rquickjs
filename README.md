@@ -773,6 +773,15 @@ This configuration hook is not a security boundary; host capability checks remai
 <details>
 <summary><strong><code>wasm-rquickjs:execution</code></strong></summary>
 
+The draft child-runtime entrypoint `runIsolatedChild(source)` is experimental and requires
+Preview 3. It evaluates a JavaScript script synchronously in a fresh runtime, inherits argv,
+environment and cwd, and drains referenced child work without advancing parent JavaScript.
+It returns a JSON string with `status`, `stdout` and `stderr`; each output stream truncates at
+1 MiB. It has no execution timeout and is not connected to the local Node process runner yet.
+Use it only with controlled native modules: unrelated staged wit-bindgen tasks and arbitrary
+native spawning across this boundary are not supported. Runtime initialization must perform
+only lazy registration, without timers or I/O. Preview 2 rejects the call explicitly.
+
 Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(options)` returns live
 `stdout`/`stderr` readable streams, a `result` promise resolving to `{ value, overflowed }`, and
 `cancel()`. `runJavaScript(options)` collects the streams and resolves to
