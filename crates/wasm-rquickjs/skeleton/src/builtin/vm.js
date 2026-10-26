@@ -1539,6 +1539,10 @@ function normalizeVmRunFilenameStack(err, filename) {
 }
 
 export function compileFunction(code, params, options) {
+    return compileFunctionInternal(code, params, options);
+}
+
+function compileFunctionInternal(code, params, options, importReferrer) {
     if (typeof code !== 'string') {
         throwInvalidArgType('code', 'string', code);
     }
@@ -1555,9 +1559,8 @@ export function compileFunction(code, params, options) {
     const sourceCode = code;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
-        const parentURL = defaultLoaderParentURL(filename);
         const paramList = params.map(String).join(',');
-        const source = '[function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(code, parentURL).code + '\n}][0]';
+        const source = '[function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(code, importReferrer ?? filename).code + '\n}][0]';
         return finalizeCompileFunction(evaluateCompileFunctionSource(source, sourceCode, filename), sourceCode, params, options);
     }
     if (options.importModuleDynamically === undefined) {
@@ -3259,5 +3262,16 @@ const vmExports = {
     createScript,
     constants,
 };
+
+// CLI eval retains its startup import base independently of its visible script
+// name. Public VM functions instead resolve non-path filenames at import time.
+Object.defineProperty(vmExports, '__wasm_rquickjs_compile_child_eval', {
+    value(code, params, importReferrer) {
+        return compileFunctionInternal(code, params, {
+            filename: '[eval]',
+            importModuleDynamically: USE_MAIN_CONTEXT_DEFAULT_LOADER,
+        }, importReferrer);
+    },
+});
 
 export default vmExports;

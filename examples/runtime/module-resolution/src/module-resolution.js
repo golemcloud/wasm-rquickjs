@@ -10821,14 +10821,18 @@ export const testVmMainContextDefaultLoader = async () => {
         const lateCwdScript = new vm.Script('import("./message.mjs")', {
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
         });
-        const lateCwdFunction = vm.compileFunction('return import("./message.mjs")', [], {
-            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
-        });
+        const lateCwdFunctions = [undefined, 'relative-function.js', 'subdir/relative.js', '[eval]']
+            .map(filename => vm.compileFunction('return import("./message.mjs")', [], {
+                filename,
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }));
         const originalCwd = process.cwd();
         try {
             process.chdir('/vm-default-loader-app');
             assert.deepStrictEqual((await lateCwdScript.runInThisContext()).default, { value: 'from-cwd' });
-            assert.deepStrictEqual((await lateCwdFunction()).default, { value: 'from-cwd' });
+            for (const lateCwdFunction of lateCwdFunctions) {
+                assert.deepStrictEqual((await lateCwdFunction()).default, { value: 'from-cwd' });
+            }
 
             const relativeFilenameScript = new vm.Script('import("./message.mjs")', {
                 filename: 'subdir/relative.js',

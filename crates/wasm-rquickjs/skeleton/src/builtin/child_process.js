@@ -603,11 +603,9 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
         const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'fs', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
         result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
     } else {
-        const evaluator = vmModule.compileFunction(parsed.source,
-            ['Buffer', 'process', 'vm', 'os', 'fs', 'require'], {
-                filename: '[eval]',
-                importModuleDynamically: vmModule.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
-            });
+        const evaluator = vmModule.__wasm_rquickjs_compile_child_eval(parsed.source,
+            ['Buffer', 'process', 'vm', 'os', 'fs', 'require'],
+            path.join(childCwd || process.cwd(), '[eval]'));
         result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
     }
     } finally {
