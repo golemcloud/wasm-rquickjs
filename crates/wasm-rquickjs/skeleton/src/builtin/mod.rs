@@ -301,6 +301,7 @@ pub fn add_module_resolvers(
 
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/execution_native")
+        .with_module("__wasm_rquickjs_builtin/child_process_native")
         .with_module("wasm-rquickjs:execution")
         .with_module("__wasm_rquickjs_builtin/typescript_native");
 
@@ -392,6 +393,10 @@ pub fn module_loader() -> (
             string_decoder::js_native_module,
         );
 
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/child_process_native",
+        child_process::js_native_module,
+    );
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/execution_native",
         execution::js_native_module,

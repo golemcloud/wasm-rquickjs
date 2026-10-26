@@ -52,10 +52,22 @@ async function checkLocalChildLifetime(api) {
 
 export async function run() {
     if (existsSync('/isolated-child-probe.json')) {
-        const { runIsolatedChild } = await import('wasm-rquickjs:execution');
+        function runChild(source) {
+            const result = spawnSync(process.execPath, ['-e', source], { encoding: 'utf8' });
+            if (result.error) throw result.error;
+            return JSON.stringify({ status: result.status, stdout: result.stdout, stderr: result.stderr });
+        }
         const config = JSON.parse(readFileSync('/isolated-child-probe.json', 'utf8'));
         if (config.mode === 'unsupported') {
-            assert.throws(() => runIsolatedChild(''), /require WASI Preview 3/);
+            const original = { argv: [...process.argv], cwd: process.cwd(), exitCode: process.exitCode };
+            const inline = spawnSync(process.execPath, ['-e', `process.stdout.write(process.env.P2_CHILD); process.exitCode = 7;`], {
+                encoding: 'utf8', env: { ...process.env, P2_CHILD: 'inline' },
+            });
+            assert.equal(inline.status, 7);
+            assert.equal(inline.stdout, 'inline');
+            assert.deepEqual(process.argv, original.argv);
+            assert.equal(process.cwd(), original.cwd);
+            assert.equal(process.exitCode, original.exitCode);
             return true;
         }
         const basic = `
@@ -72,7 +84,7 @@ export async function run() {
             const parent = { argv: [...process.argv], cwd: process.cwd(), env: { ...process.env }, exitCode: process.exitCode };
             queueMicrotask(() => events.push('parent-promise'));
             setTimeout(() => events.push('parent-timer'), 0);
-            const result = JSON.parse(runIsolatedChild(source));
+            const result = JSON.parse(runChild(source));
             assert.deepEqual(events, [], 'synchronous child advanced the parent');
             assert.deepEqual(result, expected);
             assert.deepEqual(process.argv, parent.argv);
@@ -89,11 +101,12 @@ export async function run() {
             });
         } else if (config.mode === 'nested') {
             await check(`
-                import('wasm-rquickjs:execution').then(({ runIsolatedChild }) => {
+                Promise.resolve().then(() => {
                     let parentRan = false;
                     queueMicrotask(() => { parentRan = true; });
                     setTimeout(() => { parentRan = true; }, 0);
-                    const nested = JSON.parse(runIsolatedChild(${JSON.stringify(basic)}));
+                    const nested = require('node:child_process').spawnSync(process.execPath,
+                        ['-e', ${JSON.stringify(basic)}], { encoding: 'utf8' });
                     if (parentRan) throw new Error('nested child advanced its parent');
                     process.stdout.write(nested.status + ':' + nested.stdout);
                     process.stderr.write(nested.stderr);
@@ -162,10 +175,13 @@ export async function run() {
                 Promise.reject(new Error('probe'));
             `, { status: 7, stdout: 'late\n', stderr: '' });
         } else if (config.mode === 'cleanup') {
-            assert.throws(() => runIsolatedChild(`
+            const failed = JSON.parse(runChild(`
                 setTimeout(() => process.stdout.write('unexpected\\n'), 20);
                 throw new Error('child failure');
-            `), /child failure/);
+            `));
+            assert.equal(failed.status, 1);
+            assert.equal(failed.stdout, '');
+            assert.match(failed.stderr, /child failure/);
             const original = process.env.ISOLATED_CHILD_MUTATION;
             await check(`
                 process.env.ISOLATED_CHILD_MUTATION = 'child-only';
@@ -176,19 +192,214 @@ export async function run() {
             await check(`
                 process.stdout.write(String(process.env.ISOLATED_CHILD_MUTATION) + '\\n');
             `, { status: 0, stdout: String(original) + '\n', stderr: '' });
-        } else if (config.mode === 'benchmark') {
-            const samples = [];
-            for (let i = 0; i < 20; i++) {
-                const started = performance.now();
-                const result = config.runner === 'isolated'
-                    ? JSON.parse(runIsolatedChild("process.stdout.write('ok'); process.exitCode = 7;"))
-                    : spawnSync(process.execPath, ['-e', "process.stdout.write('ok'); process.exitCode = 7;"], { encoding: 'utf8' });
-                samples.push(performance.now() - started);
-                assert.equal(result.stdout, 'ok');
-                assert.equal(result.stderr, '');
-                assert.equal(result.status, 7);
+        } else if (config.mode === 'module-stdio') {
+            mkdirSync('/child-app', { recursive: true });
+            writeFileSync('/child-app/preload.cjs', `globalThis.preloaded = 42;`);
+            writeFileSync('/child-app/main.cjs', `
+                const fs = require('node:fs');
+                assert = require('node:assert/strict');
+                assert.equal(globalThis.preloaded, 42);
+                assert.equal(process.cwd(), '/child-app');
+                assert.equal(process.argv[2], 'argument');
+                assert.equal(process.env.CHILD_APP, 'only-child');
+                process.stdout.write(fs.readFileSync(0));
+            `);
+            const input = Buffer.from([0, 255, 128, 65]);
+            const commonjs = spawnSync(process.execPath, ['-r', './preload.cjs', './main.cjs', 'argument'], {
+                cwd: '/child-app', env: { ...process.env, CHILD_APP: 'only-child' }, input,
+            });
+            assert.equal(commonjs.status, 0, commonjs.stderr?.toString());
+            assert.deepEqual([...commonjs.stdout], [...input]);
+            const backing = new Uint8Array([9, 0, 255, 128, 65, 9]);
+            for (const view of [new DataView(backing.buffer, 1, 4), new Uint16Array(backing.buffer, 2, 2)]) {
+                const echoed = spawnSync(process.execPath, ['-e', `process.stdout.write(require('node:fs').readFileSync(0));`], { input: view });
+                assert.equal(echoed.status, 0, echoed.stderr?.toString());
+                assert.deepEqual([...echoed.stdout], [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]);
             }
-            writeFileSync('/child-benchmark-result.json', JSON.stringify(samples));
+            const streamedInput = spawnSync(process.execPath, ['-e', `
+                const chunks = [];
+                process.stdin.on('data', chunk => chunks.push(chunk));
+                process.stdin.on('end', () => process.stdout.write(Buffer.concat(chunks)));
+            `], { input });
+            assert.equal(streamedInput.status, 0, streamedInput.stderr?.toString());
+            assert.deepEqual([...streamedInput.stdout], [...input]);
+            assert.throws(() => spawnSync(process.execPath, ['-e', ''], { stdio: ['ipc', 'inherit', 'inherit'] }), { code: 'ENOSYS' });
+            assert.throws(() => spawnSync(process.execPath, ['-e', ''], { stdio: ['pipe', 'pipe', 'pipe', 'pipe'] }), { code: 'ENOSYS' });
+            writeFileSync('/child-app/dep.mjs', `export const value = 42;`);
+            writeFileSync('/child-app/main.mjs', `
+                import { value } from './dep.mjs';
+                await new Promise(resolve => setTimeout(resolve, 5));
+                process.stdout.write('esm:' + value);
+            `);
+            const esm = spawnSync(process.execPath, ['./main.mjs'], { cwd: '/child-app', encoding: 'utf8' });
+            assert.equal(esm.status, 0, esm.stderr);
+            assert.equal(esm.stdout, 'esm:42');
+            const dynamic = spawnSync(process.execPath, ['-e', `
+                Promise.all([import('node:path'), import('./dep.mjs')]).then(([path, dep]) => {
+                    process.stdout.write(path.sep + dep.value);
+                });
+            `], { cwd: '/child-app', encoding: 'utf8' });
+            assert.equal(dynamic.status, 0, dynamic.stderr);
+            assert.equal(dynamic.stdout, '/42');
+            const requireTla = spawnSync(process.execPath, ['-e', `require('./main.mjs');`], { cwd: '/child-app', encoding: 'utf8' });
+            assert.equal(requireTla.status, 1);
+            assert.match(requireTla.stderr, /ERR_REQUIRE_ASYNC_MODULE/);
+            assert.equal(requireTla.stdout, '', 'require(TLA) must not evaluate the module');
+            writeFileSync('/child-app/pending.mjs', `await new Promise(() => {});`);
+            const pending = spawnSync(process.execPath, ['./pending.mjs'], { cwd: '/child-app', encoding: 'utf8' });
+            assert.equal(pending.status, 13);
+            const output = [];
+            const old = process.stdout.write;
+            process.stdout.write = chunk => { output.push(Buffer.from(chunk)); return true; };
+            try {
+                const inherited = spawnSync(process.execPath, ['-e', `console.log('inherited');`], { stdio: 'inherit' });
+                assert.equal(inherited.status, 0);
+                assert.equal(inherited.stdout, null);
+                assert.equal(inherited.stderr, null);
+            } finally { process.stdout.write = old; }
+            assert.equal(Buffer.concat(output).toString(), 'inherited\n');
+            const discarded = spawnSync(process.execPath, ['-e', `process.stdout.write('discard');process.stderr.write('discard');`], { stdio: 'ignore', maxBuffer: 0 });
+            assert.equal(discarded.status, 0);
+            assert.equal(discarded.stdout, null);
+            assert.equal(discarded.stderr, null);
+            const fresh = source => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8' });
+            assert.equal(fresh(`globalThis.childOnly = true; process.stdout.write('first');`).stdout, 'first');
+            assert.equal(fresh(`process.stdout.write(String(globalThis.childOnly));`).stdout, 'undefined');
+            assert.equal(fresh(`globalThis.Number = () => 99; process.exitCode = 7;`).status, 7);
+            assert.equal(fresh(`JSON.stringify = () => '{}'; process.exitCode = 7;`).status, 7);
+        } else if (config.mode === 'async-control') {
+            let negativeError;
+            const negative = execFile(process.execPath, error => { negativeError = error; });
+            negative.kill();
+            negative.emit('close', -1, null);
+            assert.equal(negativeError.code, 'EPERM');
+            assert.equal(negativeError.killed, true);
+            const first = spawn(process.execPath, ['-e', `setTimeout(() => process.stdout.write('one'), 25);`]);
+            const second = spawn(process.execPath, ['-e', `setTimeout(() => process.stdout.write('two'), 10);`]);
+            const outputs = [[], []];
+            first.stdout.on('data', bytes => outputs[0].push(bytes));
+            second.stdout.on('data', bytes => outputs[1].push(bytes));
+            await Promise.all([once(first, 'close'), once(second, 'close')]);
+            assert.equal(Buffer.concat(outputs[0]).toString(), 'one');
+            assert.equal(Buffer.concat(outputs[1]).toString(), 'two');
+            const controller = new AbortController();
+            const aborted = spawn(process.execPath, ['-e', `setInterval(() => {}, 100);`], { signal: controller.signal });
+            let error;
+            aborted.on('error', failure => { error = failure; });
+            const closed = new Promise(resolve => aborted.on('close', (...values) => resolve(values)));
+            setTimeout(() => controller.abort(), 20);
+            assert.deepEqual(await closed, [null, 'SIGTERM']);
+            assert.equal(error.code, 'ABORT_ERR');
+            const overflowing = execFile(process.execPath, ['-e', `process.stderr.write('overflow');setInterval(()=>{},100);`], { maxBuffer: 4 }, (error, stdout, stderr) => {
+                assert.equal(error.code, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+                assert.equal(stderr, 'over');
+            });
+            overflowing.on('error', () => {});
+            await new Promise(resolve => overflowing.on('close', resolve));
+            for (const [encoding, limit, expected] of [
+                ['utf8', 3, '中文测'], ['utf8', 10, '中文测试\n'],
+                [null, 10, '中文测试\n'],
+            ]) {
+                let observed;
+                const unicode = execFile(process.execPath, ['-e', `console.log('中文测试');`], { encoding, maxBuffer: limit }, (failure, stdout) => {
+                    assert.equal(failure.code, 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER');
+                    observed = stdout;
+                });
+                unicode.stdout.setEncoding('utf8');
+                unicode.on('error', () => {});
+                await new Promise(resolve => unicode.on('close', resolve));
+                assert.equal(observed, expected);
+            }
+            const split = execFile(process.execPath, ['-e', `
+                process.stdout.write(Buffer.from([226]));
+                setTimeout(() => process.stdout.write(Buffer.from([130, 172])), 5);
+            `], { encoding: 'utf8' });
+            let decoded = '';
+            split.stdout.on('data', text => { decoded += text; });
+            await once(split, 'close');
+            assert.equal(decoded, '€');
+            const timed = execFile(process.execPath, ['-e', `setInterval(()=>{},100);`], { timeout: 500 }, error => {
+                assert.equal(error.signal, 'SIGTERM');
+                assert.equal(error.killed, true);
+            });
+            await once(timed, 'close');
+            const early = new AbortController();
+            early.abort();
+            const already = spawn(process.execPath, ['-e', `require('node:fs').writeFileSync('/must-not-run', 'bad');`], { signal: early.signal });
+            already.on('error', failure => assert.equal(failure.code, 'ABORT_ERR'));
+            await new Promise(resolve => already.on('close', resolve));
+            assert.equal(existsSync('/must-not-run'), false);
+            const failures = [];
+            const onUncaught = error => failures.push(error.message);
+            process.on('uncaughtException', onUncaught);
+            try {
+                const healthy = spawn(process.execPath, ['-e', `
+                    process.stdout.write('first');
+                    setTimeout(() => { require('node:fs').writeFileSync('/healthy-child', 'done'); process.stdout.write('last'); }, 10);
+                `], { maxBuffer: -1 }); // spawn ignores execFile's maxBuffer option.
+                let firstChunk = true;
+                healthy.stdout.on('data', () => { if (firstChunk) { firstChunk = false; throw new Error('parent listener'); } });
+                assert.deepEqual(await once(healthy, 'close'), [0, null]);
+                assert.equal(readFileSync('/healthy-child', 'utf8'), 'done');
+                assert.deepEqual(failures, ['parent listener']);
+            } finally { process.removeListener('uncaughtException', onUncaught); }
+        } else if (config.mode === 'public-contract') {
+            const run = (source, options = {}) => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', ...options });
+            for (const source of [
+                `throw new Error('startup failure');`,
+                `setTimeout(() => { throw new Error('timer failure'); }, 5);`,
+                `Promise.reject(new Error('rejection failure'));`,
+            ]) {
+                const result = run(source);
+                assert.equal(result.status, 1, source);
+                assert.match(result.stderr, /failure/);
+            }
+            const handled = run(`
+                process.on('uncaughtException', () => { process.stdout.write('handled'); });
+                setTimeout(() => { throw new Error('caught'); }, 1);
+            `);
+            assert.equal(handled.status, 0);
+            assert.equal(handled.stdout, 'handled');
+            const natural = run(`
+                let turns = 0;
+                process.on('beforeExit', () => {
+                    process.stdout.write('before' + turns + ';');
+                    if (turns++ === 0) setTimeout(() => { process.stdout.write('timer;'); process.exitCode = 7; }, 5);
+                });
+                process.on('exit', code => process.stdout.write('exit' + code));
+            `);
+            assert.equal(natural.stdout, 'before0;timer;before1;exit7');
+            assert.equal(natural.status, 7);
+            const bytes = spawnSync(process.execPath, ['-e', `process.stdout.write(Buffer.from([0, 255, 128, 65]));`]);
+            assert.deepEqual([...bytes.stdout], [0, 255, 128, 65]);
+            const overflow = spawnSync(process.execPath, ['-e', `process.stdout.write('aa€'); setInterval(() => {}, 100);`], { maxBuffer: 4 });
+            assert.equal(overflow.error.code, 'ENOBUFS');
+            assert.deepEqual([...overflow.stdout], [97, 97, 226, 130, 172]);
+            assert.equal(run(`process.stdout.write('hello');`, { maxBuffer: 0 }).stdout, 'hello');
+            assert.equal(run(`process.stdout.write('hello');`, { maxBuffer: 3.14 }).error.code, 'ENOBUFS');
+            for (const source of [`while (true) {}`, `setInterval(() => {}, 100);`]) {
+                const timed = run(source, { timeout: 500 });
+                assert.equal(timed.error.code, 'ETIMEDOUT');
+                assert.equal(timed.status, null);
+            }
+            assert.equal(run(`process.stdout.write('after');`).stdout, 'after');
+            const nestedTimeout = run(`require('node:child_process').spawnSync(process.execPath, ['-e', 'while (true) {}']);`, { timeout: 1000 });
+            assert.equal(nestedTimeout.error.code, 'ETIMEDOUT');
+            let parentRan = false;
+            const child = execFile(process.execPath, ['-e', `setTimeout(() => process.stdout.write('async'), 50);`]);
+            const output = [];
+            child.stdout.on('data', chunk => output.push(Buffer.from(chunk)));
+            setTimeout(() => { parentRan = true; }, 0);
+            await once(child, 'close');
+            assert.equal(parentRan, true, 'async child blocked its parent');
+            assert.equal(Buffer.concat(output).toString(), 'async');
+            const cancelled = spawn(process.execPath, ['-e', `setInterval(() => {}, 100);`]);
+            const closed = once(cancelled, 'close');
+            setTimeout(() => assert.equal(cancelled.kill(), true), 20);
+            const [status, signal] = await closed;
+            assert.equal(status, null);
+            assert.equal(signal, 'SIGTERM');
+            assert.equal(run(`process.stdout.write('after cancel');`).stdout, 'after cancel');
         } else {
             await check(basic, expected);
         }

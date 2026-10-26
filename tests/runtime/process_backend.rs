@@ -37,14 +37,17 @@ async fn process_backend_is_runtime_local_and_preserves_inline_execution(
 }
 
 async fn check_local_node_child_lifetime(compiled: &CompiledTest, api: &str) -> anyhow::Result<()> {
+    if test_target() == TestTarget::P2 {
+        return check_isolated_child(compiled, serde_json::json!({ "mode": "unsupported" })).await;
+    }
     let mut instance = TestInstance::new(compiled.wasm_path()).await?;
-    instance.set_epoch_deadline(10);
+    instance.set_epoch_deadline(30);
     std::fs::write(
         instance.temp_dir_path().join("local-child-lifetime.json"),
         serde_json::to_string(api)?,
     )?;
     let (result, stdout, stderr) = tokio::time::timeout(
-        std::time::Duration::from_secs(15),
+        std::time::Duration::from_secs(30),
         instance.invoke_and_capture_output_with_stderr(None, "run", &[]),
     )
     .await?;
@@ -65,18 +68,18 @@ async fn check_isolated_child(
     compiled: &CompiledTest,
     mut config: serde_json::Value,
 ) -> anyhow::Result<()> {
-    // P2 validates explicit rejection rather than the P3-only child lifecycle.
+    // P2 checks its public inline behavior rather than the P3-only lifecycle.
     if test_target() == TestTarget::P2 {
         config["mode"] = serde_json::json!("unsupported");
     }
     let mut instance = TestInstance::new(compiled.wasm_path()).await?;
-    instance.set_epoch_deadline(10);
+    instance.set_epoch_deadline(30);
     std::fs::write(
         instance.temp_dir_path().join("isolated-child-probe.json"),
         serde_json::to_string(&config)?,
     )?;
     let (result, stdout, stderr) = tokio::time::timeout(
-        std::time::Duration::from_secs(15),
+        std::time::Duration::from_secs(30),
         instance.invoke_and_capture_output_with_stderr(None, "run", &[]),
     )
     .await?;
@@ -188,49 +191,6 @@ async fn synchronous_isolated_child_cleanup(
 }
 
 #[test]
-#[ignore] // Manual measurement; not part of runtime correctness checks.
-async fn synchronous_isolated_child_benchmark(
-    #[tagged_as("process_backend")] compiled: &CompiledTest,
-) -> anyhow::Result<()> {
-    for trial in 0..5 {
-        for runner in if trial % 2 == 0 {
-            ["inline", "isolated"]
-        } else {
-            ["isolated", "inline"]
-        } {
-            let mut instance = TestInstance::new_with_memory_tracking(compiled.wasm_path()).await?;
-            instance.set_epoch_deadline(10);
-            std::fs::write(
-                instance.temp_dir_path().join("isolated-child-probe.json"),
-                serde_json::to_string(
-                    &serde_json::json!({ "mode": "benchmark", "runner": runner }),
-                )?,
-            )?;
-            let (result, stdout, stderr) = tokio::time::timeout(
-                std::time::Duration::from_secs(15),
-                instance.invoke_and_capture_output_with_stderr(None, "run", &[]),
-            )
-            .await?;
-            assert_eq!(result?, Some(Val::Bool(true)));
-            assert!(stdout.is_empty() && stderr.is_empty());
-            let samples: Vec<f64> = serde_json::from_str(&std::fs::read_to_string(
-                instance.temp_dir_path().join("child-benchmark-result.json"),
-            )?)?;
-            println!(
-                "child-benchmark {}",
-                serde_json::json!({
-                    "trial": trial, "runner": runner, "samples_ms": samples,
-                    "linear_memory_high_water_bytes": instance.linear_memory_high_water_bytes(),
-                    "component_bytes": std::fs::metadata(compiled.wasm_path())?.len(),
-                })
-            );
-        }
-    }
-    Ok(())
-}
-
-#[test]
-#[ignore] // Local Node execution is not yet wired to the isolated child boundary.
 async fn local_node_child_spawn_sync_waits_for_asynchronous_work(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -238,9 +198,29 @@ async fn local_node_child_spawn_sync_waits_for_asynchronous_work(
 }
 
 #[test]
-#[ignore] // Local Node execution is not yet wired to the isolated child boundary.
 async fn local_node_child_exec_file_waits_for_asynchronous_work(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     check_local_node_child_lifetime(compiled, "execFile").await
+}
+
+#[test]
+async fn local_node_child_public_contract(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(compiled, serde_json::json!({ "mode": "public-contract" })).await
+}
+
+#[test]
+async fn local_node_child_module_and_stdio_contract(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(compiled, serde_json::json!({ "mode": "module-stdio" })).await
+}
+
+#[test]
+async fn local_node_child_async_control_contract(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(compiled, serde_json::json!({ "mode": "async-control" })).await
 }

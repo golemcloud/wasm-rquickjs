@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3187/4394 (72.5%)
+**Primary compatibility (CI-enforced):** 3184/4400 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3187 | 72.5% | 55.4% | 46.3% |
-| 🧩 known gap | 1207 | 27.5% | 21.0% | 17.6% |
-| 🚫 WASI-impossible (excluded) | 1196 | — | 20.8% | 17.4% |
+| ✅ passing (runnable) | 3184 | 72.4% | 55.3% | 46.3% |
+| 🧩 known gap | 1216 | 27.6% | 21.1% | 17.7% |
+| 🚫 WASI-impossible (excluded) | 1190 | — | 20.7% | 17.3% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
 | **Total** | **6876** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3187/5757 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3184/5757 (55.3%)**.
 
 ## Inventory by Module
 
@@ -33,7 +33,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks | 38 | 4 | 28 | 4 | 0 | 0 | 2 | 12.5% | 11.1% |
 | blob | 24 | 2 | 0 | 0 | 0 | 0 | 22 | 100.0% | 100.0% |
 | buffer | 180 | 172 | 0 | 1 | 1 | 0 | 6 | 100.0% | 98.9% |
-| child_process | 208 | 40 | 58 | 95 | 0 | 0 | 15 | 40.8% | 20.7% |
+| child_process | 208 | 37 | 67 | 89 | 0 | 0 | 15 | 35.6% | 19.2% |
 | cli | 32 | 9 | 21 | 0 | 0 | 0 | 2 | 30.0% | 30.0% |
 | cluster | 87 | 0 | 0 | 85 | 0 | 0 | 2 | 0.0% | 0.0% |
 | common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
@@ -147,8 +147,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-child-process-exec-abortcontroller-promisified.js` | 8 | 0 | 0 | 8 | 0 | 0 | 0 |
 | `test-child-process-exec-maxbuf.js` | 11 | 9 | 0 | 2 | 0 | 0 | 0 |
 | `test-child-process-execFile-promisified-abortController.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
-| `test-child-process-execfile-maxbuf.js` | 8 | 6 | 1 | 1 | 0 | 0 | 0 |
-| `test-child-process-execfile.js` | 8 | 5 | 2 | 1 | 0 | 0 | 0 |
+| `test-child-process-execfile-maxbuf.js` | 8 | 6 | 2 | 0 | 0 | 0 | 0 |
+| `test-child-process-execfile.js` | 8 | 4 | 3 | 1 | 0 | 0 | 0 |
 | `test-child-process-execfilesync-maxbuf.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
 | `test-child-process-execsync-maxbuf.js` | 4 | 0 | 3 | 1 | 0 | 0 | 0 |
 | `test-child-process-fork-abort-signal.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
@@ -687,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1207)
+### known gap (1216)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -729,6 +729,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | node_compat common shim is missing ../common/wpt harness | 5 | `parallel/test-whatwg-events-event-constructors.js`, `parallel/test-whatwg-events-eventtarget-this-of-listener.js`, `parallel/test-whatwg-url-custom-searchparams-sort.js`, ... (+2) |
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
 | util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
+| Preview 2 does not enforce inline maxBuffer; util.getSystemErrorName is also unavailable | 4 | `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`, `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, ... (+1) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |
@@ -775,6 +776,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
 | HTTP keep-alive socket identity reuse across sequential requests is not implemented | 2 | `parallel/test-http-keepalive-client.js`, `parallel/test-http-keepalive-request.js` |
 | IncomingMessage 'aborted' event is not emitted when the server destroys a keep-alive response | 2 | `parallel/test-http-client-aborted-event.js#block_00_block_00`, `parallel/test-http-client-aborted-event.js#block_01_block_01` |
+| Preview 2 inline execFile does not expose streams for caller-set encoding; Preview 3 passes | 2 | `parallel/test-child-process-execfile-maxbuf.js#block_06_block_06`, `parallel/test-child-process-execfile-maxbuf.js#block_07_block_07` |
 | TextDecoderStream invalid-encoding errors are not Node-compatible yet | 2 | `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`, `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01` |
 | WASM child emulation does not support Node.js --test CLI reporter execution | 2 | `parallel/test-runner-error-reporter.js#test_00_all_tests_failures_reported_without_fail_fast_flag`, `parallel/test-runner-error-reporter.js#test_01_fail_fast_stops_test_execution_after_first_failure` |
 | async_hooks createHook callback validation is incomplete | 2 | `parallel/test-async-hooks-constructor.js`, `parallel/test-async-wrap-constructor.js` |
@@ -922,6 +924,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | OutgoingMessage implicit Content-Length/Transfer-Encoding and Connection header behavior is not Node-compatible | 1 | `parallel/test-http-content-length.js` |
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
 | Overridden globalAgent socket bookkeeping (agent.sockets/close lifecycle) is not Node-compatible | 1 | `parallel/test-http-client-override-global-agent.js` |
+| Preview 2 does not time out inline children; util.getSystemErrorName is also unavailable | 1 | `parallel/test-child-process-spawnsync-timeout.js` |
+| Preview 2 inline children lose caller-mutated environment entries; Preview 3 passes | 1 | `parallel/test-child-process-spawnsync-env.js` |
 | QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361 | 1 | `es-module/test-esm-live-binding.mjs` |
 | RSA imported-key algorithm metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-encrypt-decrypt-rsa.js` |
 | RSA key import/export metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-export-import-rsa.js` |
@@ -1076,11 +1080,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | events.EventEmitterAsyncResource API and ERR_INVALID_THIS branding are incomplete | 1 | `parallel/test-eventemitter-asyncresource.js` |
 | events.once() with EventTarget does not handle sequential waits correctly | 1 | `parallel/test-eventtarget-once-twice.js` |
 | exceptions thrown in client response callbacks do not follow Node uncaughtException flow | 1 | `parallel/test-http-uncaught-from-request-callback.js` |
-| execFile() does not expose child.stdout/child.stderr streams for encoding:null | 1 | `parallel/test-child-process-execfile-maxbuf.js#block_07_block_07` |
 | execFile() signal option type validation is incomplete (missing ERR_INVALID_ARG_TYPE) | 1 | `parallel/test-child-process-execfile.js#block_05_block_05` |
 | execFile/execFileSync emulation does not execute non-execPath commands like echo | 1 | `parallel/test-child-process-execfile.js#block_07_verify_the_execfile_stdout_is_the_same_as_execfilesync` |
-| execFileSync default maxBuffer overflow behavior is not Node-compatible | 1 | `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
-| execFileSync maxBuffer overflow ENOBUFS error semantics are not implemented | 1 | `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
 | execPath child emulation does not support --trace-atomics-wait CLI behavior | 1 | `parallel/test-trace-atomic-deprecation.js` |
 | execPath child-process emulation runs recursive async stack-overflow tests in-process, which can trap the WASM runtime instead of isolating the child stack | 1 | `parallel/test-async-wrap-pop-id-during-load.js` |
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
@@ -1130,6 +1131,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
 | loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
+| local JavaScript children do not provide IPC stdio or process.send | 1 | `parallel/test-child-process-stdout-ipc.js` |
+| local JavaScript children do not provide an IPC stdio channel | 1 | `parallel/test-child-process-stdin-ipc.js` |
+| local Node children do not apply the argv0 option | 1 | `parallel/test-child-process-spawn-argv0.js` |
+| local exec fallback does not expose live stdout and stderr streams | 1 | `parallel/test-child-process-exec-std-encoding.js` |
+| local exec fallback does not normalize invalid and null output encodings like Node | 1 | `parallel/test-child-process-exec-encoding.js` |
 | mixed headersTimeout/requestTimeout handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeouts-mixed.js` |
 | moveMessagePortToContext cross-context object/prototype semantics are incomplete | 1 | `parallel/test-worker-message-port-move.js` |
 | native rquickjs URL accessors report Rust conversion errors for invalid receivers before JS can normalize them to V8/Web IDL private-member messages | 1 | `parallel/test-whatwg-url-invalidthis.js` |
@@ -1264,8 +1270,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | spawn() timeout validation path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02` |
 | spawn() timeout+AbortSignal cleanup path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_03_block_03` |
 | spawn({ stdio: 'ignore' }) does not null out stdio streams like Node | 1 | `parallel/test-child-process-stdio.js#block_01_test_stdio_ignoring` |
-| spawnSync() default maxBuffer (1MiB) limit is not enforced | 1 | `parallel/test-child-process-spawnsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
-| spawnSync() maxBuffer limit is not enforced in WASM child emulation | 1 | `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
 | spawned process does not honor --max-http-header-size (http.maxHeaderSize mismatch) | 1 | `parallel/test-http-max-header-size.js` |
 | stack-overflow recovery around vm.runInThisContext/runInNewContext traps in WASM | 1 | `parallel/test-vm-low-stack-space.js` |
 | stdout redirection to file not implemented | 1 | `parallel/test-stdout-to-file.js` |
@@ -1298,6 +1302,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | util.MIMEType parsing API is not implemented | 1 | `parallel/test-mime-whatwg.js` |
 | util.MIMEType/util.MIMEParams are not implemented | 1 | `parallel/test-mime-api.js` |
 | util.debuglog formatting/callback behavior is not fully Node-compatible | 1 | `sequential/test-util-debug.js` |
+| util.getSystemErrorName is not implemented | 1 | `parallel/test-child-process-execfile.js#block_01_block_01` |
 | v8.setFlagsFromString argument validation error fidelity is incomplete | 1 | `parallel/test-v8-flag-type-check.js` |
 | valid EC key vectors fail to import | 1 | `parallel/test-webcrypto-export-import-ec.js#block_00_block_00` |
 | verify() returns non-Node error code/message for unsupported key types | 1 | `parallel/test-crypto-sign-verify.js#block_18_block_18` |
@@ -1335,7 +1340,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1196)
+### WASI-impossible (1190)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1345,13 +1350,13 @@ Secondary full-public compatibility, including public tests that are currently e
 | [manual] http2/https not implemented | 89 | `parallel/test-http2-allow-http1.js`, `parallel/test-http2-altsvc.js`, `parallel/test-http2-async-local-storage.js`, ... (+86) |
 | requires worker_threads which is not available in WASM | 68 | `parallel/test-async-hooks-worker-asyncfn-terminate-1.js`, `parallel/test-async-hooks-worker-asyncfn-terminate-2.js`, `parallel/test-async-hooks-worker-asyncfn-terminate-3.js`, ... (+65) |
 | node:http2 is a stub in WebAssembly runtime | 59 | `parallel/test-http2-compat-serverresponse-end.js#block_00_block_00`, `parallel/test-http2-compat-serverresponse-end.js#block_01_block_01`, `parallel/test-http2-compat-serverresponse-end.js#block_02_block_02`, ... (+56) |
-| requires child_process which is not available in WASM | 54 | `parallel/test-child-process-advanced-serialization-largebuffer.js`, `parallel/test-child-process-advanced-serialization-splitted-length-field.js`, `parallel/test-child-process-advanced-serialization.js`, ... (+51) |
+| requires child_process which is not available in WASM | 49 | `parallel/test-child-process-advanced-serialization-largebuffer.js`, `parallel/test-child-process-advanced-serialization-splitted-length-field.js`, `parallel/test-child-process-advanced-serialization.js`, ... (+46) |
 | worker_threads is not supported in WASM | 47 | `parallel/test-worker-broadcastchannel-wpt.js#block_00_block_00`, `parallel/test-worker-broadcastchannel-wpt.js#block_01_block_01`, `parallel/test-worker-broadcastchannel-wpt.js#block_02_block_02`, ... (+44) |
 | REPL requires interactive terminal, not available in WASM | 44 | `parallel/test-repl-clear-immediate-crash.js`, `parallel/test-repl-cli-eval.js`, `parallel/test-repl-colors.js`, ... (+41) |
 | requires https.createServer/TLS server behavior, unsupported by WASI transport | 32 | `parallel/test-https-byteswritten.js`, `parallel/test-https-client-checkServerIdentity.js`, `parallel/test-https-client-get-url.js`, ... (+29) |
 | Node.js SEA packaging, not available in WASM | 28 | `parallel/test-single-executable-blob-config-errors.js#block_00_block_00`, `parallel/test-single-executable-blob-config-errors.js#block_01_block_01`, `parallel/test-single-executable-blob-config-errors.js#block_02_block_02`, ... (+25) |
-| inherited: requires child_process which is not available in WASM | 21 | `parallel/test-child-process-constructor.js#block_00_block_00`, `parallel/test-child-process-constructor.js#block_01_block_01`, `parallel/test-child-process-constructor.js#block_02_block_02`, ... (+18) |
 | repl is not supported in WASM | 21 | `parallel/test-repl-autolibs.js`, `parallel/test-repl-domain.js`, `parallel/test-repl-editor.js`, ... (+18) |
+| inherited: requires child_process which is not available in WASM | 20 | `parallel/test-child-process-constructor.js#block_00_block_00`, `parallel/test-child-process-constructor.js#block_01_block_01`, `parallel/test-child-process-constructor.js#block_02_block_02`, ... (+17) |
 | tls is not supported in WebAssembly environment | 16 | `parallel/test-double-tls-client.js`, `parallel/test-double-tls-server.js`, `parallel/test-gc-tls-external-memory.js`, ... (+13) |
 | http2 is not supported in WebAssembly environment | 15 | `parallel/test-h2-large-header-cause-client-to-hangup.js`, `parallel/test-h2leak-destroy-session-on-socket-ended.js`, `parallel/test-http2-alpn.js#block_00_block_00`, ... (+12) |
 | requires TLS-enabled HTTP/2 server (createSecureServer), unsupported in WASI runtime | 15 | `parallel/test-http2-https-fallback-http-server-options.js`, `parallel/test-http2-https-fallback.js#block_00_http_2_http_1_1_server`, `parallel/test-http2-https-fallback.js#block_01_http_2_only_server`, ... (+12) |

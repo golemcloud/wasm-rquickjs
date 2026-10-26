@@ -44,7 +44,7 @@ mod base64;
 #[path = "builtin/buffer.rs"]
 mod buffer;
 #[path = "builtin/child_process.rs"]
-mod child_process;
+pub(crate) mod child_process;
 #[path = "builtin/child_timers.rs"]
 pub(crate) mod child_timers;
 #[path = "builtin/cluster.rs"]
@@ -254,6 +254,7 @@ pub fn add_module_resolvers(
         .with_module("node:child_process")
         .with_module("child_process")
         .with_module("__wasm_rquickjs_builtin/child_process_backend")
+        .with_module("__wasm_rquickjs_builtin/child_process_native")
         .with_module("wasm-rquickjs:child-process")
         .with_module("node:test")
         .with_module("node:module")
@@ -466,6 +467,10 @@ pub fn module_loader() -> (
             sqlite::js_native_module,
         );
 
+    let native_loader = native_loader.with_module(
+        "__wasm_rquickjs_builtin/child_process_native",
+        child_process::js_native_module,
+    );
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/execution_native",
         execution::js_native_module,

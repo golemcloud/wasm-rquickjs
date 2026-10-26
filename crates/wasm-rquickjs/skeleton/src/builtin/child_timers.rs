@@ -48,13 +48,27 @@ impl ChildTimers {
         self.waker.wake();
     }
 
-    pub(crate) async fn drain(&self, runtime: &OwnedJsRuntime) -> Result<(), String> {
+    pub(crate) async fn drain(&self, runtime: &OwnedJsRuntime) -> Result<bool, String> {
         let mut waits: FuturesUnordered<LocalBoxFuture<'static, (ChildTimer, bool)>> =
             FuturesUnordered::new();
         let mut ready: Option<(ChildTimer, bool)> = None;
+        let mut host_work = false;
         poll_fn(|cx| {
             self.waker.register(cx.waker());
             loop {
+                let stopped = runtime.ctx.with(|ctx| {
+                    ctx.userdata::<RuntimeServices>()
+                        .unwrap()
+                        .node_child
+                        .borrow()
+                        .as_ref()
+                        .is_some_and(|child| child.exited.get())
+                });
+                match std::pin::pin!(stopped).poll(cx) {
+                    Poll::Pending => return Poll::Pending,
+                    Poll::Ready(true) => return Poll::Ready(Ok(host_work)),
+                    Poll::Ready(false) => {}
+                }
                 // idle retains the runtime lock across Pending. Its scheduler
                 // tasks stay pinned internally when this polling slice ends.
                 let idle = {
@@ -118,6 +132,7 @@ impl ChildTimers {
                     Poll::Ready(Err(error)) => return Poll::Ready(Err(error)),
                     Poll::Ready(Ok(state)) => state,
                 };
+                host_work |= idle.is_pending() || referenced != 0 || ready.is_some();
 
                 // Drop the queue borrow before any future poll can call JS.
                 let pending = std::mem::take(&mut *self.pending.borrow_mut());
@@ -138,7 +153,7 @@ impl ChildTimers {
                     continue;
                 }
                 if idle.is_ready() && referenced == 0 {
-                    return Poll::Ready(Ok(()));
+                    return Poll::Ready(Ok(host_work));
                 }
                 match Pin::new(&mut waits).poll_next(cx) {
                     Poll::Ready(Some(timer)) => ready = Some(timer),

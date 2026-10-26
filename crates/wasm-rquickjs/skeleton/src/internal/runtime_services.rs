@@ -130,6 +130,8 @@ pub(crate) struct RuntimeServices {
     pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
     pub(crate) next_execution_job_id: Cell<usize>,
     pub(crate) execution_enabled: Cell<bool>,
+    #[cfg(feature = "p3")]
+    pub(crate) node_child: RefCell<Option<Rc<crate::builtin::child_process::p3::ChildState>>>,
     pub(crate) exported_resources: ExportedResourceLedger,
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) execution_profile: Option<Rc<ExecutionProfile>>,
@@ -161,6 +163,8 @@ impl Default for RuntimeServices {
             execution_jobs: RefCell::default(),
             next_execution_job_id: Cell::new(1),
             execution_enabled: Cell::new(true),
+            #[cfg(feature = "p3")]
+            node_child: RefCell::default(),
             exported_resources: ExportedResourceLedger::default(),
             #[cfg(feature = "typescript-compiler-profiling")]
             execution_profile: None,

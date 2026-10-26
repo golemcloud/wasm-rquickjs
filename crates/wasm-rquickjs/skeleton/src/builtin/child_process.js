@@ -1,17 +1,18 @@
 // node:child_process implementation for WASM.
 //
-// We cannot spawn OS processes in WASM, but some compatibility tests only need
-// spawnSync(process.execPath, [script, ...args]) semantics. For that case we
-// emulate a child process by running the target script with an isolated argv,
-// env and cwd view, and return a spawnSync-like result object.
+// Local Node commands run in the component. Preview 3 gives each child a fresh
+// runtime; Preview 2 retains inline execution with a temporary process view.
+// Optional embedding backends handle other commands without host subprocesses.
 
 import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
 import { EventEmitter } from 'node:events';
+import { StringDecoder } from 'node:string_decoder';
 import process from 'node:process';
 import moduleExports from 'node:module';
 import { check_syntax_with_filename as checkSyntaxWithFilename } from '__wasm_rquickjs_builtin/vm_native';
 import { getProcessBackend } from '__wasm_rquickjs_builtin/child_process_backend';
+import * as childNative from '__wasm_rquickjs_builtin/child_process_native';
 
 const FIPS_STARTUP_ERROR = 'OpenSSL error when trying to enable FIPS: fips mode not supported';
 
@@ -601,7 +602,11 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
         const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'fs', 'require', 'return eval(' + JSON.stringify(parsed.source) + ');\n//# sourceURL=[eval]\n');
         result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
     } else {
-        const evaluator = new Function('Buffer', 'process', 'vm', 'os', 'fs', 'require', parsed.source + '\n//# sourceURL=[eval]\n');
+        const evaluator = vmModule.compileFunction(parsed.source,
+            ['Buffer', 'process', 'vm', 'os', 'fs', 'require'], {
+                filename: path.join(childCwd || process.cwd(), '[eval]'),
+                importModuleDynamically: vmModule.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            });
         result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
     }
     } finally {
@@ -625,9 +630,19 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
     };
 }
 
+function completedInlineSession(result) {
+    return { beforeExit() {}, finish() { return result; } };
+}
+
 function runInline(command, args, options) {
+    return beginInline(command, args, options, false).finish();
+}
+
+// Native children reuse the CLI loader but retain its process view and output
+// interception until their own event loop has reached natural completion.
+function beginInline(command, args, options, isolated) {
     if (!Array.isArray(args) || args.length === 0) {
-        return unsupportedSpawnSyncResult(command);
+        return completedInlineSession(unsupportedSpawnSyncResult(command));
     }
 
     const childArgs = [];
@@ -664,12 +679,12 @@ function runInline(command, args, options) {
         }
         if (conflictFlag !== null) {
             const encoding = getOutputEncoding(options);
-            return buildOutputResult('', conflictFlag + ' cannot be used with --test\n', 1, encoding);
+            return completedInlineSession(buildOutputResult('', conflictFlag + ' cannot be used with --test\n', 1, encoding));
         }
     }
 
     if (invocationArgs.length === 0) {
-        return unsupportedSpawnSyncResult(command);
+        return completedInlineSession(unsupportedSpawnSyncResult(command));
     }
 
     let childCwd = process.cwd();
@@ -702,6 +717,7 @@ function runInline(command, args, options) {
     const oldEnv = snapshotEnv(process.env);
     const oldStdoutWrite = process.stdout && process.stdout.write;
     const oldStderrWrite = process.stderr && process.stderr.write;
+    const oldStdin = process.stdin;
     const oldEmitWarning = process.emitWarning;
     const oldExit = process.exit;
     const runExit = process._runExit;
@@ -716,7 +732,8 @@ function runInline(command, args, options) {
     const oldSimpleSourceMaps = globalThis.__wasm_rquickjs_simple_source_maps;
     const hadCjsLineOffsets = Object.prototype.hasOwnProperty.call(globalThis, '__wasm_rquickjs_cjs_line_offsets');
     const oldCjsLineOffsets = globalThis.__wasm_rquickjs_cjs_line_offsets;
-    const stdinData = options && typeof options.__wasmStdinData === 'string' ? options.__wasmStdinData : null;
+    const stdinData = options && (typeof options.__wasmStdinData === 'string' ||
+        Array.isArray(options.__wasmStdinData)) ? options.__wasmStdinData : null;
     let oldFsPromisesReadFile = null;
     let oldFsReadFile = null;
     let oldFsReadFileSync = null;
@@ -727,15 +744,61 @@ function runInline(command, args, options) {
     let inlineBufferProbe = null;
     const checkSyntaxMode = execArgv.indexOf('-c') !== -1 || execArgv.indexOf('--check') !== -1;
     let currentScriptPath = null;
+    let failed = false;
+    let pendingEntry = false;
+    const toNumber = Number;
+
+    function capture(stdout, chunk, encoding) {
+        if (isolated) {
+            const bytes = typeof chunk === 'string'
+                ? Buffer.from(chunk, typeof encoding === 'string' ? encoding : 'utf8')
+                : Buffer.from(chunk);
+            childNative.write_output(stdout, [...bytes]);
+        } else if (stdout) {
+            capturedStdout += String(chunk);
+        } else {
+            capturedStderr += String(chunk);
+        }
+    }
 
     function reportFirstExitError() {
         if (hasFirstExitError && !firstExitErrorReported) {
-            capturedStderr += formatErrorForStderr(firstExitError);
+            capture(false, formatErrorForStderr(firstExitError));
             firstExitErrorReported = true;
         }
     }
 
-    try {
+    function entryIsModule(filename, source) {
+        if (filename.endsWith('.mjs') || filename.endsWith('.mts')) return true;
+        if (filename.endsWith('.cjs') || filename.endsWith('.cts')) return false;
+        const packageScopeInfo = globalThis.__wasm_rquickjs_cjs_package_scope_info;
+        const scope = typeof packageScopeInfo === 'function' ? packageScopeInfo(filename) : null;
+        if (scope?.packageType === 'module') return true;
+        if (scope && (scope.packageType === 'commonjs' || scope.isNodeModulesPackage)) return false;
+        const classify = globalThis.__wasm_rquickjs_source_uses_esm_format;
+        return typeof classify === 'function' && classify(source ?? runtimeRequire('node:fs').readFileSync(filename, 'utf8'));
+    }
+
+    function handleError(err) {
+        failed = true;
+        if (firstExitCode !== null) {
+            status = firstExitCode;
+            reportFirstExitError();
+        } else if (err && err.__isProcessExit) {
+            status = toNumber(err.code || 0);
+        } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
+            status = 9;
+            capture(false, String(command) + ': ' + err.message + '\n');
+        } else {
+            status = 1;
+            if (checkSyntaxMode && currentScriptPath) capture(false, currentScriptPath + '\n');
+            capture(false, formatErrorForStderr(err));
+        }
+        if (isolated) childNative.stop_child();
+    }
+
+    function execute() {
+      try {
         process.argv = [String(command)].concat(invocationArgs);
         process.execArgv = execArgv;
         globalThis.__wasm_rquickjs_package_conditions = packageConditionsFromExecArgv(execArgv);
@@ -757,19 +820,21 @@ function runInline(command, args, options) {
         delete process.mainModule;
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
-        globalThis.__wasm_rquickjs_sync_callbacks = true;
+        if (!isolated) globalThis.__wasm_rquickjs_sync_callbacks = true;
+        if (isolated) globalThis.__wasm_rquickjs_child_uncaught = handleError;
 
         process.exit = function exit(code) {
             try {
                 return runExit(code);
             } catch (err) {
                 if (firstExitCode === null && process._exiting) {
-                    firstExitCode = Number(process.exitCode || 0);
+                    firstExitCode = toNumber(process.exitCode || 0);
                     if (!err || !err.__isProcessExit) {
                         firstExitError = err;
                         hasFirstExitError = true;
                     }
                 }
+                if (isolated) childNative.stop_child();
                 throw err;
             }
         };
@@ -780,29 +845,41 @@ function runInline(command, args, options) {
 
         if (execArgv.indexOf('--experimental-test-coverage') !== -1 &&
             (!process.features || !process.features.inspector)) {
-            capturedStderr += 'Warning: coverage could not be collected\n';
+            capture(false, 'Warning: coverage could not be collected\n');
         }
 
         const secureHeapErrors = validateSecureHeapFlags(execArgv);
         if (secureHeapErrors.length > 0) {
             status = 9;
-            capturedStderr += secureHeapErrors.join('\n') + '\n';
-            return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+            capture(false, secureHeapErrors.join('\n') + '\n');
+            failed = true;
+            if (isolated) childNative.stop_child();
+            return;
         }
 
         if (options && options.env) {
             replaceEnv(process.env, options.env);
         }
+        if (isolated) {
+            const { Readable } = runtimeRequire('node:stream');
+            process.stdin = Readable.from(stdinData === null ? [] : [Buffer.from(stdinData)]);
+            process.stdin.fd = 0;
+            process.stdin.isTTY = false;
+        }
 
         if (process.stdout && typeof oldStdoutWrite === 'function') {
-            process.stdout.write = function writeStdout(chunk) {
-                capturedStdout += String(chunk);
+            process.stdout.write = function writeStdout(chunk, encoding, callback) {
+                capture(true, chunk, encoding);
+                const cb = typeof encoding === 'function' ? encoding : callback;
+                if (typeof cb === 'function') process.nextTick(cb);
                 return true;
             };
         }
         if (process.stderr && typeof oldStderrWrite === 'function') {
-            process.stderr.write = function writeStderr(chunk) {
-                capturedStderr += String(chunk);
+            process.stderr.write = function writeStderr(chunk, encoding, callback) {
+                capture(false, chunk, encoding);
+                const cb = typeof encoding === 'function' ? encoding : callback;
+                if (typeof cb === 'function') process.nextTick(cb);
                 return true;
             };
         }
@@ -816,7 +893,7 @@ function runInline(command, args, options) {
                 }
 
                 if (shouldCapture) {
-                    capturedStderr += formatWarningForStderr(warning, typeOrOptions, code);
+                    capture(false, formatWarningForStderr(warning, typeOrOptions, code));
                 }
 
                 const previousSuppressWarningStderr = globalThis.__wasm_rquickjs_suppress_warning_stderr;
@@ -835,7 +912,7 @@ function runInline(command, args, options) {
                 if (fsPromises && typeof fsPromises.readFile === 'function') {
                     oldFsPromisesReadFile = fsPromises.readFile;
                     fsPromises.readFile = function readFileWithMockedStdin(targetPath, readOptions) {
-                        if (targetPath === '/dev/stdin') {
+                        if (targetPath === '/dev/stdin' || targetPath === 0) {
                             const mockStdinBuffer = Buffer.from(stdinData);
                             let readEncoding = null;
 
@@ -864,7 +941,7 @@ function runInline(command, args, options) {
                 if (fsSync && typeof fsSync.readFileSync === 'function') {
                     oldFsReadFileSync = fsSync.readFileSync;
                     fsSync.readFileSync = function readFileSyncWithMockedStdin(targetPath, readOptions) {
-                        if (targetPath === '/dev/stdin') {
+                        if (targetPath === '/dev/stdin' || targetPath === 0) {
                             const mockStdinBuffer = Buffer.from(stdinData);
                             let readEncoding = null;
 
@@ -888,7 +965,7 @@ function runInline(command, args, options) {
                 if (fsSync && typeof fsSync.readFile === 'function') {
                     oldFsReadFile = fsSync.readFile;
                     fsSync.readFile = function readFileWithMockedStdin(targetPath, optionsOrCallback, callback) {
-                        if (targetPath === '/dev/stdin') {
+                        if (targetPath === '/dev/stdin' || targetPath === 0) {
                             const cb = typeof optionsOrCallback === 'function' ? optionsOrCallback : callback;
                             const readOptions = typeof optionsOrCallback === 'function' ? {} : optionsOrCallback;
                             const mockStdinBuffer = Buffer.from(stdinData);
@@ -973,9 +1050,11 @@ function runInline(command, args, options) {
             if (execArgv.indexOf('--test') !== -1) {
                 const fsForTest = runtimeRequire('node:fs');
                 if (!fsForTest.existsSync(scriptPath)) {
-                    capturedStderr += "Could not find '" + invocationArgs[0] + "'\n";
+                    capture(false, "Could not find '" + invocationArgs[0] + "'\n");
                     status = 1;
-                    return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+                    failed = true;
+                    if (isolated) childNative.stop_child();
+                    return;
                 }
             }
 
@@ -995,67 +1074,36 @@ function runInline(command, args, options) {
                 if (source.length > 1 && source.charCodeAt(0) === 0x23 && source.charCodeAt(1) === 0x21) {
                     source = '//' + source;
                 }
-                let isModule = scriptPath.endsWith('.mjs');
-                if (!isModule && !scriptPath.endsWith('.cjs') &&
-                    (scriptPath.endsWith('.js') || path.extname(scriptPath) === '')) {
-                    const packageScopeInfo = globalThis.__wasm_rquickjs_cjs_package_scope_info;
-                    const packageScope = typeof packageScopeInfo === 'function'
-                        ? packageScopeInfo(scriptPath)
-                        : null;
-                    if (packageScope != null && packageScope.packageType === 'module') {
-                        isModule = true;
-                    } else {
-                        const explicitlyCommonJs = packageScope != null &&
-                            (packageScope.packageType === 'commonjs' ||
-                                (packageScope.packageType == null &&
-                                    packageScope.isNodeModulesPackage === true));
-                        const classifySource =
-                            globalThis.__wasm_rquickjs_source_uses_esm_format;
-                        isModule = !explicitlyCommonJs &&
-                            typeof classifySource === 'function' &&
-                            classifySource(source);
-                    }
-                }
+                const isModule = entryIsModule(scriptPath, source);
                 checkSyntaxWithFilename(
                     isModule ? source : moduleModule.wrap(source),
                     scriptPath,
                     isModule,
                 );
+            } else if (isolated && entryIsModule(scriptPath)) {
+                pendingEntry = true;
+                const url = runtimeRequire('node:url').pathToFileURL(scriptPath).href;
+                import(url).then(() => { pendingEntry = false; }, error => {
+                    pendingEntry = false;
+                    handleError(error);
+                });
             } else if (moduleModule && typeof moduleModule.runMain === 'function') {
                 moduleModule.runMain();
             } else {
                 runtimeRequire(scriptPath);
             }
         }
-        if (firstExitCode !== null) {
-            status = firstExitCode;
-            reportFirstExitError();
-        } else if (typeof process._runExitHandlers === 'function') {
-            process._runExitHandlers();
-            status = Number(process.exitCode || 0);
-        }
-    } catch (err) {
-        if (firstExitCode !== null) {
-            status = firstExitCode;
-            reportFirstExitError();
-        } else if (err && err.__isProcessExit) {
-            status = Number(err.code || 0);
-        } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
-            status = 9;
-            capturedStderr += String(command) + ': ' + err.message + '\n';
-        } else {
-            status = 1;
-            if (checkSyntaxMode && currentScriptPath) {
-                capturedStderr += currentScriptPath + '\n';
-            }
-            capturedStderr += formatErrorForStderr(err);
-        }
-    } finally {
+      } catch (err) {
+        handleError(err);
+      }
+    }
+
+    function restore() {
         try {
             restoreParentModuleState();
         } catch (error) {
             status = 1;
-            capturedStderr += formatErrorForStderr(error);
+            capture(false, formatErrorForStderr(error));
         }
         process.argv = oldArgv;
         process.execArgv = oldExecArgv;
@@ -1105,6 +1153,7 @@ function runInline(command, args, options) {
         replaceEnv(process.env, oldEnv);
         process.emitWarning = oldEmitWarning;
         process.exit = oldExit;
+        process.stdin = oldStdin;
 
         if (process.stdout && typeof oldStdoutWrite === 'function') {
             process.stdout.write = oldStdoutWrite;
@@ -1155,8 +1204,55 @@ function runInline(command, args, options) {
         delete globalThis.__wasm_rquickjs_sync_callbacks;
     }
 
-    return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+    execute();
+    return {
+        beforeExit() {
+            if (failed || firstExitCode !== null || process._exiting) return;
+            try { process.emit('beforeExit', toNumber(process.exitCode || 0)); }
+            catch (error) { handleError(error); }
+        },
+        finish() {
+            try {
+                if (firstExitCode !== null) {
+                    status = firstExitCode;
+                    reportFirstExitError();
+                } else if (isolated) {
+                    if (!failed) status = toNumber(process.exitCode ?? (pendingEntry ? 13 : 0));
+                    if (!process._exiting) {
+                        process._exiting = true;
+                        process.emit('exit', status);
+                        if (!failed) status = toNumber(process.exitCode ?? (pendingEntry ? 13 : 0));
+                    }
+                } else if (!failed && typeof process._runExitHandlers === 'function') {
+                    process._runExitHandlers();
+                    status = toNumber(process.exitCode || 0);
+                }
+            } catch (error) { handleError(error); }
+            finally { restore(); }
+            return buildOutputResult(capturedStdout, capturedStderr, status, encoding);
+        },
+    };
 }
+
+Object.defineProperty(globalThis, '__wasm_rquickjs_begin_node_child', {
+    configurable: true,
+    value(requestJson) {
+        const stringify = JSON.stringify;
+        const { command, args, options } = JSON.parse(requestJson);
+        const session = beginInline(command, args, options, true);
+        return {
+            beforeExit: session.beforeExit,
+            finish() {
+                const result = session.finish();
+                if (result.stdout?.length) childNative.write_output(true, [...Buffer.from(result.stdout)]);
+                if (result.stderr?.length) childNative.write_output(false, [...Buffer.from(result.stderr)]);
+                return stringify({ status: result.status, error: result.error && {
+                    message: result.error.message, code: result.error.code, errno: result.error.errno,
+                } });
+            },
+        };
+    },
+});
 
 function cloneObject(value) {
     if (!value || typeof value !== 'object') {
@@ -1806,7 +1902,8 @@ function createExecError(command, result) {
     }
 
     const err = new Error(message);
-    err.code = result.status;
+    err.code = typeof result.status === 'number' && result.status < 0
+        ? systemErrorName(result.status) : result.status;
     err.killed = false;
     err.signal = result.signal;
     err.cmd = String(command);
@@ -1819,6 +1916,11 @@ function buildExecFileCommand(file, args) {
         cmd += ' ' + String(args[i]);
     }
     return cmd;
+}
+
+function systemErrorName(code) {
+    const errno = moduleExports.require('node:os').constants.errno;
+    return Object.keys(errno).find(name => errno[name] === -code) || 'Unknown system error ' + code;
 }
 
 function createExecFileError(file, args, result) {
@@ -1847,7 +1949,8 @@ function createExecFileError(file, args, result) {
     }
 
     const err = new Error(message);
-    err.code = result.status;
+    err.code = typeof result.status === 'number' && result.status < 0
+        ? systemErrorName(result.status) : result.status;
     err.killed = false;
     err.signal = result.signal;
     err.cmd = command;
@@ -1922,9 +2025,12 @@ export class ChildProcess {
 
 function createForkReadable() {
     const readable = new EventEmitter();
-    readable._encoding = null;
+    let decoder;
+    readable.readableEncoding = null;
     readable.setEncoding = function setEncoding(encoding) {
-        readable._encoding = String(encoding);
+        decoder = new StringDecoder(encoding);
+        readable.readableEncoding = decoder.encoding;
+        return readable;
     };
     readable._emitData = function emitData(chunk) {
         if (chunk === undefined || chunk === null) {
@@ -1936,12 +2042,18 @@ function createForkReadable() {
             return;
         }
 
-        if (readable._encoding && readable._encoding !== 'buffer') {
-            readable.emit('data', data.toString(readable._encoding));
+        if (decoder) {
+            const text = decoder.write(data);
+            if (text.length) readable.emit('data', text);
             return;
         }
 
         readable.emit('data', data);
+    };
+    readable._emitEnd = function emitEnd() {
+        const tail = decoder?.end();
+        if (tail) readable.emit('data', tail);
+        readable.emit('end');
     };
 
     return readable;
@@ -1988,13 +2100,13 @@ function normalizeBackendExecOptions(options) {
         normalized.encoding = 'buffer';
     }
     if (normalized.maxBuffer === undefined) normalized.maxBuffer = 1024 * 1024;
-    if (typeof normalized.maxBuffer !== 'number' || normalized.maxBuffer < 0 ||
-        Number.isNaN(normalized.maxBuffer)) {
-        throw new RangeError('maxBuffer must be a non-negative number');
+    if (normalized.maxBuffer != null && (typeof normalized.maxBuffer !== 'number' || normalized.maxBuffer < 0 ||
+        Number.isNaN(normalized.maxBuffer))) {
+        throw Object.assign(new RangeError('maxBuffer must be a non-negative number'), { code: 'ERR_OUT_OF_RANGE' });
     }
-    if (normalized.timeout !== undefined &&
+    if (normalized.timeout != null &&
         (!Number.isInteger(normalized.timeout) || normalized.timeout < 0)) {
-        throw new RangeError('timeout must be a non-negative integer');
+        throw Object.assign(new RangeError('timeout must be a non-negative integer'), { code: 'ERR_OUT_OF_RANGE' });
     }
     return normalized;
 }
@@ -2010,13 +2122,15 @@ function collectExecChild(child, options, callback, makeError) {
         if (finished) return;
         finished = true;
         if (timer !== undefined) clearTimeout(timer);
-        const result = convertSpawnResultEncoding({
-            stdout: Buffer.concat(output.stdout),
-            stderr: Buffer.concat(output.stderr),
+        const collected = channel => child[channel]?.readableEncoding
+            ? output[channel].join('') : Buffer.concat(output[channel]);
+        const result = {
+            stdout: collected('stdout'),
+            stderr: collected('stderr'),
             status: typeof status === 'number' ? status : null,
             signal: signal || null,
             error,
-        }, options);
+        };
         const failure = makeError(result);
         if (failure) failure.killed = child.killed || killed;
         if (callback) callback(failure, result.stdout, result.stderr);
@@ -2033,12 +2147,14 @@ function collectExecChild(child, options, callback, makeError) {
     };
     for (const channel of ['stdout', 'stderr']) {
         if (!child[channel]) continue;
+        if (options.encoding !== 'buffer') child[channel].setEncoding(options.encoding);
         child[channel].on('data', chunk => {
             if (finished) return;
-            const bytes = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
             const remaining = Math.max(0, options.maxBuffer - lengths[channel]);
-            if (remaining > 0) output[channel].push(bytes.subarray(0, remaining));
-            lengths[channel] += bytes.length;
+            const length = typeof chunk === 'string'
+                ? Buffer.byteLength(chunk, child[channel].readableEncoding) : chunk.length;
+            lengths[channel] += length;
+            output[channel].push(lengths[channel] > options.maxBuffer ? chunk.slice(0, remaining) : chunk);
             if (lengths[channel] > options.maxBuffer) {
                 error ||= Object.assign(new RangeError(channel + ' maxBuffer length exceeded'), {
                     code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER',
@@ -2079,9 +2195,9 @@ export function exec(command, options, callback) {
 export function execFile(file, args, options, callback) {
     const normalized = normalizeExecFileParams(args, options, callback);
     const backend = getProcessBackend();
-    if (backend && backend.spawn) {
+    if ((backend && backend.spawn) || childNative.supports_isolation()) {
         const resolvedOptions = normalizeBackendExecOptions(normalized.options);
-        return collectExecChild(spawn(String(file), normalized.args, resolvedOptions),
+        return collectExecChild(spawnCommand(String(file), normalized.args, resolvedOptions, resolvedOptions.maxBuffer),
             resolvedOptions, normalized.callback,
             result => createExecFileError(file, normalized.args, result));
     }
@@ -2165,6 +2281,7 @@ export function fork(modulePath, args, options) {
 
         const spawnOptions = {
             encoding: 'buffer',
+            maxBuffer: Infinity,
         };
         if (normalized.options && typeof normalized.options.cwd === 'string') {
             spawnOptions.cwd = normalized.options.cwd;
@@ -2180,8 +2297,8 @@ export function fork(modulePath, args, options) {
 
         child.stdout._emitData(result.stdout);
         child.stderr._emitData(result.stderr);
-        child.stdout.emit('end');
-        child.stderr.emit('end');
+        child.stdout._emitEnd();
+        child.stderr._emitEnd();
         child.emit('exit', exitCode, child.signalCode);
         child.emit('close', exitCode, child.signalCode);
     }, 0);
@@ -2210,7 +2327,15 @@ function normalizeSpawnParams(args, options) {
 }
 
 export function spawn(command, args, options) {
+    return spawnCommand(command, args, options);
+}
+
+function spawnCommand(command, args, options, maxBuffer) {
     ({ args, options } = normalizeSpawnParams(args, options));
+    if (childNative.supports_isolation() && !options.shell) {
+        const local = resolveBackendInlineCommand(String(command), args, options);
+        if (local) return spawnNode(local.command, local.args, options, maxBuffer);
+    }
     const backend = getProcessBackend();
     let inline;
     if (backend && backend.spawn) {
@@ -2267,8 +2392,8 @@ export function spawn(command, args, options) {
             if (result.stderr && result.stderr.length > 0) process.stderr.write(result.stderr);
         }
         if (result.error) child.emit('error', result.error);
-        child.stdout.emit('end');
-        child.stderr.emit('end');
+        child.stdout._emitEnd();
+        child.stderr._emitEnd();
         if (result.error) {
             // Node does not emit `exit` when the process could not be spawned.
             child.emit('close', typeof result.error.errno === 'number' ? result.error.errno : null, null);
@@ -2348,7 +2473,170 @@ export function spawnSync(command, args, options) {
             unsupportedSpawnSyncResult(cmd);
     }
 
+    if (childNative.supports_isolation()) {
+        const request = nodeRequest(cmd, resolvedArgs, normalizedOptions, true);
+        const native = new childNative.Child(JSON.stringify(request));
+        const state = JSON.parse(native.runSync());
+        const output = [[], []];
+        deliverNodeOutput(state.events, request.options.stdio, (stdout, bytes) => output[stdout ? 0 : 1].push(bytes));
+        return nodeResult(state.result, request.options, output.map(chunks => Buffer.concat(chunks)), true);
+    }
     return runInline(cmd, resolvedArgs, normalizedOptions);
+}
+
+function nodeSignal(signal) {
+    const signals = moduleExports.require('node:os').constants.signals;
+    if (typeof signal === 'number') {
+        const name = Object.keys(signals).find(name => signals[name] === signal);
+        if (name) return name;
+    } else if (typeof signal === 'string' && Object.hasOwn(signals, signal.toUpperCase())) {
+        return signal.toUpperCase();
+    }
+    throw Object.assign(new TypeError('Unknown signal: ' + String(signal)), { code: 'ERR_UNKNOWN_SIGNAL' });
+}
+
+function nodeRequest(command, args, options, synchronous, maxBuffer) {
+    // spawn has no maxBuffer option; execFile owns its collector limit.
+    const checked = normalizeBackendExecOptions({ ...options, maxBuffer: synchronous ? options.maxBuffer : maxBuffer });
+    const stdio = options.stdio === undefined ? ['pipe', 'pipe', 'pipe']
+        : typeof options.stdio === 'string' ? [options.stdio, options.stdio, options.stdio]
+        : Array.isArray(options.stdio) ? [0, 1, 2].map(i => options.stdio[i] ?? 'pipe') : null;
+    if (!stdio) {
+        throw Object.assign(new TypeError('Unsupported stdio configuration'), { code: 'ERR_INVALID_ARG_VALUE' });
+    }
+    if ((Array.isArray(options.stdio) && options.stdio.length > 3) ||
+        stdio.some((value, i) => !['pipe', 'overlapped', 'ignore', 'inherit', i].includes(value))) {
+        throw createNotSupportedError('Requested stdio configuration');
+    }
+    const env = {};
+    for (const [key, value] of Object.entries(options.env ?? process.env)) {
+        if (value !== undefined) env[key] = String(value);
+    }
+    const input = options.input ?? options.__wasmStdinData;
+    if (input !== undefined && typeof input !== 'string' && !ArrayBuffer.isView(input) && !Array.isArray(input)) {
+        throw new TypeError('input must be a string or a byte buffer');
+    }
+    const inputBytes = ArrayBuffer.isView(input)
+        ? Buffer.from(input.buffer, input.byteOffset, input.byteLength)
+        : input === undefined ? undefined : Buffer.from(input, options.encoding === 'buffer' ? undefined : options.encoding);
+    return { command: String(command), args: args.map(String), options: {
+        cwd: path.resolve(process.cwd(), options.cwd ?? '.'), env,
+        __wasmStdinData: inputBytes === undefined ? undefined : [...inputBytes],
+        stdio: stdio.map(value => typeof value === 'number' ? 'inherit' : value === 'overlapped' ? 'pipe' : value),
+        maxBuffer: synchronous ? checked.maxBuffer || null : maxBuffer ?? null,
+        timeout: checked.timeout ?? 0,
+        killSignal: nodeSignal(options.killSignal ?? 'SIGTERM'),
+        encoding: options.encoding,
+    } };
+}
+
+function deliverNodeOutput(events, modes, pipe) {
+    for (const [stdout, data] of events) {
+        const bytes = Buffer.from(data);
+        if (modes[stdout ? 1 : 2] === 'inherit') {
+            (stdout ? process.stdout : process.stderr).write(bytes);
+        } else if (modes[stdout ? 1 : 2] === 'pipe') {
+            pipe(stdout, bytes);
+        }
+    }
+}
+
+function nodeResult(terminal, options, output, synchronous) {
+    let error = terminal.error && Object.assign(new Error(terminal.error.message), terminal.error);
+    const reason = terminal.reason;
+    if (reason === 'overflow') {
+        error = synchronous
+            ? Object.assign(new Error('spawnSync ENOBUFS'), { code: 'ENOBUFS', errno: -105 })
+            : Object.assign(new RangeError((terminal.stream ?? 'stdout') + ' maxBuffer length exceeded'), { code: 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER' });
+    } else if (reason === 'timeout' && synchronous) {
+        error = Object.assign(new Error('spawnSync ETIMEDOUT'), { code: 'ETIMEDOUT', errno: -110 });
+    }
+    const stdout = options.stdio[1] === 'pipe' ? output[0] : null;
+    const stderr = options.stdio[2] === 'pipe' ? output[1] : null;
+    return convertSpawnResultEncoding({
+        pid: 1, stdout, stderr, output: [null, stdout, stderr],
+        status: terminal.status, signal: reason ? options.killSignal : null,
+        ...(error ? { error } : {}),
+    }, synchronous ? options : {});
+}
+
+function spawnNode(command, args, options, maxBuffer) {
+    const request = nodeRequest(command, args, options, false, maxBuffer);
+    const native = new childNative.Child(JSON.stringify(request));
+    const child = new EventEmitter();
+    child.pid = 1;
+    child.connected = false;
+    child.killed = false;
+    child.exitCode = null;
+    child.signalCode = null;
+    child.spawnfile = command;
+    child.spawnargs = [command, ...args];
+    child.stdin = null;
+    child.stdout = request.options.stdio[1] === 'pipe' ? createForkReadable() : null;
+    child.stderr = request.options.stdio[2] === 'pipe' ? createForkReadable() : null;
+    child.stdio = [child.stdin, child.stdout, child.stderr];
+    let completed = false;
+    let abortError;
+    // Listener exceptions belong to the parent, not to the native output pump.
+    // Use the ordinary nextTick uncaught-error path without cancelling a child.
+    const dispatch = callback => {
+        try { callback(); }
+        catch (error) { process.nextTick(() => { throw error; }); }
+    };
+    child.kill = signal => {
+        const selected = nodeSignal(signal ?? 'SIGTERM');
+        if (!native.cancel()) return false;
+        request.options.killSignal = selected;
+        child.killed = true;
+        return true;
+    };
+    const abort = () => {
+        if (child.kill(request.options.killSignal)) {
+            abortError = Object.assign(new Error('The operation was aborted'), {
+                name: 'AbortError', code: 'ABORT_ERR', cause: options.signal.reason,
+            });
+        }
+    };
+    if (options.signal !== undefined) {
+        if (!options.signal || typeof options.signal.addEventListener !== 'function') {
+            throw new TypeError('signal must be an AbortSignal');
+        }
+        if (options.signal.aborted) abort();
+        else options.signal.addEventListener('abort', abort, { once: true });
+    }
+    const finish = result => {
+        if (completed) return;
+        completed = true;
+        options.signal?.removeEventListener('abort', abort);
+        child.exitCode = result.status;
+        child.signalCode = result.signal;
+        if (result.signal) child.killed = true;
+        const error = abortError ?? result.error;
+        if (error) dispatch(() => child.emit('error', error));
+        dispatch(() => child.stdout?._emitEnd());
+        dispatch(() => child.stderr?._emitEnd());
+        dispatch(() => child.emit('exit', child.exitCode, child.signalCode));
+        dispatch(() => child.emit('close', child.exitCode, child.signalCode));
+    };
+    const execution = native.start();
+    execution.catch(error => finish({ status: null, signal: null, error }));
+    (async () => {
+        process.nextTick(() => child.emit('spawn'));
+        while (!completed) {
+            const state = JSON.parse(await native.wait());
+            for (const event of state.events) dispatch(() => deliverNodeOutput([event], request.options.stdio,
+                (stdout, bytes) => (stdout ? child.stdout : child.stderr)?._emitData(bytes)));
+            if (state.done) {
+                await execution;
+                finish(nodeResult(state.result, request.options, [Buffer.alloc(0), Buffer.alloc(0)], false));
+            }
+        }
+    })().catch(async error => {
+        native.cancel();
+        try { await execution; } catch (_) {}
+        finish({ status: null, signal: null, error });
+    });
+    return child;
 }
 
 function delegatedSpawnSync(command, args, options) {

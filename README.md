@@ -562,11 +562,18 @@ Context propagation works through `Promise.prototype.then/catch/finally` and `se
 <details>
 <summary><strong><code>node:child_process</code></strong></summary>
 
-WASI cannot create host processes. A constrained compatibility adapter runs `process.execPath`
-JavaScript targets inline with isolated argv, environment, and cwd views. It also recognizes npm's
-literal `sh -c` form for plain Node commands and executable Node shebang files. Unsupported shells,
-shell syntax, external executables, and unsupported shebangs fail explicitly with `ENOSYS`; inline
-execution is not a fresh runtime or an operating-system subprocess.
+WASI cannot create host processes. JavaScript commands targeting `process.execPath` and executable
+Node shebang files run in the component. On Preview 3, each local child has a fresh runtime,
+argv, environment, cwd and module cache. Synchronous calls pause parent JavaScript while the child
+drains its referenced work. Local `spawn` and `execFile` expose live output and let the parent run
+while the child waits for timers or I/O. JavaScript execution is cooperative on the shared WASM
+thread: a CPU-bound child needs its own timeout; parent timers cannot preempt it to call `kill()`.
+Nested children inherit the outer child's deadline. The constrained local `exec` and `fork`
+adapters still execute synchronously before delivering their events.
+Preview 2 retains inline execution and does not join asynchronous local-child work.
+The constrained compatibility adapter also recognizes npm's literal `sh -c` form for plain Node
+commands. Unsupported shells, shell syntax, external executables and unsupported shebangs fail
+explicitly with `ENOSYS`, unless an embedding handles them through a registered backend.
 
 - `ChildProcess`, `exec`, `execFile`, `fork`, `spawn`, `execSync`, `execFileSync`, `spawnSync`
 
@@ -577,6 +584,15 @@ error or exit status, and enforce their output limits and timeout. They do not u
 the synchronous backend when an asynchronous command is accepted.
 Promisified `exec` and `execFile` return both output channels and expose their child
 through the promise's `child` property.
+
+Preview 3 local children capture exit status and uncaught failures, preserve piped bytes, and
+support timeout, cancellation and bounded output. Fixed input is available through `process.stdin`,
+`fs.readFile(0)` / `fs.readFileSync(0)` and `/dev/stdin`. Live writes to `child.stdin`, interactive
+stdin, extra file descriptors and IPC are not provided; unsupported stdio requests fail with `ENOSYS`.
+Inherited output passes through the parent's stream adapter and has a 64 MiB per-channel transfer
+limit. Fresh children do not provide hard JavaScript termination after `process.exit()`.
+Native embedding modules must compose their child work explicitly rather than spawning unrelated
+wit-bindgen tasks across the synchronous child boundary. Runtime-init hooks must stay lazy.
 
 </details>
 
@@ -752,7 +768,7 @@ Compatibility stubs — HTTP/2 is not supported.
 
 `setProcessBackend({ spawn?, spawnSync? })` installs runtime-local command fallbacks; pass `null`
 or `undefined` to clear them. Methods receive `(command, args, options)` and return `undefined`
-when they do not handle a command. Inline Node and executable Node-shebang targets retain priority.
+when they do not handle a command. Local Node and executable Node-shebang targets retain priority.
 The optional-argv forms `spawn(command, options)` and `spawnSync(command, options)` are
 normalized before dispatch, so adapters always receive an argv array and a separate options object.
 `spawn` returns a ChildProcess-compatible object. `spawnSync` returns a synchronous Node-style
@@ -772,15 +788,6 @@ This configuration hook is not a security boundary; host capability checks remai
 
 <details>
 <summary><strong><code>wasm-rquickjs:execution</code></strong></summary>
-
-The draft child-runtime entrypoint `runIsolatedChild(source)` is experimental and requires
-Preview 3. It evaluates a JavaScript script synchronously in a fresh runtime, inherits argv,
-environment and cwd, and drains referenced child work without advancing parent JavaScript.
-It returns a JSON string with `status`, `stdout` and `stderr`; each output stream truncates at
-1 MiB. It has no execution timeout and is not connected to the local Node process runner yet.
-Use it only with controlled native modules: unrelated staged wit-bindgen tasks and arbitrary
-native spawning across this boundary are not supported. Runtime initialization must perform
-only lazy registration, without timers or I/O. Preview 2 rejects the call explicitly.
 
 Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(options)` returns live
 `stdout`/`stderr` readable streams, a `result` promise resolving to `{ value, overflowed }`, and
