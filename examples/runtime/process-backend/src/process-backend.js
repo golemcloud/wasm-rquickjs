@@ -193,6 +193,14 @@ export async function run() {
                 process.stdout.write(String(process.env.ISOLATED_CHILD_MUTATION) + '\\n');
             `, { status: 0, stdout: String(original) + '\n', stderr: '' });
         } else if (config.mode === 'module-stdio') {
+            let childOrdinal = 0;
+            const spawnModuleChild = (...args) => {
+                const phase = 'child ' + (++childOrdinal);
+                writeFileSync('/module-stdio-phase', phase + ': starting');
+                const result = spawnSync(...args);
+                writeFileSync('/module-stdio-phase', phase + ': returned');
+                return result;
+            };
             mkdirSync('/child-app', { recursive: true });
             writeFileSync('/child-app/preload.cjs', `globalThis.preloaded = 42;`);
             writeFileSync('/child-app/main.cjs', `
@@ -205,18 +213,18 @@ export async function run() {
                 process.stdout.write(fs.readFileSync(0));
             `);
             const input = Buffer.from([0, 255, 128, 65]);
-            const commonjs = spawnSync(process.execPath, ['-r', './preload.cjs', './main.cjs', 'argument'], {
+            const commonjs = spawnModuleChild(process.execPath, ['-r', './preload.cjs', './main.cjs', 'argument'], {
                 cwd: '/child-app', env: { ...process.env, CHILD_APP: 'only-child' }, input,
             });
             assert.equal(commonjs.status, 0, commonjs.stderr?.toString());
             assert.deepEqual([...commonjs.stdout], [...input]);
             const backing = new Uint8Array([9, 0, 255, 128, 65, 9]);
             for (const view of [new DataView(backing.buffer, 1, 4), new Uint16Array(backing.buffer, 2, 2)]) {
-                const echoed = spawnSync(process.execPath, ['-e', `process.stdout.write(require('node:fs').readFileSync(0));`], { input: view });
+                const echoed = spawnModuleChild(process.execPath, ['-e', `process.stdout.write(require('node:fs').readFileSync(0));`], { input: view });
                 assert.equal(echoed.status, 0, echoed.stderr?.toString());
                 assert.deepEqual([...echoed.stdout], [...new Uint8Array(view.buffer, view.byteOffset, view.byteLength)]);
             }
-            const streamedInput = spawnSync(process.execPath, ['-e', `
+            const streamedInput = spawnModuleChild(process.execPath, ['-e', `
                 const chunks = [];
                 process.stdin.on('data', chunk => chunks.push(chunk));
                 process.stdin.on('end', () => process.stdout.write(Buffer.concat(chunks)));
@@ -231,42 +239,62 @@ export async function run() {
                 await new Promise(resolve => setTimeout(resolve, 5));
                 process.stdout.write('esm:' + value);
             `);
-            const esm = spawnSync(process.execPath, ['./main.mjs'], { cwd: '/child-app', encoding: 'utf8' });
+            const esm = spawnModuleChild(process.execPath, ['./main.mjs'], { cwd: '/child-app', encoding: 'utf8' });
             assert.equal(esm.status, 0, esm.stderr);
             assert.equal(esm.stdout, 'esm:42');
-            const dynamic = spawnSync(process.execPath, ['-e', `
+            const dynamic = spawnModuleChild(process.execPath, ['-e', `
                 Promise.all([import('node:path'), import('./dep.mjs')]).then(([path, dep]) => {
                     process.stdout.write(path.sep + dep.value);
                 });
             `], { cwd: '/child-app', encoding: 'utf8' });
             assert.equal(dynamic.status, 0, dynamic.stderr);
             assert.equal(dynamic.stdout, '/42');
-            const requireTla = spawnSync(process.execPath, ['-e', `require('./main.mjs');`], { cwd: '/child-app', encoding: 'utf8' });
+            const requireTla = spawnModuleChild(process.execPath, ['-e', `require('./main.mjs');`], { cwd: '/child-app', encoding: 'utf8' });
             assert.equal(requireTla.status, 1);
             assert.match(requireTla.stderr, /ERR_REQUIRE_ASYNC_MODULE/);
             assert.equal(requireTla.stdout, '', 'require(TLA) must not evaluate the module');
             writeFileSync('/child-app/pending.mjs', `await new Promise(() => {});`);
-            const pending = spawnSync(process.execPath, ['./pending.mjs'], { cwd: '/child-app', encoding: 'utf8' });
+            const pending = spawnModuleChild(process.execPath, ['./pending.mjs'], { cwd: '/child-app', encoding: 'utf8' });
             assert.equal(pending.status, 13);
             const output = [];
             const old = process.stdout.write;
             process.stdout.write = chunk => { output.push(Buffer.from(chunk)); return true; };
             try {
-                const inherited = spawnSync(process.execPath, ['-e', `console.log('inherited');`], { stdio: 'inherit' });
+                const inherited = spawnModuleChild(process.execPath, ['-e', `console.log('inherited');`], { stdio: 'inherit' });
                 assert.equal(inherited.status, 0);
                 assert.equal(inherited.stdout, null);
                 assert.equal(inherited.stderr, null);
             } finally { process.stdout.write = old; }
             assert.equal(Buffer.concat(output).toString(), 'inherited\n');
-            const discarded = spawnSync(process.execPath, ['-e', `process.stdout.write('discard');process.stderr.write('discard');`], { stdio: 'ignore', maxBuffer: 0 });
+            const discarded = spawnModuleChild(process.execPath, ['-e', `process.stdout.write('discard');process.stderr.write('discard');`], { stdio: 'ignore', maxBuffer: 0 });
             assert.equal(discarded.status, 0);
             assert.equal(discarded.stdout, null);
             assert.equal(discarded.stderr, null);
-            const fresh = source => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8' });
+            const fresh = source => spawnModuleChild(process.execPath, ['-e', source], { encoding: 'utf8' });
             assert.equal(fresh(`globalThis.childOnly = true; process.stdout.write('first');`).stdout, 'first');
             assert.equal(fresh(`process.stdout.write(String(globalThis.childOnly));`).stdout, 'undefined');
             assert.equal(fresh(`globalThis.Number = () => 99; process.exitCode = 7;`).status, 7);
             assert.equal(fresh(`JSON.stringify = () => '{}'; process.exitCode = 7;`).status, 7);
+        } else if (config.mode === 'tla-cleanup') {
+            mkdirSync('/child-tla-cleanup', { recursive: true });
+            writeFileSync('/child-tla-cleanup/entry.mjs', config.kind === 'require'
+                ? `await Promise.resolve(); process.stdout.write('must not execute');`
+                : `await new Promise(() => {});`);
+            for (let iteration = 0; iteration < 3; iteration++) {
+                const args = config.kind === 'require'
+                    ? ['-e', `require('./entry.mjs');`] : ['./entry.mjs'];
+                const result = spawnSync(process.execPath, args, {
+                    cwd: '/child-tla-cleanup', encoding: 'utf8',
+                });
+                assert.equal(result.status, config.kind === 'require' ? 1 : 13, result.stderr);
+                assert.equal(result.stdout, '');
+                if (config.kind === 'require') assert.match(result.stderr, /ERR_REQUIRE_ASYNC_MODULE/);
+                else assert.equal(result.stderr, '');
+                const next = spawnSync(process.execPath, ['-e', `process.stdout.write('healthy');`], { encoding: 'utf8' });
+                assert.equal(next.status, 0, next.stderr);
+                assert.equal(next.stdout, 'healthy');
+                assert.equal(next.stderr, '');
+            }
         } else if (config.mode === 'entry-resolution') {
             mkdirSync('/entries/package', { recursive: true });
             mkdirSync('/entries/index', { recursive: true });

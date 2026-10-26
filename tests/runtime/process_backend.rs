@@ -83,7 +83,13 @@ async fn check_isolated_child(
         instance.invoke_and_capture_output_with_stderr(None, "run", &[]),
     )
     .await?;
-    assert_eq!(result?, Some(Val::Bool(true)));
+    let result = result.map_err(|error| {
+        match std::fs::read_to_string(instance.temp_dir_path().join("module-stdio-phase")) {
+            Ok(phase) => error.context(format!("Last module/stdio phase: {phase}")),
+            Err(_) => error,
+        }
+    })?;
+    assert_eq!(result, Some(Val::Bool(true)));
     assert!(stdout.is_empty(), "child stdout escaped: {stdout}");
     assert!(stderr.is_empty(), "child stderr escaped: {stderr}");
     Ok(())
@@ -216,6 +222,28 @@ async fn local_node_child_module_and_stdio_contract(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     check_isolated_child(compiled, serde_json::json!({ "mode": "module-stdio" })).await
+}
+
+#[test]
+async fn local_node_child_rejected_tla_keeps_runtime_usable(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "tla-cleanup", "kind": "require" }),
+    )
+    .await
+}
+
+#[test]
+async fn local_node_child_unresolved_tla_keeps_runtime_usable(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "tla-cleanup", "kind": "pending" }),
+    )
+    .await
 }
 
 #[test]
