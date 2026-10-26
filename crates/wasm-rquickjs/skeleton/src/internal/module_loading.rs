@@ -10748,14 +10748,14 @@ fn initialize_module_import_meta<'js>(
     init: &ImportMetaInit,
 ) -> rquickjs::Result<()> {
     let meta = module.meta()?;
-    let globals = ctx.globals();
-    let internal_meta = meta.clone();
-    let internal_globals = globals.clone();
     meta.prop(
         "__wasm_rquickjs_global",
-        Accessor::from(move || -> rquickjs::Result<Object<'js>> {
-            internal_meta.remove("__wasm_rquickjs_global")?;
-            Ok(internal_globals.clone())
+        // Do not capture JS objects in a native closure: a declared module may
+        // never execute, leaving an opaque closure -> import.meta ownership cycle
+        // that QuickJS cannot trace when the runtime is destroyed.
+        Accessor::from(|ctx: Ctx<'js>, This(meta): This<Object<'js>>| {
+            meta.remove("__wasm_rquickjs_global")?;
+            Ok::<_, rquickjs::Error>(ctx.globals())
         })
         .configurable(),
     )?;

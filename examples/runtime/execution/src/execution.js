@@ -93,6 +93,21 @@ export async function run() {
         cwd: '/tmp/execution-cache', source: `return (await import('cache-pkg')).default;`,
     });
 
+    // A rejected require(TLA) leaves compiled modules unevaluated. Completing
+    // this job must still destroy their runtime without opaque native JS roots.
+    const compiledOnly = await runJavaScript({ source: `
+        const fs = await import('node:fs');
+        const { createRequire } = await import('node:module');
+        fs.writeFileSync('/tmp/compiled-only.mjs', 'globalThis.executed = true; await 0;');
+        let code;
+        try { createRequire('/tmp/entry.cjs')('./compiled-only.mjs'); }
+        catch (error) { code = error.code; }
+        return { code, executed: globalThis.executed === true };
+    ` });
+    if (compiledOnly.value.code !== 'ERR_REQUIRE_ASYNC_MODULE' || compiledOnly.value.executed) {
+        throw new Error('require(TLA) evaluated a compile-only module');
+    }
+
     const timeoutSuccess = await runJavaScript({ source: `return 'quick';`, timeoutMs: 1000 });
     let timeoutError;
     try {
