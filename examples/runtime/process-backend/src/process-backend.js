@@ -267,6 +267,120 @@ export async function run() {
             assert.equal(fresh(`process.stdout.write(String(globalThis.childOnly));`).stdout, 'undefined');
             assert.equal(fresh(`globalThis.Number = () => 99; process.exitCode = 7;`).status, 7);
             assert.equal(fresh(`JSON.stringify = () => '{}'; process.exitCode = 7;`).status, 7);
+        } else if (config.mode === 'entry-resolution') {
+            mkdirSync('/entries/package', { recursive: true });
+            mkdirSync('/entries/index', { recursive: true });
+            mkdirSync('/entries/other', { recursive: true });
+            writeFileSync('/entries/plain.js', `process.stdout.write(process.argv[1]);`);
+            writeFileSync('/entries/package/package.json', JSON.stringify({ main: 'start.js', type: 'module' }));
+            writeFileSync('/entries/package/start.js', `process.stdout.write('package');`);
+            writeFileSync('/entries/index/index.js', `process.stdout.write('index');`);
+            writeFileSync('/entries/fs', `process.stdout.write('local-file');`);
+            writeFileSync('/entries/other/dep.mjs', `export const value = 'wrong';`);
+            writeFileSync('/entries/dep.mjs', `export const value = 'original';`);
+            const run = args => spawnSync(process.execPath, args, { cwd: '/entries', encoding: 'utf8' });
+            for (const [entry, expected] of [
+                ['plain', '/entries/plain'], ['package', 'package'], ['index', 'index'], ['fs', 'local-file'],
+            ]) {
+                const result = run([entry]);
+                assert.equal(result.status, 0, result.stderr);
+                assert.equal(result.stdout, expected);
+            }
+            for (const missing of ['missing', 'missing.mjs']) {
+                const result = run([missing]);
+                assert.equal(result.status, 1);
+                assert.match(result.stderr, /MODULE_NOT_FOUND/);
+                assert.match(result.stderr, /Cannot find module/);
+            }
+            writeFileSync('/entries/real.mjs', `
+                globalThis.entryEvaluations = (globalThis.entryEvaluations || 0) + 1;
+                export const evaluation = globalThis.entryEvaluations;
+                if (evaluation === 1) {
+                    import(new URL(process.argv[1], 'file://').href).then(self => {
+                        process.stdout.write(import.meta.url + ':' + self.evaluation);
+                    });
+                }
+            `);
+            symlinkSync('./real.mjs', '/entries/link.mjs');
+            for (const [flags, expected, evaluations] of [
+                [[], 'real.mjs', 1], [['--preserve-symlinks'], 'real.mjs', 2],
+                [['--preserve-symlinks-main'], 'link.mjs', 2],
+                [['--preserve-symlinks', '--preserve-symlinks-main'], 'link.mjs', 1],
+            ]) {
+                const result = run([...flags, './link.mjs']);
+                assert.equal(result.status, 0, result.stderr);
+                assert.equal(result.stdout, 'file:///entries/' + expected + ':' + evaluations);
+            }
+            mkdirSync('/entries/main-real', { recursive: true });
+            mkdirSync('/entries/main-link', { recursive: true });
+            writeFileSync('/entries/main-real/main.mjs', `
+                import { value } from './dep.mjs';
+                import { identity } from './linked-dep.mjs';
+                process.stdout.write(value + ':' + identity);
+            `);
+            writeFileSync('/entries/main-real/dep.mjs', `export const value = 'real';`);
+            writeFileSync('/entries/main-link/dep.mjs', `export const value = 'link';`);
+            writeFileSync('/entries/dependency.mjs', `export const identity = import.meta.url;`);
+            symlinkSync('../main-real/main.mjs', '/entries/main-link/main.mjs');
+            symlinkSync('../dependency.mjs', '/entries/main-real/linked-dep.mjs');
+            symlinkSync('../dependency.mjs', '/entries/main-link/linked-dep.mjs');
+            for (const [flags, value, identity] of [
+                [[], 'real', 'dependency.mjs'],
+                [['--preserve-symlinks'], 'real', 'main-real/linked-dep.mjs'],
+                [['--preserve-symlinks-main'], 'link', 'dependency.mjs'],
+                [['--preserve-symlinks', '--preserve-symlinks-main'], 'link', 'main-link/linked-dep.mjs'],
+            ]) {
+                const result = run([...flags, './main-link/main.mjs']);
+                assert.equal(result.status, 0, result.stderr);
+                assert.equal(result.stdout, value + ':file:///entries/' + identity);
+            }
+            const evaluated = run(['-e', `
+                const assert = require('node:assert/strict');
+                const frames = require('node:util').getCallSites();
+                assert.equal(frames[0].scriptName, '[eval]');
+                process.chdir('/entries/other');
+                import('./dep.mjs').then(dep => process.stdout.write(dep.value));
+            `]);
+            assert.equal(evaluated.status, 0, evaluated.stderr);
+            assert.equal(evaluated.stdout, 'original');
+        } else if (config.mode === 'microtask-errors') {
+            const run = source => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8' });
+            const exited = run(`queueMicrotask(() => process.exit(7));`);
+            assert.equal(exited.status, 7, exited.stderr);
+            assert.equal(exited.stderr, '');
+            const thrown = run(`queueMicrotask(() => { throw new Error('queued failure'); });`);
+            assert.equal(thrown.status, 1);
+            assert.match(thrown.stderr, /queued failure/);
+            const handled = run(`
+                process.on('uncaughtException', error => process.stdout.write(error.message));
+                queueMicrotask(() => { throw new Error('handled failure'); });
+            `);
+            assert.equal(handled.status, 0, handled.stderr);
+            assert.equal(handled.stdout, 'handled failure');
+            const handlerFailed = run(`
+                process.on('uncaughtException', () => { throw new Error('handler failure'); });
+                queueMicrotask(() => { throw new Error('original failure'); });
+            `);
+            assert.equal(handlerFailed.status, 7);
+            assert.match(handlerFailed.stderr, /handler failure/);
+            const once = run(`
+                let calls = 0;
+                process.on('uncaughtException', () => {});
+                const childFs = require('node:fs');
+                childFs.realpath('/', () => { calls++; throw new Error('callback failure'); });
+                childFs.realpath.native('/', () => { calls++; throw new Error('native callback failure'); });
+                childFs.realpath('/missing-realpath', () => { calls++; process.exit(9); });
+                process.on('exit', () => process.stdout.write(String(calls)));
+            `);
+            assert.equal(once.status, 9, once.stderr);
+            assert.equal(once.stdout, '3');
+            const recovered = run(`process.stdout.write('healthy');`);
+            assert.equal(recovered.status, 0, recovered.stderr);
+            assert.equal(recovered.stdout, 'healthy');
+            const immutable = run(`Object.defineProperty(globalThis, 'queueMicrotask', {
+                value() {}, writable: false, configurable: false,
+            });`);
+            assert.equal(immutable.status, 0, immutable.stderr);
         } else if (config.mode === 'async-control') {
             let negativeError;
             const negative = execFile(process.execPath, error => { negativeError = error; });

@@ -219,6 +219,20 @@ async fn local_node_child_module_and_stdio_contract(
 }
 
 #[test]
+async fn local_node_child_entry_resolution_contract(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(compiled, serde_json::json!({ "mode": "entry-resolution" })).await
+}
+
+#[test]
+async fn local_node_child_microtask_error_contract(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(compiled, serde_json::json!({ "mode": "microtask-errors" })).await
+}
+
+#[test]
 async fn local_node_child_async_control_contract(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

@@ -8,6 +8,7 @@ import * as path from 'node:path';
 import { Buffer } from 'node:buffer';
 import { EventEmitter } from 'node:events';
 import { StringDecoder } from 'node:string_decoder';
+import { constants as osConstants } from 'node:os';
 import process from 'node:process';
 import moduleExports from 'node:module';
 import { check_syntax_with_filename as checkSyntaxWithFilename } from '__wasm_rquickjs_builtin/vm_native';
@@ -604,7 +605,7 @@ function executeInlineSource(runtimeRequire, inlineArgs, childCwd) {
     } else {
         const evaluator = vmModule.compileFunction(parsed.source,
             ['Buffer', 'process', 'vm', 'os', 'fs', 'require'], {
-                filename: path.join(childCwd || process.cwd(), '[eval]'),
+                filename: '[eval]',
                 importModuleDynamically: vmModule.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
             });
         result = evaluator(Buffer, process, vmModule, globalThis.os, evalFs, childRequire);
@@ -720,9 +721,10 @@ function beginInline(command, args, options, isolated) {
     const oldStdin = process.stdin;
     const oldEmitWarning = process.emitWarning;
     const oldExit = process.exit;
+    const oldQueueMicrotask = globalThis.queueMicrotask;
     const runExit = process._runExit;
     const restoreParentModuleState =
-        moduleExports.__wasm_rquickjs_begin_inline_child_module_state();
+        isolated ? null : moduleExports.__wasm_rquickjs_begin_inline_child_module_state();
     const runtimeRequire = moduleExports.require;
     let firstExitCode = null;
     let firstExitError = null;
@@ -779,7 +781,7 @@ function beginInline(command, args, options, isolated) {
         return typeof classify === 'function' && classify(source ?? runtimeRequire('node:fs').readFileSync(filename, 'utf8'));
     }
 
-    function handleError(err) {
+    function handleError(err, handlerFailed = false) {
         failed = true;
         if (firstExitCode !== null) {
             status = firstExitCode;
@@ -790,7 +792,7 @@ function beginInline(command, args, options, isolated) {
             status = 9;
             capture(false, String(command) + ': ' + err.message + '\n');
         } else {
-            status = 1;
+            status = handlerFailed ? 7 : 1;
             if (checkSyntaxMode && currentScriptPath) capture(false, currentScriptPath + '\n');
             capture(false, formatErrorForStderr(err));
         }
@@ -821,7 +823,27 @@ function beginInline(command, args, options, isolated) {
         globalThis.__wasm_rquickjs_simple_source_maps = Object.create(null);
         globalThis.__wasm_rquickjs_cjs_line_offsets = Object.create(null);
         if (!isolated) globalThis.__wasm_rquickjs_sync_callbacks = true;
-        if (isolated) globalThis.__wasm_rquickjs_child_uncaught = handleError;
+        if (isolated) {
+            globalThis.__wasm_rquickjs_child_uncaught = handleError;
+            const handleUncaught = globalThis.__wasm_rquickjs_handleUncaughtError;
+            // Native microtasks, unlike Promise reactions, can throw directly
+            // out of a QuickJS job. Own their completion at the child boundary
+            // just as timer and nextTick callbacks own theirs.
+            globalThis.queueMicrotask = function queueMicrotask(callback) {
+                if (typeof callback !== 'function') return oldQueueMicrotask(callback);
+                return oldQueueMicrotask(() => {
+                    try { callback(); }
+                    catch (error) {
+                        if (error && error.__isProcessExit) {
+                            handleError(error);
+                        } else {
+                            try { handleUncaught(error); }
+                            catch (handlerError) { handleError(handlerError, true); }
+                        }
+                    }
+                });
+            };
+        }
 
         process.exit = function exit(code) {
             try {
@@ -1080,17 +1102,25 @@ function beginInline(command, args, options, isolated) {
                     scriptPath,
                     isModule,
                 );
-            } else if (isolated && entryIsModule(scriptPath)) {
-                pendingEntry = true;
-                const url = runtimeRequire('node:url').pathToFileURL(scriptPath).href;
-                import(url).then(() => { pendingEntry = false; }, error => {
-                    pendingEntry = false;
-                    handleError(error);
-                });
-            } else if (moduleModule && typeof moduleModule.runMain === 'function') {
-                moduleModule.runMain();
             } else {
-                runtimeRequire(scriptPath);
+                // Resolve CLI paths before detecting their format, including
+                // extensionless files, directories and main-specific symlinks.
+                // argv[1] retains the original absolute invocation path.
+                const resolvedScriptPath = isolated
+                    ? moduleExports.__wasm_rquickjs_resolve_main_filename(scriptPath, childCwd)
+                    : scriptPath;
+                if (isolated && entryIsModule(resolvedScriptPath)) {
+                    pendingEntry = true;
+                    const specifier = moduleExports.__wasm_rquickjs_main_import_specifier(resolvedScriptPath);
+                    import(specifier).then(() => { pendingEntry = false; }, error => {
+                        pendingEntry = false;
+                        handleError(error);
+                    });
+                } else if (moduleModule && typeof moduleModule.runMain === 'function') {
+                    moduleModule.runMain();
+                } else {
+                    runtimeRequire(scriptPath);
+                }
             }
         }
       } catch (err) {
@@ -1100,7 +1130,7 @@ function beginInline(command, args, options, isolated) {
 
     function restore() {
         try {
-            restoreParentModuleState();
+            restoreParentModuleState?.();
         } catch (error) {
             status = 1;
             capture(false, formatErrorForStderr(error));
@@ -1919,7 +1949,7 @@ function buildExecFileCommand(file, args) {
 }
 
 function systemErrorName(code) {
-    const errno = moduleExports.require('node:os').constants.errno;
+    const errno = osConstants.errno;
     return Object.keys(errno).find(name => errno[name] === -code) || 'Unknown system error ' + code;
 }
 
@@ -2381,7 +2411,8 @@ function spawnCommand(command, args, options, maxBuffer) {
         spawnOpts.encoding = 'buffer';
 
         const result = spawnSync(inline ? inline.command : String(command), inline ? inline.args : args || [], spawnOpts);
-        const exitCode = typeof result.status === 'number' ? result.status : null;
+        const exitCode = result.error && typeof result.error.errno === 'number'
+            ? result.error.errno : typeof result.status === 'number' ? result.status : null;
         child.exitCode = exitCode;
         child.signalCode = result.signal || null;
 
@@ -2396,7 +2427,7 @@ function spawnCommand(command, args, options, maxBuffer) {
         child.stderr._emitEnd();
         if (result.error) {
             // Node does not emit `exit` when the process could not be spawned.
-            child.emit('close', typeof result.error.errno === 'number' ? result.error.errno : null, null);
+            child.emit('close', exitCode, null);
         } else {
             child.emit('exit', exitCode, child.signalCode);
             child.emit('close', exitCode, child.signalCode);
@@ -2485,7 +2516,7 @@ export function spawnSync(command, args, options) {
 }
 
 function nodeSignal(signal) {
-    const signals = moduleExports.require('node:os').constants.signals;
+    const signals = osConstants.signals;
     if (typeof signal === 'number') {
         const name = Object.keys(signals).find(name => signals[name] === signal);
         if (name) return name;

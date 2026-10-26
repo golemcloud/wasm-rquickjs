@@ -1555,8 +1555,9 @@ export function compileFunction(code, params, options) {
     const sourceCode = code;
     if (options.importModuleDynamically === USE_MAIN_CONTEXT_DEFAULT_LOADER) {
         const filename = referrerFilenameFromOptions(options);
+        const parentURL = defaultLoaderParentURL(filename);
         const paramList = params.map(String).join(',');
-        const source = '[function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(code, filename).code + '\n}][0]';
+        const source = '[function(' + paramList + '){' + rewriteDefaultLoaderDynamicImportsForEvaluation(code, parentURL).code + '\n}][0]';
         return finalizeCompileFunction(evaluateCompileFunctionSource(source, sourceCode, filename), sourceCode, params, options);
     }
     if (options.importModuleDynamically === undefined) {
