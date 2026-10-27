@@ -112,7 +112,7 @@ impl JsState {
     }
 
     pub(crate) async fn initialize_async_value_helpers(context: &AsyncContext) {
-        rquickjs::AsyncContext::async_with(&context, async |ctx| {
+        rquickjs::AsyncContext::async_with(context, async |ctx| {
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
             // `get_async_iterator` normalizes any (async or sync) iterable passed from JS into an
