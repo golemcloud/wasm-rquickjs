@@ -15,8 +15,8 @@ size. Explicit `gc()` remains optional and schedules collection after the curren
 JavaScript execution completes.
 
 Disposal uses the engine's well-known `Symbol.dispose` and `Symbol.asyncDispose`,
-including for generated WIT resources. Unlike Node.js 22, these symbols are not
-in the global symbol registry and their properties are read-only.
+including for generated WIT resources. These symbols are not in the global symbol
+registry, unlike Node.js 22.14. Their properties are read-only in both runtimes.
 
 ### Comparison with ComponentizeJS
 
