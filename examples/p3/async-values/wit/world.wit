@@ -44,6 +44,8 @@ world async-values {
   export run-checkpoint-future: async func() -> future<u32>;
   export read-checkpoint-count: async func() -> u32;
   export run-stream: async func() -> stream<u8>;
+  export run-gc-stream: async func() -> stream<u8>;
+  export dispose-wrapped-resources: async func() -> bool;
   export run-sibling-streams: async func() -> tuple<stream<u8>, stream<u8>>;
   export run-wrapped-sibling-streams: async func() -> tuple<wrapped-stream, wrapped-stream>;
   export run-wrapped-stream-after-gate: async func(id: u8) -> wrapped-stream;

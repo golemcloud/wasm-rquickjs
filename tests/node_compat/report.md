@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3187/4394 (72.5%)
+**Primary compatibility (CI-enforced):** 3189/4397 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3187 | 72.5% | 55.4% | 46.3% |
-| 🧩 known gap | 1207 | 27.5% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3189 | 72.5% | 55.4% | 46.4% |
+| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1196 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
-| **Total** | **6876** |  |  | **100.0%** |
+| **Total** | **6879** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3187/5757 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3189/5760 (55.4%)**.
 
 ## Inventory by Module
 
@@ -59,7 +59,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 614 | 188 | 145 | 86 | 12 | 0 | 183 | 56.5% | 43.6% |
+| other | 617 | 190 | 146 | 86 | 12 | 0 | 183 | 56.5% | 43.8% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 4 | 33 | 2 | 0 | 0 | 2 | 10.8% | 10.3% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -687,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1207)
+### known gap (1208)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -783,6 +783,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs | 2 | `parallel/test-cli-syntax-piped-bad.js`, `parallel/test-cli-syntax-piped-good.js` |
 | child_process execPath emulation does not implement --trace-require-module warning output | 2 | `es-module/test-require-module-warning.js`, `es-module/test-require-node-modules-warning.js` |
 | child_process.spawn emulation does not support --interactive REPL sessions | 2 | `parallel/test-repl-array-prototype-tempering.js`, `sequential/test-repl-timeout-throw.js` |
+| common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness | 2 | `parallel/test-gc-http-client-connaborted.js`, `parallel/test-gc-net-timeout.js` |
 | crypto.X509Certificate.checkHost is not available | 2 | `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`, `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist` |
 | dgram send() callback does not report bytes correctly for multi-buffer payloads | 2 | `parallel/test-dgram-send-callback-multi-buffer.js`, `parallel/test-dgram-send-multi-buffer-copy.js` |
 | dgram socket buffer size APIs do not match Node error semantics | 2 | `parallel/test-dgram-socket-buffer-size.js#block_00_block_00`, `parallel/test-dgram-socket-buffer-size.js#block_01_block_01` |
@@ -931,6 +932,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Readable unpipe()+resume() transform/end event flow is not fully Node-compatible | 1 | `parallel/test-stream-readable-unpipe-resume.js` |
 | Readable.from() iterator close/return() semantics are incomplete | 1 | `parallel/test-readable-from-iterator-closing.js` |
 | Readable.map()/reduce() lazy evaluation callback ordering differs from Node | 1 | `parallel/test-stream-reduce.js#block_02_block_02` |
+| Readable.prototype.drop.length is 2 instead of Node's 1; later iterator-helper assertions are not reached | 1 | `parallel/test-stream-iterator-helpers-test262-tests.mjs` |
 | Readable.toWeb() with crypto randomBytes pressure can trap in web_crypto random_bytes | 1 | `parallel/test-stream-readable-to-web.js` |
 | ReadableStream BYOB controller respond()/Buffer interaction is not fully WHATWG-compatible | 1 | `parallel/test-whatwg-readablebytestreambyob.js` |
 | Request abort vs normal completion event ordering (aborted/error/end) is not Node-compatible | 1 | `parallel/test-http-client-spurious-aborted.js` |
@@ -1201,8 +1203,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
 | requires V8 hidden-class constructor-name recovery after the prototype constructor is detached | 1 | `parallel/test-util-inspect.js#block_73_manipulate_the_prototype_in_weird_ways` |
-| requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably | 1 | `parallel/test-gc-http-client-connaborted.js` |
-| requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably | 1 | `parallel/test-gc-net-timeout.js` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |

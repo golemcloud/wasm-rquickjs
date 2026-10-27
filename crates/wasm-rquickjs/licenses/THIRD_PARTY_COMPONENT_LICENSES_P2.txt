@@ -51,7 +51,7 @@ Third-party crates
 * compact_str 0.7.1 — MIT — https://github.com/ParkMyCar/compact_str
 * concurrent-queue 2.5.0 — Apache-2.0 OR MIT — https://github.com/smol-rs/concurrent-queue
 * const-oid 0.9.6 — Apache-2.0 OR MIT — https://github.com/RustCrypto/formats/tree/master/const-oid
-* convert_case 0.8.0 — MIT — https://github.com/rutrum/convert-case
+* convert_case 0.12.0 — MIT — https://github.com/rutrum/convert-case
 * crc32fast 1.5.0 — MIT OR Apache-2.0 — https://github.com/srijs/rust-crc32fast
 * crossbeam-utils 0.8.21 — MIT OR Apache-2.0 — https://github.com/crossbeam-rs/crossbeam
 * crypto-bigint 0.5.5 — Apache-2.0 OR MIT — https://github.com/RustCrypto/crypto-bigint
@@ -79,7 +79,6 @@ Third-party crates
 * find-msvc-tools 0.1.9 — MIT OR Apache-2.0 — https://github.com/rust-lang/cc-rs
 * fixedbitset 0.5.7 — MIT OR Apache-2.0 — https://github.com/petgraph/fixedbitset
 * flate2 1.1.9 — MIT OR Apache-2.0 — https://github.com/rust-lang/flate2-rs
-* fnv 1.0.7 — Apache-2.0  OR  MIT — https://github.com/servo/rust-fnv
 * foldhash 0.1.5 — Zlib — https://github.com/orlp/foldhash
 * foldhash 0.2.0 — Zlib — https://github.com/orlp/foldhash
 * form_urlencoded 1.2.2 — MIT OR Apache-2.0 — https://github.com/servo/rust-url
@@ -107,7 +106,6 @@ Third-party crates
 * group 0.13.0 — MIT OR Apache-2.0 — https://github.com/zkcrypto/group
 * hashbrown 0.14.5 — MIT OR Apache-2.0 — https://github.com/rust-lang/hashbrown
 * hashbrown 0.15.5 — MIT OR Apache-2.0 — https://github.com/rust-lang/hashbrown
-* hashbrown 0.16.1 — MIT OR Apache-2.0 — https://github.com/rust-lang/hashbrown
 * hashbrown 0.17.1 — MIT OR Apache-2.0 — https://github.com/rust-lang/hashbrown
 * heck 0.5.0 — MIT OR Apache-2.0 — https://github.com/withoutboats/heck
 * hkdf 0.12.4 — MIT OR Apache-2.0 — https://github.com/RustCrypto/KDFs/
@@ -124,7 +122,6 @@ Third-party crates
 * icu_properties_data 2.2.0 — Unicode-3.0 — https://github.com/unicode-org/icu4x
 * icu_provider 2.2.0 — Unicode-3.0 — https://github.com/unicode-org/icu4x
 * id-arena 2.3.0 — MIT OR Apache-2.0 — https://github.com/fitzgen/id-arena
-* ident_case 1.0.1 — MIT OR Apache-2.0 — https://github.com/TedDriggs/ident_case
 * idna 1.1.0 — MIT OR Apache-2.0 — https://github.com/servo/rust-url/
 * idna_adapter 1.2.2 — Apache-2.0 OR MIT — https://github.com/hsivonen/idna_adapter
 * if_chain 1.0.3 — MIT OR Apache-2.0 — https://github.com/lambda-fairy/if_chain
@@ -186,10 +183,10 @@ Third-party crates
 * regex-syntax 0.8.11 — MIT OR Apache-2.0 — https://github.com/rust-lang/regex
 * relative-path 2.0.1 — MIT OR Apache-2.0 — https://github.com/udoprog/relative-path
 * rfc6979 0.4.0 — Apache-2.0 OR MIT — https://github.com/RustCrypto/signatures/tree/master/rfc6979
-* rquickjs 0.10.0 — MIT — https://github.com/DelSkayn/rquickjs.git
-* rquickjs-core 0.10.0 — MIT — https://github.com/DelSkayn/rquickjs.git
-* rquickjs-macro 0.10.0 — MIT — https://github.com/DelSkayn/rquickjs.git
-* rquickjs-sys 0.10.0 — MIT — https://github.com/DelSkayn/rquickjs.git
+* rquickjs 0.14.0 — MIT — https://github.com/DelSkayn/rquickjs.git
+* rquickjs-core 0.14.0 — MIT — https://github.com/DelSkayn/rquickjs.git
+* rquickjs-macro 0.14.0 — MIT — https://github.com/DelSkayn/rquickjs.git
+* rquickjs-sys 0.14.0 — MIT — https://github.com/DelSkayn/rquickjs.git
 * rustc-hash 2.1.2 — Apache-2.0 OR MIT — https://github.com/rust-lang/rustc-hash
 * rustc_version 0.4.1 — MIT OR Apache-2.0 — https://github.com/djc/rustc-version-rs
 * rustversion 1.0.22 — MIT OR Apache-2.0 — https://github.com/dtolnay/rustversion
@@ -241,6 +238,7 @@ Third-party crates
 * swc_ts_fast_strip 56.0.0 — Apache-2.0 — https://github.com/swc-project/swc.git
 * swc_visit 2.0.1 — Apache-2.0 — https://github.com/swc-project/swc.git
 * syn 2.0.118 — MIT OR Apache-2.0 — https://github.com/dtolnay/syn
+* syn 3.0.9 — MIT OR Apache-2.0 — https://github.com/dtolnay/syn
 * synstructure 0.13.2 — MIT — https://github.com/mystor/synstructure
 * tap 1.0.1 — MIT — https://github.com/myrrlyn/tap
 * tinystr 0.8.3 — Unicode-3.0 — https://github.com/unicode-org/icu4x
@@ -3050,7 +3048,6 @@ Used by:
 * find-msvc-tools 0.1.9
 * fixedbitset 0.5.7
 * flate2 1.1.9
-* fnv 1.0.7
 * form_urlencoded 1.2.2
 * futures-lite 1.13.0
 * futures-lite 2.6.1
@@ -3058,7 +3055,6 @@ Used by:
 * group 0.13.0
 * hashbrown 0.14.5
 * hashbrown 0.15.5
-* hashbrown 0.16.1
 * hashbrown 0.17.1
 * heck 0.5.0
 * id-arena 2.3.0
@@ -5408,7 +5404,6 @@ Used by:
 * bytes-str 0.2.8
 * dragonbox_ecma 0.1.12
 * from_variant 3.0.0
-* ident_case 1.0.1
 * itoa 1.0.18
 * libc 0.2.186
 * miniz_oxide 0.8.9
@@ -5457,6 +5452,7 @@ Used by:
 * swc_ts_fast_strip 56.0.0
 * swc_visit 2.0.1
 * syn 2.0.118
+* syn 3.0.9
 * unicode-id-start 1.4.0
 * unicode-ident 1.0.24
 * wasi-logging 0.0.1
@@ -6360,11 +6356,12 @@ SOFTWARE.
 
 --- MIT License ---
 Used by:
-* rquickjs 0.10.0
+* rquickjs 0.14.0
 
 MIT License
 
 Copyright (c) 2020 Mees Delzenne
+Copyright (c) 2025 Rquickjs Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -6521,7 +6518,7 @@ SOFTWARE.
 
 --- MIT License ---
 Used by:
-* convert_case 0.8.0
+* convert_case 0.12.0
 
 MIT License
 
@@ -6547,12 +6544,13 @@ SOFTWARE.
 
 --- MIT License ---
 Used by:
-* rquickjs-core 0.10.0
-* rquickjs-macro 0.10.0
+* rquickjs-core 0.14.0
+* rquickjs-macro 0.14.0
 
 MIT License
 
 Copyright (c) 2020 Mees Delzenne
+Copyright (c) 2025 Rquickjs Contributors
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -6766,14 +6764,14 @@ SOFTWARE.
 
 --- MIT License ---
 Used by:
-* rquickjs-sys 0.10.0
+* rquickjs-sys 0.14.0
 
 The MIT License (MIT)
 
-Copyright (c) 2017-2024 Fabrice Bellard
+Copyright (c) 2017-2026 Fabrice Bellard
 Copyright (c) 2017-2024 Charlie Gordon
-Copyright (c) 2023-2025 Ben Noordhuis
-Copyright (c) 2023-2025 Saúl Ibarra Corretgé
+Copyright (c) 2023-2026 Ben Noordhuis
+Copyright (c) 2023-2026 Saúl Ibarra Corretgé
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal

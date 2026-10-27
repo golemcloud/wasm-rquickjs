@@ -110,7 +110,7 @@ golem = ["dep:golem-context", "websocket"]
 
 [dependencies]
 # Core dependencies
-rquickjs = { version = "0.10.0", default-features = false, features = ["std", "futures", "bindgen", "loader", "macro"] }
+rquickjs = { version = "0.14.0", default-features = false, features = ["std", "futures", "bindgen", "loader", "macro"] }
 
 encoding_rs = { version = "0.8.35", optional = true }
 sha1 = { version = "0.10", features = ["oid"], optional = true }

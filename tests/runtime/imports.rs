@@ -230,11 +230,7 @@ async fn imports2_static_create(
     assert_eq!(
         output,
         indoc! { r#"
-          [Function: HelloWithStaticCreate] {
-            create: [Function (anonymous)],
-            compare: [Function (anonymous)],
-            merge: [Function (anonymous)]
-          }
+          [Function: HelloWithStaticCreate]
           [Function (anonymous)]
           [Function (anonymous)]
           [Function (anonymous)]

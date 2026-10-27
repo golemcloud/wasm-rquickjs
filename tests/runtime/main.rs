@@ -20,6 +20,7 @@ mod diagnostics_channel_golem;
 mod dns;
 mod domain;
 mod encoding;
+mod engine_gc;
 mod example1;
 mod example2;
 mod example3;
@@ -111,6 +112,7 @@ tag_suite!(response_static, group8);
 tag_suite!(v8_stack_trace, group8);
 tag_suite!(source_map, group8);
 tag_suite!(structured_clone, group8);
+tag_suite!(engine_gc, group8);
 tag_suite!(node_http, group8);
 tag_suite!(intl, group8);
 

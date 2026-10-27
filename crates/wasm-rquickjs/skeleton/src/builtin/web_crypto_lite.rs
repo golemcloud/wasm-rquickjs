@@ -4,7 +4,7 @@ use std::slice;
 
 fn randomize_typed_array<V>(array: TypedArray<V>) {
     if let Some(raw) = array.as_raw() {
-        let slice = unsafe { slice::from_raw_parts_mut(raw.ptr.as_ptr(), raw.len) };
+        let slice = unsafe { slice::from_raw_parts_mut(raw.cast::<u8>().as_ptr(), raw.len()) };
         rand::rng().fill_bytes(slice);
     }
 }

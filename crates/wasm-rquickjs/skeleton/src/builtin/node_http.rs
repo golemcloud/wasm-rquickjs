@@ -214,7 +214,9 @@ impl NodeHttpClientRequest {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
 
-        let bytes = chunk.as_bytes().ok_or_else(|| {
+        // SAFETY: This synchronous path only copies into the native body buffer;
+        // it neither executes JavaScript nor suspends while reading the slice.
+        let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
             Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
         })?;
 
@@ -257,7 +259,7 @@ impl NodeHttpClientRequest {
         }
         self.ensure_started(&ctx).await?;
 
-        let bytes = chunk.as_bytes().ok_or_else(|| {
+        let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
             Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
         })?;
 
@@ -268,7 +270,7 @@ impl NodeHttpClientRequest {
             future_response,
         } = taken
         {
-            let result = write_all_to_stream(&ctx, &stream, bytes).await;
+            let result = write_all_to_stream(&ctx, &stream, &bytes).await;
             self.state = RequestState::Started {
                 body,
                 stream,
@@ -376,7 +378,7 @@ impl NodeHttpClientRequest {
         self.ensure_started(&ctx).await?;
 
         if let Some(chunk) = chunk {
-            let bytes = chunk.as_bytes().ok_or_else(|| {
+            let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
                 Exception::throw_message(&ctx, "the Uint8Array passed to finish is detached")
             })?;
             let taken = std::mem::replace(&mut self.state, RequestState::Writing);
@@ -386,7 +388,7 @@ impl NodeHttpClientRequest {
                 future_response,
             } = taken
             {
-                let result = write_all_to_stream(&ctx, &stream, bytes).await;
+                let result = write_all_to_stream(&ctx, &stream, &bytes).await;
                 if result.is_err() {
                     self.state = RequestState::Started {
                         body,

@@ -360,7 +360,7 @@ impl HttpRequest {
     }
 
     pub fn array_buffer_body(&mut self, body: ArrayBuffer<'_>) {
-        self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
+        self.body_bytes = Some(crate::wrappers::copy_array_buffer_bytes(&body).unwrap_or_default());
     }
 
     pub fn string_body(&mut self, body: String) {
@@ -368,7 +368,7 @@ impl HttpRequest {
     }
 
     pub fn uint8_array_body(&mut self, body: TypedArray<'_, u8>) {
-        self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
+        self.body_bytes = Some(crate::wrappers::copy_typed_array_bytes(&body).unwrap_or_default());
     }
 
     pub fn add_header<'js>(
@@ -860,15 +860,12 @@ impl WrappedRequestBodyWriter {
                 "HTTP request body has already been finished",
             ));
         };
-        let bytes = chunk
-            .as_bytes()
-            .ok_or_else(|| {
-                Exception::throw_message(
-                    &ctx,
-                    "the UInt8Array passed to the HTTP request is detached",
-                )
-            })?
-            .to_vec();
+        let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
+            Exception::throw_message(
+                &ctx,
+                "the UInt8Array passed to the HTTP request is detached",
+            )
+        })?;
         let remaining = body_tx.write_all(bytes).await;
         if !remaining.is_empty() {
             return Err(Exception::throw_message(
@@ -1148,7 +1145,9 @@ impl HttpResponse {
             .map(|code| code.as_u16())
             .unwrap_or(200);
         Self {
-            body: ResponseBody::Bytes(data.as_bytes().map(|b| b.to_vec()).unwrap_or_default()),
+            body: ResponseBody::Bytes(
+                crate::wrappers::copy_array_buffer_bytes(&data).unwrap_or_default(),
+            ),
             headers: vec![vec![
                 "content-type".to_string(),
                 "application/json".to_string(),

@@ -1296,6 +1296,8 @@
     "parallel/test-timers-active.js": { "category": "node-internals", "reason": "asserts deprecated timers.active() behavior and private _idle* timer fields" },
     "parallel/test-timers-destroyed.js": { "category": "node-internals", "reason": "asserts private Timer._destroyed state on timeout/interval objects" },
     "parallel/test-timers-dispose.js": {},
+    "parallel/test-dgram-async-dispose.mjs": {},
+    "parallel/test-net-server-async-dispose.mjs": {},
     "parallel/test-timers-immediate-queue.js": { "category": "known-gap", "reason": "setImmediate queue turn semantics are unstable and can trap in the timeout scheduler" },
     "parallel/test-timers-immediate-queue-throw.js": {},
     "parallel/test-timers-immediate-unref.js": {},
@@ -4805,6 +4807,10 @@
         "block_05_block_05": {}
       }
     },
+    "parallel/test-stream-iterator-helpers-test262-tests.mjs": {
+      "category": "known-gap",
+      "reason": "Readable.prototype.drop.length is 2 instead of Node's 1; later iterator-helper assertions are not reached"
+    },
     "parallel/test-stream-readable-async-iterators.js": {
       "split": true,
       "subtests": {
@@ -6725,8 +6731,8 @@
         "block_03_ensure_that_we_cannot_override_console_properties": { "reason": "inherited: --frozen-intrinsics flag semantics are not implemented" }
       }
     },
-    "parallel/test-gc-http-client-connaborted.js": { "category": "known-gap", "reason": "requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably" },
-    "parallel/test-gc-net-timeout.js": { "category": "known-gap", "reason": "requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably" },
+    "parallel/test-gc-http-client-connaborted.js": { "category": "known-gap", "reason": "common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness" },
+    "parallel/test-gc-net-timeout.js": { "category": "known-gap", "reason": "common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness" },
     "parallel/test-gc-tls-external-memory.js": { "category": "wasi-impossible", "reason": "tls is not supported in WebAssembly environment" },
     "parallel/test-global-console-exists.js": {},
     "parallel/test-global-customevent-disabled.js": { "category": "known-gap", "reason": "--no-experimental-global-customevent flag is not honored" },

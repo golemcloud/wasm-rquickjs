@@ -11,7 +11,7 @@ use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::promise::Promised;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Exception, Filter, FromJs,
-    Function, IntoJs, Module, Object, Persistent, Promise, Value, async_with,
+    Function, IntoJs, Module, Object, Persistent, Promise, Value,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -87,11 +87,14 @@ impl JsState {
         initialize_dispose_symbols(&self.ctx)
             .await
             .unwrap_or_else(|error| panic!("{error}"));
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             // Table holding live exported resource instances (see `RESOURCE_TABLE_NAME`). Must exist
             // before any exported resource is constructed or any resource handle is lowered to JS.
             ctx.globals()
-                .set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()).expect("Failed to create the resource table object"))
+                .set(
+                    RESOURCE_TABLE_NAME,
+                    Object::new(ctx.clone()).expect("Failed to create the resource table object"),
+                )
                 .expect("Failed to initialize the exported resource table");
         })
         .await;
@@ -109,7 +112,7 @@ impl JsState {
     }
 
     pub(crate) async fn initialize_async_value_helpers(context: &AsyncContext) {
-        async_with!(context => |ctx| {
+        rquickjs::AsyncContext::async_with(&context, async |ctx| {
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
             // `get_async_iterator` normalizes any (async or sync) iterable passed from JS into an
@@ -247,7 +250,7 @@ impl JsState {
     /// Phase 2b: import and evaluate the user module. Must run after
     /// `init_engine()`.
     async fn init_user_module(&self) {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             Module::evaluate(
                 ctx.clone(),
                 "__wasm_rquickjs_init_entry",
@@ -260,10 +263,20 @@ impl JsState {
                 ),
             )
             .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to evaluate module initialization:\n{}",
+                    format_caught_error(e)
+                )
+            })
             .finish::<()>()
             .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to finish module initialization:\n{}",
+                    format_caught_error(e)
+                )
+            });
 
             for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
                 if crate::internal::module_loading::is_reserved_embedded_module_name(name) {
@@ -271,10 +284,20 @@ impl JsState {
                 }
                 Module::import(&ctx, name.to_string())
                     .catch(&ctx)
-                    .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to import user module {name}:\n{}",
+                            format_caught_error(e)
+                        )
+                    })
                     .finish::<()>()
                     .catch(&ctx)
-                    .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to finish importing user module {name}:\n{}",
+                            format_caught_error(e)
+                        )
+                    });
             }
         })
         .await;
@@ -301,7 +324,7 @@ impl JsState {
                 .into_iter()
                 .collect();
 
-        async_with!(state.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
             let globals = ctx.globals();
             if globals.get::<_, rquickjs::Object>("process").is_ok() {
                 let new_argv = rquickjs::Array::new(ctx.clone())
@@ -441,10 +464,8 @@ struct RuntimeWriterLease {
     active_writers: Cell<usize>,
     writer_generation: Cell<usize>,
     next_waiter_id: Cell<usize>,
-    activation_waiters:
-        RefCell<HashMap<usize, futures::channel::oneshot::Sender<()>>>,
-    inactivity_waiters:
-        RefCell<HashMap<usize, futures::channel::oneshot::Sender<()>>>,
+    activation_waiters: RefCell<HashMap<usize, futures::channel::oneshot::Sender<()>>>,
+    inactivity_waiters: RefCell<HashMap<usize, futures::channel::oneshot::Sender<()>>>,
 }
 
 impl RuntimeWriterLease {
@@ -476,9 +497,7 @@ impl RuntimeWriterLease {
                 .checked_add(1)
                 .expect("runtime writer lease generation overflowed"),
         );
-        RuntimeWriterGuard {
-            lease: self,
-        }
+        RuntimeWriterGuard { lease: self }
     }
 
     fn has_active_writers(&self) -> bool {
@@ -510,7 +529,10 @@ impl RuntimeWriterLease {
                 .expect("runtime writer activation waiter id overflowed"),
         );
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let previous = self.activation_waiters.borrow_mut().insert(waiter_id, sender);
+        let previous = self
+            .activation_waiters
+            .borrow_mut()
+            .insert(waiter_id, sender);
         debug_assert!(previous.is_none());
         Some(WriterActivationWaiter {
             lease: self,
@@ -531,7 +553,10 @@ impl RuntimeWriterLease {
                 .expect("runtime writer inactivity waiter id overflowed"),
         );
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let previous = self.inactivity_waiters.borrow_mut().insert(waiter_id, sender);
+        let previous = self
+            .inactivity_waiters
+            .borrow_mut()
+            .insert(waiter_id, sender);
         debug_assert!(previous.is_none());
         Some(WriterInactivityWaiter {
             lease: self,
@@ -666,7 +691,7 @@ async fn drain_and_idle(js_state: &JsState) {
         }
         drove_runtime = true;
 
-        let has_unrefed_timers = async_with!(js_state.ctx => |ctx| {
+        let has_unrefed_timers = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
             !ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .timers
@@ -679,7 +704,7 @@ async fn drain_and_idle(js_state: &JsState) {
             // Spawn a sentinel that polls until only unref'd timers remain, then aborts them so
             // `idle()` can return. The sentinel is itself a spawned job (not tracked in
             // `abort_handles`), so it does not perturb the comparison below.
-            async_with!(js_state.ctx => |ctx| {
+            rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
                 let task_ctx = ctx.clone();
                 ctx.spawn(async move {
                     loop {
@@ -718,7 +743,7 @@ pub(crate) fn spawn_runtime_idle_waiter(
     spawn_local(async move {
         let js_state = get_js_state();
         drain_and_idle(js_state).await;
-        async_with!(js_state.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
             let resolve = resolve
                 .restore(&ctx)
                 .expect("failed to restore runtime-idle resolve function");
@@ -737,10 +762,9 @@ pub(crate) fn spawn_runtime_idle_waiter(
 }
 
 async fn run_turn_checkpoint(js_state: &JsState) -> bool {
-    async_with!(js_state.ctx => |ctx| {
-        run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
-            panic!("failed to run process turn checkpoint: {error}")
-        })
+    rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+        run_process_turn_checkpoint(&ctx)
+            .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"))
     })
     .await
 }
@@ -792,10 +816,7 @@ async fn cleanup_retained_driver(js_state: &'static JsState, drive_guard: DriveG
 /// before the activation is observed, normal draining is retried.
 async fn finish_async_export(js_state: &'static JsState, mut drive_guard: DriveGuard) {
     loop {
-        drive_guard = match js_state
-            .writer_lease
-            .retain_driver_if_active(drive_guard)
-        {
+        drive_guard = match js_state.writer_lease.retain_driver_if_active(drive_guard) {
             Ok(()) => return,
             Err(drive_guard) => drive_guard,
         };
@@ -911,7 +932,7 @@ where
     // would prevent it from returning.
     let drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
 
-    let result = async_with!(js_state.ctx => |ctx| {
+    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -1029,14 +1050,14 @@ pub async fn wizer_initialize() {
     let state = unsafe { STATE.as_ref().unwrap() };
     state.finish_init().await;
     drain_and_idle(state).await;
-    async_with!(state.ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
         ctx.run_gc();
         ctx.run_gc();
     })
     .await;
     drain_and_idle(state).await;
 
-    let timers_empty = async_with!(state.ctx => |ctx| {
+    let timers_empty = rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
         ctx.userdata::<RuntimeServices>()
             .expect("runtime services not initialized")
             .timers
@@ -1110,7 +1131,7 @@ where
 {
     let js_state = ensure_initialized().await;
 
-    let (resource_id, created_writer) = async_with!(js_state.ctx => |ctx| {
+    let (resource_id, created_writer) = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
@@ -1319,7 +1340,7 @@ where
     // synchronous path (driven by `block_on`) must not, so it never returns a `DriveGuard`.
     let drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
 
-    let result = async_with!(js_state.ctx => |ctx| {
+    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
@@ -1743,7 +1764,7 @@ where
     // after this returns, so the guard only needs to cover the JS call itself.
     let _drive_guard = spawn_drive_guard(&js_state.rt);
 
-    let result = async_with!(js_state.ctx => |ctx| {
+    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -1755,10 +1776,17 @@ where
             Ok(value) => Persistent::save(&ctx, value),
             Err(Error::Exception) => {
                 let exception = ctx.catch();
-                panic!("Exception during call of {fun}:\n{exception}", fun = function_path.join("."), exception = format_js_exception(&exception));
+                panic!(
+                    "Exception during call of {fun}:\n{exception}",
+                    fun = function_path.join("."),
+                    exception = format_js_exception(&exception)
+                );
             }
             Err(e) => {
-                panic!("Error during call of {fun}:\n{e:?}", fun = function_path.join("."));
+                panic!(
+                    "Error during call of {fun}:\n{e:?}",
+                    fun = function_path.join(".")
+                );
             }
         }
     })
@@ -1782,7 +1810,7 @@ pub async fn future_writer_task<T, R, F>(
     R: for<'js> FromJs<'js> + 'static,
     F: FnOnce(R) -> T + 'static,
 {
-    let payload: T = async_with!(get_js_state().ctx => |ctx| {
+    let payload: T = rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
         let value = js_value
             .restore(&ctx)
             .expect("Failed to restore a persisted future payload value");
@@ -1808,17 +1836,21 @@ pub fn spawn_future_writer<T, R, F>(
 }
 
 async fn try_close_js_stream_iterator(iterator: Persistent<Object<'static>>) -> Result<(), String> {
-    async_with!(get_js_state().ctx => |ctx| {
-        let iterator = iterator
-            .restore(&ctx)
-            .map_err(|error| format!("Failed to restore a persisted stream iterator during cleanup: {error:?}"))?;
+    rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
+        let iterator = iterator.restore(&ctx).map_err(|error| {
+            format!("Failed to restore a persisted stream iterator during cleanup: {error:?}")
+        })?;
         let close: Function = ctx
             .globals()
             .get("__wasm_rquickjs_close_async_iterator")
-            .map_err(|error| format!("async-value helper __wasm_rquickjs_close_async_iterator is missing: {error:?}"))?;
-        let result: Value = close
-            .call((iterator,))
-            .map_err(|error| format!("Failed to close a component stream<T> iterator: {error:?}"))?;
+            .map_err(|error| {
+                format!(
+                    "async-value helper __wasm_rquickjs_close_async_iterator is missing: {error:?}"
+                )
+            })?;
+        let result: Value = close.call((iterator,)).map_err(|error| {
+            format!("Failed to close a component stream<T> iterator: {error:?}")
+        })?;
         let _: Value = try_resolve_js_value(&ctx, result).await?;
         Ok(())
     })
@@ -1855,7 +1887,8 @@ pub async fn stream_writer_task<T, R, F>(
     // Obtain a normalized async iterator from the JS value once. The persisted value may be a
     // promise (an `async function` returning the iterable resolves to it), so resolve it first
     // before normalizing it into an async iterator.
-    let iterator: Persistent<Object<'static>> = async_with!(get_js_state().ctx => |ctx| {
+    let iterator: Persistent<Object<'static>> =
+        rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
             let value = js_value
                 .restore(&ctx)
                 .expect("Failed to restore a persisted stream value");
@@ -1864,9 +1897,9 @@ pub async fn stream_writer_task<T, R, F>(
                 .globals()
                 .get("__wasm_rquickjs_get_async_iterator")
                 .expect("async-value helper __wasm_rquickjs_get_async_iterator is missing");
-            let iterator: Object = get_iter
-                .call((value,))
-                .unwrap_or_else(|e| panic!("Failed to obtain an async iterator for a component stream<T>: {e:?}"));
+            let iterator: Object = get_iter.call((value,)).unwrap_or_else(|e| {
+                panic!("Failed to obtain an async iterator for a component stream<T>: {e:?}")
+            });
             Persistent::save(&ctx, iterator)
         })
         .await;
@@ -1878,27 +1911,29 @@ pub async fn stream_writer_task<T, R, F>(
         // Clone the persisted iterator handle per iteration so the `async_with!` closure moves
         // a fresh clone each time rather than the shared handle (which the loop reuses).
         let iterator_for_next = iterator.clone();
-        let item: StreamWriterItem<T> = async_with!(get_js_state().ctx => |ctx| {
+        let item: StreamWriterItem<T> =
+            rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
                 let iterator = iterator_for_next
                     .restore(&ctx)
                     .expect("Failed to restore a persisted stream iterator");
                 let next_fn: Function = iterator
                     .get("next")
                     .expect("stream async iterator has no next() method");
-                let next_value: Value = next_fn
-                    .call((This(iterator.clone()),))
-                    .unwrap_or_else(|e| panic!("Failed to call next() on a component stream<T> iterator: {e:?}"));
+                let next_value: Value =
+                    next_fn.call((This(iterator.clone()),)).unwrap_or_else(|e| {
+                        panic!("Failed to call next() on a component stream<T> iterator: {e:?}")
+                    });
                 let resolved: Value = resolve_js_value::<Value>(&ctx, next_value).await;
-                let result_obj: Object = resolved
-                    .into_object()
-                    .unwrap_or_else(|| panic!("stream iterator next() did not resolve to an object"));
+                let result_obj: Object = resolved.into_object().unwrap_or_else(|| {
+                    panic!("stream iterator next() did not resolve to an object")
+                });
                 let done: bool = result_obj.get("done").unwrap_or(false);
                 if done {
                     StreamWriterItem::Done
                 } else {
-                    let value: Value = result_obj
-                        .get("value")
-                        .unwrap_or_else(|e| panic!("Failed to read `value` from a stream iterator result: {e:?}"));
+                    let value: Value = result_obj.get("value").unwrap_or_else(|e| {
+                        panic!("Failed to read `value` from a stream iterator result: {e:?}")
+                    });
                     // A sync iterable normalized into an async iterator can still yield
                     // promise-valued items; JS `for await` awaits each value (AsyncFromSyncIterator
                     // semantics), so resolve promises before converting to the payload type.

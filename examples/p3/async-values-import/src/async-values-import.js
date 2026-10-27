@@ -1,5 +1,24 @@
 import * as host from 'test:async-values-import/host';
 
+export async function runBufferTransfer() {
+  const bytes = Uint8Array.from({ length: 16384 }, (_, i) => i & 255);
+  const pending = host.echoBytes(bytes);
+  bytes.fill(0);
+  const transferred = bytes.buffer.transfer();
+  new Uint8Array(transferred).fill(255);
+  const echoed = await pending;
+  if (echoed.length !== 16384 || !echoed.every((byte, i) => byte === (i & 255))) {
+    throw new Error('native async import did not retain its input bytes');
+  }
+  try {
+    await host.echoBytes(bytes);
+    throw new Error('detached input was accepted');
+  } catch (error) {
+    if (!(error instanceof TypeError)) throw error;
+  }
+  return true;
+}
+
 const importCheckpointReason = new Error('async import checkpoint');
 let importCheckpointCount = 0;
 process.on('unhandledRejection', (reason) => {

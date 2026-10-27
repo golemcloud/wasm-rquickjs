@@ -60,7 +60,8 @@ pub mod native_module {
         ignore_bom: bool,
     ) -> List<(Option<String>, Option<String>)> {
         let encoding = encoding.0;
-        let Some(bytes) = bytes.as_bytes() else {
+        // SAFETY: Decoding is synchronous and does not re-enter JS or mutate the input.
+        let Some(bytes) = (unsafe { bytes.as_bytes() }) else {
             return List((Some(String::new()), None));
         };
         match super::decode_impl(bytes, encoding, stream, fatal, ignore_bom) {
@@ -84,7 +85,7 @@ pub mod native_module {
         let raw = target
             .as_raw()
             .expect("the UInt8Array passed to encodeInto is detached");
-        super::encode_into_impl(&string, raw.len, raw.ptr)
+        super::encode_into_impl(&string, raw.len(), raw.cast::<u8>())
     }
 }
 
@@ -145,7 +146,8 @@ impl NativeTextDecoder {
         stream: bool,
         fatal: bool,
     ) -> rquickjs::prelude::List<(Option<String>, Option<String>)> {
-        let Some(bytes) = bytes.as_bytes() else {
+        // SAFETY: Decoding is synchronous and does not re-enter JS or mutate the input.
+        let Some(bytes) = (unsafe { bytes.as_bytes() }) else {
             return rquickjs::prelude::List((Some(String::new()), None));
         };
         let mut state = self.inner.borrow_mut();

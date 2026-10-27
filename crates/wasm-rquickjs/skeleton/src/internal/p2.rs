@@ -2,7 +2,7 @@ use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
-    Object, Persistent, Promise, Value, async_with,
+    Object, Persistent, Promise, Value,
 };
 use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
@@ -25,7 +25,6 @@ pub struct JsState {
     pub exported_function_cache: RefCell<HashMap<&'static [&'static str], CachedExportedFunction>>,
     pub resource_drop_queue_tx: futures::channel::mpsc::UnboundedSender<usize>,
     pub resource_drop_queue_rx: RefCell<Option<futures::channel::mpsc::UnboundedReceiver<usize>>>,
-    pub gc_pending: std::sync::atomic::AtomicBool,
 }
 
 pub struct CachedExportedFunction {
@@ -61,10 +60,11 @@ impl JsState {
     async fn new_base() -> Self {
         let OwnedJsRuntime { rt, ctx } = OwnedJsRuntime::new().await;
 
-        async_with!(ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&ctx, async |ctx| {
             let global = ctx.globals();
 
-            global.set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
+            global
+                .set(RESOURCE_TABLE_NAME, Object::new(ctx.clone()))
                 .expect("Failed to initialize resource table");
         })
         .await;
@@ -77,7 +77,6 @@ impl JsState {
             exported_function_cache: RefCell::new(HashMap::new()),
             resource_drop_queue_tx,
             resource_drop_queue_rx: RefCell::new(Some(resource_drop_queue_rx)),
-            gc_pending: std::sync::atomic::AtomicBool::new(false),
         }
     }
 
@@ -101,35 +100,58 @@ impl JsState {
     /// Phase 2b: Import and evaluate the user module.
     /// Must be called after init_engine().
     async fn init_user_module(&self) {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             // Import the user module (now globalThis.require is available)
             Module::evaluate(
                 ctx.clone(),
                 "__wasm_rquickjs_init_entry",
-                format!(r#"
+                format!(
+                    r#"
                 import * as userModule from '{}';
                 globalThis.userModule = userModule;
-                "#, crate::JS_EXPORT_MODULE_NAME),
+                "#,
+                    crate::JS_EXPORT_MODULE_NAME
+                ),
             )
             .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to evaluate module initialization:\n{}", format_caught_error(e)))
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to evaluate module initialization:\n{}",
+                    format_caught_error(e)
+                )
+            })
             .finish::<()>()
             .catch(&ctx)
-            .unwrap_or_else(|e| panic!("Failed to finish module initialization:\n{}", format_caught_error(e)));
+            .unwrap_or_else(|e| {
+                panic!(
+                    "Failed to finish module initialization:\n{}",
+                    format_caught_error(e)
+                )
+            });
 
             for (name, _) in crate::JS_ADDITIONAL_MODULES.iter() {
-              if crate::internal::module_loading::is_reserved_embedded_module_name(name) {
-                continue;
-              }
-              Module::import(&ctx, name.to_string())
-                 .catch(&ctx)
-                 .unwrap_or_else(|e| panic!("Failed to import user module {name}:\n{}", format_caught_error(e)))
-                 .finish::<()>()
-                 .catch(&ctx)
-                 .unwrap_or_else(|e| panic!("Failed to finish importing user module {name}:\n{}", format_caught_error(e)));
+                if crate::internal::module_loading::is_reserved_embedded_module_name(name) {
+                    continue;
+                }
+                Module::import(&ctx, name.to_string())
+                    .catch(&ctx)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to import user module {name}:\n{}",
+                            format_caught_error(e)
+                        )
+                    })
+                    .finish::<()>()
+                    .catch(&ctx)
+                    .unwrap_or_else(|e| {
+                        panic!(
+                            "Failed to finish importing user module {name}:\n{}",
+                            format_caught_error(e)
+                        )
+                    });
             }
         })
-            .await;
+        .await;
         drain_and_idle(self).await;
     }
 
@@ -153,7 +175,7 @@ impl JsState {
                 .into_iter()
                 .collect();
 
-        async_with!(state.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
             let globals = ctx.globals();
             if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
                 // Refresh argv in-place so existing references stay valid
@@ -163,10 +185,7 @@ impl JsState {
                         let _ = existing_argv.set(i, arg.as_str());
                     }
                 }
-                let _ = process.set(
-                    "argv0",
-                    argv.first().map(|s| s.as_str()).unwrap_or(""),
-                );
+                let _ = process.set("argv0", argv.first().map(|s| s.as_str()).unwrap_or(""));
 
                 // Refresh env via JS eval to trigger Proxy traps
                 if let Ok(new_env) = rquickjs::Object::new(ctx.clone()) {
@@ -189,24 +208,10 @@ impl JsState {
     }
 }
 
-/// Runs GC if it was requested from JS (deferred to avoid re-entrancy issues).
-async fn run_pending_gc(js_state: &JsState) {
-    if js_state
-        .gc_pending
-        .swap(false, std::sync::atomic::Ordering::Relaxed)
-    {
-        async_with!(js_state.ctx => |ctx| {
-            ctx.run_gc();
-        })
-        .await;
-    }
-}
-
 async fn run_turn_checkpoint(js_state: &JsState) -> bool {
-    async_with!(js_state.ctx => |ctx| {
-        run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
-            panic!("failed to run process turn checkpoint: {error}")
-        })
+    rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+        run_process_turn_checkpoint(&ctx)
+            .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"))
     })
     .await
 }
@@ -214,7 +219,6 @@ async fn run_turn_checkpoint(js_state: &JsState) -> bool {
 /// Spawns a sentinel task that waits for all ref'd timers to complete,
 /// then aborts remaining unref'd timers so that `idle()` can return.
 async fn drain_and_idle(js_state: &JsState) {
-    run_pending_gc(js_state).await;
     let mut drove_runtime = false;
     loop {
         let checkpoint_did_work = run_turn_checkpoint(js_state).await;
@@ -223,7 +227,7 @@ async fn drain_and_idle(js_state: &JsState) {
         }
         drove_runtime = true;
 
-        let has_unrefed_timers = async_with!(js_state.ctx => |ctx| {
+        let has_unrefed_timers = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
             !ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .timers
@@ -234,7 +238,7 @@ async fn drain_and_idle(js_state: &JsState) {
         .await;
         if has_unrefed_timers {
             // Spawn a sentinel that polls until only unref'd timers remain, then aborts them.
-            async_with!(js_state.ctx => |ctx| {
+            rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
                 let task_ctx = ctx.clone();
                 ctx.spawn(async move {
                     loop {
@@ -272,7 +276,7 @@ pub(crate) fn spawn_runtime_idle_waiter(
     wstd::runtime::spawn(async move {
         let js_state = get_js_state();
         drain_and_idle(js_state).await;
-        async_with!(js_state.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
             let resolve = resolve
                 .restore(&ctx)
                 .expect("failed to restore runtime-idle resolve function");
@@ -424,7 +428,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result: FR = async_with!(js_state.ctx => |ctx| {
+    let result: FR = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
@@ -584,7 +588,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result = async_with!(js_state.ctx => |ctx| {
+    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
         let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
         let constructor = constructor_obj.as_constructor().unwrap_or_else(|| panic!("Expected export {path} to be a class with a constructor", path = resource_path.join("."))).clone();
@@ -697,7 +701,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result: FR = async_with!(js_state.ctx => |ctx| {
+    let result: FR = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
@@ -786,7 +790,7 @@ pub fn enqueue_drop_js_resource(resource_id: usize) {
 async fn drop_js_resource(resource_id: usize) {
     let js_state = get_js_state();
 
-    async_with!(js_state.ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
         super::runtime_services::release_exported_resource(
             &ctx,
             resource_id,
@@ -1032,7 +1036,7 @@ pub fn wizer_initialize() {
         block_on(async {
             let state = STATE.as_ref().unwrap();
             drain_and_idle(state).await;
-            async_with!(state.ctx => |ctx| {
+            rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
                 ctx.run_gc();
                 ctx.run_gc();
             })
@@ -1040,7 +1044,7 @@ pub fn wizer_initialize() {
             drain_and_idle(state).await;
 
             // Verify clean state
-            let timers_empty = async_with!(state.ctx => |ctx| {
+            let timers_empty = rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
                 ctx.userdata::<RuntimeServices>()
                     .expect("runtime services not initialized")
                     .timers

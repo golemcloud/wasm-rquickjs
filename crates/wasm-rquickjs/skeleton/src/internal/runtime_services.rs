@@ -1,7 +1,5 @@
 use futures::future::AbortHandle;
-use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
-};
+use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value};
 use std::cell::{Cell, RefCell};
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::collections::BTreeMap;
@@ -113,8 +111,7 @@ pub(crate) struct RuntimeServices {
     pub(crate) cjs_module_probe_session: super::module_loading::CjsModuleProbeSession,
     pub(crate) cjs_loader_realpath_cache: RefCell<HashMap<String, String>>,
     pub(crate) esm_loader_realpath_cache: RefCell<HashMap<String, String>>,
-    pub(crate) registered_file_urls:
-        RefCell<super::module_loading::RegisteredFileUrlRegistry>,
+    pub(crate) registered_file_urls: RefCell<super::module_loading::RegisteredFileUrlRegistry>,
     #[cfg(feature = "test-observability")]
     loader_realpath_cache_hit_count: Cell<u64>,
     #[cfg(feature = "test-observability")]
@@ -687,14 +684,16 @@ impl OwnedJsRuntime {
         // linear memory remains the outer bound, so do not impose a smaller
         // per-runtime ceiling on execution jobs.
         rt.set_memory_limit(0).await;
-        rt.set_gc_threshold(256 * 1024 * 1024).await;
+        // Bound bootstrap garbage before the first automatic collection. The
+        // engine subsequently adapts this threshold to the retained live heap.
+        rt.set_gc_threshold(32 * 1024 * 1024).await;
         let ctx = AsyncContext::full(&rt)
             .await
             .expect("Failed to create AsyncContext");
 
         #[cfg(feature = "typescript-compiler-profiling")]
         let stored_profile = profile.clone();
-        async_with!(ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&ctx, async |ctx| {
             let services = RuntimeServices::default();
             #[cfg(feature = "typescript-compiler-profiling")]
             let services = {
@@ -706,6 +705,9 @@ impl OwnedJsRuntime {
                 .expect("Failed to initialize runtime services");
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
+            #[cfg(feature = "test-observability")]
+            crate::builtin::install_gc_observability(&ctx)
+                .expect("Failed to initialize GC observability");
         })
         .await;
 
@@ -754,7 +756,7 @@ impl OwnedJsRuntime {
         env: HashMap<String, String>,
         cwd: PathBuf,
     ) -> Result<(), String> {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .process
@@ -765,7 +767,7 @@ impl OwnedJsRuntime {
     }
 
     pub(crate) async fn set_output_sink(&self, output: Rc<dyn RuntimeOutputSink>) {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .set_output_sink(output);
@@ -774,7 +776,7 @@ impl OwnedJsRuntime {
     }
 
     pub(crate) async fn disable_execution(&self) {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .execution_enabled
@@ -785,16 +787,14 @@ impl OwnedJsRuntime {
 }
 
 pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(), String> {
-    async_with!(ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
         Module::evaluate(
             ctx.clone(),
             "dispose",
             r#"
-            const dispose = Symbol.for("dispose");
-            globalThis.__wasm_rquickjs_symbol_dispose = dispose;
-            Symbol.dispose = dispose;
-            const asyncDispose = Symbol.for("asyncDispose");
-            Symbol.asyncDispose = asyncDispose;
+            // QuickJS provides the well-known disposal symbols. Generated WIT
+            // resources and JavaScript must use the same engine-owned symbol.
+            globalThis.__wasm_rquickjs_symbol_dispose = Symbol.dispose;
             "#,
         )
         .catch(&ctx)
@@ -833,27 +833,23 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
             return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
         };
     "#);
-    async_with!(ctx => |ctx| {
-        Module::evaluate(
-            ctx.clone(),
-            "__wasm_rquickjs_init_wiring",
-            source,
-        )
-        .catch(&ctx)
-        .map_err(|error| {
-            format!(
-                "Failed to evaluate built-in wiring:\n{}",
-                super::format_caught_error(error)
-            )
-        })?
-        .finish::<()>()
-        .catch(&ctx)
-        .map_err(|error| {
-            format!(
-                "Failed to finish built-in wiring:\n{}",
-                super::format_caught_error(error)
-            )
-        })?;
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
+        Module::evaluate(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
+            .catch(&ctx)
+            .map_err(|error| {
+                format!(
+                    "Failed to evaluate built-in wiring:\n{}",
+                    super::format_caught_error(error)
+                )
+            })?
+            .finish::<()>()
+            .catch(&ctx)
+            .map_err(|error| {
+                format!(
+                    "Failed to finish built-in wiring:\n{}",
+                    super::format_caught_error(error)
+                )
+            })?;
         Ok::<(), String>(())
     })
     .await
@@ -863,7 +859,7 @@ pub(crate) async fn initialize_exported_resource_id_map(
     ctx: &AsyncContext,
     map_name: &str,
 ) -> Result<(), String> {
-    async_with!(ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
         Module::evaluate(
             ctx.clone(),
             "__wasm_rquickjs_init_resource_ids",

@@ -18,7 +18,7 @@ license_dir="$repo_root/crates/wasm-rquickjs/licenses"
 config="$license_dir/about.toml"
 template="$license_dir/component-licenses.hbs"
 swc_sourcemap_license="$license_dir/clarifications/swc_sourcemap-10.0.2-LICENSE"
-rquickjs_license="$license_dir/clarifications/rquickjs-0.10.0-LICENSE"
+rquickjs_license="$license_dir/clarifications/rquickjs-0.14.0-LICENSE"
 cargo_about=${CARGO_ABOUT:-cargo-about}
 cargo_bin=${CARGO:-cargo}
 
@@ -156,7 +156,7 @@ replace_swc_sourcemap_fallback() {
 }
 
 rquickjs_license_hash=$(shasum -a 256 "$rquickjs_license" | awk '{ print $1 }')
-if [[ "$rquickjs_license_hash" != "0517c7f76916dcc6557b3c0e1c077f14dd05bfe8e0d7d2a2fa298fe0d49a790a" ]]; then
+if [[ "$rquickjs_license_hash" != "976ad3d07927343ab99b31510625acba89eac8e0e517c712925620ddeda91b70" ]]; then
     echo "Pinned rquickjs license text changed: $rquickjs_license" >&2
     exit 1
 fi
@@ -170,14 +170,14 @@ replace_rquickjs_fallback() {
                 return
             }
             expected = "--- MIT License ---\n" \
-                "Used by:\n* rquickjs-core 0.10.0\n* rquickjs-macro 0.10.0\n\n" \
+                "Used by:\n* rquickjs-core 0.14.0\n* rquickjs-macro 0.14.0\n\n" \
                 "MIT License\n\nCopyright (c) <year> <copyright holders>\n"
             if (index(block, expected) == 1) {
                 replacements++
                 print "--- MIT License ---"
                 print "Used by:"
-                print "* rquickjs-core 0.10.0"
-                print "* rquickjs-macro 0.10.0"
+                print "* rquickjs-core 0.14.0"
+                print "* rquickjs-macro 0.14.0"
                 print ""
                 while ((getline line < license_file) > 0) {
                     print line
@@ -185,8 +185,8 @@ replace_rquickjs_fallback() {
                 close(license_file)
                 print ""
             } else {
-                if (index(block, "rquickjs-core 0.10.0") > 0 ||
-                    index(block, "rquickjs-macro 0.10.0") > 0) {
+                if (index(block, "rquickjs-core 0.14.0") > 0 ||
+                    index(block, "rquickjs-macro 0.14.0") > 0) {
                     unexpected++
                     print "Unexpected rquickjs fallback block:" > "/dev/stderr"
                     printf "%s", block > "/dev/stderr"

@@ -1,0 +1,15 @@
+package quickjs:engine-gc;
+
+world engine-gc {
+  export regexp-sets: func() -> bool;
+  export embedded-attributes: func() -> bool;
+  export accounting: func() -> string;
+  export cycle-stress: func() -> string;
+  export async-roots: func() -> bool;
+  export owned-runtimes: func() -> bool;
+  export registry-retention: func() -> string;
+  export retained-heap: func() -> string;
+  export failed-imports: func() -> bool;
+  export shared-body-errors: func() -> bool;
+  export typed-buffers: func() -> bool;
+}
