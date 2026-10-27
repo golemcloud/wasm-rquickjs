@@ -14,6 +14,10 @@ Collection makes freed space reusable; WebAssembly linear memory keeps its high-
 size. Explicit `gc()` remains optional and schedules collection after the current
 JavaScript execution completes.
 
+Disposal uses the engine's well-known `Symbol.dispose` and `Symbol.asyncDispose`,
+including for generated WIT resources. Unlike Node.js 22, these symbols are not
+in the global symbol registry and their properties are read-only.
+
 ### Comparison with ComponentizeJS
 
 [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS) achieves the same goal of wrapping JavaScript code

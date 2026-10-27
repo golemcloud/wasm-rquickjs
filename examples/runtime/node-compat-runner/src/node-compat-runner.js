@@ -42,7 +42,7 @@ function drainAsync() {
 //
 // If the async IIFE rejects, the .then() has no rejection handler, so the
 // rejection is unhandled. The runtime's native promise rejection tracker
-// (set via rquickjs 0.10's set_host_promise_rejection_tracker) emits
+// (set via rquickjs's set_host_promise_rejection_tracker) emits
 // process.emit('unhandledRejection', reason) which we listen for here.
 var _firstUnhandledRejection = null;
 var _firstUnhandledRejectionHadTestListener = false;

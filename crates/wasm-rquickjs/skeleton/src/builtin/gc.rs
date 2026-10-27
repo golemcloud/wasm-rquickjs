@@ -89,9 +89,7 @@ pub const WIRE_JS: &str = r#"
             if (typeof globalThis.__wasm_rquickjs_pre_gc === 'function') {
                 globalThis.__wasm_rquickjs_pre_gc();
             }
-            // Preserve explicit gc()'s deferred scheduling. This was introduced
-            // to avoid forcing collection inside active async-generator frames;
-            // automatic collection uses the engine's allocation checkpoints.
+            // Preserve explicit gc()'s existing deferred scheduling contract.
             // Observable cleanup (pre_gc hooks) still runs synchronously.
             globalThis.setTimeout(__wasm_rquickjs_gc, 0);
         };

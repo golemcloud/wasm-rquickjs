@@ -500,6 +500,23 @@ fn throw_native_coded_error<'js, T>(
 /// Resolve data URLs, authenticating JSON attributes before module-cache lookup.
 struct DataUrlResolver;
 
+fn authenticate_json_data_url<'a>(
+    ctx: &Ctx<'_>,
+    name: Cow<'a, str>,
+) -> rquickjs::Result<Cow<'a, str>> {
+    if determine_data_url_format(&name) == Some("json") {
+        // Every resolver handoff authenticates before QuickJS can return a
+        // cached module. Authorization is not part of the module's identity.
+        if import_attr_type_from_path(&name).as_deref() != Some("json") {
+            let (code, message) = validate_import_attrs_error(None, None, Some("json"), &name)
+                .expect("JSON requires a type attribute");
+            return throw_native_coded_error(ctx, &message, &code, true);
+        }
+        return Ok(Cow::Owned(strip_import_type_rewrite_token(&name)));
+    }
+    Ok(name)
+}
+
 impl Resolver for DataUrlResolver {
     fn resolve<'js>(
         &mut self,
@@ -510,19 +527,7 @@ impl Resolver for DataUrlResolver {
     ) -> rquickjs::Result<String> {
         let preprocessed = FileUrlResolver::preprocess_url_input(name);
         if preprocessed.starts_with("data:") {
-            if determine_data_url_format(&preprocessed) == Some("json") {
-                // Attribute preprocessing owns validation. Authenticate its
-                // one-use request before QuickJS can return a cached module,
-                // then keep the authorization token out of module identity.
-                if import_attr_type_from_path(&preprocessed).as_deref() != Some("json") {
-                    let (code, message) =
-                        validate_import_attrs_error(None, None, Some("json"), &preprocessed)
-                            .expect("JSON requires a type attribute");
-                    return throw_native_coded_error(ctx, &message, &code, true);
-                }
-                return Ok(strip_import_type_rewrite_token(&preprocessed));
-            }
-            Ok(preprocessed.into_owned())
+            authenticate_json_data_url(ctx, preprocessed).map(Cow::into_owned)
         } else {
             Err(Error::new_resolving(_base, name))
         }
@@ -977,15 +982,13 @@ impl Loader for DataUrlLoader {
         };
 
         if base_mime == "application/json" {
-            // DataUrlResolver authenticated attributes before cache lookup.
+            // The successful resolver authenticated before cache lookup.
             let module_source = json_module_source(&source, None);
             Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
         } else if base_mime == "text/javascript" || base_mime == "application/javascript" {
-            // Check for static import attributes (e.g., `import "spec" with { type: "json" }`)
-            // QuickJS doesn't support import attributes syntax, so we preprocess:
-            // - If `with { ... }` is found and attributes are invalid, generate an error module
-            // - If valid, strip the `with { ... }` clause
-            // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
+            // Preprocessing validates attributes and authorizes each JSON
+            // request independently of the engine's module cache. Legacy
+            // `assert { ... }` remains a syntax error.
             let processed = process_static_import_attrs(&source, path);
             if let Some(error_source) =
                 esm_preflight_error_module_source(&processed.source, false, false)
@@ -4071,7 +4074,7 @@ impl Resolver for RegisteredLoaderResolver {
         match resolved {
             Some(resolved) if !resolved.is_empty() => {
                 transfer_import_type_rewrite_token(name, &resolved);
-                Ok(resolved)
+                authenticate_json_data_url(ctx, Cow::Owned(resolved)).map(Cow::into_owned)
             }
             _ => Err(Error::new_resolving(base, name)),
         }

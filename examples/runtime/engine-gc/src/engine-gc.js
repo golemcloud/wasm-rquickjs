@@ -26,6 +26,79 @@ export function regexpSets() {
     assert.equal(typeof Symbol.dispose, 'symbol');
     assert.equal(typeof Symbol.asyncDispose, 'symbol');
     assert.equal(globalThis.__wasm_rquickjs_symbol_dispose, Symbol.dispose);
+    for (const name of ['dispose', 'asyncDispose']) {
+        assert.equal(Symbol.keyFor(Symbol[name]), undefined);
+        assert.equal(Object.getOwnPropertyDescriptor(Symbol, name).writable, false);
+    }
+    return true;
+}
+
+export async function registeredJsonAttributes() {
+    const { register } = await import('node:module');
+    const sourceUrl = 'registered-json:source';
+    const dataUrl = 'data:application/json,%7B%22answer%22%3A43%7D';
+    const loader = `
+        export function resolve(specifier, context, next) {
+            if (specifier === ${JSON.stringify(sourceUrl)}) {
+                return { shortCircuit: true, url: specifier, format: 'json' };
+            }
+            return next(specifier, context);
+        }
+        export function load(url, context, next) {
+            if (url === ${JSON.stringify(sourceUrl)}) {
+                return { shortCircuit: true, format: 'json', source: '{"answer":42}' };
+            }
+            return next(url, context);
+        }
+    `;
+    register('data:text/javascript,' + encodeURIComponent(loader));
+    await import('data:text/javascript,export default true#registered-json-ready');
+    const before = snapshot()[5];
+    const parent = (url, label, prefix = '') => 'data:text/javascript,' + encodeURIComponent(
+        `${prefix}\nimport * as value from ${JSON.stringify(url)} with {type:'json'}; export default value;\n// ${label}`,
+    );
+    for (const url of [sourceUrl, dataUrl]) {
+        const firstParent = parent(url, 'first');
+        const first = (await import(firstParent)).default;
+        assert.equal((await import(firstParent)).default, first);
+        assert.equal(await import(url, { with: { type: 'json' } }), first);
+        for (let i = 0; i < 20; i++) {
+            assert.equal((await import(parent(url, i))).default, first);
+            assert.equal(snapshot()[5], before, 'registered JSON handoffs must consume their authorizations');
+        }
+        const concurrent = await Promise.all([
+            import(parent(url, 'concurrent-a')), import(parent(url, 'concurrent-b')),
+        ]);
+        for (const imported of concurrent) assert.equal(imported.default, first);
+        if (url === dataUrl) {
+            // The default loader validates attributes; a custom JSON load hook
+            // may deliberately accept other attributes, as Node permits.
+            await assert.rejects(import(url), { code: 'ERR_IMPORT_ATTRIBUTE_MISSING' });
+            // The registered default loader's unsupported-type error code is
+            // a separate validation gap; cache reuse must still reject it.
+            await assert.rejects(import(url, { with: { type: 'invalid' } }));
+        }
+        for (const prefix of ['const invalid = ;', 'import "missing-registered-json-package";']) {
+            for (let i = 0; i < 10; i++) {
+                await assert.rejects(import(parent(url, `failed-${i}`, prefix)));
+                assert.equal(snapshot()[5], before, 'unreached static edges must not retain authorizations');
+            }
+        }
+    }
+    const appNamespace = await import(sourceUrl, { with: { type: 'json' } });
+    const consumer = `
+        import * as value from ${JSON.stringify(sourceUrl)} with {type:'json'};
+        globalThis.__registeredJsonLoaderNamespace = value;
+        export function resolve(specifier, context, next) { return next(specifier, context); }
+    `;
+    register('data:text/javascript,' + encodeURIComponent(consumer));
+    await import('data:text/javascript,export default true#registered-json-realm-ready');
+    const loaderNamespace = globalThis.__registeredJsonLoaderNamespace;
+    assert.deepEqual(loaderNamespace.default, appNamespace.default);
+    assert.notEqual(loaderNamespace, appNamespace, 'the loader realm must retain its own module identity');
+    assert.notEqual(loaderNamespace.default, appNamespace.default);
+    assert.equal(snapshot()[5], before);
+    delete globalThis.__registeredJsonLoaderNamespace;
     return true;
 }
 

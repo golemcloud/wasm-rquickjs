@@ -52,6 +52,18 @@ async fn engine_embedded_attributes(
 }
 
 #[test]
+async fn engine_registered_json_attributes(
+    #[tagged_as("engine_gc")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    assert_eq!(
+        invoke(&mut instance, "registered-json-attributes").await?,
+        Some(Val::Bool(true))
+    );
+    Ok(())
+}
+
+#[test]
 async fn engine_gc_failed_imports_release_tokens(
     #[tagged_as("engine_gc")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

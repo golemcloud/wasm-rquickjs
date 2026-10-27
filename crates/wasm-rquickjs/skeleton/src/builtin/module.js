@@ -5353,6 +5353,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         return staticRegisteredLoaderReturn(loaded, loaderRealmParam, attrs);
     }
 
+    function staticRegisteredLoaderCacheValue(loaded, attrs, edgeReturn) {
+        // JSON authorization is single-use. Retain the load metadata and its
+        // materialized source identity, then authorize only a resolver handoff.
+        if (loaded && loaded.format === 'json') return undefined;
+        return edgeReturn
+            ? staticRegisteredLoaderReturnForEdge(loaded, attrs)
+            : staticRegisteredLoaderReturn(loaded, undefined, attrs);
+    }
+
     function cacheDynamicRegisteredLoaderResult(parentUrl, specifier, attrs, loaded, resolvedUrl) {
         if (loaded && loaded.format === 'json' && registeredLoaderHasSource(loaded)) return;
         if (!shouldCacheRegisteredLoaderLoad(specifier, parentUrl, resolvedUrl)) {
@@ -5367,7 +5376,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             try {
                 cache[key] = normalizedRegisteredLoaderCacheResult(
                     loaded,
-                    staticRegisteredLoaderReturn(loaded, undefined, attrs),
+                    staticRegisteredLoaderCacheValue(loaded, attrs, false),
                     undefined,
                 );
             } catch (error) {
@@ -5433,9 +5442,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     'static-raw',
                     publicParentUrl,
                 );
-                const value = edgeReturn
-                    ? staticRegisteredLoaderReturnForEdge(loaded, attrs)
-                    : staticRegisteredLoaderReturn(loaded, undefined, attrs);
+                const value = staticRegisteredLoaderCacheValue(loaded, attrs, edgeReturn);
                 cache[key] = normalizedRegisteredLoaderCacheResult(loaded, value, undefined);
             } catch (error) {
                 cache[key] = normalizedRegisteredLoaderCacheResult(undefined, undefined, error);
@@ -5514,6 +5521,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     ] = cached;
                 }
             }
+            if (cached && cached.format === 'json') return;
         }
         await prepareStaticRegisteredLoaderGraph(graphUrl, Object.create(null));
     }
@@ -5531,7 +5539,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (cache && Object.prototype.hasOwnProperty.call(cache, key)) {
             const cached = cache[key];
             if (cached.error) throw cached.error;
-            if (loaderRealmParam !== undefined && loaderRealmParam !== null) {
+            if (cached.format === 'json' || loaderRealmParam !== undefined && loaderRealmParam !== null) {
                 return staticRegisteredLoaderReturnForEdge(
                     cached,
                     parts,
