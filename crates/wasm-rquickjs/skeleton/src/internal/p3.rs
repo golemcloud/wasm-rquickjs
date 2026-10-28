@@ -70,6 +70,14 @@ impl JsState {
     /// JavaScript, so it is safe to publish to `STATE` before `finish_init`.
     async fn new_base() -> Self {
         let OwnedJsRuntime { rt, ctx } = OwnedJsRuntime::new().await;
+        AsyncContext::async_with(&ctx, async |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .timers
+                .component_owned
+                .set(true);
+        })
+        .await;
 
         Self {
             rt,
@@ -87,7 +95,7 @@ impl JsState {
         initialize_dispose_symbols(&self.ctx)
             .await
             .unwrap_or_else(|error| panic!("{error}"));
-        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&self.ctx, async |ctx| {
             // Table holding live exported resource instances (see `RESOURCE_TABLE_NAME`). Must exist
             // before any exported resource is constructed or any resource handle is lowered to JS.
             ctx.globals()
@@ -112,7 +120,7 @@ impl JsState {
     }
 
     pub(crate) async fn initialize_async_value_helpers(context: &AsyncContext) {
-        rquickjs::AsyncContext::async_with(context, async |ctx| {
+        super::runtime_services::with_component_context(context, async |ctx| {
             // Helpers used by the generated `future<T>`/`stream<T>` bridges. `make_async_iterable`
             // turns Rust-provided `pull()` and `close()` operations into a JS async-iterable;
             // `get_async_iterator` normalizes any (async or sync) iterable passed from JS into an
@@ -250,7 +258,7 @@ impl JsState {
     /// Phase 2b: import and evaluate the user module. Must run after
     /// `init_engine()`.
     async fn init_user_module(&self) {
-        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&self.ctx, async |ctx| {
             Module::evaluate(
                 ctx.clone(),
                 "__wasm_rquickjs_init_entry",
@@ -324,7 +332,7 @@ impl JsState {
                 .into_iter()
                 .collect();
 
-        rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&state.ctx, async |ctx| {
             let globals = ctx.globals();
             if globals.get::<_, rquickjs::Object>("process").is_ok() {
                 let new_argv = rquickjs::Array::new(ctx.clone())
@@ -657,13 +665,24 @@ impl Drop for DriveGuard {
 /// Spawns the persistent scheduler driver described on [`DriveGuard`] and returns the guard that
 /// aborts it on drop. Must be called from within an exported call's async context (so the spawned
 /// driver is polled within that call's `FutureState`).
-fn spawn_drive_guard(rt: &AsyncRuntime) -> DriveGuard {
+async fn spawn_drive_guard(rt: &AsyncRuntime, ctx: &AsyncContext) -> DriveGuard {
+    let hub = ctx
+        .with(|ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .timers
+                .wake_hub
+                .clone()
+        })
+        .await;
     let (handle, registration) = AbortHandle::new_pair();
     let drive = rt.drive();
     spawn_local(async move {
         // `Abortable` resolves to `Err(Aborted)` once the guard is dropped; the driver itself never
         // completes on its own while the runtime is alive.
-        let _ = Abortable::new(drive, registration).await;
+        let _ =
+            super::runtime_services::with_component_wake(Abortable::new(drive, registration), hub)
+                .await;
     });
     DriveGuard(handle)
 }
@@ -690,47 +709,13 @@ async fn drain_and_idle(js_state: &JsState) {
             return;
         }
         drove_runtime = true;
-
-        let has_unrefed_timers = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
-            !ctx.userdata::<RuntimeServices>()
-                .expect("runtime services not initialized")
-                .timers
-                .unrefed_timers
-                .borrow()
-                .is_empty()
-        })
-        .await;
-        if has_unrefed_timers {
-            // Spawn a sentinel that polls until only unref'd timers remain, then aborts them so
-            // `idle()` can return. The sentinel is itself a spawned job (not tracked in
-            // `abort_handles`), so it does not perturb the comparison below.
-            rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
-                let task_ctx = ctx.clone();
-                ctx.spawn(async move {
-                    loop {
-                        // 1ms poll interval (`wait_for` takes nanoseconds).
-                        wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
-                        let services = task_ctx
-                            .userdata::<RuntimeServices>()
-                            .expect("runtime services not initialized");
-                        let abort_count = services.timers.abort_handles.borrow().len();
-                        let unref_count = services.timers.unrefed_timers.borrow().len();
-                        // Once the only remaining timers are unref'd, abort them so the loop can
-                        // drain.
-                        if abort_count > 0 && abort_count == unref_count {
-                            services.timers.abort_unrefed();
-                            break;
-                        }
-                        if unref_count == 0 {
-                            break;
-                        }
-                    }
-                });
-            })
-            .await;
-        }
-        js_state.rt.idle().await;
+        super::runtime_services::idle_component_runtime(&js_state.rt, &js_state.ctx).await;
     }
+}
+
+/// Schedule a component-owned timer without making its clock wait keep QuickJS idle pending.
+pub(crate) fn spawn_component_timer(task: impl Future<Output = ()> + 'static) {
+    spawn_local(task);
 }
 
 /// Resolves the internal `process._awaitRuntimeIdle()` promise from a component-executor task,
@@ -743,7 +728,7 @@ pub(crate) fn spawn_runtime_idle_waiter(
     spawn_local(async move {
         let js_state = get_js_state();
         drain_and_idle(js_state).await;
-        rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
             let resolve = resolve
                 .restore(&ctx)
                 .expect("failed to restore runtime-idle resolve function");
@@ -762,7 +747,7 @@ pub(crate) fn spawn_runtime_idle_waiter(
 }
 
 async fn run_turn_checkpoint(js_state: &JsState) -> bool {
-    rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"))
     })
@@ -930,9 +915,13 @@ where
     // driven by `block_on`) never awaits a JS promise and never spawns scheduler tasks, so it must
     // NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned inside a `block_on`
     // would prevent it from returning.
-    let drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
+    let drive_guard = if allow_async {
+        Some(spawn_drive_guard(&js_state.rt, &js_state.ctx).await)
+    } else {
+        None
+    };
 
-    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -1050,14 +1039,14 @@ pub async fn wizer_initialize() {
     let state = unsafe { STATE.as_ref().unwrap() };
     state.finish_init().await;
     drain_and_idle(state).await;
-    rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&state.ctx, async |ctx| {
         ctx.run_gc();
         ctx.run_gc();
     })
     .await;
     drain_and_idle(state).await;
 
-    let timers_empty = rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
+    let timers_empty = super::runtime_services::with_component_context(&state.ctx, async |ctx| {
         ctx.userdata::<RuntimeServices>()
             .expect("runtime services not initialized")
             .timers
@@ -1131,7 +1120,7 @@ where
 {
     let js_state = ensure_initialized().await;
 
-    let (resource_id, created_writer) = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let (resource_id, created_writer) = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
@@ -1338,9 +1327,13 @@ where
     let js_state = ensure_initialized().await;
     // See `call_js_export_internal`: the async path drives the scheduler for the whole call; the
     // synchronous path (driven by `block_on`) must not, so it never returns a `DriveGuard`.
-    let drive_guard = allow_async.then(|| spawn_drive_guard(&js_state.rt));
+    let drive_guard = if allow_async {
+        Some(spawn_drive_guard(&js_state.rt, &js_state.ctx).await)
+    } else {
+        None
+    };
 
-    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
@@ -1762,9 +1755,9 @@ where
     // See `call_js_export_internal`: keep the rquickjs scheduler driven for the whole call. The
     // returned raw value's writer task (spawned by the caller) self-drives via its own `async_with!`
     // after this returns, so the guard only needs to cover the JS call itself.
-    let _drive_guard = spawn_drive_guard(&js_state.rt);
+    let _drive_guard = spawn_drive_guard(&js_state.rt, &js_state.ctx).await;
 
-    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -1810,14 +1803,15 @@ pub async fn future_writer_task<T, R, F>(
     R: for<'js> FromJs<'js> + 'static,
     F: FnOnce(R) -> T + 'static,
 {
-    let payload: T = rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
-        let value = js_value
-            .restore(&ctx)
-            .expect("Failed to restore a persisted future payload value");
-        let r: R = resolve_js_value::<R>(&ctx, value).await;
-        convert(r)
-    })
-    .await;
+    let payload: T =
+        super::runtime_services::with_component_context(&get_js_state().ctx, async |ctx| {
+            let value = js_value
+                .restore(&ctx)
+                .expect("Failed to restore a persisted future payload value");
+            let r: R = resolve_js_value::<R>(&ctx, value).await;
+            convert(r)
+        })
+        .await;
     let _ = writer.write(payload).await;
 }
 
@@ -1836,7 +1830,7 @@ pub fn spawn_future_writer<T, R, F>(
 }
 
 async fn try_close_js_stream_iterator(iterator: Persistent<Object<'static>>) -> Result<(), String> {
-    rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
+    super::runtime_services::with_component_context(&get_js_state().ctx, async |ctx| {
         let iterator = iterator.restore(&ctx).map_err(|error| {
             format!("Failed to restore a persisted stream iterator during cleanup: {error:?}")
         })?;
@@ -1888,7 +1882,7 @@ pub async fn stream_writer_task<T, R, F>(
     // promise (an `async function` returning the iterable resolves to it), so resolve it first
     // before normalizing it into an async iterator.
     let iterator: Persistent<Object<'static>> =
-        rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
+        super::runtime_services::with_component_context(&get_js_state().ctx, async |ctx| {
             let value = js_value
                 .restore(&ctx)
                 .expect("Failed to restore a persisted stream value");
@@ -1912,7 +1906,7 @@ pub async fn stream_writer_task<T, R, F>(
         // a fresh clone each time rather than the shared handle (which the loop reuses).
         let iterator_for_next = iterator.clone();
         let item: StreamWriterItem<T> =
-            rquickjs::AsyncContext::async_with(&get_js_state().ctx, async |ctx| {
+            super::runtime_services::with_component_context(&get_js_state().ctx, async |ctx| {
                 let iterator = iterator_for_next
                     .restore(&ctx)
                     .expect("Failed to restore a persisted stream iterator");

@@ -496,7 +496,10 @@ function isEvalStackFrame(frame) {
     if (!frame || typeof frame.functionName !== 'string') {
         return false;
     }
-    return frame.functionName === 'eval' || frame.functionName === '<eval>';
+    // QuickJS-ng uses anonymous (<input>:...) for Function constructors.
+    // That synthetic source must never be attributed to the calling module.
+    return frame.functionName === 'eval' || frame.functionName === '<eval>' ||
+        frame.fileName === '<input>';
 }
 
 function resolveSourceForFrame(frame, currentModuleSource) {

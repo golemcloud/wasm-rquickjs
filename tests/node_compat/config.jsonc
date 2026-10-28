@@ -1290,7 +1290,7 @@
     "parallel/test-timers-timeout-with-non-integer.js": {},
     "parallel/test-timers-same-timeout-wrong-list-deleted.js": {},
     "parallel/test-timers-throw-when-cb-not-function.js": {},
-    "parallel/test-timers-api-refs.js": { "category": "known-gap", "reason": "node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals" },
+    "parallel/test-timers-api-refs.js": {},
     "parallel/test-timers-process-tampering.js": {},
     "parallel/test-timers-refresh-in-callback.js": {},
     "parallel/test-timers-active.js": { "category": "node-internals", "reason": "asserts deprecated timers.active() behavior and private _idle* timer fields" },

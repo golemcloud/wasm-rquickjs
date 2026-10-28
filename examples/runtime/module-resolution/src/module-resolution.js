@@ -3015,13 +3015,11 @@ export const testStaticLoaderAbsoluteEntrySpecifier = async () => {
         const { register } = await import('node:module');
         register(loaderUrl);
         await import('data:text/javascript,export default 0');
-        await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(
-            cliEntryUrl,
-            cliEntryUrl,
-            import.meta.url,
-        );
-        assert.strictEqual((await import(cliEntryUrl)).default, 'redirected-entry');
+        const cliEntry = await import(cliEntryUrl);
+        assert.strictEqual(cliEntry.default, 'redirected-entry');
         assert.strictEqual(globalThis.__static_loader_cli_entry_calls, 1);
+        assert.strictEqual(await import(cliEntryUrl), cliEntry);
+        assert.strictEqual(globalThis.__static_loader_cli_entry_calls, 2);
         assert.strictEqual(
             (await import(pathToFileURL(`${root}/importer.mjs`).href)).default,
             true,
@@ -10209,8 +10207,8 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.strictEqual(hiddenDescriptor.configurable, false);
         assert.strictEqual(vm.runInNewContext('typeof performance'), 'undefined');
         assert.strictEqual(vm.runInContext('Object.keys(this).join(",")', vm.createContext({ key: 'value', 1: 'one' })), '1,key');
-        const hiddenVmGlobalNames = ['DOMException', 'Float16Array', 'InternalError', 'performance', 'queueMicrotask'];
-        assert.strictEqual(vm.runInNewContext('["DOMException", "Float16Array", "InternalError", "performance", "queueMicrotask"].filter((name) => Object.hasOwn(this, name)).join(",")'), '');
+        const hiddenVmGlobalNames = ['AsyncDisposableStack', 'DOMException', 'DisposableStack', 'Float16Array', 'InternalError', 'SuppressedError', 'atob', 'btoa', 'performance', 'queueMicrotask'];
+        assert.strictEqual(vm.runInNewContext(`${JSON.stringify(hiddenVmGlobalNames)}.filter((name) => Object.hasOwn(this, name)).join(",")`), '');
         for (const hiddenName of hiddenVmGlobalNames) {
             assert.strictEqual(vm.runInContext(hiddenName + '.marker', vm.createContext({
                 [hiddenName]: { marker: hiddenName },

@@ -10,7 +10,13 @@ class Counter {
     }
 
     static async identity(value) {
-        await Promise.resolve();
+        // A queued resource drop runs concurrently with this referenced I/O.
+        // Its drain must release the context lock so the timer can close it.
+        await new Promise((resolve, reject) => {
+            const server = createServer();
+            server.on('error', reject);
+            server.listen(0, () => setTimeout(() => server.close(resolve), 5));
+        });
         return value;
     }
 
@@ -33,3 +39,4 @@ class Counter {
 }
 
 export const api = { Counter };
+import { createServer } from 'node:net';

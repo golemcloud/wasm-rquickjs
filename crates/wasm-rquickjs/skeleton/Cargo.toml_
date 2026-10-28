@@ -6,6 +6,12 @@ publish = false
 
 [workspace]
 
+# Unoptimized QuickJS-ng interpreter frames can exhaust the WASI C stack
+# while loading ordinary npm dependency graphs. Keep the engine optimized in
+# development builds without increasing every component's reserved stack.
+[profile.dev.package.rquickjs-sys]
+opt-level = 1
+
 [profile.release]
 opt-level = "s"
 lto = true

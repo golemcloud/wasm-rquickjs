@@ -57,6 +57,120 @@ fn prepare_node_compat_full(
 }
 
 #[test_r::test]
+async fn runner_waits_for_referenced_callbacks(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+    let test_root = instance.temp_dir_path().join("home/node/test");
+    fs::create_dir_all(test_root.join("parallel"))?;
+    common::copy_dir_recursive(
+        Utf8Path::new("tests/node_compat/common-shim").as_std_path(),
+        test_root.join("common").as_std_path(),
+    )?;
+    fs::write(
+        test_root.join("parallel/runner-delayed-callback.js"),
+        "const common = require('../common');\nsetTimeout(common.mustCall(() => {}), 3100);\n",
+    )?;
+
+    let (result, stdout, stderr) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/parallel/runner-delayed-callback.js".to_string(),
+            )],
+        )
+        .await;
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
+async fn runner_unrefed_interval_preserves_referenced_server(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+    let test_root = instance.temp_dir_path().join("home/node/test");
+    fs::create_dir_all(test_root.join("parallel"))?;
+    common::copy_dir_recursive(
+        Utf8Path::new("tests/node_compat/common-shim").as_std_path(),
+        test_root.join("common").as_std_path(),
+    )?;
+    fs::write(
+        test_root.join("parallel/runner-unref-server.js"),
+        [
+            "const common = require('../common');",
+            "const assert = require('node:assert');",
+            "const server = require('node:net').createServer();",
+            "server.on('listening', () => console.log('server listening'));",
+            "server.on('close', common.mustCall(() => console.log('server closed')));",
+            "server.listen(0);",
+            "let count = 0;",
+            "const interval = setInterval(() => {",
+            "  interval.unref();",
+            "  if (++count <= 5) console.log('interval tick', count);",
+            "  if (count === 4) server.close();",
+            "  if (count === 1000) { clearInterval(interval); assert.fail('unreferenced interval prevented completion'); }",
+            "}, 1);",
+        ]
+        .join("\n"),
+    )?;
+    let (result, stdout, stderr) = timeout(
+        Duration::from_secs(20),
+        instance.invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/parallel/runner-unref-server.js".to_string(),
+            )],
+        ),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("timer/server completion exceeded 20 seconds"))?;
+    println!("Timer/server lifecycle:\n{stdout}\n{stderr}");
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
+async fn runner_concurrent_idle_waiters_without_timers(
+    prepared: &Arc<FullPreparedComponent>,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
+    instance.set_epoch_deadline(30);
+    let test_root = instance.temp_dir_path().join("home/node/test");
+    fs::create_dir_all(test_root.join("parallel"))?;
+    common::copy_dir_recursive(
+        Utf8Path::new("tests/node_compat/common-shim").as_std_path(),
+        test_root.join("common").as_std_path(),
+    )?;
+    fs::write(
+        test_root.join("parallel/runner-concurrent-idle.mjs"),
+        [
+            "import common from '../common/index.js';",
+            "import { createServer } from 'node:net';",
+            "const server = createServer();",
+            "server.listen(0, common.mustCall(() => server.close(common.mustCall())));",
+            "await Promise.all([process._awaitRuntimeIdle(), process._awaitRuntimeIdle()]).then(common.mustCall());",
+        ]
+        .join("\n"),
+    )?;
+    let (result, stdout, stderr) = timeout(
+        Duration::from_secs(20),
+        instance.invoke_and_capture_output_with_stderr(
+            None,
+            "run-test",
+            &[Val::String(
+                "/home/node/test/parallel/runner-concurrent-idle.mjs".to_string(),
+            )],
+        ),
+    )
+    .await
+    .map_err(|_| anyhow::anyhow!("concurrent idle completion exceeded 20 seconds"))?;
+    handle_test_result(result, &stdout, &stderr)
+}
+
+#[test_r::test]
 async fn runner_import_preload_flag(prepared: &Arc<FullPreparedComponent>) -> anyhow::Result<()> {
     let mut instance = TestInstance::from_golem_prepared(&prepared.0).await?;
     instance.set_epoch_deadline(30);
@@ -157,17 +271,22 @@ async fn runner_static_registered_loader_async_resolve(
         [
             "export async function resolve(specifier, context, nextResolve) {",
             "  if (specifier === './dep.mjs') {",
+            "    if (context.parentURL !== new URL('./async-static-entry.mjs', import.meta.url).href) throw new Error('wrong logical entry parent');",
             "    return nextResolve('./real.mjs', context);",
             "  }",
             "  if (specifier === './generated.mjs') {",
             "    return { shortCircuit: true, url: 'virtual:generated', format: 'module' };",
             "  }",
             "  if (specifier === 'virtual:child') {",
+            "    if (context.parentURL !== 'virtual:generated') throw new Error('wrong logical generated parent');",
             "    return { shortCircuit: true, url: new URL('./child.mjs', import.meta.url).href, format: 'module' };",
             "  }",
             "  return nextResolve(specifier, context);",
             "}",
             "export async function load(url, context, nextLoad) {",
+            "  if (url === new URL('./async-static-entry.mjs', import.meta.url).href) {",
+            "    return { shortCircuit: true, format: 'module', source: 'import value from \"./dep.mjs\"; import generated from \"./generated.mjs\"; if (value !== 42 || generated !== 7) throw new Error(\"wrong provided entry source\");' };",
+            "  }",
             "  if (url === 'virtual:generated') {",
             "    return { shortCircuit: true, format: 'module', source: 'import value from \"virtual:child\"; export default value;' };",
             "  }",
@@ -180,10 +299,7 @@ async fn runner_static_registered_loader_async_resolve(
         suite_dir.join("async-static-entry.mjs"),
         [
             "// Flags: --experimental-loader ./test/es-module/async-static-loader.mjs",
-            "import value from './dep.mjs';",
-            "import generated from './generated.mjs';",
-            "if (value !== 42) throw new Error('static async loader resolve did not run');",
-            "if (generated !== 7) throw new Error('loader source child import was not prepared');",
+            "throw new Error('physical entry source must not execute');",
         ]
         .join("\n"),
     )?;

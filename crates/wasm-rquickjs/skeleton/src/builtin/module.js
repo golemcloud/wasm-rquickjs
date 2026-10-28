@@ -5453,10 +5453,15 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
 
     async function prepareStaticRegisteredLoaderGraph(parentUrl, seen) {
         parentUrl = normalizeLoaderResolvedUrl(String(parentUrl));
-        const internalParentUrl = internalLoaderBaseUrl(parentUrl);
+        const physicalParentUrl = internalLoaderBaseUrl(parentUrl);
         seen = seen || Object.create(null);
-        if (seen[internalParentUrl]) return;
-        seen[internalParentUrl] = true;
+        if (seen[physicalParentUrl]) return;
+        seen[physicalParentUrl] = true;
+
+        // Read the materialized source, but resolve its edges under the same
+        // logical parent identity used by the native registered resolver.
+        const logicalParentUrl = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_lookup_loader_source_url(parentUrl) || parentUrl;
+        const internalParentUrl = internalLoaderBaseUrl(logicalParentUrl);
 
         const source = staticRegisteredLoaderSourceForUrl(parentUrl);
         if (source === null) return;
@@ -5469,7 +5474,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 specifier,
                 attrs,
                 true,
-                parentUrl,
+                logicalParentUrl,
             );
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
             const { cached } = cacheEntry;

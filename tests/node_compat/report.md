@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3189/4397 (72.5%)
+**Primary compatibility (CI-enforced):** 3190/4397 (72.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3189 | 72.5% | 55.4% | 46.4% |
-| 🧩 known gap | 1208 | 27.5% | 21.0% | 17.6% |
+| ✅ passing (runnable) | 3190 | 72.5% | 55.4% | 46.4% |
+| 🧩 known gap | 1207 | 27.5% | 21.0% | 17.5% |
 | 🚫 WASI-impossible (excluded) | 1196 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
 | **Total** | **6879** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3189/5760 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3190/5760 (55.4%)**.
 
 ## Inventory by Module
 
@@ -76,7 +76,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream | 753 | 713 | 31 | 2 | 0 | 0 | 7 | 95.8% | 95.6% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | test_runner | 157 | 93 | 34 | 21 | 1 | 0 | 8 | 73.2% | 62.4% |
-| timers | 97 | 47 | 4 | 0 | 0 | 0 | 46 | 92.2% | 92.2% |
+| timers | 97 | 48 | 3 | 0 | 0 | 0 | 46 | 94.1% | 94.1% |
 | tls | 207 | 4 | 7 | 185 | 0 | 0 | 11 | 36.4% | 2.0% |
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
@@ -687,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1208)
+### known gap (1207)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1140,7 +1140,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts | 1 | `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
-| node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals | 1 | `parallel/test-timers-api-refs.js` |
 | node-compat runner inspects a no-listener proxy rejection and triggers its throwing traps | 1 | `parallel/test-promises-unhandled-proxy-rejections.js` |
 | node-compat runner treats a no-listener rejection as failure even with --unhandled-rejections=none | 1 | `parallel/test-promise-unhandled-silent-no-hook.js` |
 | node:http abort/destroy response lifecycle (aborted/error/close ordering) is incomplete | 1 | `parallel/test-http-abort-client.js` |

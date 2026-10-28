@@ -78,7 +78,16 @@ async fn p2_promise_resource_ownership() -> anyhow::Result<()> {
     )
     .await?;
     assert_eq!(counter_value(&mut instance, identity).await?, 20);
+    let concurrent = construct_counter(&mut instance, 21).await?;
     instance.drop_resource(identity).await?;
+    let concurrent_identity = invoke_resource(
+        &mut instance,
+        "[static]counter.identity",
+        &[Val::Resource(concurrent)],
+    )
+    .await?;
+    assert_eq!(counter_value(&mut instance, concurrent_identity).await?, 21);
+    instance.drop_resource(concurrent_identity).await?;
     assert_eq!(resource_count(&mut instance).await?, baseline);
 
     let failing = construct_counter(&mut instance, 30).await?;

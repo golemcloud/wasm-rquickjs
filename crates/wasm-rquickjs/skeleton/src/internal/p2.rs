@@ -59,8 +59,16 @@ impl JsState {
     /// JS module initialization runs.
     async fn new_base() -> Self {
         let OwnedJsRuntime { rt, ctx } = OwnedJsRuntime::new().await;
+        AsyncContext::async_with(&ctx, async |ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .timers
+                .component_owned
+                .set(true);
+        })
+        .await;
 
-        rquickjs::AsyncContext::async_with(&ctx, async |ctx| {
+        super::runtime_services::with_component_context(&ctx, async |ctx| {
             let global = ctx.globals();
 
             global
@@ -86,7 +94,7 @@ impl JsState {
         initialize_dispose_symbols(&self.ctx)
             .await
             .unwrap_or_else(|error| panic!("{error}"));
-        self.rt.idle().await;
+        super::runtime_services::idle_component_runtime(&self.rt, &self.ctx).await;
 
         initialize_builtin_wiring(&self.ctx)
             .await
@@ -100,7 +108,7 @@ impl JsState {
     /// Phase 2b: Import and evaluate the user module.
     /// Must be called after init_engine().
     async fn init_user_module(&self) {
-        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&self.ctx, async |ctx| {
             // Import the user module (now globalThis.require is available)
             Module::evaluate(
                 ctx.clone(),
@@ -175,7 +183,7 @@ impl JsState {
                 .into_iter()
                 .collect();
 
-        rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&state.ctx, async |ctx| {
             let globals = ctx.globals();
             if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
                 // Refresh argv in-place so existing references stay valid
@@ -209,15 +217,14 @@ impl JsState {
 }
 
 async fn run_turn_checkpoint(js_state: &JsState) -> bool {
-    rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"))
     })
     .await
 }
 
-/// Spawns a sentinel task that waits for all ref'd timers to complete,
-/// then aborts remaining unref'd timers so that `idle()` can return.
+/// Drain ordinary asynchronous work and referenced component timers to a fixpoint.
 async fn drain_and_idle(js_state: &JsState) {
     let mut drove_runtime = false;
     loop {
@@ -226,44 +233,13 @@ async fn drain_and_idle(js_state: &JsState) {
             return;
         }
         drove_runtime = true;
-
-        let has_unrefed_timers = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
-            !ctx.userdata::<RuntimeServices>()
-                .expect("runtime services not initialized")
-                .timers
-                .unrefed_timers
-                .borrow()
-                .is_empty()
-        })
-        .await;
-        if has_unrefed_timers {
-            // Spawn a sentinel that polls until only unref'd timers remain, then aborts them.
-            rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
-                let task_ctx = ctx.clone();
-                ctx.spawn(async move {
-                    loop {
-                        wstd::task::sleep(wstd::time::Duration::from_millis(1)).await;
-                        let services = task_ctx
-                            .userdata::<RuntimeServices>()
-                            .expect("runtime services not initialized");
-                        let abort_count = services.timers.abort_handles.borrow().len();
-                        let unref_count = services.timers.unrefed_timers.borrow().len();
-                        // When the only remaining abort handles are for unref'd timers,
-                        // abort them all (the sentinel itself is not tracked in abort_handles).
-                        if abort_count > 0 && abort_count == unref_count {
-                            services.timers.abort_unrefed();
-                            break;
-                        }
-                        if unref_count == 0 {
-                            break;
-                        }
-                    }
-                });
-            })
-            .await;
-        }
-        js_state.rt.idle().await;
+        super::runtime_services::idle_component_runtime(&js_state.rt, &js_state.ctx).await;
     }
+}
+
+/// Schedule a component-owned timer without making its clock wait keep QuickJS idle pending.
+pub(crate) fn spawn_component_timer(task: impl Future<Output = ()> + 'static) {
+    wstd::runtime::spawn(task).detach();
 }
 
 /// Resolves the internal `process._awaitRuntimeIdle()` promise from a task owned by the component
@@ -276,7 +252,7 @@ pub(crate) fn spawn_runtime_idle_waiter(
     wstd::runtime::spawn(async move {
         let js_state = get_js_state();
         drain_and_idle(js_state).await;
-        rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+        super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
             let resolve = resolve
                 .restore(&ctx)
                 .expect("failed to restore runtime-idle resolve function");
@@ -428,7 +404,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result: FR = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let result: FR = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
@@ -588,7 +564,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
         let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
         let constructor = constructor_obj.as_constructor().unwrap_or_else(|| panic!("Expected export {path} to be a class with a constructor", path = resource_path.join("."))).clone();
@@ -701,7 +677,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result: FR = rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    let result: FR = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
@@ -790,7 +766,7 @@ pub fn enqueue_drop_js_resource(resource_id: usize) {
 async fn drop_js_resource(resource_id: usize) {
     let js_state = get_js_state();
 
-    rquickjs::AsyncContext::async_with(&js_state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         super::runtime_services::release_exported_resource(
             &ctx,
             resource_id,
@@ -800,7 +776,7 @@ async fn drop_js_resource(resource_id: usize) {
         .unwrap_or_else(|e| panic!("Failed to release resource {resource_id}: {e:?}"));
     })
     .await;
-    js_state.rt.idle().await;
+    drain_and_idle(js_state).await;
 }
 
 fn call_with_this<'js, A, R>(
@@ -1036,7 +1012,7 @@ pub fn wizer_initialize() {
         block_on(async {
             let state = STATE.as_ref().unwrap();
             drain_and_idle(state).await;
-            rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
+            super::runtime_services::with_component_context(&state.ctx, async |ctx| {
                 ctx.run_gc();
                 ctx.run_gc();
             })
@@ -1044,13 +1020,14 @@ pub fn wizer_initialize() {
             drain_and_idle(state).await;
 
             // Verify clean state
-            let timers_empty = rquickjs::AsyncContext::async_with(&state.ctx, async |ctx| {
-                ctx.userdata::<RuntimeServices>()
-                    .expect("runtime services not initialized")
-                    .timers
-                    .is_empty()
-            })
-            .await;
+            let timers_empty =
+                super::runtime_services::with_component_context(&state.ctx, async |ctx| {
+                    ctx.userdata::<RuntimeServices>()
+                        .expect("runtime services not initialized")
+                        .timers
+                        .is_empty()
+                })
+                .await;
             assert!(timers_empty, "pending timers/tasks at snapshot time");
         });
 
