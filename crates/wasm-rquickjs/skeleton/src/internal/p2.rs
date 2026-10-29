@@ -323,33 +323,38 @@ pub fn async_exported_function<F: Future>(future: F) -> F::Output {
     block_on(async move {
         use futures::StreamExt;
 
-        if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
-            let resource_dropper = async move {
-                while let Some(resource_id) = resource_drop_queue_rx.next().await {
-                    if resource_id > 0 {
-                        drop_js_resource(resource_id).await;
-                    } else {
-                        break;
+        let result =
+            if let Some(mut resource_drop_queue_rx) = js_state.resource_drop_queue_rx.take() {
+                let resource_dropper = async move {
+                    while let Some(resource_id) = resource_drop_queue_rx.next().await {
+                        if resource_id > 0 {
+                            drop_js_resource(resource_id).await;
+                        } else {
+                            break;
+                        }
                     }
-                }
-                resource_drop_queue_rx
+                    resource_drop_queue_rx
+                };
+
+                // Finish resource dropper
+                js_state
+                    .resource_drop_queue_tx
+                    .unbounded_send(0)
+                    .expect("Failed to enqueue resource dropper stop signal");
+                let (result, resource_drop_queue_rx) = (future, resource_dropper).join().await;
+                js_state
+                    .resource_drop_queue_rx
+                    .replace(Some(resource_drop_queue_rx));
+
+                result
+            } else {
+                // This case will never happen because block_on does not allow reentry
+                unreachable!()
             };
-
-            // Finish resource dropper
-            js_state
-                .resource_drop_queue_tx
-                .unbounded_send(0)
-                .expect("Failed to enqueue resource dropper stop signal");
-            let (result, resource_drop_queue_rx) = (future, resource_dropper).join().await;
-            js_state
-                .resource_drop_queue_rx
-                .replace(Some(resource_drop_queue_rx));
-
-            result
-        } else {
-            // This case will never happen because block_on does not allow reentry
-            unreachable!()
-        }
+        // Queued drops release roots while the export is still running. Only this
+        // boundary, after both finish, may cancel remaining unreferenced work.
+        drain_and_idle(js_state).await;
+        result
     })
 }
 
@@ -404,7 +409,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result: FR = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
@@ -455,9 +460,7 @@ where
                 }
             }
         }
-    }).await;
-    drain_and_idle(js_state).await;
-    result
+    }).await
 }
 
 fn get_cached_js_export<'js>(
@@ -564,7 +567,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
         let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
         let constructor = constructor_obj.as_constructor().unwrap_or_else(|| panic!("Expected export {path} to be a class with a constructor", path = resource_path.join("."))).clone();
@@ -595,9 +598,7 @@ where
                     .expect("Failed to register resource instance")
             }
         }
-    }).await;
-    drain_and_idle(js_state).await;
-    result
+    }).await
 }
 
 pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {
@@ -677,7 +678,7 @@ where
 {
     let js_state = get_js_state();
 
-    let result: FR = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
@@ -750,9 +751,7 @@ where
                 }
             }
         }
-    }).await;
-    drain_and_idle(js_state).await;
-    result
+    }).await
 }
 
 pub fn enqueue_drop_js_resource(resource_id: usize) {
@@ -776,7 +775,6 @@ async fn drop_js_resource(resource_id: usize) {
         .unwrap_or_else(|e| panic!("Failed to release resource {resource_id}: {e:?}"));
     })
     .await;
-    drain_and_idle(js_state).await;
 }
 
 fn call_with_this<'js, A, R>(

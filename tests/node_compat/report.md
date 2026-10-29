@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3190/4397 (72.5%)
+**Primary compatibility (CI-enforced):** 3192/4397 (72.6%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3190 | 72.5% | 55.4% | 46.4% |
-| 🧩 known gap | 1207 | 27.5% | 21.0% | 17.5% |
+| ✅ passing (runnable) | 3192 | 72.6% | 55.4% | 46.4% |
+| 🧩 known gap | 1205 | 27.4% | 20.9% | 17.5% |
 | 🚫 WASI-impossible (excluded) | 1196 | — | 20.8% | 17.4% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
 | **Total** | **6879** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3190/5760 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3192/5760 (55.4%)**.
 
 ## Inventory by Module
 
@@ -41,7 +41,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
 | crypto | 239 | 204 | 11 | 8 | 0 | 0 | 16 | 94.9% | 91.5% |
 | dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
-| diagnostics_channel | 33 | 22 | 8 | 1 | 2 | 0 | 0 | 73.3% | 66.7% |
+| diagnostics_channel | 33 | 24 | 6 | 1 | 2 | 0 | 0 | 80.0% | 72.7% |
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
 | domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
@@ -687,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1207)
+### known gap (1205)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1061,8 +1061,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | diagnostics_channel integration for http.server.* events is incomplete | 1 | `parallel/test-diagnostics-channel-http-server-start.js` |
 | diagnostics_channel integration for net events is incomplete | 1 | `parallel/test-diagnostics-channel-net.js` |
 | diagnostics_channel integration for worker_threads events is missing in the worker shim | 1 | `parallel/test-diagnostics-channel-worker-threads.js` |
-| diagnostics_channel runStores transformer-error propagation is incomplete | 1 | `parallel/test-diagnostics-channel-bind-store.js` |
-| diagnostics_channel subscriber-throw path does not surface uncaughtException handling like Node.js | 1 | `parallel/test-diagnostics-channel-safe-subscriber-errors.js` |
 | dns perf_hooks integration not implemented | 1 | `parallel/test-dns-perf_hooks.js` |
 | dns.promises.lookupService is not implemented (returns ENOTIMP) | 1 | `parallel/test-dns-lookupService-promises.js` |
 | domain error propagation across node:http server/client callbacks is incomplete | 1 | `parallel/test-domain-multi.js` |

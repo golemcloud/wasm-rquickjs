@@ -1,5 +1,6 @@
 use crate::common::{CompiledTest, TestInstance, TestTarget, test_target};
 use camino::Utf8Path;
+use std::time::Duration;
 use test_r::test;
 use wasmtime::component::{ResourceAny, Val};
 
@@ -110,5 +111,41 @@ async fn p2_promise_resource_ownership() -> anyhow::Result<()> {
     instance.drop_resource(recovered).await?;
     assert_eq!(resource_count(&mut instance).await?, baseline);
 
+    Ok(())
+}
+
+#[test]
+async fn p2_queued_drop_preserves_awaited_unref_timer() -> anyhow::Result<()> {
+    if test_target() != TestTarget::P2 {
+        return Ok(());
+    }
+
+    let compiled =
+        CompiledTest::new(Utf8Path::new("examples/runtime/p2-exported-resource"), true).await?;
+    for queued_drop in [false, true] {
+        let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+        let baseline = resource_count(&mut instance).await?;
+        let value = construct_counter(&mut instance, 42).await?;
+        if queued_drop {
+            let previous = construct_counter(&mut instance, 1).await?;
+            instance.drop_resource(previous).await?;
+        }
+        let identity = tokio::time::timeout(
+            Duration::from_secs(5),
+            invoke_resource(
+                &mut instance,
+                "[static]counter.identity-unref",
+                &[Val::Resource(value)],
+            ),
+        )
+        .await
+        .map_err(|_| anyhow::anyhow!("awaited unref timer stalled (queued drop: {queued_drop})"))?
+        .map_err(|error| {
+            error.context(format!("awaited unref timer (queued drop: {queued_drop})"))
+        })?;
+        assert_eq!(counter_value(&mut instance, identity).await?, 42);
+        instance.drop_resource(identity).await?;
+        assert_eq!(resource_count(&mut instance).await?, baseline);
+    }
     Ok(())
 }

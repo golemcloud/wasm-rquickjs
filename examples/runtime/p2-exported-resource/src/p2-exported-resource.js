@@ -20,6 +20,14 @@ class Counter {
         return value;
     }
 
+    static async identityUnref(value) {
+        // Awaited exports must finish even if their only clock is unreferenced.
+        await new Promise(resolve => setTimeout(resolve, 5).unref());
+        // Remaining unreferenced work must still be retired at export completion.
+        setInterval(() => {}, 60_000).unref();
+        return value;
+    }
+
     static async stashAndFail(value) {
         Object.freeze(value);
         stashedCounter = value;

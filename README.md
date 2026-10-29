@@ -639,6 +639,8 @@ UDP datagram sockets built on WASI sockets.
 
 Publish/subscribe diagnostic messaging and tracing.
 
+Subscriber and store-transform errors are delivered through `uncaughtException` on the next tick, without interrupting other subscribers.
+
 - `channel(name)`, `subscribe(name, onMessage)`, `unsubscribe(name, onMessage)`, `hasSubscribers(name)`, `tracingChannel(name)`
 - `Channel` — `subscribe`, `unsubscribe`, `publish`, `bindStore`, `unbindStore`, `runStores`, `hasSubscribers`, `name`
 - `TracingChannel` — `subscribe`, `unsubscribe`, `hasSubscribers`, `traceSync`, `tracePromise`, `traceCallback`

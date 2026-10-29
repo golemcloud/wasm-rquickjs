@@ -1003,7 +1003,28 @@ where
                 .clone()
         })
         .await;
-    with_component_wake(AsyncContext::async_with(ctx, f), hub).await
+    with_component_wake(
+        AsyncContext::async_with(ctx, async move |ctx| {
+            let mut future = std::pin::pin!(f(ctx.clone()));
+            futures::future::poll_fn(|cx| {
+                // Let the caller attach Promise handlers and capture immediate errors
+                // before ending its JS turn. Otherwise WithFuture drains Promise jobs
+                // ahead of nextTick and leaves exceptions from failed jobs pending.
+                let result = future.as_mut().poll(cx);
+                if result.is_pending()
+                    && run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
+                        panic!("failed to run process turn checkpoint: {error}")
+                    })
+                {
+                    cx.waker().wake_by_ref();
+                }
+                result
+            })
+            .await
+        }),
+        hub,
+    )
+    .await
 }
 
 impl TimerServices {

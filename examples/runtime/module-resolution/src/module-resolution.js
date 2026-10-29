@@ -11462,6 +11462,15 @@ export const testUnhandledRejectionTurnOrdering = async () => {
         process.removeListener('unhandledRejection', onUnhandled);
         process.removeListener('rejectionHandled', onHandled);
 
+        // Inside an existing microtask, Node finishes Promise jobs before nextTick.
+        const insideMicrotask = [];
+        await Promise.resolve().then(() => {
+            process.nextTick(() => insideMicrotask.push('nextTick'));
+            Promise.resolve().then(() => insideMicrotask.push('microtask'));
+        });
+        await new Promise(resolve => setImmediate(resolve));
+        assert.deepStrictEqual(insideMicrotask, ['microtask', 'nextTick']);
+
         const fixpointOrder = [];
         let listenerChild;
         let handledFromNextTick;
