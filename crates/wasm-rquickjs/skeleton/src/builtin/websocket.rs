@@ -115,10 +115,8 @@ impl WsConnection {
     }
 
     pub fn send_binary(&self, ctx: Ctx<'_>, data: TypedArray<'_, u8>) -> rquickjs::Result<()> {
-        let data = data
-            .as_bytes()
-            .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket data buffer is detached"))?
-            .to_vec();
+        let data = crate::wrappers::copy_typed_array_bytes(&data)
+            .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket data buffer is detached"))?;
         let inner = self.inner.borrow();
         let conn = inner
             .as_ref()

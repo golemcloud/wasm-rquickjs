@@ -1,6 +1,7 @@
 package quickjs:sqlite;
 
 world sqlite {
+  export test-changeset-input-detached-in-callback: func() -> bool;
   export test-memory-roundtrip: func() -> bool;
   export test-file-roundtrip: func() -> bool;
   export test-udf-survives-restore: func() -> bool;

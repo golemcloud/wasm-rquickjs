@@ -44,7 +44,7 @@ class Channel {
             try {
                 onMessage(message, this._name);
             } catch (e) {
-                queueMicrotask(() => { throw e; });
+                process.nextTick(() => { throw e; });
             }
         }
     }
@@ -69,7 +69,7 @@ class Channel {
                 try {
                     value = typeof transform === 'function' ? transform(context) : context;
                 } catch (e) {
-                    queueMicrotask(() => { throw e; });
+                    process.nextTick(() => { throw e; });
                     return next();
                 }
                 return store.run(value, next);

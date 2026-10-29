@@ -20,6 +20,22 @@ async fn compiled_sqlite_unoptimized() -> CompiledTest {
 }
 
 #[test]
+async fn sqlite_changeset_input_detached_in_callback(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = crate::common::TestInstance::new(compiled_test.wasm_path()).await?;
+    let (result, _, _) = instance
+        .invoke_and_capture_output_with_stderr(
+            None,
+            "test-changeset-input-detached-in-callback",
+            &[],
+        )
+        .await;
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn sqlite_test_memory_roundtrip(
     #[tagged_as("sqlite")] compiled_test: &CompiledTest,
 ) -> anyhow::Result<()> {

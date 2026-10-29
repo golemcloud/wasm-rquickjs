@@ -25,13 +25,15 @@ maintainer/legal review; cargo-about output is not legal advice.
 There are two fail-closed local fallbacks where cargo-about 0.9.2 cannot resolve the published
 repository metadata directly. `swc_sourcemap 10.0.2` points at the SWC monorepo while its VCS
 revision and license live in the separate `swc-project/swc-sourcemap` repository. The
-`rquickjs-core 0.10.0` and `rquickjs-macro 0.10.0` manifests use a repository URL ending in
+`rquickjs-core 0.14.0` and `rquickjs-macro 0.14.0` manifests use a repository URL ending in
 `.git`, which cargo-about 0.9.2 passes through to GitHub's raw-content path and receives a 404.
 The checker therefore replaces only those crates' exact generic fallback blocks with
 `clarifications/swc_sourcemap-10.0.2-LICENSE` and
-`clarifications/rquickjs-0.10.0-LICENSE`; both SHA-256 values are pinned in the script. The SWC
+`clarifications/rquickjs-0.14.0-LICENSE`; both SHA-256 values are pinned in the script. The SWC
 text is the upstream `swc-project/swc-sourcemap` BSD-3-Clause license introduced at commit
 `8e6963c4e880190b1c680634bda3c565d1522daf`; a shape or hash change fails generation.
+The rquickjs text matches the packaged root crate's license at version 0.14.0, whose
+published VCS revision is `d7ef5eeae702fea24c03643064de454f1c1dd4b0`.
 
 The generator copies the matching retained notice to
 `THIRD_PARTY_COMPONENT_LICENSES.txt` in every generated crate. It is deliberately a target-specific

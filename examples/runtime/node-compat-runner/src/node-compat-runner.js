@@ -10,30 +10,9 @@
 // The test does require('../common') which resolves naturally to /home/node/test/common/index.js.
 
 const require = globalThis.require;
-
-// Drain pending microtasks/timers by yielding multiple times.
-// Many stream tests need several event loop turns to complete.
-// Uses increasing delays to handle both quick microtask chains and slower timers.
-function drainAsync() {
-    var p = Promise.resolve();
-    // First: 50 quick ticks for microtask chains
-    for (var i = 0; i < 50; i++) {
-        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 0); }); });
-    }
-    // Then: 25 longer ticks for setTimeout-based tests.
-    // Tests use common.platformTimeout() which multiplies by 3, so a 500ms
-    // timeout becomes 1500ms.  We need enough drain time to cover those
-    // delays plus watcher polling intervals (~200ms) and margin.
-    // 25 × 100ms = 2500ms total, covering platformTimeout(500) + poll + slack.
-    for (var j = 0; j < 25; j++) {
-        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 100); }); });
-    }
-    // Final: 20 quick ticks for any remaining activity after timers
-    for (var k = 0; k < 20; k++) {
-        p = p.then(function() { return new Promise(function(r) { setTimeout(r, 0); }); });
-    }
-    return p;
-}
+// Tests may replace process or delete global timer functions.
+const awaitRuntimeIdle = globalThis.process._awaitRuntimeIdle;
+const reportUnexpectedRejection = globalThis.console.error.bind(globalThis.console);
 
 // Track unhandled rejections from test top-level promise chains.
 //
@@ -42,7 +21,7 @@ function drainAsync() {
 //
 // If the async IIFE rejects, the .then() has no rejection handler, so the
 // rejection is unhandled. The runtime's native promise rejection tracker
-// (set via rquickjs 0.10's set_host_promise_rejection_tracker) emits
+// (set via rquickjs's set_host_promise_rejection_tracker) emits
 // process.emit('unhandledRejection', reason) which we listen for here.
 var _firstUnhandledRejection = null;
 var _firstUnhandledRejectionHadTestListener = false;
@@ -58,6 +37,22 @@ function installRejectionTracking() {
                 globalThis.process &&
                 typeof globalThis.process.listenerCount === 'function' &&
                 globalThis.process.listenerCount('unhandledRejection') > 1;
+            if (!_firstUnhandledRejectionHadTestListener) {
+                // A failed operation can leave a server listening, so the idle
+                // wait may never finish. Preserve its first rejection in the
+                // timeout's captured stderr as well as the final failure result.
+                var diagnostic = '<unprintable rejection>';
+                try {
+                    var stack = reason && reason.stack;
+                    diagnostic = stack ? String(stack) : String(reason);
+                } catch (_) {}
+                try {
+                    reportUnexpectedRejection(
+                        'Unhandled promise rejection before runtime idle:',
+                        diagnostic
+                    );
+                } catch (_) {}
+            }
         }
     }
 
@@ -253,24 +248,18 @@ function withSuppressedModuleRequireDiagnostics(fn) {
     return fn();
 }
 
-async function prepareStaticRegisteredLoaderGraph(testPath) {
+function registeredLoaderEntrySpecifier(testPath) {
     if (
         !Array.isArray(globalThis.__wasm_rquickjs_registered_loaders) ||
-        globalThis.__wasm_rquickjs_registered_loaders.length === 0 ||
-        typeof globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph !== 'function'
+        globalThis.__wasm_rquickjs_registered_loaders.length === 0
     ) {
         return testPath;
     }
     globalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
     var urlBuiltin = require('node:url');
     // Node converts the CLI entry path to a file URL before loader hooks see it.
-    var testUrl = urlBuiltin.pathToFileURL(testPath).href;
-    await globalThis.__wasm_rquickjs_prepare_static_registered_loader_graph(
-        testUrl,
-        testUrl,
-        import.meta.url,
-    );
-    return testUrl;
+    // The rewritten import() owns resolve/load and static graph preparation.
+    return urlBuiltin.pathToFileURL(testPath).href;
 }
 
 export const runTest = async (testPath) => {
@@ -330,7 +319,7 @@ export const runTest = async (testPath) => {
         restorePromise = installRejectionTracking();
 
         if (testPath.endsWith('.mjs')) {
-            var testSpecifier = await prepareStaticRegisteredLoaderGraph(testPath);
+            var testSpecifier = registeredLoaderEntrySpecifier(testPath);
             await import(testSpecifier);
         } else {
             // Use createRequire('/') so the test module gets parent: null,
@@ -347,7 +336,9 @@ export const runTest = async (testPath) => {
             await testModule._awaitPendingTests();
         }
         // Drain pending async operations (streams, timers, etc.)
-        await drainAsync();
+        // Check exit handlers and callback counts only after referenced work
+        // finishes, using the same completion boundary as component exports.
+        await awaitRuntimeIdle();
         // Run exit handlers after test completes normally
         if (globalThis.process && typeof globalThis.process._runExitHandlers === 'function') {
             globalThis.process._runExitHandlers(0);

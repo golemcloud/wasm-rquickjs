@@ -6,12 +6,11 @@
 use indexmap::IndexMap;
 use rquickjs::convert::Coerced;
 use rquickjs::function::This;
-use rquickjs::loader::{BuiltinResolver, FileResolver, Loader, Resolver};
+use rquickjs::loader::{BuiltinResolver, FileResolver, ImportAttributes, Loader, Resolver};
 use rquickjs::object::{Accessor, Property};
 use rquickjs::prelude::Opt;
 use rquickjs::{
     AsyncContext, AsyncRuntime, Ctx, Error, Exception, Function, IntoJs, Module, Object, Value,
-    async_with,
 };
 use serde::de::Error as SerdeError;
 use serde::{Deserialize, Deserializer};
@@ -412,7 +411,11 @@ async function __wasm_rquickjs_import_attr_dynamic_import_parsed(baseUrl, origin
       discardGeneratedRewriteToken();
       throw error;
     }
-    var validationPromise = Promise.resolve(importFn(cached.preparedKey)).then(function() {
+    // JSON data URLs authenticate each request before the engine cache lookup.
+    // Their previous request's one-use authorization has already been consumed.
+    var validationKey = generatedRewriteToken && key.startsWith('data:')
+      ? prepared : cached.preparedKey;
+    var validationPromise = Promise.resolve(importFn(validationKey)).then(function() {
       return cached.promise;
     });
     cached.parents[parentVisitKey] = validationPromise;
@@ -494,19 +497,37 @@ fn throw_native_coded_error<'js, T>(
     Err(ctx.throw(error_obj.into_value()))
 }
 
-/// Resolver that passes `data:` URLs through as-is.
+/// Resolve data URLs, authenticating JSON attributes before module-cache lookup.
 struct DataUrlResolver;
+
+fn authenticate_json_data_url<'a>(
+    ctx: &Ctx<'_>,
+    name: Cow<'a, str>,
+) -> rquickjs::Result<Cow<'a, str>> {
+    if determine_data_url_format(&name) == Some("json") {
+        // Every resolver handoff authenticates before QuickJS can return a
+        // cached module. Authorization is not part of the module's identity.
+        if import_attr_type_from_path(&name).as_deref() != Some("json") {
+            let (code, message) = validate_import_attrs_error(None, None, Some("json"), &name)
+                .expect("JSON requires a type attribute");
+            return throw_native_coded_error(ctx, &message, &code, true);
+        }
+        return Ok(Cow::Owned(strip_import_type_rewrite_token(&name)));
+    }
+    Ok(name)
+}
 
 impl Resolver for DataUrlResolver {
     fn resolve<'js>(
         &mut self,
-        _ctx: &Ctx<'js>,
+        ctx: &Ctx<'js>,
         _base: &str,
         name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<String> {
         let preprocessed = FileUrlResolver::preprocess_url_input(name);
         if preprocessed.starts_with("data:") {
-            Ok(preprocessed.into_owned())
+            authenticate_json_data_url(ctx, preprocessed).map(Cow::into_owned)
         } else {
             Err(Error::new_resolving(_base, name))
         }
@@ -523,6 +544,7 @@ impl Resolver for PublicBuiltinAliasResolver {
         _ctx: &Ctx<'js>,
         base: &str,
         name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<String> {
         if let Some(public_name) = name.strip_prefix(PUBLIC_BUILTIN_FACADE_PREFIX) {
             return crate::builtin::canonical_public_builtin_name(public_name)
@@ -554,6 +576,7 @@ impl Resolver for EmbeddedModuleResolver {
         _ctx: &Ctx<'js>,
         base: &str,
         name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<String> {
         if !PrivateBuiltinResolverGuard::is_private_builtin(base)
             && !is_reserved_embedded_module_name(name)
@@ -590,7 +613,13 @@ impl PrivateBuiltinResolverGuard {
 }
 
 impl Resolver for PrivateBuiltinResolverGuard {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         let registered_user_referrer = registered_file_url_from_id(ctx, base).is_some();
         if !Self::is_private_builtin(name)
             || (!Self::is_user_referrer(base) && !registered_user_referrer)
@@ -887,10 +916,9 @@ struct JsonModuleCjsCache<'a> {
 }
 
 fn json_import_attribute_missing_module_source(path: &str) -> String {
-    let escaped = DataUrlLoader::js_string_escape(path);
-    format!(
-        "await Promise.reject(Object.assign(new TypeError('Module \"{escaped}\" needs an import attribute of type: json'), {{code: 'ERR_IMPORT_ATTRIBUTE_MISSING'}}));\n"
-    )
+    let (code, message) = validate_import_attrs_error(None, None, Some("json"), path)
+        .expect("JSON requires a type attribute");
+    import_attr_error_module_source(&code, &message)
 }
 
 fn json_module_source(source: &str, cjs_cache: Option<JsonModuleCjsCache<'_>>) -> String {
@@ -920,6 +948,7 @@ impl Loader for DataUrlLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let path_without_suffix = module_filesystem_path(path);
         let rest = path_without_suffix
@@ -944,12 +973,6 @@ impl Loader for DataUrlLoader {
         // Extract base MIME type (before any parameters)
         let base_mime = metadata.split(';').next().unwrap_or(metadata).trim();
 
-        let json_import_attr = if base_mime == "application/json" {
-            import_attr_type_from_path(path)
-        } else {
-            None
-        };
-
         let source = if is_base64 {
             // Simple base64 decoder for ASCII content
             let decoded = base64_decode(raw_content).ok_or_else(|| Error::new_loading(path))?;
@@ -959,18 +982,13 @@ impl Loader for DataUrlLoader {
         };
 
         if base_mime == "application/json" {
-            if json_import_attr.as_deref() != Some("json") {
-                let module_source = json_import_attribute_missing_module_source(path);
-                return Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec());
-            }
+            // The successful resolver authenticated before cache lookup.
             let module_source = json_module_source(&source, None);
             Module::declare(ctx.clone(), path, module_source.as_bytes().to_vec())
         } else if base_mime == "text/javascript" || base_mime == "application/javascript" {
-            // Check for static import attributes (e.g., `import "spec" with { type: "json" }`)
-            // QuickJS doesn't support import attributes syntax, so we preprocess:
-            // - If `with { ... }` is found and attributes are invalid, generate an error module
-            // - If valid, strip the `with { ... }` clause
-            // - `assert { ... }` is left as-is (QuickJS will throw SyntaxError, as expected)
+            // Preprocessing validates attributes and authorizes each JSON
+            // request independently of the engine's module cache. Legacy
+            // `assert { ... }` remains a syntax error.
             let processed = process_static_import_attrs(&source, path);
             if let Some(error_source) =
                 esm_preflight_error_module_source(&processed.source, false, false)
@@ -1033,7 +1051,58 @@ const IMPORT_TYPE_QUERY_PREFIX: &str = "__wasm_rquickjs_import_type=";
 
 thread_local! {
     static IMPORT_ATTR_REWRITE_TOKENS: RefCell<HashMap<String, String>> = RefCell::new(HashMap::new());
+    static IMPORT_ATTR_REWRITE_CAPTURE: RefCell<Option<Vec<String>>> = const { RefCell::new(None) };
     static LOADER_SOURCE_URLS: RefCell<HashMap<String, LoaderSourceUrl>> = RefCell::new(HashMap::new());
+}
+
+#[derive(Default)]
+struct ImportAttrRewriteTokens(Vec<String>);
+
+impl Drop for ImportAttrRewriteTokens {
+    fn drop(&mut self) {
+        IMPORT_ATTR_REWRITE_TOKENS.with(|tokens| {
+            let mut tokens = tokens.borrow_mut();
+            for token in &self.0 {
+                tokens.remove(token);
+            }
+        });
+    }
+}
+
+struct ImportAttrRewriteCapture {
+    previous: Option<Vec<String>>,
+    active: bool,
+}
+
+impl ImportAttrRewriteCapture {
+    fn new() -> Self {
+        Self {
+            previous: IMPORT_ATTR_REWRITE_CAPTURE.with(|capture| capture.replace(Some(Vec::new()))),
+            active: true,
+        }
+    }
+
+    fn finish(&mut self) -> ImportAttrRewriteTokens {
+        self.active = false;
+        ImportAttrRewriteTokens(
+            IMPORT_ATTR_REWRITE_CAPTURE
+                .with(|capture| capture.replace(self.previous.take()))
+                .unwrap_or_default(),
+        )
+    }
+}
+
+impl Drop for ImportAttrRewriteCapture {
+    fn drop(&mut self) {
+        if self.active {
+            drop(self.finish());
+        }
+    }
+}
+
+#[cfg(feature = "test-observability")]
+pub(crate) fn import_attr_rewrite_token_count() -> usize {
+    IMPORT_ATTR_REWRITE_TOKENS.with(|tokens| tokens.borrow().len())
 }
 
 #[derive(Clone)]
@@ -1082,6 +1151,11 @@ fn register_import_attr_rewrite(token: &str, rewritten_specifier: &str) {
         tokens
             .borrow_mut()
             .insert(token.to_string(), rewritten_specifier.to_string());
+    });
+    IMPORT_ATTR_REWRITE_CAPTURE.with(|capture| {
+        if let Some(tokens) = capture.borrow_mut().as_mut() {
+            tokens.push(token.to_string());
+        }
     });
 }
 
@@ -1229,6 +1303,10 @@ fn read_closed_import_specifier_literal(
 struct ProcessedStaticImportAttrs {
     source: String,
     dynamic_import_binding_names: Option<(String, String)>,
+    // Keep this result alive through Module::declare, which synchronously
+    // resolves static requests even in compile-only mode. Failed parsing or
+    // resolution must release every unused authorization from this source.
+    _rewrite_tokens: ImportAttrRewriteTokens,
 }
 
 impl ProcessedStaticImportAttrs {
@@ -1236,6 +1314,7 @@ impl ProcessedStaticImportAttrs {
         Self {
             source,
             dynamic_import_binding_names: None,
+            _rewrite_tokens: ImportAttrRewriteTokens::default(),
         }
     }
 }
@@ -1245,6 +1324,25 @@ fn process_static_import_attrs(source: &str, module_path: &str) -> ProcessedStat
 }
 
 fn process_import_attrs(
+    source: &str,
+    module_path: &str,
+    inherited_dynamic_import_binding_names: Option<(String, String)>,
+    parent_filename_expression: &str,
+    parent_url_expression: &str,
+) -> ProcessedStaticImportAttrs {
+    let mut capture = ImportAttrRewriteCapture::new();
+    let mut processed = process_import_attrs_inner(
+        source,
+        module_path,
+        inherited_dynamic_import_binding_names,
+        parent_filename_expression,
+        parent_url_expression,
+    );
+    processed._rewrite_tokens = capture.finish();
+    processed
+}
+
+fn process_import_attrs_inner(
     source: &str,
     module_path: &str,
     inherited_dynamic_import_binding_names: Option<(String, String)>,
@@ -1457,6 +1555,7 @@ fn process_import_attrs(
 
     ProcessedStaticImportAttrs {
         source: result,
+        _rewrite_tokens: ImportAttrRewriteTokens::default(),
         dynamic_import_binding_names: rewrote_dynamic_import.then(|| {
             dynamic_import_binding_names.expect(
                 "dynamic import bindings must be initialized when a dynamic import was rewritten",
@@ -1811,7 +1910,9 @@ struct ImportAttrInfo {
 }
 
 fn append_import_type_query(specifier: &str, import_type: &str) -> String {
-    if let Some(rewritten) = existing_import_attr_rewrite(specifier, import_type) {
+    if !specifier.starts_with("data:")
+        && let Some(rewritten) = existing_import_attr_rewrite(specifier, import_type)
+    {
         return rewritten;
     }
 
@@ -2058,7 +2159,7 @@ fn validate_import_attrs_error(
     if format == Some("json") && type_value != Some("json") {
         return Some((
             "ERR_IMPORT_ATTRIBUTE_MISSING".to_string(),
-            format!("Module \"{specifier}\" needs an import attribute of type: json"),
+            format!("Module \"{specifier}\" needs an import attribute of \"type: json\""),
         ));
     }
 
@@ -3574,7 +3675,13 @@ impl FileUrlResolver {
 }
 
 impl Resolver for FileUrlResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         let registered_base = registered_file_url_from_id(ctx, base);
         let resolution_base = registered_base.as_ref().map_or_else(
             || base.to_string(),
@@ -3903,7 +4010,13 @@ fn register_loader_realm_file_url(
 }
 
 impl Resolver for RegisteredLoaderResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         if registered_file_url_from_id(ctx, name).is_some() {
             return Ok(name.to_string());
         }
@@ -3961,7 +4074,7 @@ impl Resolver for RegisteredLoaderResolver {
         match resolved {
             Some(resolved) if !resolved.is_empty() => {
                 transfer_import_type_rewrite_token(name, &resolved);
-                Ok(resolved)
+                authenticate_json_data_url(ctx, Cow::Owned(resolved)).map(Cow::into_owned)
             }
             _ => Err(Error::new_resolving(base, name)),
         }
@@ -3980,7 +4093,13 @@ impl Resolver for RegisteredLoaderResolver {
 struct RealmGuardResolver;
 
 impl Resolver for RealmGuardResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         if base != "<input>" {
             return Err(Error::new_resolving(base, name));
         }
@@ -4018,7 +4137,13 @@ impl Resolver for RealmGuardResolver {
 struct MockModuleResolver;
 
 impl Resolver for MockModuleResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         let globals = ctx.globals();
 
         let canonical_key_fn: Function = globals
@@ -4080,6 +4205,7 @@ impl Loader for MockModuleLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         if !path.starts_with("__wasm_rquickjs_mock__:") {
             return Err(Error::new_loading(path));
@@ -4135,7 +4261,13 @@ impl CjsEvalResolver {
 }
 
 impl Resolver for CjsEvalResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         if base != "<input>" {
             return Err(Error::new_resolving(base, name));
         }
@@ -4513,7 +4645,13 @@ impl NodeFileResolver {
 }
 
 impl Resolver for NodeFileResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         let registered_base = registered_file_url_from_id(ctx, base);
         let resolution_base = registered_base.as_ref().map_or_else(
             || base.to_string(),
@@ -4650,7 +4788,13 @@ struct NodeModuleErrorResolver;
 struct NodeBuiltinNamespaceGuard;
 
 impl Resolver for NodeBuiltinNamespaceGuard {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         if !name.starts_with("node:") {
             return Err(Error::new_resolving(base, name));
         }
@@ -4665,6 +4809,7 @@ impl Resolver for NodeModuleErrorResolver {
         ctx: &Ctx<'js>,
         _base: &str,
         name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<String> {
         discard_import_type_rewrite_token(name);
         let preprocessed = FileUrlResolver::preprocess_url_input(name);
@@ -7720,7 +7865,13 @@ fn import_meta_trailing_slash_package_has_exports(
 }
 
 impl Resolver for NodeModulesResolver {
-    fn resolve<'js>(&mut self, ctx: &Ctx<'js>, base: &str, name: &str) -> rquickjs::Result<String> {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
         let registered_base = registered_file_url_from_id(ctx, base);
         let loader_realm_param = registered_base
             .as_ref()
@@ -10438,6 +10589,7 @@ impl Resolver for LoaderCjsFacadeResolver {
         _ctx: &Ctx<'js>,
         _base: &str,
         name: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<String> {
         if name.starts_with(LOADER_CJS_FACADE_PREFIX) && self.0.contains(name) {
             Ok(name.to_string())
@@ -10452,6 +10604,7 @@ impl Loader for LoaderCjsFacadeLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         if !path.starts_with(LOADER_CJS_FACADE_PREFIX) {
             return Err(Error::new_loading(path));
@@ -10510,6 +10663,7 @@ impl Loader for CjsCompatLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let Some(target) = FileModuleLoadContext::for_module(ctx, path) else {
             return Err(Error::new_loading(path));
@@ -12536,10 +12690,6 @@ fn inject_module_source_prologue(
     }
 }
 
-fn virtual_builtin_module_source(source: &str) -> String {
-    inject_module_source_prologue(None, source, None)
-}
-
 #[derive(Default)]
 struct VirtualBuiltinModuleLoader {
     modules: HashMap<String, String>,
@@ -12557,13 +12707,20 @@ impl Loader for VirtualBuiltinModuleLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let Some(source) = self.modules.get(path) else {
             return Err(Error::new_loading(path));
         };
         let init =
             url_only_import_meta_init(format!("file:///__wasm_rquickjs_virtual__/{}.mjs", path));
-        declare_module_with_import_meta(ctx, path, source, &init)
+        let processed = process_static_import_attrs(source, path);
+        let injected = inject_module_source_prologue(
+            None,
+            &processed.source,
+            processed.dynamic_import_binding_names.as_ref(),
+        );
+        declare_module_with_import_meta(ctx, path, &injected, &init)
     }
 }
 
@@ -12603,17 +12760,15 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
     if !is_reserved_embedded_module_name(crate::JS_EXPORT_MODULE_NAME) {
         virtual_builtin_loader = virtual_builtin_loader.with_module(
             crate::JS_EXPORT_MODULE_NAME,
-            virtual_builtin_module_source(crate::js_export_module()),
+            crate::js_export_module().to_string(),
         );
     }
     for (name, get_module) in crate::JS_ADDITIONAL_MODULES.iter() {
         if is_reserved_embedded_module_name(name) {
             continue;
         }
-        virtual_builtin_loader = virtual_builtin_loader.with_module(
-            name.to_string(),
-            virtual_builtin_module_source(&(get_module)()),
-        );
+        virtual_builtin_loader =
+            virtual_builtin_loader.with_module(name.to_string(), (get_module)());
     }
 
     let loader = (
@@ -12630,13 +12785,14 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
 
     rt.set_loader(resolver, loader).await;
 
-    async_with!(ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
         let global = ctx.globals();
 
         ctx.eval::<(), _>(BUILTIN_FACADE_PRIMORDIALS_JS)
             .expect("Failed to initialize builtin facade primordials");
 
-        global.set("__wasm_rquickjs_mock_seq", 0i64)
+        global
+            .set("__wasm_rquickjs_mock_seq", 0i64)
             .expect("Failed to initialize mock sequence counter");
 
         set_non_replaceable_global(
@@ -12731,11 +12887,8 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
         set_non_replaceable_global(
             &global,
             "__wasm_rquickjs_extract_source_map_url",
-            Function::new(
-                ctx.clone(),
-                super::typescript::extract_source_map_url,
-            )
-            .expect("Failed to create source map URL extractor"),
+            Function::new(ctx.clone(), super::typescript::extract_source_map_url)
+                .expect("Failed to create source map URL extractor"),
         )
         .expect("Failed to initialize source map URL extractor");
 
@@ -13145,6 +13298,7 @@ impl Loader for ImportMetaLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let Some(target) = FileModuleLoadContext::for_module(ctx, path) else {
             return Err(Error::new_loading(path));
@@ -13193,6 +13347,7 @@ impl Loader for JsonFileLoader {
         &mut self,
         ctx: &Ctx<'js>,
         path: &str,
+        _attributes: Option<ImportAttributes<'js>>,
     ) -> rquickjs::Result<Module<'js, rquickjs::module::Declared>> {
         let Some(target) = FileModuleLoadContext::for_module(ctx, path) else {
             return Err(Error::new_loading(path));

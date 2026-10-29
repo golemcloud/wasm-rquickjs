@@ -1,9 +1,13 @@
 use crate::internal::{
     format_caught_error,
-    runtime_services::{RuntimeServices, run_process_turn_checkpoint},
+    runtime_services::{RuntimeServices, TimerServices, run_process_turn_checkpoint},
 };
 use rquickjs::function::Args;
 use rquickjs::{CatchResultExt, Ctx, Persistent, Value};
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use std::task::{Context, Poll};
 
 // Native functions for the timeout implementation
 #[rquickjs::module]
@@ -29,30 +33,47 @@ pub mod native_module {
             .last_abort_id
             .fetch_add(1, Ordering::Relaxed);
 
-        let (task, abort_handle) = abortable(super::scheduled_task(
-            ctx.clone(),
-            code_or_fn,
-            delay,
-            periodic,
-            args,
-            key,
-        ));
-        services
-            .timers
-            .abort_handles
-            .borrow_mut()
-            .insert(key, abort_handle);
+        let timers = services.timers.clone();
         drop(services);
-        let task_ctx = ctx.clone();
-        ctx.spawn(async move {
-            let _ = task.await;
-            // Clean up after the task completes naturally
-            let services = task_ctx
-                .userdata::<RuntimeServices>()
-                .expect("runtime services not initialized");
-            services.timers.abort_handles.borrow_mut().remove(&key);
-            services.timers.unrefed_timers.borrow_mut().remove(&key);
-        });
+        if timers.component_owned.get() {
+            let (task, handle) = abortable(super::scheduled_component_task(
+                code_or_fn, delay, periodic, args, key,
+            ));
+            timers.abort_handles.borrow_mut().insert(key, handle);
+            timers.active_tasks.borrow_mut().insert(key);
+            let task = super::ComponentTimerTask {
+                task: Some(Box::pin(async move {
+                    let _ = task.await;
+                })),
+                timers: timers.clone(),
+                key,
+            };
+            // A synchronous P3 resource call must return without starting clock imports.
+            // Transfer the already-rooted task when the JS scheduler is next driven; only
+            // the dispatcher lives there, so sleeping clocks still do not keep it busy.
+            ctx.spawn(async move {
+                crate::internal::spawn_component_timer(task);
+            });
+        } else {
+            // Owned execution jobs keep their own context and cancellation scope.
+            let (task, handle) = abortable(super::scheduled_task(
+                ctx.clone(),
+                code_or_fn,
+                delay,
+                periodic,
+                args,
+                key,
+            ));
+            timers.abort_handles.borrow_mut().insert(key, handle);
+            let task_timers = timers.clone();
+            ctx.spawn(async move {
+                let _ = task.await;
+                task_timers.abort_handles.borrow_mut().remove(&key);
+                task_timers.unrefed_timers.borrow_mut().remove(&key);
+                task_timers.changed();
+            });
+        }
+        timers.changed();
         key
     }
 
@@ -70,6 +91,8 @@ pub mod native_module {
         if let Some(handle) = abort_handles.remove(&timeout_id) {
             handle.abort();
         }
+        drop(abort_handles);
+        services.timers.changed();
     }
 
     #[rquickjs::function]
@@ -77,11 +100,19 @@ pub mod native_module {
         let services = ctx
             .userdata::<RuntimeServices>()
             .expect("runtime services not initialized");
-        services
+        if services
             .timers
-            .unrefed_timers
-            .borrow_mut()
-            .insert(timeout_id);
+            .abort_handles
+            .borrow()
+            .contains_key(&timeout_id)
+        {
+            services
+                .timers
+                .unrefed_timers
+                .borrow_mut()
+                .insert(timeout_id);
+            services.timers.changed();
+        }
     }
 
     #[rquickjs::function]
@@ -94,6 +125,7 @@ pub mod native_module {
             .unrefed_timers
             .borrow_mut()
             .remove(&timeout_id);
+        services.timers.changed();
     }
 
     #[rquickjs::function]
@@ -122,6 +154,53 @@ pub const WIRE_JS: &str = r#"
         globalThis.__wasm_rquickjs_ref_timer_count = __wasm_rquickjs_timeout.getRefTimerCount;
     "#;
 
+/// The task's JS roots must be released before completion is observable to a snapshot/export.
+struct ComponentTimerTask<F> {
+    task: Option<Pin<Box<F>>>,
+    timers: Rc<TimerServices>,
+    key: usize,
+}
+
+impl<F: Future<Output = ()>> Future for ComponentTimerTask<F> {
+    type Output = ();
+
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<()> {
+        self.get_mut()
+            .task
+            .as_mut()
+            .expect("timer task missing")
+            .as_mut()
+            .poll(cx)
+    }
+}
+
+impl<F> Drop for ComponentTimerTask<F> {
+    fn drop(&mut self) {
+        drop(self.task.take());
+        self.timers.abort_handles.borrow_mut().remove(&self.key);
+        self.timers.unrefed_timers.borrow_mut().remove(&self.key);
+        self.timers.active_tasks.borrow_mut().remove(&self.key);
+        self.timers.changed();
+    }
+}
+
+async fn scheduled_loop<F: Future<Output = bool>>(
+    delay: u32,
+    periodic: bool,
+    mut callback: impl FnMut() -> F,
+) {
+    loop {
+        #[cfg(feature = "p2")]
+        wstd::task::sleep(wstd::time::Duration::from_millis(delay as u64)).await;
+        #[cfg(feature = "p3")]
+        wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)).await;
+        let active = callback().await;
+        if !periodic || !active {
+            break;
+        }
+    }
+}
+
 async fn scheduled_task(
     ctx: Ctx<'_>,
     code_or_fn: Persistent<Value<'static>>,
@@ -130,45 +209,63 @@ async fn scheduled_task(
     args: Persistent<Vec<Value<'static>>>,
     timer_key: usize,
 ) {
-    #[cfg(feature = "p2")]
-    let duration = wstd::time::Duration::from_millis(delay as u64);
+    scheduled_loop(delay, periodic, || {
+        let ctx = ctx.clone();
+        let code_or_fn = code_or_fn.clone();
+        let args = args.clone();
+        async move { invoke_scheduled_task(ctx, code_or_fn, args, timer_key) }
+    })
+    .await;
+}
 
-    #[cfg(feature = "p3")]
-    let duration_ns = (delay as u64).saturating_mul(1_000_000);
-
-    loop {
-        #[cfg(feature = "p2")]
-        wstd::task::sleep(duration).await;
-
-        #[cfg(feature = "p3")]
-        wasip3::clocks::monotonic_clock::wait_for(duration_ns).await;
-
-        run_scheduled_task(ctx.clone(), code_or_fn.clone(), args.clone(), timer_key)
-            .catch(&ctx)
-            .unwrap_or_else(|e| {
-                eprintln!(
-                    "Timer callback error escaped JS uncaught handler: {}",
-                    format_caught_error(e)
-                )
-            });
-
-        if !periodic {
-            break;
+async fn scheduled_component_task(
+    code_or_fn: Persistent<Value<'static>>,
+    delay: u32,
+    periodic: bool,
+    args: Persistent<Vec<Value<'static>>>,
+    timer_key: usize,
+) {
+    scheduled_loop(delay, periodic, || {
+        let code_or_fn = code_or_fn.clone();
+        let args = args.clone();
+        async move {
+            let state = crate::internal::get_js_state();
+            state
+                .ctx
+                .with(|ctx| {
+                    let active = invoke_scheduled_task(ctx.clone(), code_or_fn, args, timer_key);
+                    ctx.userdata::<RuntimeServices>()
+                        .expect("runtime services not initialized")
+                        .timers
+                        .changed();
+                    active
+                })
+                .await
         }
+    })
+    .await;
+}
 
-        // Check if the timer was cancelled during the callback
-        let services = ctx
-            .userdata::<RuntimeServices>()
-            .expect("runtime services not initialized");
-        if !services
-            .timers
-            .abort_handles
-            .borrow()
-            .contains_key(&timer_key)
-        {
-            break;
-        }
-    }
+fn invoke_scheduled_task(
+    ctx: Ctx<'_>,
+    code_or_fn: Persistent<Value<'static>>,
+    args: Persistent<Vec<Value<'static>>>,
+    timer_key: usize,
+) -> bool {
+    run_scheduled_task(ctx.clone(), code_or_fn, args, timer_key)
+        .catch(&ctx)
+        .unwrap_or_else(|e| {
+            eprintln!(
+                "Timer callback error escaped JS uncaught handler: {}",
+                format_caught_error(e)
+            );
+        });
+    ctx.userdata::<RuntimeServices>()
+        .expect("runtime services not initialized")
+        .timers
+        .abort_handles
+        .borrow()
+        .contains_key(&timer_key)
 }
 
 fn run_scheduled_task(

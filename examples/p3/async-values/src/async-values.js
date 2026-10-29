@@ -38,6 +38,37 @@ export async function runStream() {
   return gen();
 }
 
+export async function runGcStream() {
+  async function* gen() {
+    const captured = { value: 42, native: globalThis.__wasm_rquickjs_new_gc_probe() };
+    try {
+      for (let n = 0; n < 3; n++) {
+        const before = globalThis.__wasm_rquickjs_gc_snapshot()[3];
+        for (let i = 0; i < 20000; i++) {
+          const cycle = { data: new Uint8Array(4096), native: globalThis.__wasm_rquickjs_new_gc_probe() };
+          cycle.self = cycle;
+        }
+        if (globalThis.__wasm_rquickjs_gc_snapshot()[3] <= before) throw new Error('GC pressure did not collect cycles');
+        await Promise.resolve();
+        yield captured.value + n;
+      }
+    } finally {
+      observer.cleanupComplete();
+    }
+  }
+  return gen();
+}
+
+export async function disposeWrappedResources() {
+  const first = await WrappedStream.wrap([]);
+  if (typeof first[Symbol.dispose] !== 'function') throw new Error('missing engine dispose symbol');
+  first[Symbol.dispose]();
+  {
+    using second = await WrappedStream.wrap([]);
+  }
+  return true;
+}
+
 export async function runSiblingStreams() {
   return [
     [1, 2],

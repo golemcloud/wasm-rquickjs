@@ -324,7 +324,7 @@ impl HttpRequest {
     }
 
     pub fn array_buffer_body(&mut self, body: ArrayBuffer<'_>) {
-        self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
+        self.body_bytes = Some(crate::wrappers::copy_array_buffer_bytes(&body).unwrap_or_default());
     }
 
     pub fn readable_stream_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<BodySink> {
@@ -344,7 +344,7 @@ impl HttpRequest {
     }
 
     pub fn uint8_array_body(&mut self, body: rquickjs::TypedArray<'_, u8>) {
-        self.body_bytes = Some(body.as_bytes().map(|b| b.to_vec()).unwrap_or_default());
+        self.body_bytes = Some(crate::wrappers::copy_typed_array_bytes(&body).unwrap_or_default());
     }
 
     pub fn add_header<'js>(
@@ -654,13 +654,13 @@ impl WrappedRequestBodyWriter {
         chunk: TypedArray<'_, u8>,
     ) -> rquickjs::Result<()> {
         if let Some(writer) = self.writer.as_mut() {
-            let bytes = chunk.as_bytes().ok_or_else(|| {
+            let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
                 Exception::throw_message(
                     &ctx,
                     "the UInt8Array passed to the HTTP request is detached",
                 )
             })?;
-            writer.write_body_chunk(bytes).await.map_err(|_| {
+            writer.write_body_chunk(&bytes).await.map_err(|_| {
                 Exception::throw_message(&ctx, "Failed to write HTTP request body chunk")
             })?;
             Ok(())
@@ -955,7 +955,7 @@ impl HttpResponse {
 
         Self {
             body_source: ResponseBodySource::Bytes(
-                data.as_bytes().map(|b| b.to_vec()).unwrap_or_default(),
+                crate::wrappers::copy_array_buffer_bytes(&data).unwrap_or_default(),
             ),
             headers,
             status: status_code,
@@ -1365,11 +1365,11 @@ impl BodySink {
         chunk: TypedArray<'_, u8>,
     ) -> rquickjs::Result<()> {
         let mut sender = self.sender.borrow_mut();
-        let bytes = chunk.as_bytes().ok_or_else(|| {
+        let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
             Exception::throw_message(&ctx, "the UInt8Array passed to the BodySink is detached")
         })?;
         sender
-            .send(bytes.to_vec())
+            .send(bytes)
             .await
             .map_err(|_| Exception::throw_message(&ctx, "Failed to send chunk to BodySink"))?;
         Ok(())

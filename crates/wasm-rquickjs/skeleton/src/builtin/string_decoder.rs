@@ -149,9 +149,9 @@ pub mod native_module {
     /// Takes a Uint8Array and (start, end) offsets.
     #[rquickjs::function]
     pub fn utf8_decode(bytes: TypedArray<'_, u8>, start: usize, end: usize) -> String {
-        let buf = bytes
-            .as_bytes()
-            .expect("Uint8Array passed to utf8_decode is detached");
+        // SAFETY: Decoding consumes the rooted input synchronously without JS re-entry.
+        let buf =
+            unsafe { bytes.as_bytes() }.expect("Uint8Array passed to utf8_decode is detached");
         let end = end.min(buf.len());
         let start = start.min(end);
         super::utf8_decode_v8(&buf[start..end])

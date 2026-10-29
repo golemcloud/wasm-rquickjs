@@ -7,6 +7,7 @@ package test:async-values-import;
 //   * `consume-future` / `consume-stream` receive a future/stream from JS: a JS `Promise` /
 //     async-iterable is lowered into a component future/stream the host reads.
 interface host {
+  echo-bytes: async func(bytes: list<u8>) -> list<u8>;
   make-future: func(x: u32) -> future<u32>;
   make-stream: func(n: u32) -> stream<u8>;
   consume-future: async func(f: future<u32>) -> u32;
@@ -24,6 +25,7 @@ world async-values-import {
   import host;
 
   export run: async func() -> string;
+  export run-buffer-transfer: async func() -> bool;
   export run-promise-stream-items: async func() -> string;
   export run-stored-future: async func() -> string;
   export run-stream-readable-drop: async func() -> string;

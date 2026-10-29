@@ -362,6 +362,129 @@ export async function httpSelfConnectPost() {
     });
 }
 
+export async function httpRequestBodyCompletion() {
+    const upload = (chunks, explicitLength) => new Promise((resolve) => {
+        const expectedBody = Buffer.concat(chunks);
+        let request;
+        let settled = false;
+        let receivedBody;
+        let writeCallbacks = 0;
+        let endCallbacks = 0;
+        let finishes = 0;
+        let requestErrors = 0;
+        const server = http.createServer((incoming, response) => {
+            const received = [];
+            incoming.on('data', (chunk) => received.push(chunk));
+            incoming.on('error', () => complete(false));
+            incoming.on('end', () => {
+                receivedBody = Buffer.concat(received);
+                response.end('ok');
+            });
+        });
+        const complete = (valid) => {
+            if (settled) return;
+            settled = true;
+            if (!valid) {
+                console.log(JSON.stringify({
+                    explicitLength, bytes: expectedBody.length,
+                    receivedBytes: receivedBody && receivedBody.length,
+                    writeCallbacks, endCallbacks, finishes, requestErrors,
+                }));
+            }
+            if (request) request.destroy();
+            server.closeAllConnections();
+            server.close(() => resolve(valid));
+        };
+        server.on('error', () => complete(false));
+        server.listen(0, () => {
+            const headers = { Connection: 'close' };
+            if (explicitLength) headers['Content-Length'] = expectedBody.length;
+            request = http.request({
+                port: server.address().port, method: 'POST', headers, agent: false,
+            }, (response) => {
+                let body = '';
+                response.setEncoding('utf8');
+                response.on('data', (chunk) => { body += chunk; });
+                response.on('error', () => complete(false));
+                response.on('end', () => complete(
+                    response.statusCode === 200 && body === 'ok' &&
+                    receivedBody && receivedBody.equals(expectedBody) &&
+                    writeCallbacks === chunks.length && endCallbacks === 1 &&
+                    finishes === 1 && requestErrors === 0
+                ));
+            });
+            request.on('error', () => {
+                requestErrors++;
+                complete(false);
+            });
+            request.on('finish', () => finishes++);
+            for (const chunk of chunks) {
+                request.write(chunk, (error) => {
+                    writeCallbacks++;
+                    if (error) complete(false);
+                });
+            }
+            request.end((error) => {
+                endCallbacks++;
+                if (error) complete(false);
+            });
+        });
+    });
+
+    for (const [chunks, explicitLength] of [
+        [[Buffer.from('12345')], true],
+        [[Buffer.from('12'), Buffer.from('345')], true],
+        [[Buffer.from('12'), Buffer.from('345')], false],
+        [[], true],
+    ]) {
+        if (!await upload(chunks, explicitLength)) return false;
+    }
+
+    // No HTTP response exists on this path: accepting a complete write's
+    // terminal closure must not turn a real connection failure into success.
+    const rejectedUpload = (destroyWithError) => new Promise((resolve) => {
+        const sockets = new Set();
+        const cleanupError = new Error('upload cleanup');
+        let requestErrors = 0;
+        const errors = [];
+        let responses = 0;
+        const server = net.createServer((socket) => {
+            sockets.add(socket);
+            socket.on('close', () => sockets.delete(socket));
+            socket.on('error', () => {});
+            socket.once('data', () => socket.destroy());
+        });
+        server.listen(0, () => {
+            const request = http.request({
+                port: server.address().port,
+                method: 'POST',
+                headers: { 'Content-Length': 8 * 1024 * 1024 },
+                agent: false,
+            }, (response) => {
+                responses++;
+                response.resume();
+            });
+            request.on('error', (error) => {
+                requestErrors++;
+                errors.push({ code: error.code, message: error.message });
+                request.destroy(destroyWithError ? cleanupError : undefined);
+            });
+            request.on('close', () => {
+                for (const socket of sockets) socket.destroy();
+                server.close(() => {
+                    const valid = requestErrors === 1 && responses === 0;
+                    if (!valid) console.log(JSON.stringify({
+                        destroyWithError, requestErrors, responses, errors,
+                    }));
+                    resolve(valid);
+                });
+            });
+            request.end(Buffer.alloc(8 * 1024 * 1024, 'x'));
+        });
+    });
+    return await rejectedUpload(false) && await rejectedUpload(true);
+}
+
 export async function httpAbortIsolation() {
     return new Promise((resolve) => {
         const server = http.createServer((req, res) => {
@@ -687,6 +810,59 @@ export async function httpResponseRepeatedEndCallbacks() {
         destroyedErrorCount !== 0
     ) {
         return false;
+    }
+
+    // Hold public socket write completions until destroy() has begun, before
+    // its asynchronous close notification. Socket errors must still reach the
+    // public write callback without becoming a second response error.
+    for (const withError of [false, true]) {
+        const socket = new net.Socket();
+        const completions = [];
+        const expectedError = Object.assign(new Error('cancelled socket write'), {
+            code: 'EPIPE',
+        });
+        let socketErrorCount = 0;
+        let socketError;
+        let socketCloseCount = 0;
+        let responseErrorCount = 0;
+        let cancelledFinishCount = 0;
+        let endCallbackCount = 0;
+        let writeCallbackCount = 0;
+        let writeCallbackError;
+        socket.on('error', (error) => {
+            socketErrorCount++;
+            socketError = error;
+        });
+        socket.on('close', () => socketCloseCount++);
+        socket.write = (_data, encoding, callback) => {
+            completions.push(typeof encoding === 'function' ? encoding : callback);
+            return false;
+        };
+        const response = new http.ServerResponse(request);
+        response.on('error', () => responseErrorCount++);
+        response.on('finish', () => cancelledFinishCount++);
+        response.assignSocket(socket);
+        response.write('prefix', (error) => {
+            writeCallbackCount++;
+            writeCallbackError = error;
+        });
+        response.end('body', () => endCallbackCount++);
+        socket.destroy(withError ? expectedError : undefined);
+        for (const completion of completions) {
+            if (typeof completion === 'function') completion(expectedError);
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+        if (responseErrorCount !== 0 ||
+            cancelledFinishCount !== 1 || endCallbackCount !== 1 ||
+            writeCallbackCount !== 1 || writeCallbackError !== expectedError ||
+            socketCloseCount !== 1 || socketErrorCount !== Number(withError) ||
+            (withError && socketError !== expectedError)) {
+            console.log(JSON.stringify({
+                withError, responseErrorCount, cancelledFinishCount,
+                endCallbackCount, writeCallbackCount, socketCloseCount, socketErrorCount,
+            }));
+            return false;
+        }
     }
     return true;
 }

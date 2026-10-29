@@ -1,16 +1,17 @@
 use futures::future::AbortHandle;
-use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value, async_with,
-};
+use rquickjs::{AsyncContext, AsyncRuntime, CatchResultExt, Function, JsLifetime, Module, Value};
 use std::cell::{Cell, RefCell};
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::collections::BTreeMap;
 use std::collections::{HashMap, HashSet};
+use std::future::Future;
 use std::io::Write;
 use std::num::NonZeroUsize;
 use std::path::{Component, Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
+use std::sync::{Arc, Mutex, Weak};
+use std::task::{Context, Wake, Waker};
 #[cfg(feature = "typescript-compiler-profiling")]
 use std::time::{Duration, Instant};
 
@@ -107,14 +108,13 @@ impl ExecutionProfile {
 /// `JsState`, so additional runtimes can use built-ins without reaching into
 /// the main component runtime.
 pub(crate) struct RuntimeServices {
-    pub(crate) timers: TimerServices,
+    pub(crate) timers: Rc<TimerServices>,
     pub(crate) node_package_deprecation_warnings: RefCell<HashSet<String>>,
     pub(crate) package_json_cache: super::module_loading::PackageJsonCache,
     pub(crate) cjs_module_probe_session: super::module_loading::CjsModuleProbeSession,
     pub(crate) cjs_loader_realpath_cache: RefCell<HashMap<String, String>>,
     pub(crate) esm_loader_realpath_cache: RefCell<HashMap<String, String>>,
-    pub(crate) registered_file_urls:
-        RefCell<super::module_loading::RegisteredFileUrlRegistry>,
+    pub(crate) registered_file_urls: RefCell<super::module_loading::RegisteredFileUrlRegistry>,
     #[cfg(feature = "test-observability")]
     loader_realpath_cache_hit_count: Cell<u64>,
     #[cfg(feature = "test-observability")]
@@ -139,7 +139,7 @@ pub(crate) struct RuntimeServices {
 impl Default for RuntimeServices {
     fn default() -> Self {
         Self {
-            timers: TimerServices::default(),
+            timers: Rc::default(),
             node_package_deprecation_warnings: RefCell::default(),
             package_json_cache: Default::default(),
             cjs_module_probe_session: Default::default(),
@@ -687,14 +687,16 @@ impl OwnedJsRuntime {
         // linear memory remains the outer bound, so do not impose a smaller
         // per-runtime ceiling on execution jobs.
         rt.set_memory_limit(0).await;
-        rt.set_gc_threshold(256 * 1024 * 1024).await;
+        // Bound bootstrap garbage before the first automatic collection. The
+        // engine subsequently adapts this threshold to the retained live heap.
+        rt.set_gc_threshold(32 * 1024 * 1024).await;
         let ctx = AsyncContext::full(&rt)
             .await
             .expect("Failed to create AsyncContext");
 
         #[cfg(feature = "typescript-compiler-profiling")]
         let stored_profile = profile.clone();
-        async_with!(ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&ctx, async |ctx| {
             let services = RuntimeServices::default();
             #[cfg(feature = "typescript-compiler-profiling")]
             let services = {
@@ -706,6 +708,9 @@ impl OwnedJsRuntime {
                 .expect("Failed to initialize runtime services");
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
+            #[cfg(feature = "test-observability")]
+            crate::builtin::install_gc_observability(&ctx)
+                .expect("Failed to initialize GC observability");
         })
         .await;
 
@@ -754,7 +759,7 @@ impl OwnedJsRuntime {
         env: HashMap<String, String>,
         cwd: PathBuf,
     ) -> Result<(), String> {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .process
@@ -765,7 +770,7 @@ impl OwnedJsRuntime {
     }
 
     pub(crate) async fn set_output_sink(&self, output: Rc<dyn RuntimeOutputSink>) {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .set_output_sink(output);
@@ -774,7 +779,7 @@ impl OwnedJsRuntime {
     }
 
     pub(crate) async fn disable_execution(&self) {
-        async_with!(self.ctx => |ctx| {
+        rquickjs::AsyncContext::async_with(&self.ctx, async |ctx| {
             ctx.userdata::<RuntimeServices>()
                 .expect("runtime services not initialized")
                 .execution_enabled
@@ -785,16 +790,14 @@ impl OwnedJsRuntime {
 }
 
 pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(), String> {
-    async_with!(ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
         Module::evaluate(
             ctx.clone(),
             "dispose",
             r#"
-            const dispose = Symbol.for("dispose");
-            globalThis.__wasm_rquickjs_symbol_dispose = dispose;
-            Symbol.dispose = dispose;
-            const asyncDispose = Symbol.for("asyncDispose");
-            Symbol.asyncDispose = asyncDispose;
+            // QuickJS provides the well-known disposal symbols. Generated WIT
+            // resources and JavaScript must use the same engine-owned symbol.
+            globalThis.__wasm_rquickjs_symbol_dispose = Symbol.dispose;
             "#,
         )
         .catch(&ctx)
@@ -833,27 +836,23 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
             return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
         };
     "#);
-    async_with!(ctx => |ctx| {
-        Module::evaluate(
-            ctx.clone(),
-            "__wasm_rquickjs_init_wiring",
-            source,
-        )
-        .catch(&ctx)
-        .map_err(|error| {
-            format!(
-                "Failed to evaluate built-in wiring:\n{}",
-                super::format_caught_error(error)
-            )
-        })?
-        .finish::<()>()
-        .catch(&ctx)
-        .map_err(|error| {
-            format!(
-                "Failed to finish built-in wiring:\n{}",
-                super::format_caught_error(error)
-            )
-        })?;
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
+        Module::evaluate(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
+            .catch(&ctx)
+            .map_err(|error| {
+                format!(
+                    "Failed to evaluate built-in wiring:\n{}",
+                    super::format_caught_error(error)
+                )
+            })?
+            .finish::<()>()
+            .catch(&ctx)
+            .map_err(|error| {
+                format!(
+                    "Failed to finish built-in wiring:\n{}",
+                    super::format_caught_error(error)
+                )
+            })?;
         Ok::<(), String>(())
     })
     .await
@@ -863,7 +862,7 @@ pub(crate) async fn initialize_exported_resource_id_map(
     ctx: &AsyncContext,
     map_name: &str,
 ) -> Result<(), String> {
-    async_with!(ctx => |ctx| {
+    rquickjs::AsyncContext::async_with(ctx, async |ctx| {
         Module::evaluate(
             ctx.clone(),
             "__wasm_rquickjs_init_resource_ids",
@@ -901,12 +900,159 @@ unsafe impl<'js> JsLifetime<'js> for RuntimeServices {
 
 #[derive(Default)]
 pub(crate) struct TimerServices {
+    pub(crate) wake_hub: Arc<ComponentWakeHub>,
+    pub(crate) component_owned: Cell<bool>,
     pub(crate) abort_handles: RefCell<HashMap<usize, AbortHandle>>,
     pub(crate) last_abort_id: AtomicUsize,
     pub(crate) unrefed_timers: RefCell<HashSet<usize>>,
+    pub(crate) active_tasks: RefCell<HashSet<usize>>,
+    change_waiters: RefCell<Vec<futures::channel::oneshot::Sender<()>>>,
+}
+
+/// QuickJS's scheduler keeps one waker. All component drivers use this hub so a short-lived
+/// context poll cannot replace the wake target of another driver or idle observer.
+#[derive(Default)]
+pub(crate) struct ComponentWakeHub {
+    listeners: Mutex<Vec<Weak<Mutex<Option<Waker>>>>>,
+    polling: AtomicUsize,
+}
+
+struct ComponentPollGuard<'a>(&'a AtomicUsize);
+
+impl Drop for ComponentPollGuard<'_> {
+    fn drop(&mut self) {
+        self.0.fetch_sub(1, std::sync::atomic::Ordering::Relaxed);
+    }
+}
+
+impl Wake for ComponentWakeHub {
+    fn wake(self: Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &Arc<Self>) {
+        let mut listeners = self.listeners.lock().expect("component wake hub poisoned");
+        let mut wakes = Vec::new();
+        listeners.retain(|listener| {
+            let Some(listener) = listener.upgrade() else {
+                return false;
+            };
+            if let Some(waker) = listener
+                .lock()
+                .expect("component wake listener poisoned")
+                .as_ref()
+            {
+                wakes.push(waker.clone());
+            }
+            true
+        });
+        drop(listeners);
+        for waker in wakes {
+            waker.wake();
+        }
+    }
+}
+
+pub(crate) async fn with_component_wake<F: Future>(
+    future: F,
+    hub: Arc<ComponentWakeHub>,
+) -> F::Output {
+    let mut future = std::pin::pin!(future);
+    let hub_waker = Waker::from(hub.clone());
+    let listener = Arc::new(Mutex::new(None));
+    let mut registered = false;
+    futures::future::poll_fn(|cx| {
+        // A QuickJS task has its own ready-queue waker. Preserve it when a nested driver
+        // is polled by this runtime, rather than subscribing that queue back to its hub.
+        if hub.polling.load(std::sync::atomic::Ordering::Relaxed) != 0 {
+            *listener.lock().expect("component wake listener poisoned") = None;
+            return future.as_mut().poll(cx);
+        }
+        if !cx.waker().will_wake(&hub_waker) {
+            *listener.lock().expect("component wake listener poisoned") = Some(cx.waker().clone());
+            if !registered {
+                let mut listeners = hub.listeners.lock().expect("component wake hub poisoned");
+                listeners.retain(|listener| listener.strong_count() != 0);
+                listeners.push(Arc::downgrade(&listener));
+                registered = true;
+            }
+        } else {
+            // A nested driver is already running through this hub; never subscribe the hub
+            // to itself, which would turn one wake into recursive notification.
+            *listener.lock().expect("component wake listener poisoned") = None;
+        }
+        hub.polling
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        let _guard = ComponentPollGuard(&hub.polling);
+        future.as_mut().poll(&mut Context::from_waker(&hub_waker))
+    })
+    .await
+}
+
+pub(crate) async fn with_component_context<F, R>(ctx: &AsyncContext, f: F) -> R
+where
+    F: for<'js> AsyncFnOnce(rquickjs::Ctx<'js>) -> R + rquickjs::markers::ParallelSend,
+    R: rquickjs::markers::ParallelSend + 'static,
+{
+    let hub = ctx
+        .with(|ctx| {
+            ctx.userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .timers
+                .wake_hub
+                .clone()
+        })
+        .await;
+    with_component_wake(
+        AsyncContext::async_with(ctx, async move |ctx| {
+            let mut future = std::pin::pin!(f(ctx.clone()));
+            futures::future::poll_fn(|cx| {
+                // Let the caller attach Promise handlers and capture immediate errors
+                // before ending its JS turn. Otherwise WithFuture drains Promise jobs
+                // ahead of nextTick and leaves exceptions from failed jobs pending.
+                let result = future.as_mut().poll(cx);
+                if result.is_pending()
+                    && run_process_turn_checkpoint(&ctx).unwrap_or_else(|error| {
+                        panic!("failed to run process turn checkpoint: {error}")
+                    })
+                {
+                    cx.waker().wake_by_ref();
+                }
+                result
+            })
+            .await
+        }),
+        hub,
+    )
+    .await
 }
 
 impl TimerServices {
+    pub(crate) fn changed(&self) {
+        let waiters = std::mem::take(&mut *self.change_waiters.borrow_mut());
+        for waiter in waiters {
+            let _ = waiter.send(());
+        }
+        // Callback progress can complete ordinary QuickJS work while another driver owns
+        // its scheduler waker. Sleeping clocks do not themselves subscribe to this hub.
+        self.wake_hub.wake_by_ref();
+    }
+
+    fn wait_for_change(&self) -> futures::channel::oneshot::Receiver<()> {
+        let (sender, receiver) = futures::channel::oneshot::channel();
+        let mut waiters = self.change_waiters.borrow_mut();
+        waiters.retain(|waiter| !waiter.is_canceled());
+        waiters.push(sender);
+        receiver
+    }
+
+    fn referenced_count(&self) -> usize {
+        self.abort_handles
+            .borrow()
+            .len()
+            .saturating_sub(self.unrefed_timers.borrow().len())
+    }
+
     pub(crate) fn abort_unrefed(&self) {
         let unrefed = self.unrefed_timers.borrow().clone();
         let mut abort_handles = self.abort_handles.borrow_mut();
@@ -920,6 +1066,43 @@ impl TimerServices {
     }
 
     pub(crate) fn is_empty(&self) -> bool {
-        self.abort_handles.borrow().is_empty() && self.unrefed_timers.borrow().is_empty()
+        self.abort_handles.borrow().is_empty()
+            && self.unrefed_timers.borrow().is_empty()
+            && self.active_tasks.borrow().is_empty()
+    }
+}
+
+/// Timer clock waits live outside the component's QuickJS scheduler. Consequently its idle
+/// probe describes ordinary asynchronous work, including referenced TCP accept/read tasks.
+/// Drop a pending probe after each poll: rquickjs otherwise holds its runtime lock while idle
+/// waits, preventing an external timer callback from entering the context to finish that work.
+pub(crate) async fn idle_component_runtime(rt: &AsyncRuntime, ctx: &AsyncContext) {
+    let timers = AsyncContext::async_with(ctx, async |ctx| {
+        ctx.userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .timers
+            .clone()
+    })
+    .await;
+    loop {
+        with_component_wake(
+            futures::future::poll_fn(|cx| {
+                let mut idle = std::pin::pin!(rt.idle());
+                idle.as_mut().poll(cx)
+            }),
+            timers.wake_hub.clone(),
+        )
+        .await;
+
+        // No await or JS call may separate this snapshot from the return/registration below.
+        // A timer callback cannot interleave while this single-threaded component poll runs.
+        if timers.referenced_count() == 0 {
+            timers.abort_unrefed();
+        }
+        if timers.active_tasks.borrow().is_empty() {
+            return;
+        }
+        let changed = timers.wait_for_change();
+        let _ = changed.await;
     }
 }

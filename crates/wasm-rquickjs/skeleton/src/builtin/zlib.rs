@@ -1127,7 +1127,8 @@ pub mod native_module {
         level: i32,
         window_bits: i32,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         super::zlib_compress_sync_impl(input, level, window_bits)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1140,7 +1141,8 @@ pub mod native_module {
         window_bits: i32,
         finish_flush: i32,
     ) -> rquickjs::Result<DecompressOutcome<'js>> {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         match super::zlib_decompress_sync_impl(input, window_bits, finish_flush) {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
             Err(super::SyncDecompressError::Buffer) => {
@@ -1161,7 +1163,8 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         params_json: String,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         super::brotli_compress_sync_impl(input, &params_json)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1173,7 +1176,8 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         finish_flush: u8,
     ) -> rquickjs::Result<DecompressOutcome<'js>> {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         match super::brotli_decompress_sync_impl(input, finish_flush) {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
             Err(super::SyncDecompressError::Buffer) => {
@@ -1190,7 +1194,8 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn crc32_compute(data: TypedArray<'_, u8>, initial: u32) -> u32 {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         super::crc32_compute_impl(input, initial)
     }
 
@@ -1214,7 +1219,8 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         flush: i32,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         super::zlib_stream_push_impl(id, input, flush)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()
@@ -1254,7 +1260,8 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         flush: u8,
     ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        let input = data.as_bytes().unwrap_or_default();
+        // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
+        let input = unsafe { data.as_bytes() }.unwrap_or_default();
         super::brotli_stream_push_impl(id, input, flush)
             .map(|bytes| TypedArray::new(ctx, bytes))
             .transpose()

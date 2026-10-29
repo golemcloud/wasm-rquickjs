@@ -5,6 +5,19 @@
 Command line tool and library to generate a Rust crate wrapping JavaScript code into a WebAssembly Component using the
 QuickJS engine.
 
+Generated components use QuickJS-ng 0.16.2 through rquickjs 0.14.0, including
+Unicode `v`-flag regular expression sets, intersections and subtraction.
+
+The engine automatically collects unreachable reference cycles. Each runtime starts
+with a 32 MiB GC threshold, which the engine then adapts to its retained heap.
+Collection makes freed space reusable; WebAssembly linear memory keeps its high-water
+size. Explicit `gc()` remains optional and schedules collection after the current
+JavaScript execution completes.
+
+Disposal uses the engine's well-known `Symbol.dispose` and `Symbol.asyncDispose`,
+including for generated WIT resources. These symbols are not in the global symbol
+registry, unlike Node.js 22.14. Their properties are read-only in both runtimes.
+
 ### Comparison with ComponentizeJS
 
 [ComponentizeJS](https://github.com/bytecodealliance/ComponentizeJS) achieves the same goal of wrapping JavaScript code
@@ -625,6 +638,8 @@ UDP datagram sockets built on WASI sockets.
 <summary><strong><code>node:diagnostics_channel</code></strong></summary>
 
 Publish/subscribe diagnostic messaging and tracing.
+
+Subscriber and store-transform errors are delivered through `uncaughtException` on the next tick, without interrupting other subscribers.
 
 - `channel(name)`, `subscribe(name, onMessage)`, `unsubscribe(name, onMessage)`, `hasSubscribers(name)`, `tracingChannel(name)`
 - `Channel` — `subscribe`, `unsubscribe`, `publish`, `bindStore`, `unbindStore`, `runStores`, `hasSubscribers`, `name`
