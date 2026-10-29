@@ -643,10 +643,8 @@ impl TcpSocket {
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
         let write_started = Instant::now();
-        let data = data
-            .as_bytes()
-            .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
-            .to_vec();
+        let data = crate::wrappers::copy_typed_array_bytes(&data)
+            .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?;
         let start_gen = {
             let inner = self.inner.borrow();
             if inner.closed {
@@ -1412,10 +1410,8 @@ impl TcpSocket {
     ) -> rquickjs::Result<u32> {
         #[cfg(feature = "net-write-profiling")]
         let write_started = Instant::now();
-        let data = data
-            .as_bytes()
-            .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?
-            .to_vec();
+        let data = crate::wrappers::copy_typed_array_bytes(&data)
+            .ok_or_else(|| Exception::throw_message(&ctx, "write buffer is detached"))?;
         let total = data.len();
         let (_keepalive, mut writer, mut cancel_rx) = {
             let mut inner = self.inner.borrow_mut();

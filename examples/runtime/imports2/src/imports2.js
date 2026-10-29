@@ -15,20 +15,24 @@ export const test = async (input) => {
     const dump2 = await iface.dump(undefined);
     console.log(`Dump 2: ${dump2}`);
 
-    let merged = iface.Hello.merge(hello, world);
+    using merged = iface.Hello.merge(hello, world);
 
     const dump3 = await iface.dumpAll([merged]);
     console.log(`Dump 3: ${dump3}`);
 
     const result = await merged.getName();
 
-    merged[Symbol.dispose]();
-
     return result;
 };
 
 
 export const testStaticCreate = (input) => {
+    for (const name of ['create', 'compare', 'merge']) {
+        const descriptor = Object.getOwnPropertyDescriptor(iface.HelloWithStaticCreate, name);
+        if (!descriptor || descriptor.enumerable || typeof descriptor.value !== 'function') {
+            throw new Error(`Unexpected static method descriptor for ${name}`);
+        }
+    }
     // NOTE: we cannot implement the constructor in js properly,
     //       so we just check for the existence of functions
     console.log(iface.HelloWithStaticCreate);

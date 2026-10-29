@@ -20,6 +20,8 @@ pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
+#[cfg(feature = "test-observability")]
+pub(crate) use gc::install_observability as install_gc_observability;
 mod shared_response_body;
 
 #[cfg(feature = "fetch")]

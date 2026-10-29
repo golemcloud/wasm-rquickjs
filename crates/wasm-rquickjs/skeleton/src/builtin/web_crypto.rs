@@ -5402,7 +5402,7 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn hash_update(id: u32, data: TypedArray<'_, u8>) -> bool {
         if let Some(raw) = data.as_raw() {
-            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            let slice = unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) };
             super::hash_update_impl(id, slice)
         } else {
             false
@@ -5429,7 +5429,7 @@ pub mod native_module {
         let algo = algorithm.to_lowercase();
         let mut hasher = super::create_hasher(&algo)?;
         if let Some(raw) = data.as_raw() {
-            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            let slice = unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) };
             hasher.update(slice);
         }
         Some(hasher.finalize())
@@ -5438,7 +5438,7 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn hmac_init(algorithm: String, key: TypedArray<'_, u8>) -> Option<u32> {
         if let Some(raw) = key.as_raw() {
-            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            let slice = unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) };
             super::hmac_init_impl(&algorithm, slice)
         } else {
             None
@@ -5448,7 +5448,7 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn hmac_update(id: u32, data: TypedArray<'_, u8>) -> bool {
         if let Some(raw) = data.as_raw() {
-            let slice = unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) };
+            let slice = unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) };
             super::hmac_update_impl(id, slice)
         } else {
             false
@@ -5501,11 +5501,13 @@ pub mod native_module {
     pub fn timing_safe_equal(a: TypedArray<'_, u8>, b: TypedArray<'_, u8>) -> Option<bool> {
         let a_raw = a.as_raw()?;
         let b_raw = b.as_raw()?;
-        if a_raw.len != b_raw.len {
+        if a_raw.len() != b_raw.len() {
             return None;
         }
-        let a_slice = unsafe { std::slice::from_raw_parts(a_raw.ptr.as_ptr(), a_raw.len) };
-        let b_slice = unsafe { std::slice::from_raw_parts(b_raw.ptr.as_ptr(), b_raw.len) };
+        let a_slice =
+            unsafe { std::slice::from_raw_parts(a_raw.cast::<u8>().as_ptr(), a_raw.len()) };
+        let b_slice =
+            unsafe { std::slice::from_raw_parts(b_raw.cast::<u8>().as_ptr(), b_raw.len()) };
         use subtle::ConstantTimeEq;
         Some(a_slice.ct_eq(b_slice).into())
     }
@@ -5514,7 +5516,7 @@ pub mod native_module {
     pub fn certificate_verify_spkac(spkac: TypedArray<'_, u8>) -> Option<bool> {
         let slice = spkac
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::certificate_verify_spkac_impl(slice)
     }
@@ -5523,7 +5525,7 @@ pub mod native_module {
     pub fn certificate_export_public_key(spkac: TypedArray<'_, u8>) -> Option<Vec<u8>> {
         let slice = spkac
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::certificate_export_public_key_impl(slice)
     }
@@ -5532,7 +5534,7 @@ pub mod native_module {
     pub fn certificate_export_challenge(spkac: TypedArray<'_, u8>) -> Option<Vec<u8>> {
         let slice = spkac
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::certificate_export_challenge_impl(slice)
     }
@@ -5592,11 +5594,11 @@ pub mod native_module {
     ) -> Option<Vec<u8>> {
         let password_slice = password
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         let salt_slice = salt
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::pbkdf2_derive_impl(&algorithm, password_slice, salt_slice, iterations, keylen)
     }
@@ -5611,15 +5613,15 @@ pub mod native_module {
     ) -> Option<Vec<u8>> {
         let ikm_slice = ikm
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         let salt_slice = salt
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         let info_slice = info
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::hkdf_derive_impl(&algorithm, ikm_slice, salt_slice, info_slice, keylen)
     }
@@ -5635,11 +5637,11 @@ pub mod native_module {
     ) -> Option<Vec<u8>> {
         let password_slice = password
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         let salt_slice = salt
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::scrypt_derive_impl(password_slice, salt_slice, n, r, p, keylen)
     }
@@ -5653,11 +5655,11 @@ pub mod native_module {
     ) -> Option<u32> {
         let key_slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         let iv_slice = iv
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::cipher_init_impl(&algorithm.to_lowercase(), key_slice, iv_slice, decrypt)
     }
@@ -5666,7 +5668,7 @@ pub mod native_module {
     pub fn cipher_update(id: u32, data: TypedArray<'_, u8>) -> Option<Vec<u8>> {
         let data_slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::cipher_update_impl(id, data_slice)
     }
@@ -5685,7 +5687,7 @@ pub mod native_module {
     pub fn cipher_set_aad(id: u32, aad: TypedArray<'_, u8>) -> bool {
         let aad_slice = aad
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::cipher_set_aad_impl(id, aad_slice)
     }
@@ -5699,7 +5701,7 @@ pub mod native_module {
     pub fn cipher_set_auth_tag(id: u32, tag: TypedArray<'_, u8>) -> bool {
         let tag_slice = tag
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::cipher_set_auth_tag_impl(id, tag_slice)
     }
@@ -5761,7 +5763,7 @@ pub mod native_module {
     ) -> Option<Vec<u8>> {
         let slice = passphrase
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::key_export_encrypted_impl(id, &format, &type_, &cipher_name, slice)
     }
@@ -5786,7 +5788,7 @@ pub mod native_module {
     pub fn create_private_key_der(data: TypedArray<'_, u8>) -> Option<u32> {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::create_private_key_from_der(slice)
             .or_else(|| super::create_rsa_private_key_from_der(slice))
@@ -5805,7 +5807,7 @@ pub mod native_module {
     ) -> Option<u32> {
         let slice = passphrase
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::create_private_key_from_encrypted_pem(&pem, slice)
     }
@@ -5817,7 +5819,7 @@ pub mod native_module {
     ) -> Option<Vec<u8>> {
         let slice = passphrase
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::decrypt_pkcs8_pem_to_der_impl(&pem, slice)
     }
@@ -5829,7 +5831,7 @@ pub mod native_module {
     ) -> Option<Vec<u8>> {
         let slice = passphrase
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::decrypt_traditional_pem_to_der_impl(&pem, slice)
     }
@@ -5838,7 +5840,7 @@ pub mod native_module {
     pub fn create_public_key_der(data: TypedArray<'_, u8>) -> Option<u32> {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::create_public_key_from_der(slice)
             .or_else(|| super::create_rsa_public_key_from_der(slice))
@@ -5859,7 +5861,7 @@ pub mod native_module {
     pub fn create_secret_key_native(data: TypedArray<'_, u8>) -> u32 {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::create_secret_key(slice)
     }
@@ -5874,7 +5876,7 @@ pub mod native_module {
     pub fn sign_update(id: u32, data: TypedArray<'_, u8>) -> bool {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::sign_update_impl(id, slice)
     }
@@ -5894,7 +5896,7 @@ pub mod native_module {
     pub fn verify_update(id: u32, data: TypedArray<'_, u8>) -> bool {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::verify_update_impl(id, slice)
     }
@@ -5903,7 +5905,7 @@ pub mod native_module {
     pub fn verify_final_native(id: u32, signature: TypedArray<'_, u8>) -> Option<bool> {
         let slice = signature
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::verify_final_impl(id, slice)
     }
@@ -5912,7 +5914,7 @@ pub mod native_module {
     pub fn public_encrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::public_encrypt_impl(key_id, slice, padding)
     }
@@ -5921,7 +5923,7 @@ pub mod native_module {
     pub fn private_decrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::private_decrypt_impl(key_id, slice, padding)
     }
@@ -5930,7 +5932,7 @@ pub mod native_module {
     pub fn private_encrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::private_encrypt_impl(key_id, slice, padding)
     }
@@ -5939,7 +5941,7 @@ pub mod native_module {
     pub fn public_decrypt(key_id: u32, data: TypedArray<'_, u8>, padding: u32) -> Option<Vec<u8>> {
         let slice = data
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::public_decrypt_impl(key_id, slice, padding)
     }
@@ -5955,11 +5957,11 @@ pub mod native_module {
     pub fn dh_create_from_prime(prime: TypedArray<'_, u8>, generator: TypedArray<'_, u8>) -> u32 {
         let prime_slice = prime
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         let gen_slice = generator
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::dh_create_from_prime_impl(prime_slice, gen_slice)
     }
@@ -5986,7 +5988,7 @@ pub mod native_module {
     pub fn dh_compute_secret(id: u32, other_pub: TypedArray<'_, u8>) -> Option<Vec<u8>> {
         let slice = other_pub
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::dh_compute_secret_impl(id, slice).ok()
     }
@@ -5995,7 +5997,7 @@ pub mod native_module {
     pub fn dh_compute_secret_err(id: u32, other_pub: TypedArray<'_, u8>) -> Vec<String> {
         let slice = other_pub
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         match super::dh_compute_secret_impl(id, slice) {
             Ok(bytes) => {
@@ -6035,7 +6037,7 @@ pub mod native_module {
     pub fn dh_set_public_key(id: u32, key: TypedArray<'_, u8>) -> bool {
         let slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::dh_set_public_key_impl(id, slice);
         true
@@ -6045,7 +6047,7 @@ pub mod native_module {
     pub fn dh_set_private_key(id: u32, key: TypedArray<'_, u8>) -> bool {
         let slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::dh_set_private_key_impl(id, slice)
     }
@@ -6076,7 +6078,7 @@ pub mod native_module {
     pub fn ecdh_compute_secret(id: u32, other_pub: TypedArray<'_, u8>) -> Option<Vec<u8>> {
         let slice = other_pub
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::ecdh_compute_secret_impl(id, slice).ok()
     }
@@ -6085,7 +6087,7 @@ pub mod native_module {
     pub fn ecdh_compute_secret_err(id: u32, other_pub: TypedArray<'_, u8>) -> Vec<String> {
         let slice = other_pub
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         match super::ecdh_compute_secret_impl(id, slice) {
             Ok(bytes) => {
@@ -6110,7 +6112,7 @@ pub mod native_module {
     pub fn ecdh_set_private_key(id: u32, key: TypedArray<'_, u8>) -> Option<Vec<u8>> {
         let slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::ecdh_set_private_key_impl(id, slice).ok()
     }
@@ -6119,7 +6121,7 @@ pub mod native_module {
     pub fn ecdh_set_private_key_err(id: u32, key: TypedArray<'_, u8>) -> Vec<String> {
         let slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         match super::ecdh_set_private_key_impl(id, slice) {
             Ok(bytes) => {
@@ -6134,7 +6136,7 @@ pub mod native_module {
     pub fn ecdh_set_public_key(id: u32, key: TypedArray<'_, u8>) -> bool {
         let slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::ecdh_set_public_key_impl(id, slice).is_ok()
     }
@@ -6143,7 +6145,7 @@ pub mod native_module {
     pub fn ecdh_set_public_key_err(id: u32, key: TypedArray<'_, u8>) -> Vec<String> {
         let slice = key
             .as_raw()
-            .map(|raw| unsafe { std::slice::from_raw_parts(raw.ptr.as_ptr(), raw.len) })
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         match super::ecdh_set_public_key_impl(id, slice) {
             Ok(_) => vec!["ok".to_string()],
@@ -6159,7 +6161,7 @@ pub mod native_module {
 
 fn randomize_typed_array<V>(array: TypedArray<V>) {
     if let Some(raw) = array.as_raw() {
-        let slice = unsafe { slice::from_raw_parts_mut(raw.ptr.as_ptr(), raw.len) };
+        let slice = unsafe { slice::from_raw_parts_mut(raw.cast::<u8>().as_ptr(), raw.len()) };
         rand::rng().fill_bytes(slice);
     }
 }

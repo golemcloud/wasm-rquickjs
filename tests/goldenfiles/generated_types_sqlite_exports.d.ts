@@ -1,4 +1,5 @@
 declare module 'sqlite' {
+  export function testChangesetInputDetachedInCallback(): Promise<boolean>;
   export function testMemoryRoundtrip(): Promise<boolean>;
   export function testFileRoundtrip(): Promise<boolean>;
   export function testUdfSurvivesRestore(): Promise<boolean>;

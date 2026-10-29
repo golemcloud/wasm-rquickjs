@@ -475,6 +475,15 @@ export const testEvalGeneratedMessage = () => {
     }
     if (!evalError || evalError.code !== 'ERR_ASSERTION' || evalError.message !== 'false == true') return false;
 
+    // A Function constructor's synthetic source is not the calling module.
+    for (const invoke of [
+        () => Function('assert', 'assert(false)')(assert),
+        () => new Function('assert', 'assert.ok(false)')(assert),
+        () => Reflect.construct(Function, ['assert', 'assert(false)'])(assert),
+    ]) {
+        assert.throws(invoke, { code: 'ERR_ASSERTION', message: 'false == true' });
+    }
+
     const filename = '/assert-eval-named-function.cjs';
     fs.writeFileSync(filename, [
         "const assert = require('assert');",

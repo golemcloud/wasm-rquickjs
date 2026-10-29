@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3184/4400 (72.4%)
+**Primary compatibility (CI-enforced):** 3189/4403 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3184 | 72.4% | 55.3% | 46.3% |
-| 🧩 known gap | 1216 | 27.6% | 21.1% | 17.7% |
+| ✅ passing (runnable) | 3189 | 72.4% | 55.4% | 46.4% |
+| 🧩 known gap | 1214 | 27.6% | 21.1% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1190 | — | 20.7% | 17.3% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
-| **Total** | **6876** |  |  | **100.0%** |
+| **Total** | **6879** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3184/5757 (55.3%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3189/5760 (55.4%)**.
 
 ## Inventory by Module
 
@@ -41,7 +41,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
 | crypto | 239 | 204 | 11 | 8 | 0 | 0 | 16 | 94.9% | 91.5% |
 | dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
-| diagnostics_channel | 33 | 22 | 8 | 1 | 2 | 0 | 0 | 73.3% | 66.7% |
+| diagnostics_channel | 33 | 24 | 6 | 1 | 2 | 0 | 0 | 80.0% | 72.7% |
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
 | domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
@@ -59,7 +59,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 614 | 188 | 145 | 86 | 12 | 0 | 183 | 56.5% | 43.6% |
+| other | 617 | 190 | 146 | 86 | 12 | 0 | 183 | 56.5% | 43.8% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 4 | 33 | 2 | 0 | 0 | 2 | 10.8% | 10.3% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -76,7 +76,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream | 753 | 713 | 31 | 2 | 0 | 0 | 7 | 95.8% | 95.6% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | test_runner | 157 | 93 | 34 | 21 | 1 | 0 | 8 | 73.2% | 62.4% |
-| timers | 97 | 47 | 4 | 0 | 0 | 0 | 46 | 92.2% | 92.2% |
+| timers | 97 | 48 | 3 | 0 | 0 | 0 | 46 | 94.1% | 94.1% |
 | tls | 207 | 4 | 7 | 185 | 0 | 0 | 11 | 36.4% | 2.0% |
 | trace_events | 35 | 15 | 10 | 6 | 0 | 0 | 4 | 60.0% | 48.4% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
@@ -687,7 +687,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1216)
+### known gap (1214)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -785,6 +785,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs | 2 | `parallel/test-cli-syntax-piped-bad.js`, `parallel/test-cli-syntax-piped-good.js` |
 | child_process execPath emulation does not implement --trace-require-module warning output | 2 | `es-module/test-require-module-warning.js`, `es-module/test-require-node-modules-warning.js` |
 | child_process.spawn emulation does not support --interactive REPL sessions | 2 | `parallel/test-repl-array-prototype-tempering.js`, `sequential/test-repl-timeout-throw.js` |
+| common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness | 2 | `parallel/test-gc-http-client-connaborted.js`, `parallel/test-gc-net-timeout.js` |
 | crypto.X509Certificate.checkHost is not available | 2 | `parallel/test-x509-escaping.js#block_06_the_subject_must_be_ignored_if_a_dnsname_subject_alternative`, `parallel/test-x509-escaping.js#block_07_exists_even_if_other_subject_alternative_names_exist` |
 | dgram send() callback does not report bytes correctly for multi-buffer payloads | 2 | `parallel/test-dgram-send-callback-multi-buffer.js`, `parallel/test-dgram-send-multi-buffer-copy.js` |
 | dgram socket buffer size APIs do not match Node error semantics | 2 | `parallel/test-dgram-socket-buffer-size.js#block_00_block_00`, `parallel/test-dgram-socket-buffer-size.js#block_01_block_01` |
@@ -859,6 +860,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | ClientRequest default header generation is not Node-compatible (Connection/Content-Length defaults differ by method) | 1 | `parallel/test-http-client-default-headers-exist.js` |
 | ClientRequest destroyed state/lifecycle on response close with keep-alive Agent is not Node-compatible | 1 | `parallel/test-http-client-agent-end-close-event.js` |
 | ClientRequest timeout-event + end/destroy sequencing is not Node-compatible | 1 | `parallel/test-http-client-timeout-event.js` |
+| ClientRequest waits for end() before native writes, so a piped source paused by request backpressure cannot reach end() or drain | 1 | `parallel/test-pipe-file-to-http.js` |
 | ClientRequest.flushHeaders() does not reliably complete request/response lifecycle | 1 | `parallel/test-http-flush-headers.js` |
 | ClientRequest.setTimeout and socket-timeout interaction is incomplete | 1 | `parallel/test-http-client-set-timeout.js` |
 | ClientRequest.setTimeout callback path does not reliably destroy/close the request | 1 | `parallel/test-http-client-timeout.js` |
@@ -887,7 +889,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | HTTP parser does not emit Node-compatible HPE_INVALID_TRANSFER_ENCODING clientError semantics | 1 | `parallel/test-http-server-reject-chunked-with-content-length.js` |
 | HTTP parser handling for blank request headers and 400 response framing is incomplete | 1 | `parallel/test-http-blank-header.js` |
 | HTTP parser/clientError path does not reject duplicate Content-Length with HPE_UNEXPECTED_CONTENT_LENGTH | 1 | `parallel/test-http-double-content-length.js` |
-| HTTP request streaming/pipe backpressure behavior is not fully Node-compatible | 1 | `parallel/test-pipe-file-to-http.js` |
 | HTTP response serialization/header ordering differs from Node for first-chunk single-byte encodings | 1 | `parallel/test-http-outgoing-first-chunk-singlebyte-encoding.js` |
 | HTTP server close/reopen ECONNREFUSED sequencing is not Node-compatible | 1 | `sequential/test-http-econnrefused.js` |
 | HTTP server duplicate request-header coalescing for allowed/forbidden header sets is not Node-compatible | 1 | `parallel/test-http-server-multiheaders2.js` |
@@ -935,6 +936,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Readable unpipe()+resume() transform/end event flow is not fully Node-compatible | 1 | `parallel/test-stream-readable-unpipe-resume.js` |
 | Readable.from() iterator close/return() semantics are incomplete | 1 | `parallel/test-readable-from-iterator-closing.js` |
 | Readable.map()/reduce() lazy evaluation callback ordering differs from Node | 1 | `parallel/test-stream-reduce.js#block_02_block_02` |
+| Readable.prototype.drop.length is 2 instead of Node's 1; later iterator-helper assertions are not reached | 1 | `parallel/test-stream-iterator-helpers-test262-tests.mjs` |
 | Readable.toWeb() with crypto randomBytes pressure can trap in web_crypto random_bytes | 1 | `parallel/test-stream-readable-to-web.js` |
 | ReadableStream BYOB controller respond()/Buffer interaction is not fully WHATWG-compatible | 1 | `parallel/test-whatwg-readablebytestreambyob.js` |
 | Request abort vs normal completion event ordering (aborted/error/end) is not Node-compatible | 1 | `parallel/test-http-client-spurious-aborted.js` |
@@ -1063,8 +1065,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | diagnostics_channel integration for http.server.* events is incomplete | 1 | `parallel/test-diagnostics-channel-http-server-start.js` |
 | diagnostics_channel integration for net events is incomplete | 1 | `parallel/test-diagnostics-channel-net.js` |
 | diagnostics_channel integration for worker_threads events is missing in the worker shim | 1 | `parallel/test-diagnostics-channel-worker-threads.js` |
-| diagnostics_channel runStores transformer-error propagation is incomplete | 1 | `parallel/test-diagnostics-channel-bind-store.js` |
-| diagnostics_channel subscriber-throw path does not surface uncaughtException handling like Node.js | 1 | `parallel/test-diagnostics-channel-safe-subscriber-errors.js` |
 | dns perf_hooks integration not implemented | 1 | `parallel/test-dns-perf_hooks.js` |
 | dns.promises.lookupService is not implemented (returns ENOTIMP) | 1 | `parallel/test-dns-lookupService-promises.js` |
 | domain error propagation across node:http server/client callbacks is incomplete | 1 | `parallel/test-domain-multi.js` |
@@ -1144,7 +1144,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | net.BlockList with autoSelectFamily and multiple lookup addresses does not yet raise ERR_IP_BLOCKED before connection attempts | 1 | `parallel/test-net-blocklist.js#block_03_connect_with_autoselectfamily_and_multiple_ips` |
 | net.Server blockList enforcement is incomplete | 1 | `parallel/test-net-server-blocklist.js` |
 | net.Server captureRejections async error propagation is incomplete | 1 | `parallel/test-net-server-capture-rejection.js` |
-| node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals | 1 | `parallel/test-timers-api-refs.js` |
 | node-compat runner inspects a no-listener proxy rejection and triggers its throwing traps | 1 | `parallel/test-promises-unhandled-proxy-rejections.js` |
 | node-compat runner treats a no-listener rejection as failure even with --unhandled-rejections=none | 1 | `parallel/test-promise-unhandled-silent-no-hook.js` |
 | node:http abort/destroy response lifecycle (aborted/error/close ordering) is incomplete | 1 | `parallel/test-http-abort-client.js` |
@@ -1207,8 +1206,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
 | requires V8 hidden-class constructor-name recovery after the prototype constructor is detached | 1 | `parallel/test-util-inspect.js#block_73_manipulate_the_prototype_in_weird_ways` |
-| requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably | 1 | `parallel/test-gc-http-client-connaborted.js` |
-| requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably | 1 | `parallel/test-gc-net-timeout.js` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |

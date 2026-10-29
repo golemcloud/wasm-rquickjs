@@ -70,10 +70,18 @@ export async function test() {
     try {
         const ch = dc.channel('test:error-isolation');
         let secondCalled = false;
-        ch.subscribe(() => { throw new Error('boom'); });
+        const expected = new Error('boom');
+        const observed = [];
+        const onUncaught = error => observed.push(error);
+        process.on('uncaughtException', onUncaught);
+        ch.subscribe(() => { throw expected; });
         ch.subscribe(() => { secondCalled = true; });
         ch.publish({});
         results.errorIsolation = secondCalled;
+        results.subscriberErrorDeferred = observed.length === 0;
+        await new Promise(resolve => setImmediate(resolve));
+        process.removeListener('uncaughtException', onUncaught);
+        results.subscriberErrorExactlyOnce = observed.length === 1 && observed[0] === expected;
     } catch (e) {
         errors.push('errorIsolation: ' + e.message);
     }

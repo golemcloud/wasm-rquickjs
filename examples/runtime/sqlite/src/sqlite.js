@@ -3,6 +3,37 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 
 let tmpCounter = 0;
+
+export function testChangesetInputDetachedInCallback() {
+  const source = new DatabaseSync(':memory:');
+  const target = new DatabaseSync(':memory:');
+  try {
+    const schema = 'CREATE TABLE items (id INTEGER PRIMARY KEY, value TEXT)';
+    source.exec(schema);
+    target.exec(schema);
+    const session = source.createSession();
+    const insert = source.prepare('INSERT INTO items VALUES (?, ?)');
+    const value = 'changeset-value-'.repeat(32);
+    for (let i = 0; i < 1000; i++) insert.run(i, value);
+    const changeset = session.changeset();
+    let calls = 0;
+    const applied = target.applyChangeset(changeset, {
+      filter() {
+        calls++;
+        const transferred = changeset.buffer.transfer();
+        new Uint8Array(transferred).fill(255);
+        return true;
+      },
+    });
+    const rows = target.prepare('SELECT value FROM items ORDER BY id').all();
+    return applied && calls === 1 && changeset.byteLength === 0 &&
+      rows.length === 1000 && rows.every(row => row.value === value);
+  } finally {
+    source.close();
+    target.close();
+  }
+}
+
 function tmpDb() {
   return `/test/sqlite-test-${Date.now()}-${tmpCounter++}.db`;
 }

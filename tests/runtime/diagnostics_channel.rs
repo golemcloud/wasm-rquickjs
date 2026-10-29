@@ -51,6 +51,14 @@ async fn diagnostics_channel_api(
         // Error handling
         assert!(r["subscribeError"].as_bool().unwrap(), "subscribeError");
         assert!(r["errorIsolation"].as_bool().unwrap(), "errorIsolation");
+        assert!(
+            r["subscriberErrorDeferred"].as_bool().unwrap(),
+            "subscriberErrorDeferred"
+        );
+        assert!(
+            r["subscriberErrorExactlyOnce"].as_bool().unwrap(),
+            "subscriberErrorExactlyOnce"
+        );
 
         // Stores
         assert!(r["storeBeforeRun"].as_bool().unwrap(), "storeBeforeRun");

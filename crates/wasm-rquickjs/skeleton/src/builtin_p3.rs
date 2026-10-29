@@ -73,6 +73,8 @@ mod formdata_node;
 mod fs;
 #[path = "builtin/gc.rs"]
 mod gc;
+#[cfg(feature = "test-observability")]
+pub(crate) use gc::install_observability as install_gc_observability;
 #[path = "builtin/http_p3.rs"]
 mod http;
 #[path = "builtin/http2.rs"]

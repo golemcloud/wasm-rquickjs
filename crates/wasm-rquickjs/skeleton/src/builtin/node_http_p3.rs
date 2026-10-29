@@ -126,7 +126,9 @@ impl NodeHttpClientRequest {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
 
-        let bytes = chunk.as_bytes().ok_or_else(|| {
+        // SAFETY: append_body copies into a native Vec without executing JS or
+        // suspending, so the rooted JS backing buffer cannot change here.
+        let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
             Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
         })?;
 
@@ -150,7 +152,9 @@ impl NodeHttpClientRequest {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
 
-        let bytes = chunk.as_bytes().ok_or_else(|| {
+        // SAFETY: This async adapter does not suspend: append_body only copies
+        // into a native Vec and never executes JavaScript.
+        let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
             Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
         })?;
 
@@ -227,7 +231,9 @@ impl NodeHttpClientRequest {
         }
 
         if let Some(chunk) = chunk {
-            let bytes = chunk.as_bytes().ok_or_else(|| {
+            // SAFETY: The copy finishes in this block before any await or JS
+            // execution, while chunk roots the backing buffer.
+            let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
                 Exception::throw_message(&ctx, "the Uint8Array passed to finish is detached")
             })?;
             self.append_body(&ctx, bytes)?;

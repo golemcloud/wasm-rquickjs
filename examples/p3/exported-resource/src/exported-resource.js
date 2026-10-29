@@ -6,6 +6,7 @@
 // `async func` method (`incrementAsync`) returns a Promise.
 const constructorRejection = new Error('constructor checkpoint');
 let constructorCheckpointCount = 0;
+let unexpectedTimerCallbacks = 0;
 let stashedCounter;
 process.on('unhandledRejection', (reason) => {
   if (reason === constructorRejection) constructorCheckpointCount += 1;
@@ -15,14 +16,32 @@ class Counter {
   constructor(initial) {
     this.value = initial;
     Promise.reject(constructorRejection);
+    // Scheduling work must not keep a synchronous component-model constructor running.
+    // The next async entry cancels this unreferenced timer at the normal idle boundary.
+    setInterval(() => {
+      unexpectedTimerCallbacks += 1;
+    }, 60_000).unref();
+    this.timerState = { ran: false };
+    this.timer = new Promise(resolve => {
+      setTimeout(() => {
+        this.timerState.ran = true;
+        resolve();
+      }, 0);
+    });
+    const canceled = setTimeout(() => {
+      unexpectedTimerCallbacks += 1;
+    }, 0);
+    clearTimeout(canceled);
   }
 
   increment(by) {
+    if (this.timerState.ran) throw new Error('constructor timer ran during synchronous calls');
     this.value += by;
     return this.value;
   }
 
   get() {
+    if (unexpectedTimerCallbacks !== 0) throw new Error('canceled or unreferenced timer ran');
     return this.value;
   }
 
@@ -43,7 +62,8 @@ class Counter {
   }
 
   static async identityAsync(value) {
-    await Promise.resolve();
+    await value.timer;
+    if (!value.timerState.ran) throw new Error('async entry did not drive the constructor timer');
     return value;
   }
 

@@ -10,7 +10,21 @@ class Counter {
     }
 
     static async identity(value) {
-        await Promise.resolve();
+        // A queued resource drop runs concurrently with this referenced I/O.
+        // Its drain must release the context lock so the timer can close it.
+        await new Promise((resolve, reject) => {
+            const server = createServer();
+            server.on('error', reject);
+            server.listen(0, () => setTimeout(() => server.close(resolve), 5));
+        });
+        return value;
+    }
+
+    static async identityUnref(value) {
+        // Awaited exports must finish even if their only clock is unreferenced.
+        await new Promise(resolve => setTimeout(resolve, 5).unref());
+        // Remaining unreferenced work must still be retired at export completion.
+        setInterval(() => {}, 60_000).unref();
         return value;
     }
 
@@ -33,3 +47,4 @@ class Counter {
 }
 
 export const api = { Counter };
+import { createServer } from 'node:net';

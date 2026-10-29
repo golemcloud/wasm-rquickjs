@@ -1290,12 +1290,14 @@
     "parallel/test-timers-timeout-with-non-integer.js": {},
     "parallel/test-timers-same-timeout-wrong-list-deleted.js": {},
     "parallel/test-timers-throw-when-cb-not-function.js": {},
-    "parallel/test-timers-api-refs.js": { "category": "known-gap", "reason": "node-compat runner drainAsync() relies on global setTimeout after this test deletes timer globals" },
+    "parallel/test-timers-api-refs.js": {},
     "parallel/test-timers-process-tampering.js": {},
     "parallel/test-timers-refresh-in-callback.js": {},
     "parallel/test-timers-active.js": { "category": "node-internals", "reason": "asserts deprecated timers.active() behavior and private _idle* timer fields" },
     "parallel/test-timers-destroyed.js": { "category": "node-internals", "reason": "asserts private Timer._destroyed state on timeout/interval objects" },
     "parallel/test-timers-dispose.js": {},
+    "parallel/test-dgram-async-dispose.mjs": {},
+    "parallel/test-net-server-async-dispose.mjs": {},
     "parallel/test-timers-immediate-queue.js": { "category": "known-gap", "reason": "setImmediate queue turn semantics are unstable and can trap in the timeout scheduler" },
     "parallel/test-timers-immediate-queue-throw.js": {},
     "parallel/test-timers-immediate-unref.js": {},
@@ -2626,7 +2628,7 @@
     "parallel/test-console-tty-colors.js": {},
     "parallel/test-console-with-frozen-intrinsics.js": {},
     "parallel/test-delayed-require.js": { "category": "runnable" },
-    "parallel/test-diagnostics-channel-bind-store.js": { "category": "known-gap", "reason": "diagnostics_channel runStores transformer-error propagation is incomplete" },
+    "parallel/test-diagnostics-channel-bind-store.js": {},
     "parallel/test-diagnostics-channel-has-subscribers.js": {},
     "parallel/test-diagnostics-channel-object-channel-pub-sub.js": {},
     "parallel/test-diagnostics-channel-pub-sub.js": {},
@@ -3827,7 +3829,7 @@
     "parallel/test-client-request-destroy.js": {},
     "parallel/test-console-async-write-error.js": {},
     "parallel/test-console-sync-write-error.js": {},
-    "parallel/test-diagnostics-channel-safe-subscriber-errors.js": { "category": "known-gap", "reason": "diagnostics_channel subscriber-throw path does not surface uncaughtException handling like Node.js" },
+    "parallel/test-diagnostics-channel-safe-subscriber-errors.js": {},
     "parallel/test-diagnostics-channel-sync-unsubscribe.js": {},
     "parallel/test-domain-add-remove.js": {},
     "parallel/test-domain-ee.js": { "category": "node-internals", "reason": "second block asserts private EventEmitter kCapture symbol initialization details" },
@@ -4456,7 +4458,7 @@
     "parallel/test-http-client-timeout-with-data.js": { "category": "known-gap", "reason": "Request timeout behavior during response body transfer is not Node-compatible" },
     "parallel/test-http-client-timeout.js": { "category": "known-gap", "reason": "ClientRequest.setTimeout callback path does not reliably destroy/close the request" },
     "parallel/test-http-client-upload-buf.js": {},
-    "parallel/test-http-client-upload.js": { "timeout": 30, "flaky": true, "reason": "Recovered on same-commit rerun in CI run 38285927640 (120s timeout, then 2.7s pass)" },
+    "parallel/test-http-client-upload.js": { "timeout": 30 },
     "parallel/test-http-client-with-create-connection.js": { "category": "wasi-impossible", "reason": "requires http.request({ createConnection }) to select a raw TCP or Unix-socket transport; node:http outbound requests always use wasi:http" },
     "parallel/test-http-connect-req-res.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket detachment; node:http outbound requests always use wasi:http" },
     "parallel/test-http-connect.js": { "category": "wasi-impossible", "reason": "requires HTTP CONNECT tunnel socket data forwarding; node:http outbound requests always use wasi:http" },
@@ -4787,12 +4789,12 @@
       }
     },
     "parallel/test-http-write-head.js": { "category": "wasi-impossible", "reason": "wasi:http normalizes response header names, so raw header case preservation assertions cannot be satisfied" },
-    "parallel/test-http-zero-length-write.js": { "timeout": 30, "flaky": true, "reason": "Recovered on same-commit reruns; previously allowlisted by the CI retry wrapper" },
+    "parallel/test-http-zero-length-write.js": { "timeout": 30 },
     "parallel/test-http-zerolengthbuffer.js": {},
     "parallel/test-http2-autoselect-protocol.js": { "category": "wasi-impossible", "reason": "[manual] http2/https not implemented" },
     "parallel/test-https-connecting-to-http.js": { "category": "wasi-impossible", "reason": "requires raw TLS handshake/protocol-mismatch behavior (HTTPS client to HTTP server), unavailable with wasi:http" },
     "parallel/test-https-socket-options.js": { "category": "wasi-impossible", "reason": "[manual] http2/https not implemented" },
-    "parallel/test-pipe-file-to-http.js": { "category": "known-gap", "reason": "HTTP request streaming/pipe backpressure behavior is not fully Node-compatible" },
+    "parallel/test-pipe-file-to-http.js": { "category": "known-gap", "reason": "ClientRequest waits for end() before native writes, so a piped source paused by request backpressure cannot reach end() or drain" },
     "parallel/test-pipe-outgoing-message-data-emitted-after-ended.js": {},
     "parallel/test-stream-destroy.js": {
       "split": true,
@@ -4804,6 +4806,10 @@
         "block_04_block_04": {},
         "block_05_block_05": {}
       }
+    },
+    "parallel/test-stream-iterator-helpers-test262-tests.mjs": {
+      "category": "known-gap",
+      "reason": "Readable.prototype.drop.length is 2 instead of Node's 1; later iterator-helper assertions are not reached"
     },
     "parallel/test-stream-readable-async-iterators.js": {
       "split": true,
@@ -6725,8 +6731,8 @@
         "block_03_ensure_that_we_cannot_override_console_properties": { "reason": "inherited: --frozen-intrinsics flag semantics are not implemented" }
       }
     },
-    "parallel/test-gc-http-client-connaborted.js": { "category": "known-gap", "reason": "requires V8-style GC/finalization behavior for rapidly churned HTTP client requests; current QuickJS/WASM runtime does not collect all watched request objects reliably" },
-    "parallel/test-gc-net-timeout.js": { "category": "known-gap", "reason": "requires V8-style GC/finalization behavior for rapidly churned net sockets with timeouts; current QuickJS/WASM runtime does not collect all watched socket objects reliably" },
+    "parallel/test-gc-http-client-connaborted.js": { "category": "known-gap", "reason": "common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness" },
+    "parallel/test-gc-net-timeout.js": { "category": "known-gap", "reason": "common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness" },
     "parallel/test-gc-tls-external-memory.js": { "category": "wasi-impossible", "reason": "tls is not supported in WebAssembly environment" },
     "parallel/test-global-console-exists.js": {},
     "parallel/test-global-customevent-disabled.js": { "category": "known-gap", "reason": "--no-experimental-global-customevent flag is not honored" },

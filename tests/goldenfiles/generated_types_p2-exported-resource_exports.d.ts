@@ -4,6 +4,7 @@ declare module 'p2-exported-resource' {
       constructor(value: number);
       get(): Promise<number>;
       static identity(value: Counter): Promise<Counter>;
+      static identityUnref(value: Counter): Promise<Counter>;
       /**
        * @throws string
        */

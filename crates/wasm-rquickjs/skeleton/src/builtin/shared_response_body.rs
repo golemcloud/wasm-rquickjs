@@ -238,7 +238,9 @@ pub(crate) async fn read_chunk<'js, S: NativeBody>(
                 return Ok(Some(chunk));
             }
             if let Some(error) = &state.error {
-                return Err(Exception::throw_message(ctx, error));
+                let error = error.clone();
+                drop(state);
+                return Err(Exception::throw_message(ctx, &error));
             }
             if state.finished {
                 return Ok(None);
@@ -298,13 +300,15 @@ pub(crate) async fn read_chunk<'js, S: NativeBody>(
                 Err(error) => {
                     state.error = Some(error.clone());
                     state.finished = true;
-                    Err(Exception::throw_message(ctx, &error))
+                    Err(error)
                 }
             };
             (result, std::mem::take(&mut state.waiters))
         };
         wake_all(waiters);
-        result?;
+        // Allocating an exception can collect an abandoned sibling reader.
+        // Its destructor needs the shared state, so release the borrow first.
+        result.map_err(|error| Exception::throw_message(ctx, &error))?;
     }
 }
 
@@ -335,6 +339,88 @@ fn reclaim_consumed_prefix<S>(state: &mut SharedBody<S>) {
 fn wake_all(waiters: Vec<Waker>) {
     for waiter in waiters {
         waiter.wake();
+    }
+}
+
+#[cfg(feature = "test-observability")]
+pub(crate) mod gc_regression {
+    use super::{NativeBody, SharedBodyReader, read_chunk};
+    use rquickjs::class::Trace;
+    use rquickjs::{Class, Ctx, JsLifetime};
+    use std::cell::Cell;
+    use std::rc::Rc;
+
+    struct ErrorBody;
+
+    impl NativeBody for ErrorBody {
+        async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
+            Err("shared-body-test-error".to_string())
+        }
+        fn discard(self) {}
+    }
+
+    #[derive(Trace)]
+    #[rquickjs::class]
+    struct ReaderProbe {
+        #[qjs(skip_trace)]
+        _reader: SharedBodyReader<ErrorBody>,
+        #[qjs(skip_trace)]
+        drops: Rc<Cell<usize>>,
+    }
+
+    // This test class contains only Rust state, with no JS-lifetime-bound values.
+    unsafe impl<'js> JsLifetime<'js> for ReaderProbe {
+        type Changed<'to> = Self;
+    }
+
+    impl Drop for ReaderProbe {
+        fn drop(&mut self) {
+            self.drops.set(self.drops.get() + 1);
+        }
+    }
+
+    pub(crate) async fn error_gc(ctx: Ctx<'_>, cached: bool) -> rquickjs::Result<bool> {
+        let (reader, sibling) = SharedBodyReader::pair(ErrorBody);
+        if cached {
+            let mut state = reader.shared.borrow_mut();
+            state.error = Some("shared-body-test-error".to_string());
+            state.finished = true;
+        }
+        let drops = Rc::new(Cell::new(0));
+        let object = Class::instance(
+            ctx.clone(),
+            ReaderProbe {
+                _reader: sibling,
+                drops: drops.clone(),
+            },
+        )?
+        .into_inner();
+        object.set("self", object.clone())?;
+        drop(object);
+
+        // SAFETY: ctx roots this runtime throughout the read. The next JS
+        // allocation must collect the abandoned sibling while throwing the error.
+        let (rt, previous) = unsafe {
+            let rt = rquickjs::qjs::JS_GetRuntime(ctx.as_raw().as_ptr());
+            let previous = rquickjs::qjs::JS_GetGCThreshold(rt);
+            rquickjs::qjs::JS_SetGCThreshold(rt, 0);
+            (rt, previous)
+        };
+        let result = read_chunk(&ctx, &reader).await;
+        // SAFETY: The same rooted context still owns rt.
+        unsafe { rquickjs::qjs::JS_SetGCThreshold(rt, previous) };
+        assert!(matches!(result, Err(rquickjs::Error::Exception)));
+        let error = ctx.catch();
+        assert_eq!(
+            error.as_object().unwrap().get::<_, String>("message")?,
+            "shared-body-test-error"
+        );
+        assert_eq!(
+            drops.get(),
+            1,
+            "exception allocation must collect the sibling reader"
+        );
+        Ok(true)
     }
 }
 

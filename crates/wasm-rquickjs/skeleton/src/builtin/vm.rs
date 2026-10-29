@@ -135,9 +135,14 @@ fn eval_in_new_context_impl<'js>(
     // Match the Node 22 vm global surface by hiding QuickJS globals that are
     // not present on a fresh contextified global unless the sandbox provides them.
     for key in [
+        "AsyncDisposableStack",
         "DOMException",
+        "DisposableStack",
         "Float16Array",
         "InternalError",
+        "SuppressedError",
+        "atob",
+        "btoa",
         "performance",
         "queueMicrotask",
     ] {

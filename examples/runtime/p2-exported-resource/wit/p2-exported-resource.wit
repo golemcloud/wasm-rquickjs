@@ -5,6 +5,7 @@ interface api {
     constructor(value: u32);
     get: func() -> u32;
     identity: static func(value: own<counter>) -> counter;
+    identity-unref: static func(value: own<counter>) -> counter;
     stash-and-fail: static func(value: own<counter>) -> result<_, string>;
     take: static func() -> counter;
     resource-count: static func() -> u32;

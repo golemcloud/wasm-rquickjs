@@ -6,7 +6,7 @@ use crate::internal::runtime_services::{
 
 use futures::future::{Either, pending, poll_fn, select};
 use futures::task::AtomicWaker;
-use rquickjs::{CatchResultExt, Ctx, Function, Module, Promise, Value, async_with};
+use rquickjs::{CatchResultExt, Ctx, Function, Module, Promise, Value};
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
 use std::collections::{HashMap, VecDeque};
@@ -455,7 +455,7 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         complete_job!(Err(error));
     }
     mark_profile!("builtinInitialization");
-    let transport_wiring = async_with!(runtime.ctx => |ctx| {
+    let transport_wiring = rquickjs::AsyncContext::async_with(&runtime.ctx, async |ctx| {
         Module::evaluate(
             ctx.clone(),
             "__wasm_rquickjs_execution_transport",
@@ -542,7 +542,10 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
         )
     };
     let source_maps_enabled = if options.language == ExecutionLanguage::Typescript {
-        async_with!(runtime.ctx => |ctx| { execution_source_maps_enabled(&ctx) }).await
+        rquickjs::AsyncContext::async_with(&runtime.ctx, async |ctx| {
+            execution_source_maps_enabled(&ctx)
+        })
+        .await
     } else {
         false
     };
@@ -566,14 +569,15 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
     let execution_profile = profile.clone();
     let result = {
         let execution = async {
-            async_with!(runtime.ctx => |ctx| {
+            rquickjs::AsyncContext::async_with(&runtime.ctx, async |ctx| {
                 if (options.language == ExecutionLanguage::Typescript || is_inline)
-                    && let Ok(register_source_map) = ctx.globals().get::<_, Function>(
-                        "__wasm_rquickjs_register_transformed_source_map",
-                    )
+                    && let Ok(register_source_map) = ctx
+                        .globals()
+                        .get::<_, Function>("__wasm_rquickjs_register_transformed_source_map")
                 {
                     let (line_offset, original_line_offset, force_line_offset) =
-                        if options.language == ExecutionLanguage::Typescript && source_maps_enabled {
+                        if options.language == ExecutionLanguage::Typescript && source_maps_enabled
+                        {
                             (0, usize::from(is_inline), false)
                         } else if is_inline {
                             (1, 0, true)
@@ -593,12 +597,17 @@ async fn run_job(options: ExecutionOptions, job: Rc<ExecutionJob>) {
                             format!("failed to register execution source map: {error:?}")
                         })?;
                 }
-                Module::evaluate(ctx.clone(), name, source).catch(&ctx)
-                    .map_err(|e| crate::internal::format_caught_error(e))?.finish::<()>().catch(&ctx)
+                Module::evaluate(ctx.clone(), name, source)
+                    .catch(&ctx)
+                    .map_err(|e| crate::internal::format_caught_error(e))?
+                    .finish::<()>()
+                    .catch(&ctx)
                     .map_err(|e| crate::internal::format_caught_error(e))?;
                 #[cfg(feature = "typescript-compiler-profiling")]
                 execution_profile.mark("initialEvaluation");
-                let promise: Promise = ctx.globals().get("__wasmRquickjsExecutionResult")
+                let promise: Promise = ctx
+                    .globals()
+                    .get("__wasmRquickjsExecutionResult")
                     .map_err(|e| format!("execution result unavailable: {e:?}"))?;
                 let result = promise
                     .into_future::<String>()

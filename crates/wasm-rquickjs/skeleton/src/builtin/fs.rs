@@ -1065,7 +1065,8 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn write_file(ctx: Ctx<'_>, path: String, content: TypedArray<'_, u8>) -> Option<String> {
-        if let Some(bytes) = content.as_bytes() {
+        // SAFETY: No JS executes while the rooted input is read by synchronous file I/O.
+        if let Some(bytes) = unsafe { content.as_bytes() } {
             let resolved_path = runtime_path(&ctx, &path);
             if let Some(parent) = Path::new(&resolved_path).parent()
                 && let Err(err) = std::fs::create_dir_all(parent)
@@ -1302,7 +1303,8 @@ pub mod native_module {
 
         let result = Object::new(ctx.clone()).unwrap();
 
-        let Some(bytes) = buffer.as_bytes() else {
+        // SAFETY: The rooted buffer is only read during synchronous file I/O.
+        let Some(bytes) = (unsafe { buffer.as_bytes() }) else {
             result
                 .set(
                     "error",
@@ -2127,7 +2129,8 @@ pub mod native_module {
         path: String,
         data: TypedArray<'js, u8>,
     ) -> Option<Object<'js>> {
-        let Some(bytes) = data.as_bytes() else {
+        // SAFETY: The bytes are consumed by synchronous file I/O without JS re-entry.
+        let Some(bytes) = (unsafe { data.as_bytes() }) else {
             return Some(super::make_fs_error(
                 &ctx,
                 &std::io::Error::new(std::io::ErrorKind::InvalidInput, "detached buffer"),

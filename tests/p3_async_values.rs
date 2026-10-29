@@ -81,6 +81,8 @@ struct Host {
     export_gates: Vec<Option<ExportGate>>,
     cleanup_notification: Option<oneshot::Sender<()>>,
     nested_cleanup_calls: usize,
+    wrapped_drops: usize,
+    byte_echo_calls: usize,
     stderr: MemoryOutputPipe,
     // The Golem wasmtime fork's `WasiCtxBuilder::build()` also yields an `IoCtx` that the
     // `WasiCtxView` requires; on stock wasmtime this field does not exist.
@@ -151,6 +153,7 @@ impl<T> export_bindings::test::async_values::observer::HostWithStore<T> for HasS
 impl export_bindings::test::async_values::observer::HostWrappedStream for Host {
     fn drop(&mut self, rep: wasmtime::component::Resource<WrappedStream>) -> Result<()> {
         self.table.delete(rep)?;
+        self.wrapped_drops += 1;
         Ok(())
     }
 }
@@ -169,6 +172,12 @@ impl<T> export_bindings::test::async_values::observer::HostWrappedStreamWithStor
 }
 
 impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
+    async fn echo_bytes(accessor: &Accessor<T, Self>, bytes: Vec<u8>) -> Vec<u8> {
+        accessor.with(|mut access| access.get().byte_echo_calls += 1);
+        tokio::time::sleep(Duration::from_millis(10)).await;
+        bytes
+    }
+
     fn make_future(mut host: Access<T, Self>, x: u32) -> FutureReader<u32> {
         // Construct a component `future<u32>` whose value is `x`, resolved immediately.
         let (tx, rx) = oneshot::channel();
@@ -277,6 +286,8 @@ fn new_store(engine: &Engine) -> Store<Host> {
             export_gates: Vec::new(),
             cleanup_notification: None,
             nested_cleanup_calls: 0,
+            wrapped_drops: 0,
+            byte_echo_calls: 0,
             stderr,
             #[cfg(feature = "use-golem-wasmtime")]
             io_ctx,
@@ -1090,6 +1101,15 @@ fn generate_and_build(
     example: &str,
     wasm_name: &str,
 ) -> anyhow::Result<Utf8PathBuf> {
+    generate_and_build_with_features(temp, example, wasm_name, "p3,crypto,zlib,encoding")
+}
+
+fn generate_and_build_with_features(
+    temp: &Utf8TempDir,
+    example: &str,
+    wasm_name: &str,
+    features: &str,
+) -> anyhow::Result<Utf8PathBuf> {
     let manifest_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"));
     let example_dir = manifest_dir.join("examples").join("p3").join(example);
     let wit_dir = example_dir.join("wit");
@@ -1116,7 +1136,7 @@ fn generate_and_build(
         .arg(out.join("Cargo.toml"))
         .arg("--no-default-features")
         .arg("--features")
-        .arg("p3,crypto,zlib,encoding")
+        .arg(features)
         .arg("--target")
         .arg("wasm32-wasip2")
         .output()?;
@@ -1185,6 +1205,104 @@ fn anyhow_msg(msg: &'static str) -> anyhow::Error {
 // ---------------------------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------------------------
+
+#[test]
+fn p3_stream_roots_survive_automatic_gc() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build_with_features(
+        &temp,
+        "async-values",
+        "async_values",
+        "p3,crypto,zlib,encoding,test-observability",
+    )
+    .expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let linker = base_linker(&engine)?;
+        let mut store = new_store(&engine);
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| -> Result<()> {
+                let reader = bindings.call_run_gc_stream(accessor).await?;
+                let (tx, rx) = mpsc::channel::<u8>(16);
+                accessor.with(|access| reader.pipe(access, PipeConsumer::new(tx)))?;
+                assert_eq!(rx.collect::<Vec<_>>().await, vec![42, 43, 44]);
+                assert_eq!(
+                    accessor.with(|mut access| access.get().nested_cleanup_calls),
+                    1
+                );
+
+                let (cleanup_tx, cleanup_rx) = oneshot::channel();
+                accessor.with(|mut access| access.get().cleanup_notification = Some(cleanup_tx));
+                let reader = bindings.call_run_gc_stream(accessor).await?;
+                let (tx, rx) = oneshot::channel();
+                accessor.with(|access| reader.pipe(access, PrefixConsumer::new(tx)))?;
+                assert_eq!(rx.await?, 42);
+                cleanup_rx.await?;
+                // A fresh export must still work after the stream's peer closes.
+                let future = bindings.call_run_future(accessor).await?;
+                let (tx, rx) = oneshot::channel();
+                accessor.with(|access| future.pipe(access, OneshotConsumer::new(tx)))?;
+                assert_eq!(rx.await?, 42);
+                assert_eq!(
+                    accessor.with(|mut access| access.get().nested_cleanup_calls),
+                    2
+                );
+                Ok(())
+            })
+            .await??;
+        Ok::<(), anyhow::Error>(())
+    });
+}
+
+#[test]
+fn p3_async_import_owns_bytes_before_transfer() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let mut linker = base_linker(&engine)?;
+        test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(
+            &mut linker,
+            |host| host,
+        )?;
+        let mut store = new_store(&engine);
+        let bindings =
+            AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| -> Result<()> {
+                assert!(bindings.call_run_buffer_transfer(accessor).await?);
+                assert_eq!(accessor.with(|mut access| access.get().byte_echo_calls), 1);
+                Ok(())
+            })
+            .await??;
+        Ok::<(), anyhow::Error>(())
+    });
+}
+
+#[test]
+fn p3_imported_resources_use_engine_dispose_symbol() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let linker = base_linker(&engine)?;
+        let mut store = new_store(&engine);
+        let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async move |accessor| -> Result<()> {
+                assert!(bindings.call_dispose_wrapped_resources(accessor).await?);
+                assert_eq!(accessor.with(|mut access| access.get().wrapped_drops), 2);
+                Ok(())
+            })
+            .await??;
+        Ok::<(), anyhow::Error>(())
+    });
+}
 
 #[test]
 fn p3_async_values_export_boundaries_roundtrip() {

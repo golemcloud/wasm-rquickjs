@@ -82,7 +82,7 @@ impl ChildTimers {
                     let dispatched = ready.is_some();
                     if let Some((timer, cancelled)) = ready.take() {
                         if !cancelled {
-                            super::timeout::dispatch_scheduled_task(
+                            super::timeout::invoke_scheduled_task(
                                 ctx.clone(),
                                 timer.callback.clone(),
                                 timer.args.clone(),

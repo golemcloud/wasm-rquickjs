@@ -4286,11 +4286,9 @@ impl TestInstance {
         // captured by the test runner and are not part of the reported failure message
         // on CI).
         let results = results.map_err(|err| {
-            let host_trace = host_trace();
-            let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
-            let server_http_lifecycle = test_server_http_trace().snapshot();
+            let diagnostics = self.failure_diagnostics();
             err.context(format!(
-                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\nHTTP lifecycle:\n{http_lifecycle}\ntest-server HTTP lifecycle:\n{server_http_lifecycle}\nhost trace:\n{host_trace}"
+                "guest stdout:\n{stdout}\nguest stderr:\n{stderr}\n{diagnostics}"
             ))
         });
 
@@ -4298,6 +4296,16 @@ impl TestInstance {
             results.map(|results| results.first().cloned()),
             stdout,
             stderr,
+        )
+    }
+
+    /// Read existing journals even after a timeout cancelled the invocation future.
+    pub fn failure_diagnostics(&self) -> String {
+        let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
+        let server_http_lifecycle = test_server_http_trace().snapshot();
+        let host_trace = host_trace();
+        format!(
+            "HTTP lifecycle:\n{http_lifecycle}\ntest-server HTTP lifecycle:\n{server_http_lifecycle}\nhost trace:\n{host_trace}"
         )
     }
 

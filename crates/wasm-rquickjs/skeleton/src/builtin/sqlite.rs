@@ -284,10 +284,8 @@ fn js_value_to_sqlite<'js>(
         return Ok(rusqlite::types::Value::Text(s));
     }
     if let Ok(ta) = rquickjs::TypedArray::<u8>::from_value(val.clone()) {
-        let bytes = ta
-            .as_bytes()
-            .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "detached TypedArray buffer"))?
-            .to_vec();
+        let bytes = crate::wrappers::copy_typed_array_bytes(&ta)
+            .ok_or_else(|| rquickjs::Exception::throw_message(ctx, "detached TypedArray buffer"))?;
         return Ok(rusqlite::types::Value::Blob(bytes));
     }
     // Check for other TypedArray types or DataView (has .buffer property)
@@ -299,7 +297,9 @@ fn js_value_to_sqlite<'js>(
         let byte_offset: usize = obj.get::<_, f64>("byteOffset").unwrap_or(0.0) as usize;
         let byte_length: usize = obj.get::<_, f64>("byteLength").unwrap_or(0.0) as usize;
         if let Some(ab) = rquickjs::ArrayBuffer::from_value(buffer_val)
-            && let Some(raw_bytes) = ab.as_bytes()
+            // SAFETY: All JS property access is complete. The following slice
+            // copy cannot execute JS or suspend, and ab roots its backing bytes.
+            && let Some(raw_bytes) = unsafe { ab.as_bytes() }
         {
             let buf_len = raw_bytes.len();
             let end = (byte_offset + byte_length).min(buf_len);
@@ -1080,10 +1080,9 @@ fn udf_js_result_to_sqlite<'js>(
         ));
     }
     if let Ok(ta) = rquickjs::TypedArray::<u8>::from_value(result.clone()) {
-        let bytes = ta
-            .as_bytes()
-            .ok_or_else(|| rusqlite::Error::UserFunctionError("detached TypedArray buffer".into()))?
-            .to_vec();
+        let bytes = crate::wrappers::copy_typed_array_bytes(&ta).ok_or_else(|| {
+            rusqlite::Error::UserFunctionError("detached TypedArray buffer".into())
+        })?;
         return Ok(rusqlite::types::Value::Blob(bytes));
     }
     if result.is_function() {
@@ -1472,8 +1471,7 @@ fn apply_changeset_impl<'js>(
         .get(&conn_id)
         .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
 
-    let bytes = changeset
-        .as_bytes()
+    let bytes = crate::wrappers::copy_typed_array_bytes(&changeset)
         .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "detached TypedArray buffer"))?;
 
     let has_on_conflict = on_conflict.is_function();
@@ -1573,7 +1571,7 @@ fn apply_changeset_impl<'js>(
         }
     };
 
-    let mut input: &[u8] = bytes;
+    let mut input: &[u8] = &bytes;
     let result = conn.apply_strm(&mut input, filter_fn, conflict_fn);
 
     // Check if the JS callback threw an error
@@ -1918,7 +1916,9 @@ fn restore_database_impl<'js>(
         ));
     }
 
-    let data = bytes.as_bytes().ok_or_else(|| {
+    // SAFETY: Deserialization and the backup below run synchronously without
+    // JavaScript callbacks; bytes roots the input until the copy is complete.
+    let data = unsafe { bytes.as_bytes() }.ok_or_else(|| {
         rquickjs::Exception::throw_message(&ctx, "failed to read Uint8Array bytes")
     })?;
 

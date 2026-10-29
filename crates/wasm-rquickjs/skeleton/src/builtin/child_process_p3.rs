@@ -3,7 +3,7 @@ use futures::future::{Either, poll_fn, select};
 use futures::task::AtomicWaker;
 use rquickjs::class::Trace;
 use rquickjs::{
-    CatchResultExt, Ctx, Exception, Function, JsLifetime, Module, Object, Persistent, async_with,
+    AsyncContext, CatchResultExt, Ctx, Exception, Function, JsLifetime, Module, Object, Persistent,
 };
 use serde::Deserialize;
 use std::cell::{Cell, RefCell};
@@ -305,15 +305,20 @@ async fn execute(
             interrupt.reason.get().is_some()
         })))
         .await;
-    let session = async_with!(runtime.ctx => |ctx| {
+    let session = AsyncContext::async_with(&runtime.ctx, async |ctx| {
         let bootstrap = async {
-            Module::import(&ctx, "node:child_process")?.into_future::<Object>().await?;
+            Module::import(&ctx, "node:child_process")?
+                .into_future::<Object>()
+                .await?;
             let begin: Function = ctx.globals().get("__wasm_rquickjs_begin_node_child")?;
             ctx.globals().remove("__wasm_rquickjs_begin_node_child")?;
             let session: Object = begin.call((request,))?;
             Ok::<_, rquickjs::Error>(Persistent::save(&ctx, session))
-        }.await;
-        bootstrap.catch(&ctx).map_err(crate::internal::format_caught_error)
+        }
+        .await;
+        bootstrap
+            .catch(&ctx)
+            .map_err(crate::internal::format_caught_error)
     })
     .await?;
     let mut emitted_before_exit = false;

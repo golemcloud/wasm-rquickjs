@@ -1,6 +1,18 @@
 use rquickjs::function::Args;
 use rquickjs::{Array, Ctx, FromJs, IntoJs, Object, Value};
 
+/// Copy a JS buffer before native code can re-enter JavaScript or suspend.
+pub(crate) fn copy_typed_array_bytes<T>(array: &rquickjs::TypedArray<'_, T>) -> Option<Vec<u8>> {
+    // SAFETY: The array roots its backing buffer, and the copy neither calls JS
+    // nor yields. No borrowed JS memory escapes this function.
+    unsafe { array.as_bytes().map(<[u8]>::to_vec) }
+}
+
+pub(crate) fn copy_array_buffer_bytes(buffer: &rquickjs::ArrayBuffer<'_>) -> Option<Vec<u8>> {
+    // SAFETY: The buffer remains rooted for this synchronous, non-reentrant copy.
+    unsafe { buffer.as_bytes().map(<[u8]>::to_vec) }
+}
+
 #[allow(dead_code)]
 pub const TAG: &str = "tag";
 #[allow(dead_code)]
@@ -234,13 +246,12 @@ impl<'js> IntoJs<'js> for UInt8Array {
 }
 
 impl<'js> FromJs<'js> for UInt8Array {
-    fn from_js(_ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
+    fn from_js(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Self> {
         let array = rquickjs::TypedArray::<'js, u8>::from_value(value)?;
-        Ok(UInt8Array(
-            array
-                .as_bytes()
-                .expect("the UInt8Array passed to decode is detached")
-                .to_vec(),
-        ))
+        copy_typed_array_bytes(&array)
+            .map(UInt8Array)
+            .ok_or_else(|| {
+                rquickjs::Exception::throw_type(ctx, "Cannot read bytes from a detached Uint8Array")
+            })
     }
 }
