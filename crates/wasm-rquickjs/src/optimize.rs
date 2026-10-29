@@ -1,3 +1,5 @@
+mod preinit;
+
 use anyhow::anyhow;
 use camino::Utf8Path;
 use std::time::Duration;
@@ -123,9 +125,10 @@ pub struct OptimizeOptions {
 /// Reads the component from `input`, runs the specified `init_func` to capture
 /// the initialized state, and writes the pre-initialized component to `output`.
 ///
-/// Known imports (WASI, HTTP, logging) are provided with real or logging
-/// implementations. Any remaining unknown imports are automatically stubbed
-/// with trapping functions — if the init code calls them, pre-initialization
+/// Filesystem preopens, network acquisition and outgoing HTTP trap during
+/// initialization, including for unmarked templates and custom initializers.
+/// Other known WASI services and logging retain their real implementations.
+/// Remaining unknown imports are automatically stubbed with trapping functions — if the init code calls them, pre-initialization
 /// will fail with an error identifying the unexpected import call.
 ///
 /// Updated wasm-rquickjs templates advertise `wasm-rquickjs-wizer-restore-v1`.
@@ -170,10 +173,11 @@ pub async fn optimize_component_with_options(
     config.wasm_component_model_async(true);
     let engine = Engine::new(&config)?;
 
+    let stderr = preinit::Stderr::default();
     let mut wasi_builder = wasmtime_wasi::WasiCtxBuilder::new();
     // Forward guest stdout/stderr so Wizer failures preserve the original JS/Rust
     // diagnostics instead of collapsing into a bare trap.
-    wasi_builder.inherit_stdout().inherit_stderr();
+    wasi_builder.inherit_stdout().stderr(stderr.clone());
 
     #[cfg(feature = "use-golem-wasmtime")]
     let (wasi, io_ctx) = wasi_builder.build();
@@ -224,7 +228,7 @@ pub async fn optimize_component_with_options(
                     let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
                     builder
                         .inherit_stdout()
-                        .inherit_stderr()
+                        .stderr(stderr.clone())
                         .secure_random(StdRng::from_seed([0; 32]))
                         .insecure_random(StdRng::from_seed([1; 32]))
                         .insecure_random_seed(0)
@@ -255,7 +259,11 @@ pub async fn optimize_component_with_options(
                     &bindings::LinkOptions::default(),
                 )?;
                 wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-                wasmtime_wasi::p3::add_to_linker(&mut linker)?;
+                // Keep P3 socket resource ownership in the deny-only provider.
+                wasmtime_wasi::p3::cli::add_to_linker(&mut linker)?;
+                wasmtime_wasi::p3::clocks::add_to_linker(&mut linker)?;
+                wasmtime_wasi::p3::filesystem::add_to_linker(&mut linker)?;
+                wasmtime_wasi::p3::random::add_to_linker(&mut linker)?;
                 wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
 
                 // Implement wasi:logging/logging with actual log output
@@ -280,12 +288,17 @@ pub async fn optimize_component_with_options(
                 // user-defined WIT interfaces) with trapping functions.
                 // We skip wasi: prefixed imports to preserve wasmtime's
                 // semver version aliasing for WASI interfaces.
+                preinit::deny_external_io(&mut linker, component)?;
                 stub_unknown_imports(&mut linker, component)?;
 
                 linker.instantiate_async(store, component).await
             },
         )
-        .await?;
+        .await
+        .map_err(|error| match stderr.diagnostic() {
+            Some(diagnostic) => error.context(diagnostic),
+            None => error,
+        })?;
 
     eprintln!("Writing pre-initialized component to {output}...");
     std::fs::write(output.as_std_path(), &optimized)

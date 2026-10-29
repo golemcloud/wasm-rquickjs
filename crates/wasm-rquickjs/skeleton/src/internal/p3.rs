@@ -381,10 +381,6 @@ enum InitState {
 static mut STATE: Option<JsState> = None;
 static mut INIT: InitState = InitState::NotStarted;
 
-/// True while `wizer_initialize` is running. Builtins use this to avoid snapshotting
-/// wasi-libc caches populated from Wizer's empty filesystem and environment.
-static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 /// Cooperative yield: returns `Pending` exactly once (re-waking immediately) so
 /// that another concurrent task can make progress. Used to wait for an in-flight
 /// initialization without busy-spinning the host.
@@ -417,6 +413,7 @@ pub async fn ensure_initialized() -> &'static JsState {
                 unsafe {
                     INIT = InitState::InProgress;
                 }
+                super::refresh_component_cwd();
                 let state = JsState::new_base().await;
                 unsafe {
                     STATE = Some(state);
@@ -450,11 +447,6 @@ pub async fn ensure_initialized() -> &'static JsState {
             }
         }
     }
-}
-
-#[inline]
-pub fn is_wizer_active() -> bool {
-    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Returns the already-initialized shared state. Only valid to call after
@@ -1026,7 +1018,7 @@ pub fn run_sync<T: 'static>(future: impl Future<Output = T>) -> T {
 /// Fully initializes the P3 QuickJS runtime and leaves it quiescent for Wizer to snapshot.
 #[allow(static_mut_refs)]
 pub async fn wizer_initialize() {
-    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::begin();
 
     unsafe {
         INIT = InitState::InProgress;
@@ -1059,7 +1051,7 @@ pub async fn wizer_initialize() {
         INIT = InitState::WizerPreInitialized;
     }
 
-    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::complete();
 }
 
 pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {

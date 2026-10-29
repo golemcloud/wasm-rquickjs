@@ -117,6 +117,7 @@ fn poll_resolve_stream(stream: &ResolveAddressStream) -> Result<Vec<IpAddress>, 
 
 #[cfg(feature = "p2")]
 async fn resolve_impl(ctx: &Ctx<'_>, hostname: &str) -> rquickjs::Result<Vec<DnsResult>> {
+    crate::internal::preinit::check("DNS resolution", "hostname");
     let network = instance_network();
     let stream = resolve_addresses(&network, hostname).map_err(|e| {
         let code = error_code_to_js(e);
@@ -156,6 +157,7 @@ async fn resolve_impl(ctx: &Ctx<'_>, hostname: &str) -> rquickjs::Result<Vec<Dns
 // stream polling is required.
 #[cfg(feature = "p3")]
 async fn resolve_impl(ctx: &Ctx<'_>, hostname: &str) -> rquickjs::Result<Vec<DnsResult>> {
+    crate::internal::preinit::check("DNS resolution", "hostname");
     match resolve_addresses(hostname.to_string()).await {
         Ok(addresses) => Ok(addresses
             .iter()

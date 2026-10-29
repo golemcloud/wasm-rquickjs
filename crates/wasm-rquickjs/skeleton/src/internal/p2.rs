@@ -185,31 +185,36 @@ impl JsState {
 
         super::runtime_services::with_component_context(&state.ctx, async |ctx| {
             let globals = ctx.globals();
-            if let Ok(process) = globals.get::<_, rquickjs::Object>("process") {
-                // Refresh argv in-place so existing references stay valid
-                if let Ok(existing_argv) = process.get::<_, rquickjs::Array>("argv") {
-                    let _ = existing_argv.as_object().set("length", 0u32);
-                    for (i, arg) in argv.iter().enumerate() {
-                        let _ = existing_argv.set(i, arg.as_str());
-                    }
+            if globals.get::<_, rquickjs::Object>("process").is_ok() {
+                let new_argv = rquickjs::Array::new(ctx.clone())
+                    .expect("failed to create process.argv for Wizer restoration");
+                for (i, arg) in argv.iter().enumerate() {
+                    new_argv
+                        .set(i, arg.as_str())
+                        .expect("failed to populate process.argv for Wizer restoration");
                 }
-                let _ = process.set("argv0", argv.first().map(|s| s.as_str()).unwrap_or(""));
 
-                // Refresh env via JS eval to trigger Proxy traps
-                if let Ok(new_env) = rquickjs::Object::new(ctx.clone()) {
-                    for (key, value) in &env_vars {
-                        let _ = new_env.set(key.as_str(), value.as_str());
-                    }
-                    let _ = globals.set("__wasm_rquickjs_new_env", new_env);
-                    let _ = ctx.eval::<(), &str>(
-                        "(() => { \
-                            const e = globalThis.__wasm_rquickjs_new_env; \
-                            for (const k of Object.keys(process.env)) delete process.env[k]; \
-                            for (const [k,v] of Object.entries(e)) process.env[k] = v; \
-                            delete globalThis.__wasm_rquickjs_new_env; \
-                        })()",
-                    );
+                let new_env = rquickjs::Object::new(ctx.clone())
+                    .expect("failed to create process.env for Wizer restoration");
+                for (key, value) in &env_vars {
+                    new_env
+                        .set(key.as_str(), value.as_str())
+                        .expect("failed to populate process.env for Wizer restoration");
                 }
+
+                let refresh_process = ctx
+                    .eval::<rquickjs::Function, &str>(
+                        "((argv, env) => process[Symbol.for(\
+                            '__wasm_rquickjs_refresh_process_state'\
+                        )](argv, env))",
+                    )
+                    .expect("failed to load the Wizer process-state refresh hook");
+                assert!(
+                    refresh_process
+                        .call::<_, bool>((new_argv, new_env))
+                        .unwrap_or(false),
+                    "failed to restore process state after Wizer pre-initialization"
+                );
             }
         })
         .await;
@@ -274,23 +279,12 @@ pub(crate) fn spawn_runtime_idle_waiter(
 static mut STATE: Option<JsState> = None;
 static mut INIT_PHASE: InitPhase = InitPhase::Uninitialized;
 
-/// True while `wizer_initialize` is running. Used by built-in modules to avoid
-/// std::fs / std::env operations during Wizer pre-init: those would trigger
-/// wasi-libc's lazy preopen-cache population with the empty wizer environment,
-/// and the broken cache would then be snapshotted into the pre-initialized
-/// component, breaking filesystem access at runtime. See issue #91.
-static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
-#[inline]
-pub fn is_wizer_active() -> bool {
-    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
-}
-
 #[allow(static_mut_refs)]
 pub fn get_js_state() -> &'static JsState {
     unsafe {
         match INIT_PHASE {
             InitPhase::Uninitialized => {
+                super::refresh_component_cwd();
                 // Phase 1: Create the runtime and all Rust-side state (no JS evaluation).
                 STATE = Some(block_on(JsState::new_base()));
                 // Mark as Initializing so re-entrant get_js_state() calls (e.g.
@@ -988,11 +982,9 @@ pub fn format_caught_error(caught: CaughtError) -> String {
 /// After Wizer snapshots this state, the runtime is ready to handle exports immediately.
 #[allow(static_mut_refs)]
 pub fn wizer_initialize() {
-    // Mark Wizer pre-init as active so built-in modules avoid touching
-    // std::fs / std::env: those would trigger wasi-libc's lazy preopen-cache
-    // population with the empty wizer environment, and the broken cache would
-    // then be snapshotted into the pre-initialized component (issue #91).
-    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    // Reject external I/O before it can populate libc caches or leave host
+    // resources in the snapshot. The shared phase also covers VM/owned jobs.
+    super::preinit::begin();
 
     unsafe {
         // Phase 1: Create runtime
@@ -1032,5 +1024,5 @@ pub fn wizer_initialize() {
         INIT_PHASE = InitPhase::WizerPreInitialized;
     }
 
-    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::complete();
 }

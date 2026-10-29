@@ -3,6 +3,8 @@ use camino_tempfile::Utf8TempDir;
 use wasm_rquickjs::{OptimizeOptions, optimize_component, optimize_component_with_options};
 
 mod p3_build;
+#[path = "optimize/preinit.rs"]
+mod preinit_tests;
 
 // Initialization mutates the last byte, so verifying the optimized component
 // checks that snapshot extraction retained memory, not just that Wizer returned.
@@ -118,7 +120,40 @@ async fn optimizer_determinism_requires_matching_restore_capability() -> anyhow:
     Ok(())
 }
 
+#[derive(Debug)]
+struct ProbeOutput {
+    json: String,
+    stdout: String,
+    stderr: String,
+}
+
 async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option<String>> {
+    Ok(run_probe_inner(path, deny_entropy, None, None)
+        .await?
+        .map(|output| output.json))
+}
+
+async fn run_filesystem_probe(path: &Utf8Path, filesystem: &Utf8Path) -> anyhow::Result<String> {
+    let output = run_probe_inner(path, false, Some(filesystem), Some("/app"))
+        .await?
+        .unwrap();
+    assert!(
+        output.stdout.contains("runtime-stdio-out"),
+        "stdout was not restored: {output:?}"
+    );
+    assert!(
+        output.stderr.contains("runtime-stdio-err"),
+        "stderr was not restored: {output:?}"
+    );
+    Ok(output.json)
+}
+
+async fn run_probe_inner(
+    path: &Utf8Path,
+    deny_entropy: bool,
+    filesystem: Option<&Utf8Path>,
+    cwd: Option<&str>,
+) -> anyhow::Result<Option<ProbeOutput>> {
     use wasmtime::component::{Component, Linker, ResourceTable};
     use wasmtime::{Config, Engine, Store, StoreContextMut};
 
@@ -140,6 +175,15 @@ async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option
             }
         }
     }
+    impl wasmtime_wasi_http::p2::WasiHttpView for Host {
+        fn http(&mut self) -> wasmtime_wasi_http::p2::WasiHttpCtxView<'_> {
+            wasmtime_wasi_http::p2::WasiHttpCtxView {
+                ctx: &mut self.http,
+                table: &mut self.table,
+                hooks: wasmtime_wasi_http::p2::default_hooks(),
+            }
+        }
+    }
     impl wasmtime_wasi_http::p3::WasiHttpView for Host {
         fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
             wasmtime_wasi_http::p3::WasiHttpCtxView {
@@ -158,8 +202,22 @@ async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option
     }
     let engine = Engine::new(&config)?;
     let component = Component::from_file(&engine, path)?;
+    let stdout = wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(64 * 1024);
+    let stderr = wasmtime_wasi::p2::pipe::MemoryOutputPipe::new(64 * 1024);
     let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
+    builder.stdout(stdout.clone()).stderr(stderr.clone());
     builder.env("GOL787_RUNTIME", "live").arg(path.as_str());
+    if let Some(filesystem) = filesystem {
+        builder.preopened_dir(
+            filesystem,
+            "/",
+            wasmtime_wasi::DirPerms::all(),
+            wasmtime_wasi::FilePerms::all(),
+        )?;
+    }
+    if let Some(cwd) = cwd {
+        builder.initial_cwd(cwd);
+    }
     #[cfg(not(feature = "use-golem-wasmtime"))]
     let wasi = builder.build();
     #[cfg(feature = "use-golem-wasmtime")]
@@ -181,10 +239,64 @@ async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option
     linker.define_unknown_imports_as_traps(&component)?;
     linker.allow_shadowing(true);
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
+    wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     // Unknown-import stubs are synchronous; P3 HTTP imports require the real
     // async signatures even though this probe never performs HTTP requests.
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    // The probe does not provide a WebSocket service: every call must trap.
+    // Register its complete imported ABI so a pure import also links on P3,
+    // whose receive methods are async (the generic trap helper is sync-only).
+    for (interface, item) in component.component_type().imports(&engine) {
+        if !interface.starts_with("golem:websocket/client@") {
+            continue;
+        }
+        let wasmtime::component::types::ComponentItem::ComponentInstance(instance) = item.ty else {
+            continue;
+        };
+        let mut provider = linker.instance(interface)?;
+        for (name, export) in instance.exports(&engine) {
+            match export.ty {
+                wasmtime::component::types::ComponentItem::Resource(_) => {
+                    assert_eq!(
+                        name, "websocket-connection",
+                        "unexpected WebSocket resource"
+                    );
+                    provider.resource(
+                        name,
+                        wasmtime::component::ResourceType::host::<()>(),
+                        |_, _| Ok(()),
+                    )?;
+                }
+                wasmtime::component::types::ComponentItem::ComponentFunc(function) => {
+                    let message = format!(
+                        "WebSocket service unavailable in this filesystem probe: {interface}#{name}"
+                    );
+                    if function.async_() {
+                        provider.func_new_concurrent(name, move |_, _, _, _| {
+                            let message = message.clone();
+                            Box::pin(async move { Err(wasmtime::Error::msg(message)) })
+                        })?;
+                    } else {
+                        provider.func_new(name, move |_, _, _, _| {
+                            Err(wasmtime::Error::msg(message.clone()))
+                        })?;
+                    }
+                }
+                _ => {}
+            }
+        }
+    }
+    for (name, _) in component.component_type().imports(&engine) {
+        if name.starts_with("wasi:logging/logging") {
+            linker.instance(name)?.func_new("log", |_, _, args, _| {
+                if let Some(wasmtime::component::Val::String(message)) = args.last() {
+                    eprintln!("[guest log] {message}");
+                }
+                Ok(())
+            })?;
+        }
+    }
     for (name, _) in component.component_type().imports(&engine) {
         if deny_entropy && name.starts_with("wasi:random/random@") {
             let mut random = linker.instance(name)?;
@@ -209,8 +321,24 @@ async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option
         let run = instance.get_typed_func::<(), (String,)>(&mut store, "run")?;
         let (json,) = store
             .run_concurrent(async move |accessor| run.call_concurrent(accessor, ()).await)
-            .await??;
-        return Ok(Some(json));
+            .await
+            .map_err(|error| {
+                error.context(format!(
+                    "guest stderr: {}",
+                    String::from_utf8_lossy(&stderr.contents())
+                ))
+            })?
+            .map_err(|error| {
+                error.context(format!(
+                    "guest stderr: {}",
+                    String::from_utf8_lossy(&stderr.contents())
+                ))
+            })?;
+        return Ok(Some(ProbeOutput {
+            json,
+            stdout: String::from_utf8(stdout.contents().to_vec())?,
+            stderr: String::from_utf8(stderr.contents().to_vec())?,
+        }));
     }
     let ready = instance.get_typed_func::<(), (String,)>(&mut store, "ready")?;
     let result = ready.call_async(&mut store, ()).await;
@@ -226,10 +354,88 @@ async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option
     Ok(None)
 }
 
+fn build_preinit_template(
+    root: &Utf8Path,
+    target: wasm_rquickjs::GenerationTarget,
+    tier: &str,
+) -> anyhow::Result<camino::Utf8PathBuf> {
+    use std::process::Command;
+    use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+    std::fs::create_dir_all(root.join("wit"))?;
+    let async_keyword = if target == GenerationTarget::WasiP3 {
+        "async "
+    } else {
+        ""
+    };
+    std::fs::write(
+        root.join("wit/world.wit"),
+        format!(
+            "package test:preinit; world preinit-probe {{ export run: {async_keyword}func() -> string; export ready: {async_keyword}func() -> string; }}"
+        ),
+    )?;
+    wasm_rquickjs::generate_wrapper_crate_with_target(
+        &root.join("wit"),
+        &[JsModuleSpec {
+            name: "module".into(),
+            mode: EmbeddingMode::BinarySlot,
+        }],
+        &root.join("out"),
+        None,
+        target,
+    )?;
+    let cache = p3_build::BuildCache::new()?;
+    let mut build = Command::new("cargo");
+    cache.configure(&mut build);
+    // This matrix repeatedly compiles the same guest for different JS slots.
+    // Keep full templates compact so Wasmtime compilation does not dominate
+    // every negative case; all stores and component instances remain fresh.
+    if tier.contains("full") {
+        build
+            .env("CARGO_PROFILE_DEV_DEBUG", "0")
+            .env("CARGO_PROFILE_DEV_OPT_LEVEL", "1");
+    }
+    let result = build
+        .args([
+            "build",
+            "--target",
+            "wasm32-wasip2",
+            "--no-default-features",
+            "--features",
+            tier,
+            "--manifest-path",
+        ])
+        .arg(root.join("out/Cargo.toml"))
+        .output()?;
+    assert!(
+        result.status.success(),
+        "{tier}: {}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let mut metadata = Command::new("cargo");
+    cache.configure(&mut metadata);
+    let result = metadata
+        .args([
+            "metadata",
+            "--no-deps",
+            "--format-version",
+            "1",
+            "--manifest-path",
+        ])
+        .arg(root.join("out/Cargo.toml"))
+        .output()?;
+    assert!(result.status.success());
+    let metadata: serde_json::Value = serde_json::from_slice(&result.stdout)?;
+    let wasm = Utf8Path::new(metadata["target_directory"].as_str().unwrap())
+        .join("wasm32-wasip2/debug/preinit_probe.wasm");
+    let template = cache.finish(wasm.as_std_path(), root.as_std_path())?;
+    let template = camino::Utf8PathBuf::from_path_buf(template).unwrap();
+    Ok(template)
+}
+
 #[test]
 fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Result<()> {
     use std::process::Command;
-    use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+    use wasm_rquickjs::GenerationTarget;
 
     let temp = Utf8TempDir::new()?;
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -242,66 +448,7 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
         (GenerationTarget::WasiP3, "p3,crypto,encoding"),
     ] {
         let root = temp.path().join(tier.replace(',', "-"));
-        std::fs::create_dir_all(root.join("wit"))?;
-        let async_keyword = if target == GenerationTarget::WasiP3 {
-            "async "
-        } else {
-            ""
-        };
-        std::fs::write(
-            root.join("wit/world.wit"),
-            format!(
-                "package test:preinit; world preinit-probe {{ export run: {async_keyword}func() -> string; export ready: {async_keyword}func() -> string; }}"
-            ),
-        )?;
-        wasm_rquickjs::generate_wrapper_crate_with_target(
-            &root.join("wit"),
-            &[JsModuleSpec {
-                name: "module".into(),
-                mode: EmbeddingMode::BinarySlot,
-            }],
-            &root.join("out"),
-            None,
-            target,
-        )?;
-        let cache = p3_build::BuildCache::new()?;
-        let mut build = Command::new("cargo");
-        cache.configure(&mut build);
-        let result = build
-            .args([
-                "build",
-                "--target",
-                "wasm32-wasip2",
-                "--no-default-features",
-                "--features",
-                tier,
-                "--manifest-path",
-            ])
-            .arg(root.join("out/Cargo.toml"))
-            .output()?;
-        assert!(
-            result.status.success(),
-            "{tier}: {}",
-            String::from_utf8_lossy(&result.stderr)
-        );
-        let mut metadata = Command::new("cargo");
-        cache.configure(&mut metadata);
-        let result = metadata
-            .args([
-                "metadata",
-                "--no-deps",
-                "--format-version",
-                "1",
-                "--manifest-path",
-            ])
-            .arg(root.join("out/Cargo.toml"))
-            .output()?;
-        assert!(result.status.success());
-        let metadata: serde_json::Value = serde_json::from_slice(&result.stdout)?;
-        let wasm = Utf8Path::new(metadata["target_directory"].as_str().unwrap())
-            .join("wasm32-wasip2/debug/preinit_probe.wasm");
-        let template = cache.finish(wasm.as_std_path(), root.as_std_path())?;
-        let template = Utf8Path::from_path(&template).unwrap();
+        let template = build_preinit_template(&root, target, tier)?;
         let js = root.join("main.js");
         std::fs::write(
             &js,
@@ -333,7 +480,7 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
         )?;
         let input = root.join("input.wasm");
         let source = std::fs::read_to_string(&js)?;
-        wasm_rquickjs::inject_js_into_component(template, &input, &[&source])?;
+        wasm_rquickjs::inject_js_into_component(&template, &input, &[&source])?;
         let mut previous = None;
         let optimized = root.join("optimized.wasm");
         for _ in 0..3 {

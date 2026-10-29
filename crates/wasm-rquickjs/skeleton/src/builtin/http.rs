@@ -392,6 +392,7 @@ impl HttpRequest {
     }
 
     pub fn init_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
+        crate::internal::preinit::check("HTTP request", "remote endpoint");
         let client = golem_wasi_http::ClientBuilder::new()
             .build()
             .map_err(|_| Exception::throw_message(&ctx, "Failed to create HTTP client"))?;
@@ -493,6 +494,7 @@ impl HttpRequest {
     }
 
     async fn simple_send_inner<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
+        crate::internal::preinit::check("HTTP request", "remote endpoint");
         // Validate mode constraints
         if self.mode == RequestMode::NoCors {
             let method_str = self.method.to_string().to_uppercase();

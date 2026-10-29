@@ -5451,7 +5451,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         })();
     }
 
-    async function prepareStaticRegisteredLoaderGraph(parentUrl, seen) {
+    async function prepareStaticRegisteredLoaderGraph(parentUrl, seen, loaded) {
+        // The normalized load record owns supplied source. A logical file URL
+        // alone must never turn that source into a deployment filesystem read.
+        // CommonJS reexports have a separate Rust analysis owner; JSON has no
+        // static ESM edges to prepare.
+        if (loaded && (loaded.format === 'commonjs' || loaded.format === 'json')) return;
         parentUrl = normalizeLoaderResolvedUrl(String(parentUrl));
         const physicalParentUrl = internalLoaderBaseUrl(parentUrl);
         seen = seen || Object.create(null);
@@ -5463,6 +5468,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const logicalParentUrl = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_lookup_loader_source_url(parentUrl) || parentUrl;
         const internalParentUrl = internalLoaderBaseUrl(logicalParentUrl);
 
+        // Supplied ESM has already been materialized into the data URL selected
+        // by staticRegisteredLoaderChildUrl. Reuse those stable bytes rather
+        // than converting a potentially mutated loader ArrayBuffer again.
         const source = staticRegisteredLoaderSourceForUrl(parentUrl);
         if (source === null) return;
         const edges = rustModuleSourceAnalysis(source).staticEdges;
@@ -5483,6 +5491,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 await prepareStaticRegisteredLoaderGraph(
                     staticRegisteredLoaderChildUrl(cached, cached.value),
                     seen,
+                    cached,
                 );
             }
         }
@@ -5493,6 +5502,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
         let graphUrl = entryUrl;
+        let graphLoad;
         if (entrySpecifier !== undefined && entryParentUrl !== undefined) {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
             const internalParentUrl = internalLoaderBaseUrl(parentUrl);
@@ -5505,9 +5515,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 parentUrl,
             );
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
-            const { cached, created } = cacheEntry;
-            if (created && cached && cached.error) return;
+            const { cached } = cacheEntry;
+            if (cached && cached.error) return;
             graphUrl = staticRegisteredLoaderChildUrl(cached, entryUrl);
+            graphLoad = cached;
             const aliases = staticRegisteredLoaderParentAliases(internalParentUrl);
             const specifierAliases = [specifier];
             if (cached && cached.url && isLoaderFileUrl(cached.url)) {
@@ -5528,7 +5539,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
             if (cached && cached.format === 'json') return;
         }
-        await prepareStaticRegisteredLoaderGraph(graphUrl, Object.create(null));
+        await prepareStaticRegisteredLoaderGraph(graphUrl, Object.create(null), graphLoad);
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_prepare_static_registered_loader_graph', {
         value: prepareStaticRegisteredLoaderEntry,
