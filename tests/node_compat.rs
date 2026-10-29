@@ -566,6 +566,18 @@ enum DiscoveryData {
     NodeTest(Vec<TestInfo>),
 }
 
+fn timeout_error(instance: &TestInstance, timeout_secs: u64) -> anyhow::Error {
+    let stdout = instance.read_stdout().unwrap_or_default();
+    let stderr = instance.read_stderr().unwrap_or_default();
+    anyhow::anyhow!(
+        "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n{}",
+        timeout_secs,
+        stdout.trim(),
+        stderr.trim(),
+        instance.failure_diagnostics()
+    )
+}
+
 fn handle_test_result(
     result: anyhow::Result<Option<Val>>,
     stdout: &str,
@@ -670,17 +682,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         };
                         match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
                             Ok(result) => result,
-                            Err(_) => {
-                                let stdout = instance.read_stdout().unwrap_or_default();
-                                let stderr = instance.read_stderr().unwrap_or_default();
-                                anyhow::bail!(
-                                    "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
-                                    test_timeout_secs,
-                                    stdout.trim(),
-                                    stderr.trim(),
-                                    common::host_trace().trim()
-                                )
-                            }
+                            Err(_) => Err(timeout_error(&instance, test_timeout_secs)),
                         }
                     })
                 },
@@ -762,12 +764,14 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
                             // Rewrite the test file to isolate the target subtest
                             let rewritten = match &discovery_clone {
-                                Some(DiscoveryData::Block(blocks)) => rewrite_for_block_with_options(
-                                    &source,
-                                    blocks,
-                                    subtest_index,
-                                    isolate_block_subtests,
-                                ),
+                                Some(DiscoveryData::Block(blocks)) => {
+                                    rewrite_for_block_with_options(
+                                        &source,
+                                        blocks,
+                                        subtest_index,
+                                        isolate_block_subtests,
+                                    )
+                                }
                                 Some(DiscoveryData::NodeTest(tests)) => {
                                     rewrite_for_node_test(&source, tests, subtest_index)
                                 }
@@ -798,19 +802,10 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
                                 handle_test_result(result, &stdout, &stderr)
                             };
-                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
+                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await
+                            {
                                 Ok(result) => result,
-                                Err(_) => {
-                                    let stdout = instance.read_stdout().unwrap_or_default();
-                                    let stderr = instance.read_stderr().unwrap_or_default();
-                                    anyhow::bail!(
-                                        "Test timed out after {}s\n[stdout]\n{}\n[stderr]\n{}\n[host trace]\n{}",
-                                        test_timeout_secs,
-                                        stdout.trim(),
-                                        stderr.trim(),
-                                        common::host_trace().trim()
-                                    )
-                                }
+                                Err(_) => Err(timeout_error(&instance, test_timeout_secs)),
                             }
                         })
                     },
