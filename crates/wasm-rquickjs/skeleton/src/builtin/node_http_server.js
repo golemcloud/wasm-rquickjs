@@ -1045,12 +1045,10 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
     if (typeof cb === 'function') {
         this.once('finish', cb);
     }
-    const finishResponse = (error) => {
-        if (error) {
-            this._errored = error;
-            this.emit('error', error);
-            return;
-        }
+    const finishResponse = () => {
+        // Like Node's internal end completion, this only notifies finish.
+        // Socket errors belong to socket error/close handling and public write
+        // callbacks; re-emitting them here races the socket's abort cleanup.
         this._finishEmitted = true;
         this.emit('finish');
     };

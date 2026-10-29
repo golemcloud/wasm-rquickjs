@@ -688,6 +688,59 @@ export async function httpResponseRepeatedEndCallbacks() {
     ) {
         return false;
     }
+
+    // Hold public socket write completions until destroy() has begun, before
+    // its asynchronous close notification. Socket errors must still reach the
+    // public write callback without becoming a second response error.
+    for (const withError of [false, true]) {
+        const socket = new net.Socket();
+        const completions = [];
+        const expectedError = Object.assign(new Error('cancelled socket write'), {
+            code: 'EPIPE',
+        });
+        let socketErrorCount = 0;
+        let socketError;
+        let socketCloseCount = 0;
+        let responseErrorCount = 0;
+        let cancelledFinishCount = 0;
+        let endCallbackCount = 0;
+        let writeCallbackCount = 0;
+        let writeCallbackError;
+        socket.on('error', (error) => {
+            socketErrorCount++;
+            socketError = error;
+        });
+        socket.on('close', () => socketCloseCount++);
+        socket.write = (_data, encoding, callback) => {
+            completions.push(typeof encoding === 'function' ? encoding : callback);
+            return false;
+        };
+        const response = new http.ServerResponse(request);
+        response.on('error', () => responseErrorCount++);
+        response.on('finish', () => cancelledFinishCount++);
+        response.assignSocket(socket);
+        response.write('prefix', (error) => {
+            writeCallbackCount++;
+            writeCallbackError = error;
+        });
+        response.end('body', () => endCallbackCount++);
+        socket.destroy(withError ? expectedError : undefined);
+        for (const completion of completions) {
+            if (typeof completion === 'function') completion(expectedError);
+        }
+        await new Promise((resolve) => setImmediate(resolve));
+        if (responseErrorCount !== 0 ||
+            cancelledFinishCount !== 1 || endCallbackCount !== 1 ||
+            writeCallbackCount !== 1 || writeCallbackError !== expectedError ||
+            socketCloseCount !== 1 || socketErrorCount !== Number(withError) ||
+            (withError && socketError !== expectedError)) {
+            console.log(JSON.stringify({
+                withError, responseErrorCount, cancelledFinishCount,
+                endCallbackCount, writeCallbackCount, socketCloseCount, socketErrorCount,
+            }));
+            return false;
+        }
+    }
     return true;
 }
 

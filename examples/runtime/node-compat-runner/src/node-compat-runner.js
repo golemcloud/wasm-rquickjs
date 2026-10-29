@@ -12,6 +12,7 @@
 const require = globalThis.require;
 // Tests may replace process or delete global timer functions.
 const awaitRuntimeIdle = globalThis.process._awaitRuntimeIdle;
+const reportUnexpectedRejection = globalThis.console.error.bind(globalThis.console);
 
 // Track unhandled rejections from test top-level promise chains.
 //
@@ -36,6 +37,22 @@ function installRejectionTracking() {
                 globalThis.process &&
                 typeof globalThis.process.listenerCount === 'function' &&
                 globalThis.process.listenerCount('unhandledRejection') > 1;
+            if (!_firstUnhandledRejectionHadTestListener) {
+                // A failed operation can leave a server listening, so the idle
+                // wait may never finish. Preserve its first rejection in the
+                // timeout's captured stderr as well as the final failure result.
+                var diagnostic = '<unprintable rejection>';
+                try {
+                    var stack = reason && reason.stack;
+                    diagnostic = stack ? String(stack) : String(reason);
+                } catch (_) {}
+                try {
+                    reportUnexpectedRejection(
+                        'Unhandled promise rejection before runtime idle:',
+                        diagnostic
+                    );
+                } catch (_) {}
+            }
         }
     }
 
