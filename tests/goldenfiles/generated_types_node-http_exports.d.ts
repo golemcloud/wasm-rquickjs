@@ -5,6 +5,7 @@ declare module 'node-http' {
   export function httpConstants(): Promise<void>;
   export function httpSelfConnect(): Promise<void>;
   export function httpSelfConnectPost(): Promise<void>;
+  export function httpRequestBodyCompletion(): Promise<boolean>;
   export function httpAbortIsolation(): Promise<boolean>;
   export function httpResponseCancellation(port: number, testCase: number): Promise<boolean>;
   export function httpResponseLifecycle(): Promise<boolean>;

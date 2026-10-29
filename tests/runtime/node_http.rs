@@ -246,7 +246,6 @@ async fn node_http_self_connect(
 }
 
 #[test]
-#[test_r::flaky(2)]
 async fn node_http_self_connect_post(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -274,6 +273,25 @@ async fn node_http_abort_isolation(
         invoke_and_capture_output(compiled.wasm_path(), None, "http-abort-isolation", &[]).await;
     println!("{output}");
     assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_http_request_body_completion(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = tokio::time::timeout(
+        std::time::Duration::from_secs(90),
+        invoke_and_capture_output(
+            compiled.wasm_path(),
+            None,
+            "http-request-body-completion",
+            &[],
+        ),
+    )
+    .await?;
+    println!("{output}");
+    assert_eq!(result?, Some(Val::Bool(true)));
     Ok(())
 }
 

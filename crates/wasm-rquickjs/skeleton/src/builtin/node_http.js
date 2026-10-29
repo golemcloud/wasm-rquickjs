@@ -1537,6 +1537,7 @@ export class ClientRequest extends OutgoingMessage {
         this._transportRejected = false;
 
         this.aborted = false;
+        this._requestErrorEmitted = false;
         this.socket = null;
         this.reusedSocket = false;
         this._timeout = null;
@@ -1601,6 +1602,9 @@ export class ClientRequest extends OutgoingMessage {
 
     _emitRequestError(error) {
         const parsed = _parseNativeHttpError(error);
+        // Remember the transport failure before application code can destroy
+        // the request, so cleanup does not manufacture a second hangup error.
+        this._requestErrorEmitted = true;
         if (onClientRequestError.hasSubscribers) {
             onClientRequestError.publish({ request: this, error: parsed });
         }
@@ -2219,7 +2223,8 @@ export class ClientRequest extends OutgoingMessage {
                 this._response.destroy(responseError);
             }
         }
-        if (!error && !this._response && !this._transportRejected) {
+        if (!error && !this._response && !this._transportRejected &&
+            !this._requestErrorEmitted) {
             // Request destroyed before receiving a response — emit ECONNRESET
             // matching Node.js behavior for destroyed pending requests.
             error = new Error('socket hang up');
@@ -2230,7 +2235,10 @@ export class ClientRequest extends OutgoingMessage {
         // after construction (e.g., pre-aborted AbortSignal case).
         if (error) {
             process.nextTick(() => {
-                this.emit('error', error);
+                if (!this._requestErrorEmitted) {
+                    this._requestErrorEmitted = true;
+                    this.emit('error', error);
+                }
                 this._emitCloseOnce();
             });
         } else {

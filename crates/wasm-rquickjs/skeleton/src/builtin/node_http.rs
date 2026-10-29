@@ -809,13 +809,42 @@ async fn write_all_to_stream<'js>(
             }
         }
     }
-    stream
-        .flush()
-        .map_err(|_| Exception::throw_message(ctx, "failed to flush request body"))?;
+    // Match wasi:io's combined write-and-flush operation: closing after all
+    // input was accepted can complete the write, while a failed operation must
+    // still be reported. In particular, HTTP may consume the declared body
+    // length and close its receiver before this flush.
+    match stream.flush() {
+        Ok(()) | Err(StreamError::Closed) => {}
+        Err(_) => {
+            return Err(Exception::throw_message(
+                ctx,
+                "failed to flush request body",
+            ));
+        }
+    }
     #[cfg(feature = "net-write-profiling")]
     let flush_wait_started_at = Instant::now();
-    let pollable = stream.subscribe();
-    AsyncPollable::new(pollable).wait_for().await;
+    loop {
+        let pollable = stream.subscribe();
+        AsyncPollable::new(pollable).wait_for().await;
+        // Readiness alone does not prove the flush succeeded: delayed failures
+        // are returned by check-write. Closed is successful only in this final
+        // phase; the input loop above still rejects every premature closure.
+        #[cfg(feature = "net-write-profiling")]
+        {
+            check_write_calls += 1;
+        }
+        match stream.check_write() {
+            Ok(0) => continue,
+            Ok(_) | Err(StreamError::Closed) => break,
+            Err(_) => {
+                return Err(Exception::throw_message(
+                    ctx,
+                    "failed to flush request body",
+                ));
+            }
+        }
+    }
     #[cfg(feature = "net-write-profiling")]
     eprintln!(
         "[node-http-write-profile]{}",
