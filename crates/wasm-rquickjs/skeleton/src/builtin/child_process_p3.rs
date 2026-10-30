@@ -112,6 +112,13 @@ impl RuntimeOutputSink for ChildState {
 }
 
 /// A parent-owned handle. Neither the handle nor its state roots a child context.
+///
+/// Like Node, local children have no count or nesting limit; the component's resources
+/// are the limit. Each live child is a fresh runtime (about 7 MiB measured), so
+/// concurrent children share the component's linear memory, and a child whose runtime
+/// cannot be created exits with status 1 and an out-of-memory message without
+/// trapping the parent. Nested `spawnSync` runs on the parent's stack: about 97
+/// levels fit in a release build before the shadow stack overflows and traps.
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class]
 pub struct Child {
