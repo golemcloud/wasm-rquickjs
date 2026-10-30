@@ -69,6 +69,11 @@ impl StdoutStream for Stderr {
 }
 
 impl OutputStream for Stderr {
+    #[cfg(feature = "use-golem-wasmtime")]
+    fn as_any(&self) -> &dyn std::any::Any {
+        self
+    }
+
     fn write(&mut self, bytes: bytes::Bytes) -> StreamResult<()> {
         self.write_all(&bytes)
             .map_err(|error| StreamError::LastOperationFailed(error.into()))
