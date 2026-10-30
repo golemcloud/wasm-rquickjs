@@ -792,7 +792,7 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
     }
 
     let inventory = syncable_inventory();
-    assert_eq!(inventory.len(), 55, "syncable builtin inventory changed");
+    assert_eq!(inventory.len(), 61, "syncable builtin inventory changed");
     for (target, registry) in [("p2", BUILTIN_MOD_RS), ("p3", BUILTIN_P3_RS)] {
         assert_eq!(
             registered_syncable_builtins(registry),

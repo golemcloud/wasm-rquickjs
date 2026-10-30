@@ -13,6 +13,11 @@ const IMPLEMENTATION_PREFIX: &str = "__wasm_rquickjs_builtin/sync-implementation
 const SYNCABLE_BUILTIN_NAMES: &[&str] = &[
     "node:_http_agent",
     "node:_http_common",
+    "node:_stream_duplex",
+    "node:_stream_passthrough",
+    "node:_stream_readable",
+    "node:_stream_transform",
+    "node:_stream_writable",
     "node:assert",
     "node:assert/strict",
     "node:async_hooks",
@@ -53,6 +58,7 @@ const SYNCABLE_BUILTIN_NAMES: &[&str] = &[
     "node:stream/promises",
     "node:stream/web",
     "node:string_decoder",
+    "node:sys",
     "node:test",
     "node:timers",
     "node:timers/promises",
@@ -147,7 +153,7 @@ const __wasmRquickjsKeys = globalThis.__wasm_rquickjs_builtin_facade_object_keys
     for export_name in &export_names {
         writeln!(
             source,
-            "  if (!__wasmRquickjsHasOwn(__wasmRquickjsDefault, {export_name:?})) __wasmRquickjsDefineProperty(__wasmRquickjsDefault, {export_name:?}, {{ value: __wasmRquickjsNamespace[{export_name:?}], writable: true, configurable: true, enumerable: true }});"
+            "  if (!__wasmRquickjsHasOwn(__wasmRquickjsDefault, {export_name:?}) && __wasmRquickjsHasOwn(__wasmRquickjsNamespace, {export_name:?})) __wasmRquickjsDefineProperty(__wasmRquickjsDefault, {export_name:?}, {{ value: __wasmRquickjsNamespace[{export_name:?}], writable: true, configurable: true, enumerable: true }});"
         )
         .unwrap();
     }

@@ -513,6 +513,11 @@ async fn every_syncable_builtin_can_be_imported_first(
     const SPECIFIERS: &[&str] = &[
         "node:_http_agent",
         "node:_http_common",
+        "node:_stream_readable",
+        "node:_stream_writable",
+        "node:_stream_duplex",
+        "node:_stream_transform",
+        "node:_stream_passthrough",
         "node:assert",
         "node:assert/strict",
         "node:async_hooks",
@@ -553,6 +558,7 @@ async fn every_syncable_builtin_can_be_imported_first(
         "node:stream/promises",
         "node:stream/web",
         "node:string_decoder",
+        "node:sys",
         "node:test",
         "node:timers",
         "node:timers/promises",
@@ -600,6 +606,123 @@ async fn first_builtin_import_snapshots_commonjs_mutations(
     let r = r?;
     println!("Output:\n{output}");
     assert_eq!(r, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn process_builtin_discovery_contract(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 0).await
+}
+
+#[test]
+async fn process_builtin_discovery_loader_bypass(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 1).await
+}
+
+#[test]
+async fn process_builtin_discovery_console_identity(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 2).await
+}
+
+#[test]
+async fn process_builtin_discovery_mutation_and_vm(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 3).await
+}
+
+#[test]
+async fn process_builtin_discovery_execution_isolation(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 4).await
+}
+
+#[test]
+async fn process_builtin_discovery_sys_alias(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 5).await
+}
+
+#[test]
+async fn process_builtin_discovery_stream_aliases(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 6).await
+}
+
+#[test]
+async fn process_builtin_discovery_alias_snapshots(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 7).await
+}
+
+#[test]
+async fn process_builtin_discovery_cjs_getter_boundary(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 8).await
+}
+
+#[test]
+async fn process_builtin_discovery_esm_getter_boundary(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 9).await
+}
+
+#[test]
+async fn process_builtin_discovery_throwing_static_getter(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 10).await
+}
+
+#[test]
+async fn process_builtin_discovery_loader_error(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 11).await
+}
+
+#[test]
+async fn process_builtin_discovery_sys_own_properties(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 12).await
+}
+
+#[test]
+async fn process_builtin_discovery_esm_first_throw(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 13).await
+}
+
+#[test]
+async fn process_builtin_discovery_console_own_properties(
+    #[tagged_as("module_resolution")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    builtin_discovery(compiled, 14).await
+}
+
+async fn builtin_discovery(compiled: &CompiledTest, test_case: u8) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-builtin-discovery",
+        &[Val::U8(test_case)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::Bool(true)), "case {test_case}: {output}");
     Ok(())
 }
 

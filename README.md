@@ -819,6 +819,8 @@ Compatibility stubs — no V8 inspector in WASM.
 <details>
 <summary><strong><code>node:module</code></strong></summary>
 
+Builtin ESM export names are fixed by the runtime, including aliases. Changing builtin properties before the first ESM import does not add or remove named exports; `syncBuiltinESMExports()` updates their values.
+
 - `require`, `require.resolve`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
 - `stripTypeScriptTypes(code[, options])` with Node-compatible strip and transform modes when the
   generated crate enables `typescript-runtime`
@@ -883,7 +885,8 @@ TCP sockets and servers built on WASI sockets.
 <summary><strong><code>node:process</code></strong></summary>
 
 - **Properties:** `argv`, `argv0`, `env`, `pid`, `ppid`, `platform` (`'wasi'`), `arch` (`'wasm32'`), `version`, `versions`, `config`, `features`, `execArgv`, `execPath`, `exitCode`, `stdout`, `stderr`
-- **Methods:** `exit(code)`, `cwd()`, `nextTick(callback, ...args)`, `hrtime()`, `hrtime.bigint()`, `uptime()`, `cpuUsage()`, `memoryUsage()`, `kill(pid, signal)`, `abort()`, `emitWarning()`
+- **Methods:** `exit(code)`, `cwd()`, `nextTick(callback, ...args)`, `getBuiltinModule(id)`, `hrtime()`, `hrtime.bigint()`, `uptime()`, `cpuUsage()`, `memoryUsage()`, `kill(pid, signal)`, `abort()`, `emitWarning()`
+- `getBuiltinModule(id)` returns the existing object for builtins registered by this runtime, and `undefined` for unavailable IDs. The supported set is smaller than Node.js: `node:sea`, `node:test/reporters`, `node:inspector/promises`, `node:wasi`, `_stream_wrap`, and unimplemented `_http_*`/`_tls_*` wrappers are unavailable.
 - **User/Group:** `getuid`, `getgid`, `geteuid`, `getegid`, `getgroups`, `setuid`, `setgid`
 - Inherits from `EventEmitter` — supports `on('uncaughtException')`, `on('unhandledRejection')`, etc.
 
@@ -934,6 +937,8 @@ Requires the `sqlite` feature flag. Provides a synchronous SQLite database API w
 
 <details>
 <summary><strong><code>node:stream</code></strong></summary>
+
+- Legacy `_stream_readable`, `_stream_writable`, `_stream_duplex`, `_stream_transform` and `_stream_passthrough` aliases support CommonJS and ESM, with the same constructor defaults.
 
 - `Readable` (with `from`, `fromWeb`, `toWeb`, `wrap`, and functional methods: `map`, `filter`, `flatMap`, `take`, `drop`, `toArray`, `forEach`, `reduce`, `some`, `every`, `find`)
 - `Writable`, `Duplex`, `Transform`, `PassThrough`, `Stream`
@@ -1013,6 +1018,8 @@ Partial compatibility API to unblock modules that inspect tracing state.
 
 <details>
 <summary><strong><code>node:util</code></strong></summary>
+
+- `sys` / `node:sys` aliases share the util object and support CommonJS and ESM.
 
 - `format`, `inspect`, `deprecate`, `debugLog`, `log`
 - Type checks: `isArray`, `isBoolean`, `isNull`, `isNullOrUndefined`, `isNumber`, `isString`, `isSymbol`, `isUndefined`, `isRegExp`, `isObject`, `isDate`, `isError`, `isFunction`, `isPrimitive`, `isBuffer`
