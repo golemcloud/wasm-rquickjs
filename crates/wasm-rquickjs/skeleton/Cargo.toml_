@@ -219,5 +219,8 @@ golem-websocket = { version = "0.0.3", default-features = false, optional = true
 [patch.crates-io]
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
+# QuickJS freed module records while pending import() reactions still referenced
+# them, corrupting memory during runtime teardown.
+rquickjs-sys = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
 # The bridge includes the target-specific receive signatures and reconstruction policy.
 golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", branch = "gol804-websocket-current-generator" }

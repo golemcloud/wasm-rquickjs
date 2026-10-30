@@ -277,19 +277,27 @@ export async function run() {
             assert.equal(fresh(`JSON.stringify = () => '{}'; process.exitCode = 7;`).status, 7);
         } else if (config.mode === 'tla-cleanup') {
             mkdirSync('/child-tla-cleanup', { recursive: true });
-            writeFileSync('/child-tla-cleanup/entry.mjs', config.kind === 'require'
-                ? `await Promise.resolve(); process.stdout.write('must not execute');`
-                : `await new Promise(() => {});`);
+            writeFileSync('/child-tla-cleanup/async.mjs', `await Promise.resolve(); process.stdout.write('must not execute');`);
+            writeFileSync('/child-tla-cleanup/pending.mjs', `await new Promise(() => {});`);
+            writeFileSync('/child-tla-cleanup/chained.mjs', `await import('./pending.mjs'); process.stdout.write('must not execute');`);
+            writeFileSync('/child-tla-cleanup/exit.mjs', `setTimeout(() => process.exit(3), 1); await new Promise(() => {});`);
+            // Pending import() reactions keep module records alive into runtime teardown,
+            // where the failure depends on GC order; repeat each shape.
+            const { args, status } = {
+                require: { args: ['-e', `require('./async.mjs');`], status: 1 },
+                pending: { args: ['./pending.mjs'], status: 13 },
+                dynamic: { args: ['-e', `import('./pending.mjs');`], status: 0 },
+                chained: { args: ['./chained.mjs'], status: 13 },
+                exit: { args: ['./exit.mjs'], status: 3 },
+            }[config.kind];
             for (let iteration = 0; iteration < 3; iteration++) {
-                const args = config.kind === 'require'
-                    ? ['-e', `require('./entry.mjs');`] : ['./entry.mjs'];
                 const result = spawnSync(process.execPath, args, {
                     cwd: '/child-tla-cleanup', encoding: 'utf8',
                 });
-                assert.equal(result.status, config.kind === 'require' ? 1 : 13, result.stderr);
+                assert.equal(result.status, status, result.stderr);
                 assert.equal(result.stdout, '');
                 if (config.kind === 'require') assert.match(result.stderr, /ERR_REQUIRE_ASYNC_MODULE/);
-                else assert.equal(result.stderr, '');
+                else if (config.kind === 'pending') assert.equal(result.stderr, '');
                 const next = spawnSync(process.execPath, ['-e', `process.stdout.write('healthy');`], { encoding: 'utf8' });
                 assert.equal(next.status, 0, next.stderr);
                 assert.equal(next.stdout, 'healthy');

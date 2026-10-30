@@ -247,6 +247,39 @@ async fn local_node_child_unresolved_tla_keeps_runtime_usable(
 }
 
 #[test]
+async fn local_node_child_dynamic_import_of_pending_tla_keeps_runtime_usable(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "tla-cleanup", "kind": "dynamic" }),
+    )
+    .await
+}
+
+#[test]
+async fn local_node_child_chained_pending_tla_keeps_runtime_usable(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "tla-cleanup", "kind": "chained" }),
+    )
+    .await
+}
+
+#[test]
+async fn local_node_child_exit_during_tla_keeps_runtime_usable(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "tla-cleanup", "kind": "exit" }),
+    )
+    .await
+}
+
+#[test]
 async fn local_node_child_entry_resolution_contract(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
