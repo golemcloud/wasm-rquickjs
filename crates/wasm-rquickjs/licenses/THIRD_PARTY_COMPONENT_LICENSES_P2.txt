@@ -6764,6 +6764,7 @@ SOFTWARE.
 
 --- MIT License ---
 Used by:
+* rquickjs 0.14.0
 * rquickjs-sys 0.14.0
 
 The MIT License (MIT)

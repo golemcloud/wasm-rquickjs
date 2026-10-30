@@ -219,8 +219,13 @@ golem-websocket = { version = "0.0.3", default-features = false, optional = true
 [patch.crates-io]
 rusqlite = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
 libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.38.0-patched" }
-# QuickJS freed module records while pending import() reactions still referenced
-# them, corrupting memory during runtime teardown.
+# Patch the rquickjs crates together: QuickJS freed module records still referenced by
+# pending top-level awaits during runtime teardown. The fork carries quickjs-ng PR #1751
+# (GC-traced modules, jobs retaining their realm) and releases the module values that
+# Module::declare and Module::load leaked (rquickjs issue #783).
+rquickjs = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
+rquickjs-core = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
+rquickjs-macro = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
 rquickjs-sys = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
 # The bridge includes the target-specific receive signatures and reconstruction policy.
 golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", branch = "gol804-websocket-current-generator" }
