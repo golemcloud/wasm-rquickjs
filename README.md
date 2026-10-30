@@ -206,6 +206,19 @@ Defer SQLite connections with `new DatabaseSync(path, { open: false })`, then ca
 Applications that require top-level external I/O should skip `optimize` and
 initialize at runtime instead.
 
+Host exception diagnostics recognize native Errors and legacy Error-prototype
+objects and use bounded native stack
+frames without invoking application getters, coercion, `toJSON`, or
+`Error.prepareStackTrace`. Arbitrary objects and oversized strings receive
+bounded descriptions. When the engine supplies no usable position, the
+diagnostic explicitly says that the source location is unavailable. Existing
+source maps and wrapper offsets are read through guarded data lookup; unsafe,
+missing or overly expensive mappings fall back to generated code locations.
+Previously prepared stack text is reused within the same bounds without running
+its hook again. Readable bundles and source map configuration remain the
+responsibility of the build tooling. Public
+JavaScript `.stack` and `prepareStackTrace` behavior is unchanged.
+
 **Deterministic pre-initialization:** newly generated P2 and P3 templates export
 `wasm-rquickjs-wizer-restore-v1`. When optimizing their `wizer-initialize` export,
 the optimizer supplies fixed-seed entropy, Unix-epoch wall time, and a zero

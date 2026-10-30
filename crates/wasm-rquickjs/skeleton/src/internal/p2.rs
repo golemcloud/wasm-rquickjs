@@ -1,10 +1,11 @@
+use super::{format_caught_error, format_js_exception};
 use futures_concurrency::future::Join;
 use rquickjs::function::{Args, Constructor};
+use rquickjs::prelude::*;
 use rquickjs::{
     AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Filter, FromJs, Function, Module,
     Object, Persistent, Promise, Value,
 };
-use rquickjs::{CaughtError, prelude::*};
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::future::Future;
@@ -889,93 +890,6 @@ fn dump_cannot_find_method(
     ));
 
     panic_message
-}
-
-pub fn format_js_exception(exc: &Value) -> String {
-    try_format_js_error(exc)
-        .or_else(|| try_format_tagged_error(exc))
-        .unwrap_or_else(|| {
-            let formatted_exc = pretty_stringify_or_debug_print(exc);
-            if formatted_exc.contains("\n") {
-                format!("JavaScript exception:\n{formatted_exc}",)
-            } else {
-                format!("JavaScript exception: {formatted_exc}",)
-            }
-        })
-}
-
-pub fn try_format_js_error(err: &Value) -> Option<String> {
-    let error_ctor: Object = err.ctx().globals().get("Error").ok()?;
-    let obj = err.as_object()?;
-
-    if !obj.is_instance_of(error_ctor) {
-        return None;
-    }
-
-    let message: Option<String> = obj.get("message").ok();
-    let stack: Option<String> = obj.get("stack").ok();
-
-    match (message, stack) {
-        (Some(msg), Some(st)) => Some(format!("JavaScript error: {msg}\nStack:\n{st}")),
-        (Some(msg), None) => Some(format!("JavaScript error: {msg}")),
-        (None, Some(st)) => Some(format!("JavaScript error: <no message>\nStack:\n{st}")),
-        _ => None,
-    }
-}
-
-pub fn try_format_tagged_error(err: &Value) -> Option<String> {
-    let obj = err.as_object()?;
-    let tag: Option<String> = obj.get("tag").ok();
-    let val: Option<Value> = obj.get("val").ok();
-    let val = val.and_then(|v| (!v.is_undefined()).then_some(v));
-
-    match (tag, val) {
-        (Some(tag), Some(val)) => {
-            let formatted_val = pretty_stringify_or_debug_print(&val);
-            if formatted_val.contains("\n") {
-                Some(format!("Error: {tag}:\n{formatted_val}"))
-            } else {
-                Some(format!("Error: {tag}: {formatted_val}"))
-            }
-        }
-        (Some(tag), None) => Some(format!("Error: {tag}")),
-        _ => None,
-    }
-}
-
-fn pretty_stringify_or_debug_print(val: &Value) -> String {
-    if let Some(formatted) = try_pretty_stringify(val) {
-        formatted
-    } else {
-        format!("{val:#?}")
-    }
-}
-
-fn try_pretty_stringify(val: &Value) -> Option<String> {
-    if val.is_undefined() {
-        return Some("undefined".to_string());
-    }
-
-    // Return strings as they are
-    if let Some(str) = val.as_string() {
-        return str.to_string().ok();
-    }
-
-    // For other values try to use JSON.stringify()
-    let json: Object = val.ctx().globals().get("JSON").ok()?;
-    let stringify: Function = json.get("stringify").ok()?;
-    let res: Result<String, Error> = stringify.call((val, rquickjs::Undefined, 2));
-    res.ok()
-}
-
-pub fn format_caught_error(caught: CaughtError) -> String {
-    match caught {
-        CaughtError::Error(e) => {
-            format!("Host error: {e:?}")
-        }
-        CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
-        CaughtError::Value(val) => format_js_exception(&val),
-    }
 }
 
 /// Wizer pre-initialization entry point: full initialization including user module.

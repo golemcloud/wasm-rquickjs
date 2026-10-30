@@ -741,6 +741,8 @@ impl OwnedJsRuntime {
             };
             ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
+            super::error_formatting::initialize(&ctx)
+                .expect("Failed to initialize diagnostic intrinsics");
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
             #[cfg(feature = "test-observability")]
@@ -871,23 +873,34 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
             return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
         };
     "#);
+    source.push_str(r#"
+        export { readHostErrorStack as __hostStackReader } from '__wasm_rquickjs_builtin/internal/errors';
+    "#);
     rquickjs::AsyncContext::async_with(ctx, async |ctx| {
-        Module::evaluate(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
+        let module = Module::declare(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
             .catch(&ctx)
             .map_err(|error| {
                 format!(
                     "Failed to evaluate built-in wiring:\n{}",
                     super::format_caught_error(error)
                 )
-            })?
-            .finish::<()>()
-            .catch(&ctx)
-            .map_err(|error| {
-                format!(
-                    "Failed to finish built-in wiring:\n{}",
-                    super::format_caught_error(error)
-                )
             })?;
+        let (module, promise) = module.eval().catch(&ctx).map_err(|error| {
+            format!(
+                "Failed to start built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        promise.finish::<()>().catch(&ctx).map_err(|error| {
+            format!(
+                "Failed to finish built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        let reader = module
+            .get("__hostStackReader")
+            .map_err(|error| format!("Failed to capture host stack reader: {error}"))?;
+        super::error_formatting::install_host_stack_reader(&ctx, reader);
         Ok::<(), String>(())
     })
     .await

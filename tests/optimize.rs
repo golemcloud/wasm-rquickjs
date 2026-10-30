@@ -2,6 +2,8 @@ use camino::Utf8Path;
 use camino_tempfile::Utf8TempDir;
 use wasm_rquickjs::{OptimizeOptions, optimize_component, optimize_component_with_options};
 
+#[path = "optimize/diagnostics.rs"]
+mod diagnostics_tests;
 mod p3_build;
 #[path = "optimize/preinit.rs"]
 mod preinit_tests;

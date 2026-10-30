@@ -24,11 +24,15 @@ compile_error!(
     "enable exactly one of the `p2` or `p3` features to select the WASI generation target"
 );
 
+pub(crate) mod error_formatting;
 pub(crate) mod module_loading;
 pub(crate) mod preinit;
 pub(crate) mod runtime_services;
 #[cfg(feature = "typescript-runtime")]
 pub(crate) mod typescript;
+pub use error_formatting::{
+    format_caught_error, format_js_exception, try_format_js_error, try_format_tagged_error,
+};
 pub(crate) use module_loading::{
     mark_node_package_deprecation_warning_seen, node_package_deprecation_warning_seen,
 };
