@@ -83,22 +83,12 @@ impl wasmtime_wasi::WasiView for WizerHost {
     }
 }
 
-impl wasmtime_wasi_http::p2::WasiHttpView for WizerHost {
-    fn http(&mut self) -> wasmtime_wasi_http::p2::WasiHttpCtxView<'_> {
-        wasmtime_wasi_http::p2::WasiHttpCtxView {
+impl wasmtime_wasi_http::WasiHttpView for WizerHost {
+    fn http(&mut self) -> wasmtime_wasi_http::WasiHttpCtxView<'_> {
+        wasmtime_wasi_http::WasiHttpCtxView {
             ctx: &mut self.wasi_http,
             table: &mut self.table,
-            hooks: wasmtime_wasi_http::p2::default_hooks(),
-        }
-    }
-}
-
-impl wasmtime_wasi_http::p3::WasiHttpView for WizerHost {
-    fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
-        wasmtime_wasi_http::p3::WasiHttpCtxView {
-            ctx: &mut self.wasi_http,
-            table: &mut self.table,
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: wasmtime_wasi_http::default_hooks(),
         }
     }
 }
@@ -110,7 +100,7 @@ pub struct OptimizeOptions {
     /// memory extraction. This is not WebAssembly instruction fuel or a limit
     /// on the total snapshot size.
     ///
-    /// `None` preserves Wasmtime's default (128 MiB in Golem's 46.0.1 fork).
+    /// `None` preserves Wasmtime's default copy budget.
     /// `Some(0)` permits no copying; values are passed through unchanged.
     /// An explicit budget requires `use-golem-wasmtime` and Golem's compatible
     /// Wasmtime fork via Cargo patches. Stock Wasmtime does not expose this
@@ -206,7 +196,7 @@ pub async fn optimize_component_with_options(
     // removing the export corrupts CoreInstance section references.
     wizer.keep_init_func(true);
 
-    let optimized: Vec<u8> = wizer
+    let (optimized, _) = wizer
         .run_component(
             &mut store,
             &wasm_bytes,

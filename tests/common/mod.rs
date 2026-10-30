@@ -35,9 +35,8 @@ use wasmtime::component::{
 use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::p2::bindings;
-use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi::{FsPerms, WasiCtx, WasiCtxView, WasiView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 pub mod ws_mock_p2 {
     wasmtime::component::bindgen!({
@@ -1255,175 +1254,20 @@ impl<B: HttpBody> Drop for TracedHttpBody<B> {
 }
 
 #[derive(Clone)]
-struct P2HttpTraceHooks(HttpLifecycleTrace);
+struct HttpTraceHooks(HttpLifecycleTrace);
 
-fn trace_p2_result(
-    trace: &HttpLifecycleTrace,
-    request_id: usize,
-    result: Result<
-        wasmtime_wasi_http::p2::types::IncomingResponse,
-        wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
-    >,
-) -> Result<
-    wasmtime_wasi_http::p2::types::IncomingResponse,
-    wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
-> {
-    match result {
-        Ok(mut incoming) => {
-            trace.record(
-                request_id,
-                HttpLifecyclePhase::ResponseHead,
-                incoming.resp.status().as_u16(),
-            );
-            let (parts, body) = incoming.resp.into_parts();
-            incoming.resp = http::Response::from_parts(
-                parts,
-                TracedHttpBody::new(body, trace.clone(), request_id, "response", None)
-                    .boxed_unsync(),
-            );
-            Ok(incoming)
-        }
-        Err(error) => {
-            trace.record(request_id, HttpLifecyclePhase::SendError, 0);
-            Err(error)
-        }
-    }
-}
-
-#[cfg(feature = "use-golem-wasmtime")]
-fn p2_method_expects_body(method: &http::Method) -> bool {
-    method == http::Method::POST || method == http::Method::PUT || method == http::Method::PATCH
-}
-
-#[cfg(feature = "use-golem-wasmtime")]
-fn p2_body_completion_for_dispatch(
-    method: &http::Method,
-    body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
-) -> Option<wasmtime_wasi_http::p2::BodyCompletionReceiver> {
-    if p2_method_expects_body(method) {
-        drop(body_completion);
-        None
-    } else {
-        body_completion
-    }
-}
-
-impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
-    #[cfg(not(feature = "use-golem-wasmtime"))]
+impl wasmtime_wasi_http::WasiHttpHooks for HttpTraceHooks {
     fn send_request(
         &mut self,
-        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
-    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
-    {
-        let trace = self.0.clone();
-        let request_id = record_http_submit(&trace, &request);
-
-        let (parts, body) = request.into_parts();
-        let request = http::Request::from_parts(
-            parts,
-            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
-        );
-        let handle = wasmtime_wasi::runtime::spawn(async move {
-            let result =
-                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
-            Ok(trace_p2_result(&trace, request_id, result))
-        });
-        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
-    }
-
-    #[cfg(feature = "use-golem-wasmtime")]
-    fn send_request(
-        &mut self,
-        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
-        body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
-    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
-    {
-        let trace = self.0.clone();
-        let request_id = record_http_submit(&trace, &request);
-        let body_completion = p2_body_completion_for_dispatch(request.method(), body_completion);
-        let collect_before_send = body_completion.is_some();
-        let (parts, body) = request.into_parts();
-        let request = http::Request::from_parts(
-            parts,
-            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
-        );
-        let handle = wasmtime_wasi::runtime::spawn(async move {
-            let request = if collect_before_send {
-                let body_completion = body_completion.expect("checked above");
-                let (parts, body) = request.into_parts();
-                let completion = async {
-                    match body_completion.await {
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(error)) => Err(error),
-                        Err(_) => Err(
-                            wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError,
-                        ),
-                    }
-                };
-                let collect = async {
-                    BodyExt::collect(body).await.map(|collected| {
-                        collected
-                            .map_err(|_: std::convert::Infallible| unreachable!())
-                            .boxed_unsync()
-                    })
-                };
-                let (completion, collected) = futures::future::join(completion, collect).await;
-                completion?;
-                http::Request::from_parts(parts, collected?)
-            } else {
-                request
-            };
-            let result =
-                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
-            Ok(trace_p2_result(&trace, request_id, result))
-        });
-        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
-    }
-}
-
-#[derive(Clone)]
-struct P3HttpTraceHooks(HttpLifecycleTrace);
-
-impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
-    fn send_request(
-        &mut self,
-        request: http::Request<
-            http_body_util::combinators::UnsyncBoxBody<
-                bytes::Bytes,
-                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-            >,
-        >,
-        options: Option<wasmtime_wasi_http::p3::RequestOptions>,
-        response_processing: Box<
-            dyn Future<
-                    Output = Result<(), wasmtime_wasi_http::p3::bindings::http::types::ErrorCode>,
-                > + Send,
-        >,
+        request: http::Request<wasmtime_wasi_http::WasiBody>,
+        options: Option<wasmtime_wasi_http::RequestOptions>,
+        response_processing: Box<dyn Future<Output = Result<(), wasmtime_wasi_http::Error>> + Send>,
     ) -> Box<
         dyn Future<
-                Output = Result<
-                    (
-                        http::Response<
-                            http_body_util::combinators::UnsyncBoxBody<
-                                bytes::Bytes,
-                                wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-                            >,
-                        >,
-                        Box<
-                            dyn Future<
-                                    Output = Result<
-                                        (),
-                                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-                                    >,
-                                > + Send,
-                        >,
-                    ),
-                    wasmtime_wasi::TrappableError<
-                        wasmtime_wasi_http::p3::bindings::http::types::ErrorCode,
-                    >,
-                >,
+                Output = wasmtime_wasi_http::Result<(
+                    http::Response<wasmtime_wasi_http::WasiBody>,
+                    Box<dyn Future<Output = Result<(), wasmtime_wasi_http::Error>> + Send>,
+                )>,
             > + Send,
     > {
         // Match Wasmtime's default hook: response-processing is currently not wired into the
@@ -1440,12 +1284,12 @@ impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
         );
 
         Box::new(async move {
-            let result = wasmtime_wasi_http::p3::default_send_request(request, options).await;
+            let result = wasmtime_wasi_http::default_send_request(request, options).await;
             let (response, io) = match result {
                 Ok(value) => value,
                 Err(error) => {
                     trace.record(request_id, HttpLifecyclePhase::SendError, 0);
-                    return Err(error.into());
+                    return Err(error);
                 }
             };
             trace.record(
@@ -2181,17 +2025,26 @@ mod tests {
     }
 
     #[test]
-    fn http_lifecycle_p2_send_error_is_terminal_boundary() {
+    async fn http_lifecycle_send_error_is_terminal_boundary() {
+        use wasmtime_wasi_http::WasiHttpHooks;
+
         let trace = HttpLifecycleTrace::new();
-        let result = trace_p2_result(
-            &trace,
-            7,
-            Err(wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError),
-        );
+        let mut hooks = HttpTraceHooks(trace.clone());
+        let request = http::Request::builder()
+            .uri("/")
+            .body(
+                http_body_util::Empty::<bytes::Bytes>::new()
+                    .map_err(|never| match never {})
+                    .boxed_unsync(),
+            )
+            .unwrap();
+        let result =
+            Box::into_pin(hooks.send_request(request, None, Box::new(async { Ok(()) }))).await;
 
         assert!(result.is_err());
         let snapshot = trace.snapshot();
-        assert!(snapshot.contains("request=7 phase=send-error"));
+        assert!(snapshot.contains("phase=send-error"));
+        assert!(!snapshot.contains("phase=response-head"));
     }
 
     #[test]
@@ -2786,13 +2639,30 @@ mod tests {
 
     #[cfg(feature = "use-golem-wasmtime")]
     #[test]
-    fn p2_body_method_drops_unused_completion_before_dispatch() {
+    async fn p2_body_method_drops_unused_completion_before_dispatch() {
+        use wasmtime_wasi_http::p2::body::{RequestBodyCompletion, prepare_request};
+
         let (sender, receiver) = tokio::sync::oneshot::channel::<
             Result<(), wasmtime_wasi_http::p2::bindings::http::types::ErrorCode>,
         >();
-        let retained = p2_body_completion_for_dispatch(&http::Method::POST, Some(receiver));
+        let mut request = http::Request::post("http://localhost/")
+            .body(
+                http_body_util::Empty::<bytes::Bytes>::new()
+                    .map_err(|never| match never {})
+                    .boxed_unsync(),
+            )
+            .unwrap();
+        request
+            .extensions_mut()
+            .insert(RequestBodyCompletion(Arc::new(Mutex::new(Some(receiver)))));
+        let request = prepare_request(request).await.unwrap();
 
-        assert!(retained.is_none());
+        assert!(
+            request
+                .extensions()
+                .get::<RequestBodyCompletion>()
+                .is_none()
+        );
         assert!(sender.is_closed());
     }
 
@@ -4178,7 +4048,7 @@ impl TestInstance {
             .arg("second-arg")
             .env("TEST_KEY", "TEST_VALUE")
             .env("TEST_KEY_2", "TEST_VALUE_2")
-            .preopened_dir(&temp_dir, "/", DirPerms::all(), FilePerms::all())?
+            .preopened_dir(&temp_dir, "/", FsPerms::ReadWrite)?
             .inherit_network()
             .allow_ip_name_lookup(true);
         #[cfg(feature = "use-golem-wasmtime")]
@@ -4191,8 +4061,7 @@ impl TestInstance {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(Mutex::new(http_ctx)),
-            p2_http_hooks: P2HttpTraceHooks(http_trace.clone()),
-            p3_http_hooks: P3HttpTraceHooks(http_trace),
+            http_hooks: HttpTraceHooks(http_trace),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
             log_messages: Arc::new(Mutex::new(Vec::new())),
@@ -4301,7 +4170,7 @@ impl TestInstance {
 
     /// Read existing journals even after a timeout cancelled the invocation future.
     pub fn failure_diagnostics(&self) -> String {
-        let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
+        let http_lifecycle = self.store.data().http_hooks.0.snapshot();
         let server_http_lifecycle = test_server_http_trace().snapshot();
         let host_trace = host_trace();
         format!(
@@ -4908,8 +4777,7 @@ pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<Mutex<WasiHttpCtx>>,
-    p2_http_hooks: P2HttpTraceHooks,
-    p3_http_hooks: P3HttpTraceHooks,
+    http_hooks: HttpTraceHooks,
     pub started_at: Instant,
     pub timeout: Duration,
     pub log_messages: Arc<Mutex<Vec<(LogLevel, String, String)>>>,
@@ -4979,7 +4847,7 @@ impl WasiHttpView for Host {
                 .expect("ResourceTable is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("ResourceTable mutex must never fail"),
-            hooks: &mut self.p2_http_hooks,
+            hooks: &mut self.http_hooks,
         }
     }
 }
@@ -5178,22 +5046,6 @@ fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> a
         }
     }
     Ok(())
-}
-
-impl wasmtime_wasi_http::p3::WasiHttpView for Host {
-    fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
-        wasmtime_wasi_http::p3::WasiHttpCtxView {
-            hooks: &mut self.p3_http_hooks,
-            table: Arc::get_mut(&mut self.table)
-                .expect("ResourceTable is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("ResourceTable mutex must never fail"),
-            ctx: Arc::get_mut(&mut self.wasi_http)
-                .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("WasiHttpCtx mutex must never fail"),
-        }
-    }
 }
 
 // Based on https://github.com/bytecodealliance/wac/blob/release-0.6.0/crates/wac-graph/src/plug.rs#L23

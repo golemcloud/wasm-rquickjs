@@ -140,12 +140,12 @@ async fn run_probe(path: &Utf8Path, deny_entropy: bool) -> anyhow::Result<Option
             }
         }
     }
-    impl wasmtime_wasi_http::p3::WasiHttpView for Host {
-        fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
-            wasmtime_wasi_http::p3::WasiHttpCtxView {
+    impl wasmtime_wasi_http::WasiHttpView for Host {
+        fn http(&mut self) -> wasmtime_wasi_http::WasiHttpCtxView<'_> {
+            wasmtime_wasi_http::WasiHttpCtxView {
                 ctx: &mut self.http,
                 table: &mut self.table,
-                hooks: wasmtime_wasi_http::p3::default_hooks(),
+                hooks: wasmtime_wasi_http::default_hooks(),
             }
         }
     }

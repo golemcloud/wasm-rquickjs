@@ -3,8 +3,7 @@ use wasmtime::component::bindgen;
 use wasmtime::component::{Component, Linker, ResourceTable};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{WasiCtxBuilder, WasiCtxView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 bindgen!({
     world: "exported-res",
@@ -37,7 +36,7 @@ impl WasiHttpView for Host {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: wasmtime_wasi_http::default_hooks(),
         }
     }
 }
@@ -136,12 +135,14 @@ async fn main() -> Result<()> {
         zero = counter.call_static_zero(&mut store).await?;
     }
 
-    // increment-async(100) -> 115
+    // increment-async(100, self) -> 130 (115 plus the borrowed counter's original 15).
     let after_async = store
         .run_concurrent(async move |accessor| -> wasmtime::Result<u32> {
             let api = bindings.test_exported_res_api();
             let counter = api.counter();
-            counter.call_increment_async(accessor, instance, 100).await
+            counter
+                .call_increment_async(accessor, instance, 100, instance)
+                .await
         })
         .await??;
 
@@ -151,11 +152,14 @@ async fn main() -> Result<()> {
     println!("increment(5) = {after_increment}");
     println!("get() = {value}");
     println!("staticZero() = {zero}");
-    println!("incrementAsync(100) = {after_async}");
+    println!("incrementAsync(100, self) = {after_async}");
     assert_eq!(after_increment, 15, "increment(5) should return 15");
     assert_eq!(value, 15, "get() should return 15");
     assert_eq!(zero, 0, "staticZero() should return 0");
-    assert_eq!(after_async, 115, "incrementAsync(100) should return 115");
+    assert_eq!(
+        after_async, 130,
+        "incrementAsync(100, self) should return 130"
+    );
     println!("OK: exported-resource constructor/method/static/async/drop all correct");
     Ok(())
 }
