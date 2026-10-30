@@ -2508,7 +2508,7 @@ export function spawnSync(command, args, options) {
         const state = JSON.parse(native.runSync());
         const output = [[], []];
         deliverNodeOutput(state.events, request.options.stdio, (stdout, bytes) => output[stdout ? 0 : 1].push(bytes));
-        return nodeResult(state.result, request.options, output.map(chunks => Buffer.concat(chunks)), true);
+        return nodeResult(state.result, request, output.map(chunks => Buffer.concat(chunks)), true);
     }
     return runInline(cmd, resolvedArgs, normalizedOptions);
 }
@@ -2570,7 +2570,19 @@ function deliverNodeOutput(events, modes, pipe) {
     }
 }
 
-function nodeResult(terminal, options, output, synchronous) {
+function nodeResult(terminal, request, output, synchronous) {
+    const options = request.options;
+    if (terminal.spawnError) {
+        // The child runtime could not be created; report it like a failed fork.
+        const code = terminal.spawnError;
+        const syscall = (synchronous ? 'spawnSync ' : 'spawn ') + request.command;
+        const error = Object.assign(new Error(syscall + ' ' + code), {
+            errno: -osConstants.errno[code], code, syscall, path: request.command, spawnargs: request.args,
+        });
+        return synchronous
+            ? { error, status: null, signal: null, output: null, pid: 0 }
+            : { error, status: error.errno, signal: null, spawnFailed: true };
+    }
     let error = terminal.error && Object.assign(new Error(terminal.error.message), terminal.error);
     const reason = terminal.reason;
     if (reason === 'overflow') {
@@ -2640,24 +2652,31 @@ function spawnNode(command, args, options, maxBuffer) {
         child.exitCode = result.status;
         child.signalCode = result.signal;
         if (result.signal) child.killed = true;
+        // A failed spawn has no pid and, as in Node, reports 'error' and 'close' but no 'exit'.
+        if (result.spawnFailed) child.pid = undefined;
         const error = abortError ?? result.error;
         if (error) dispatch(() => child.emit('error', error));
         dispatch(() => child.stdout?._emitEnd());
         dispatch(() => child.stderr?._emitEnd());
-        dispatch(() => child.emit('exit', child.exitCode, child.signalCode));
+        if (!result.spawnFailed) dispatch(() => child.emit('exit', child.exitCode, child.signalCode));
         dispatch(() => child.emit('close', child.exitCode, child.signalCode));
     };
     const execution = native.start();
     execution.catch(error => finish({ status: null, signal: null, error }));
     (async () => {
-        process.nextTick(() => child.emit('spawn'));
+        let spawned = false;
         while (!completed) {
             const state = JSON.parse(await native.wait());
+            // 'spawn' follows a successful spawn: here, once the child runtime exists.
+            if (state.spawned && !spawned) {
+                spawned = true;
+                dispatch(() => child.emit('spawn'));
+            }
             for (const event of state.events) dispatch(() => deliverNodeOutput([event], request.options.stdio,
                 (stdout, bytes) => (stdout ? child.stdout : child.stderr)?._emitData(bytes)));
             if (state.done) {
                 await execution;
-                finish(nodeResult(state.result, request.options, [Buffer.alloc(0), Buffer.alloc(0)], false));
+                finish(nodeResult(state.result, request, [Buffer.alloc(0), Buffer.alloc(0)], false));
             }
         }
     })().catch(async error => {

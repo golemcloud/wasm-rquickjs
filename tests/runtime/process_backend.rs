@@ -66,7 +66,15 @@ async fn synchronous_isolated_child_boundary(
 
 async fn check_isolated_child(
     compiled: &CompiledTest,
+    config: serde_json::Value,
+) -> anyhow::Result<()> {
+    check_isolated_child_with_memory_limit(compiled, config, None).await
+}
+
+async fn check_isolated_child_with_memory_limit(
+    compiled: &CompiledTest,
     mut config: serde_json::Value,
+    memory_limit: Option<usize>,
 ) -> anyhow::Result<()> {
     // P2 checks its public inline behavior rather than the P3-only lifecycle.
     if test_target() == TestTarget::P2 {
@@ -74,6 +82,9 @@ async fn check_isolated_child(
     }
     let mut instance = TestInstance::new(compiled.wasm_path()).await?;
     instance.set_epoch_deadline(30);
+    if let Some(limit) = memory_limit {
+        instance.set_linear_memory_limit(limit);
+    }
     std::fs::write(
         instance.temp_dir_path().join("isolated-child-probe.json"),
         serde_json::to_string(&config)?,
@@ -298,4 +309,24 @@ async fn local_node_child_async_control_contract(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     check_isolated_child(compiled, serde_json::json!({ "mode": "async-control" })).await
+}
+
+#[test]
+async fn local_node_child_memory_exhaustion_fails_spawn(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    // A cap like an embedder's lets about twenty idle children fit.
+    check_isolated_child_with_memory_limit(
+        compiled,
+        serde_json::json!({ "mode": "memory-exhaustion" }),
+        Some(192 * 1024 * 1024),
+    )
+    .await
+}
+
+#[test]
+async fn local_node_child_stack_exhaustion_fails_spawn(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(compiled, serde_json::json!({ "mode": "stack-exhaustion" })).await
 }

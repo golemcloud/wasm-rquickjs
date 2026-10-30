@@ -671,6 +671,13 @@ pub(crate) fn run_process_turn_checkpoint(ctx: &rquickjs::Ctx<'_>) -> rquickjs::
 
 impl OwnedJsRuntime {
     pub(crate) async fn new() -> Self {
+        Self::try_new()
+            .await
+            .expect("Failed to create JavaScript runtime")
+    }
+
+    /// Fails when QuickJS cannot allocate the runtime or its context.
+    pub(crate) async fn try_new() -> rquickjs::Result<Self> {
         Self::new_inner(
             #[cfg(feature = "typescript-compiler-profiling")]
             None,
@@ -680,13 +687,15 @@ impl OwnedJsRuntime {
 
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) async fn new_profiled(profile: Rc<ExecutionProfile>) -> Self {
-        Self::new_inner(Some(profile)).await
+        Self::new_inner(Some(profile))
+            .await
+            .expect("Failed to create JavaScript runtime")
     }
 
     async fn new_inner(
         #[cfg(feature = "typescript-compiler-profiling")] profile: Option<Rc<ExecutionProfile>>,
-    ) -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+    ) -> rquickjs::Result<Self> {
+        let rt = AsyncRuntime::new()?;
         // QuickJS defines zero as unlimited. The component's shared wasm32
         // linear memory remains the outer bound, so do not impose a smaller
         // per-runtime ceiling on execution jobs.
@@ -694,9 +703,7 @@ impl OwnedJsRuntime {
         // Bound bootstrap garbage before the first automatic collection. The
         // engine subsequently adapts this threshold to the retained live heap.
         rt.set_gc_threshold(32 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
+        let ctx = AsyncContext::full(&rt).await?;
 
         #[cfg(feature = "typescript-compiler-profiling")]
         let stored_profile = profile.clone();
@@ -742,7 +749,7 @@ impl OwnedJsRuntime {
         )))
         .await;
 
-        Self { rt, ctx }
+        Ok(Self { rt, ctx })
     }
 
     /// Install the ordinary Node-compatible global environment without loading

@@ -275,6 +275,84 @@ export async function run() {
             assert.equal(fresh(`process.stdout.write(String(globalThis.childOnly));`).stdout, 'undefined');
             assert.equal(fresh(`globalThis.Number = () => 99; process.exitCode = 7;`).status, 7);
             assert.equal(fresh(`JSON.stringify = () => '{}'; process.exitCode = 7;`).status, 7);
+        } else if (config.mode === 'stack-exhaustion') {
+            // Each nested spawnSync runs on its parent's stack. The level that would
+            // overflow it must get Node's failed-spawn results instead of a trap.
+            mkdirSync('/child-stack', { recursive: true });
+            writeFileSync('/child-stack/nest.js', `
+                const { spawn, spawnSync } = require('node:child_process');
+                const fs = require('node:fs');
+                const depth = Number(process.argv[2]);
+                const sync = spawnSync(process.execPath, [__filename, String(depth + 1)], { encoding: 'utf8' });
+                if (!sync.error) {
+                    process.stdout.write(sync.stdout);
+                    process.exitCode = sync.status;
+                    return;
+                }
+                const pick = error => ({ message: error.message, errno: error.errno, code: error.code,
+                    syscall: error.syscall, path: error.path, spawnargs: error.spawnargs });
+                const child = spawn(process.execPath, ['-e', '']);
+                const events = [];
+                child.on('spawn', () => events.push(['spawn']));
+                child.on('exit', (...args) => events.push(['exit', ...args]));
+                child.on('error', error => events.push(['error', pick(error)]));
+                child.on('close', (...args) => {
+                    events.push(['close', ...args]);
+                    process.stdout.write(JSON.stringify({
+                        depth, sync: { ...sync, error: pick(sync.error) }, pid: child.pid, events,
+                    }));
+                });
+            `);
+            const result = spawnSync(process.execPath, ['/child-stack/nest.js', '1'], { encoding: 'utf8' });
+            assert.equal(result.status, 0, result.stderr);
+            const deepest = JSON.parse(result.stdout);
+            assert.ok(deepest.depth >= 8, 'nesting stopped early at depth ' + deepest.depth);
+            const file = process.execPath;
+            const failed = (syscall, spawnargs) => ({
+                message: syscall + ' EAGAIN', errno: -11, code: 'EAGAIN', syscall, path: file, spawnargs,
+            });
+            assert.deepEqual(deepest.sync, {
+                error: failed('spawnSync ' + file, ['/child-stack/nest.js', String(deepest.depth + 1)]),
+                status: null, signal: null, output: null, pid: 0,
+            });
+            assert.equal(deepest.pid, undefined);
+            assert.deepEqual(deepest.events, [
+                ['error', failed('spawn ' + file, ['-e', ''])],
+                ['close', -11, null],
+            ]);
+        } else if (config.mode === 'memory-exhaustion') {
+            // Live children share the component's capped linear memory. Spawning past it
+            // must fail like an exhausted fork instead of trapping, and freed memory is reused.
+            const children = [];
+            let failure;
+            while (!failure) {
+                assert.ok(children.length < 200, 'memory cap was never reached');
+                const child = spawn(process.execPath, ['-e', 'setTimeout(() => {}, 600000)'], { stdio: 'ignore' });
+                const outcome = await new Promise(resolve => {
+                    child.once('spawn', () => resolve('spawn'));
+                    child.once('error', error => resolve({ error, pid: child.pid }));
+                });
+                if (outcome === 'spawn') children.push(child);
+                else failure = outcome;
+            }
+            assert.ok(children.length >= 2, 'only ' + children.length + ' children fit');
+            const file = process.execPath;
+            assert.equal(failure.pid, undefined);
+            assert.deepEqual({ ...failure.error, message: failure.error.message }, {
+                errno: -11, code: 'EAGAIN', syscall: 'spawn ' + file, path: file,
+                spawnargs: ['-e', 'setTimeout(() => {}, 600000)'], message: 'spawn ' + file + ' EAGAIN',
+            });
+            const refused = spawnSync(process.execPath, ['-e', ''], { encoding: 'utf8' });
+            assert.equal(refused.error?.code, 'EAGAIN');
+            assert.equal(refused.pid, 0);
+            await Promise.all(children.map(child => {
+                const closed = once(child, 'close');
+                child.kill();
+                return closed;
+            }));
+            const after = spawnSync(process.execPath, ['-e', `process.stdout.write('again')`], { encoding: 'utf8' });
+            assert.equal(after.status, 0, after.stderr);
+            assert.equal(after.stdout, 'again');
         } else if (config.mode === 'tla-cleanup') {
             mkdirSync('/child-tla-cleanup', { recursive: true });
             writeFileSync('/child-tla-cleanup/async.mjs', `await Promise.resolve(); process.stdout.write('must not execute');`);

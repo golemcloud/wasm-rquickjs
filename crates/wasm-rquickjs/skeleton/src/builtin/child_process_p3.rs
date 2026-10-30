@@ -28,6 +28,62 @@ struct Request {
 
 type InitialProcess = (Vec<String>, HashMap<String, String>, PathBuf);
 
+/// Shadow stack a local child must leave unused. Nested `spawnSync` runs each child
+/// runtime on its parent's stack, and overflowing that stack traps the component. One
+/// level measured about 14 KiB in a release build and 32 KiB in debug, so this keeps
+/// room for several levels of a child's setup and code (88 and 40 levels fit).
+const CHILD_STACK_RESERVE: usize = 128 * 1024;
+
+/// Memory the allocator must still be able to provide when a child is spawned. A fresh
+/// child runtime takes about 7.2 MiB, and exhausting linear memory traps wherever an
+/// allocation first fails, so a spawn fails before that point instead.
+const CHILD_MEMORY_HEADROOM: usize = 16 * 1024 * 1024;
+
+/// Whether the allocator can provide [`CHILD_MEMORY_HEADROOM`]. A runtime is built from
+/// many small allocations and freed children leave free memory fragmented, so the probe
+/// takes it in pieces. It is freed at once and stays available for what it stands for.
+fn memory_available() -> bool {
+    const PIECE: usize = 256 * 1024;
+    let mut pieces = Vec::new();
+    if pieces
+        .try_reserve_exact(CHILD_MEMORY_HEADROOM / PIECE)
+        .is_err()
+    {
+        return false;
+    }
+    for _ in 0..CHILD_MEMORY_HEADROOM / PIECE {
+        let mut piece = Vec::<u8>::new();
+        if piece.try_reserve_exact(PIECE).is_err() {
+            return false;
+        }
+        pieces.push(piece);
+    }
+    true
+}
+
+/// Bytes left on the shadow stack below the caller's frame.
+fn remaining_stack() -> usize {
+    unsafe extern "C" {
+        static __stack_low: u8;
+    }
+    let marker = 0u8;
+    let current = std::hint::black_box(&marker) as *const u8 as usize;
+    current.saturating_sub(&raw const __stack_low as usize)
+}
+
+/// How a child ended before producing a Node exit result.
+enum ChildFailure {
+    /// The child runtime could not be created; reported like a failed `fork`.
+    Spawn,
+    Error(String),
+}
+
+impl From<String> for ChildFailure {
+    fn from(error: String) -> Self {
+        Self::Error(error)
+    }
+}
+
 pub(crate) struct ChildState {
     request: RefCell<Option<String>>,
     process: InitialProcess,
@@ -39,6 +95,11 @@ pub(crate) struct ChildState {
     completion: RefCell<Option<serde_json::Value>>,
     reason: Cell<Option<&'static str>>,
     overflow_stdout: Cell<Option<bool>>,
+    /// Decided at the spawn call, where nested `spawnSync` would build the child runtime.
+    resources_exhausted: bool,
+    /// The child runtime exists, so the spawn succeeded.
+    spawned: Cell<bool>,
+    spawn_reported: Cell<bool>,
     pub(crate) exited: Cell<bool>,
     event: AtomicWaker,
     control: AtomicWaker,
@@ -92,8 +153,15 @@ impl ChildState {
         }
     }
 
+    fn complete(&self, result: serde_json::Value) {
+        *self.completion.borrow_mut() = Some(result);
+        self.event.wake();
+    }
+
     fn read(&self) -> String {
+        self.spawn_reported.set(self.spawned.get());
         serde_json::json!({
+            "spawned": self.spawned.get(),
             "events": self.output.borrow_mut().drain(..).collect::<Vec<_>>(),
             "done": self.completion.borrow().is_some(),
             "result": *self.completion.borrow(),
@@ -114,11 +182,11 @@ impl RuntimeOutputSink for ChildState {
 /// A parent-owned handle. Neither the handle nor its state roots a child context.
 ///
 /// Like Node, local children have no count or nesting limit; the component's resources
-/// are the limit. Each live child is a fresh runtime (about 7 MiB measured), so
-/// concurrent children share the component's linear memory, and a child whose runtime
-/// cannot be created exits with status 1 and an out-of-memory message without
-/// trapping the parent. Nested `spawnSync` runs on the parent's stack: about 97
-/// levels fit in a release build before the shadow stack overflows and traps.
+/// are the limit. Each live child is a fresh runtime (about 7 MiB measured) in the
+/// component's shared linear memory, and nested `spawnSync` runs on the parent's stack.
+/// A child that would leave less than [`CHILD_STACK_RESERVE`] or
+/// [`CHILD_MEMORY_HEADROOM`], or whose runtime cannot be created, fails to spawn with
+/// `EAGAIN` instead of trapping.
 #[derive(Trace, JsLifetime)]
 #[rquickjs::class]
 pub struct Child {
@@ -149,6 +217,9 @@ impl Child {
                 completion: RefCell::default(),
                 reason: Cell::new(None),
                 overflow_stdout: Cell::new(None),
+                resources_exhausted: remaining_stack() < CHILD_STACK_RESERVE || !memory_available(),
+                spawned: Cell::new(false),
+                spawn_reported: Cell::new(false),
                 exited: Cell::new(false),
                 event: AtomicWaker::new(),
                 control: AtomicWaker::new(),
@@ -175,7 +246,10 @@ impl Child {
     pub async fn wait(&self) -> String {
         poll_fn(|cx| {
             self.state.event.register(cx.waker());
-            if !self.state.output.borrow().is_empty() || self.state.completion.borrow().is_some() {
+            if !self.state.output.borrow().is_empty()
+                || self.state.completion.borrow().is_some()
+                || self.state.spawned.get() != self.state.spawn_reported.get()
+            {
                 Poll::Ready(())
             } else {
                 Poll::Pending
@@ -204,6 +278,11 @@ impl Child {
 }
 
 async fn run(request: String, state: Rc<ChildState>) {
+    // Missing resources fail the spawn as fork reports them (see `Child`).
+    let spawn_error = || serde_json::json!({ "status": null, "spawnError": "EAGAIN" });
+    if state.resources_exhausted {
+        return state.complete(spawn_error());
+    }
     let own_deadline = state
         .options
         .timeout
@@ -260,7 +339,8 @@ async fn run(request: String, state: Rc<ChildState>) {
     }
     let mut result = match result {
         Ok(result) => result,
-        Err(error) => {
+        Err(ChildFailure::Spawn) => return state.complete(spawn_error()),
+        Err(ChildFailure::Error(error)) => {
             state.write(false, format!("{error}\n").as_bytes());
             serde_json::json!({ "status": 1 })
         }
@@ -272,16 +352,19 @@ async fn run(request: String, state: Rc<ChildState>) {
             result["stream"] = if stdout { "stdout" } else { "stderr" }.into();
         }
     }
-    *state.completion.borrow_mut() = Some(result);
-    state.event.wake();
+    state.complete(result);
 }
 
 async fn execute(
     request: String,
     state: Rc<ChildState>,
     deadline: Option<Instant>,
-) -> Result<serde_json::Value, String> {
-    let runtime = OwnedJsRuntime::new().await;
+) -> Result<serde_json::Value, ChildFailure> {
+    // QuickJS reports exhausted memory while creating the runtime or its built-ins;
+    // Rust allocation failure still aborts the component, as everywhere else.
+    let runtime = OwnedJsRuntime::try_new()
+        .await
+        .map_err(|_| ChildFailure::Spawn)?;
     runtime.disable_execution().await;
     runtime
         .configure_process(
@@ -300,8 +383,13 @@ async fn execute(
                 .borrow_mut() = Some(state.clone());
         })
         .await;
-    runtime.initialize_node_builtins().await?;
+    runtime
+        .initialize_node_builtins()
+        .await
+        .map_err(|_| ChildFailure::Spawn)?;
     let timers = super::super::child_timers::ChildTimers::install(&runtime).await;
+    state.spawned.set(true);
+    state.event.wake();
     let interrupt = state.clone();
     runtime
         .rt
@@ -358,5 +446,5 @@ async fn execute(
             .map_err(crate::internal::format_caught_error)
         })
         .await?;
-    serde_json::from_str(&result).map_err(|error| error.to_string())
+    serde_json::from_str(&result).map_err(|error| ChildFailure::Error(error.to_string()))
 }
