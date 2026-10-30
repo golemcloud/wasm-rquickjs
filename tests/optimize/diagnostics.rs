@@ -52,10 +52,10 @@ fn host_diagnostics_do_not_execute_thrown_values() -> anyhow::Result<()> {
                 assigned.stack = {toString:forbidden};
                 assert(format(assigned).includes('Source location unavailable'), 'prepared object coercion');
                 const shadow = Object.create(Object.create({tag:'wrong'}, {tag:{get:forbidden}}));
-                assert(format(shadow).includes('<object>'), 'accessor must shadow inherited data');
+                assert(!format(shadow).includes('wrong'), 'accessor must shadow inherited data');
                 let deep = {tag:'too-deep'};
                 for (let i=0; i<9; i++) deep = Object.create(deep);
-                assert(format(deep).includes('<object>'), 'prototype hop bound');
+                assert(!format(deep).includes('too-deep'), 'prototype hop bound');
                 assert(format(Object.create({tag:'shallow'})).includes('Error: shallow'), 'safe inherited tag');
                 const hostile = new NativeError('hidden');
                 for (const key of ['name', 'message', 'stack', 'toJSON', 'toString']) {
@@ -70,7 +70,7 @@ fn host_diagnostics_do_not_execute_thrown_values() -> anyhow::Result<()> {
                 assert(format(new Proxy({}, handler)).includes('<Proxy>'), 'proxy');
                 const revoked = Proxy.revocable({}, handler); revoked.revoke();
                 assert(format(revoked.proxy).includes('<Proxy>'), 'revoked proxy');
-                assert(format(Object.create(new Proxy({}, handler))).includes('<object>'), 'prototype proxy');
+                assert(format(Object.create(new Proxy({}, handler))).includes('{}'), 'prototype proxy');
                 const prototypeError = new NativeError('prototype-message');
                 const beforePrototypeSetup = calls;
                 Object.setPrototypeOf(prototypeError, new Proxy({}, handler));
@@ -81,9 +81,41 @@ fn host_diagnostics_do_not_execute_thrown_values() -> anyhow::Result<()> {
                 assert(calls === afterPrototypeSetup, 'formatter inspected prototype proxy');
                 calls = beforePrototypeSetup;
                 const cyclic = {}; cyclic.self = cyclic; cyclic.toJSON = forbidden;
-                assert(format({tag:'Failure', val:cyclic}).includes('Failure: <object>'), 'tagged cycle');
+                diagnostic = format({tag:'Failure', val:cyclic});
+                assert(diagnostic.includes('Failure: {') && diagnostic.includes('[Circular]') && diagnostic.includes('<Function>'), diagnostic);
                 const taggedAccessor = {get tag() { return forbidden(); }, get val() { return forbidden(); }};
-                assert(format(taggedAccessor).includes('<object>'), 'tagged accessors');
+                assert(format(taggedAccessor).includes('[Getter]'), 'tagged accessors');
+                Object.defineProperty(taggedAccessor, 'empty', {get:undefined, enumerable:true});
+                assert(format(taggedAccessor).includes('"empty": undefined'), 'empty accessor');
+                diagnostic = format({code:404, message:'missing'});
+                assert(diagnostic.includes('"code": 404') && diagnostic.includes('"message": "missing"'), diagnostic);
+                diagnostic = format({tag:'not-found', val:{id:'x', nested:{reason:'missing', deep:{secret:'hidden'}}}});
+                assert(diagnostic.includes('not-found: {') && diagnostic.includes('"id": "x"') && diagnostic.includes('"reason": "missing"'), diagnostic);
+                assert(diagnostic.includes('"deep": {…}') && !diagnostic.includes('hidden'), 'summary depth budget');
+                const shared = {id:'same'};
+                diagnostic = format([shared, shared, new NativeError('nested-error'), new Proxy({}, handler)]);
+                assert(diagnostic.includes('"id": "same"') && !diagnostic.includes('[Circular]'), diagnostic);
+                assert(diagnostic.includes('Error: nested-error') && diagnostic.includes('<Proxy>'), diagnostic);
+                const sparse = new Array(0xffffffff);
+                sparse[0] = 'first';
+                Object.defineProperty(sparse, 1, {get:forbidden});
+                Object.defineProperty(sparse, 2, {set:forbidden});
+                Object.defineProperty(sparse, 3, {get:forbidden, set:forbidden});
+                diagnostic = format(sparse);
+                assert(diagnostic.includes('"first", [Getter], [Setter], [Getter/Setter], [empty]') && diagnostic.endsWith(', …]'), diagnostic);
+                const wide = {};
+                for (let i=0; i<20000; i++) wide['field' + i] = i;
+                diagnostic = format(wide);
+                assert(diagnostic.includes('"field15": 15') && !diagnostic.includes('"field16"') && diagnostic.endsWith(', …}'), diagnostic);
+                const unicode = format({text:'😀'.repeat(2048), ['é'.repeat(300)]:1});
+                assert(new TextEncoder().encode(unicode.slice('JavaScript exception: '.length)).byteLength <= 4096 && unicode.includes('…') && !unicode.includes('\ufffd'), 'UTF8 output budget');
+                const hooks = {toJSON:forbidden, toString:forbidden, [Symbol.toPrimitive]:forbidden};
+                assert(format({hooks}).includes('<Function>'), 'record hooks are data only');
+                const hidden = Object.create(null, {hidden:{value:'not-enumerable'}});
+                assert(format(hidden).endsWith('{}'), 'record enumerable own keys only');
+                for (const pending of [undefined, null, {}]) {
+                    assert(format({tag:'pending-record', val:{id:'preserved'}}, true, pending).includes('"id": "preserved"'), 'record pending identity');
+                }
                 assert(format(Symbol('secret')).includes('<Symbol>'), 'symbol');
                 assert(format(1n).includes('<BigInt>'), 'bigint');
                 const flat = 'x'.repeat(1024 * 1024);
@@ -187,6 +219,14 @@ fn host_diagnostics_do_not_execute_thrown_values() -> anyhow::Result<()> {
                     assert(error.message.includes('ownedOrigin'), error.message);
                 }
                 assert(failed && stdout === '', 'owned diagnostic ran prepareStackTrace');
+                const recordJob = startJavaScript({source:`throw {tag:'not-found', val:{id:'owned-id'}};`});
+                failed = false;
+                try { await recordJob.result; }
+                catch (error) {
+                    failed = true;
+                    assert(error.message.includes('not-found: {') && error.message.includes('"id": "owned-id"'), error.message);
+                }
+                assert(failed, 'owned tagged record must fail');
                 assert(format(original).includes('native-message'), 'subsequent formatting');
                 return 'ok';
             }

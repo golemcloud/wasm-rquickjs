@@ -209,7 +209,13 @@ initialize at runtime instead.
 Host exception diagnostics recognize native Errors and legacy Error-prototype
 objects and use bounded native stack
 frames without invoking application getters, coercion, `toJSON`, or
-`Error.prepareStackTrace`. Arbitrary objects and oversized strings receive
+`Error.prepareStackTrace`. Ordinary records and arrays show own data with a
+two-level depth limit, a shared 16-property budget and a 4096-byte summary limit;
+accessors, cycles and omitted entries are marked explicitly. Proxies and exotic
+objects remain opaque. Array inspection reads only a bounded prefix, while native
+record key discovery allocates a native table per visited record and may sort
+integer keys. Its cost grows with record size, including repeated visits to shared
+records; allocation failure falls back to an unavailable marker. Oversized strings receive
 bounded descriptions. When the engine supplies no usable position, the
 diagnostic explicitly says that the source location is unavailable. Existing
 source maps and wrapper offsets are read through guarded data lookup; unsafe,

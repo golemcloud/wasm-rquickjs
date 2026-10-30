@@ -9,6 +9,9 @@ use std::mem::MaybeUninit;
 const MAX_FIELD_LENGTH: i64 = 4096;
 const MAX_STACK_LENGTH: i64 = 16 * 1024;
 const MAX_PROTOTYPES: usize = 8;
+const MAX_SUMMARY_DEPTH: usize = 2;
+const MAX_SUMMARY_PROPERTIES: usize = 16;
+const MAX_SUMMARY_BYTES: usize = 4096;
 
 #[derive(JsLifetime)]
 struct DiagnosticIntrinsics<'js> {
@@ -115,9 +118,20 @@ fn safe_object(value: &Value<'_>) -> bool {
             })
 }
 
+fn safe_array(value: &Value<'_>) -> bool {
+    value.is_object()
+        && !value.is_proxy()
+        && value
+            .ctx()
+            .userdata::<DiagnosticIntrinsics>()
+            .is_some_and(|intrinsics| unsafe {
+                qjs::JS_GetClassID(value.as_raw()) == intrinsics.array_class
+            })
+}
+
 enum Property<'js> {
     Absent,
-    Accessor,
+    Accessor { getter: bool, setter: bool },
     Data(Value<'js>),
 }
 
@@ -154,10 +168,13 @@ fn property_by_atom<'js>(value: &Value<'js>, atom: qjs::JSAtom) -> Property<'js>
         // Every successful descriptor owns all three values, including unused
         // getters/setters. Transfer each to RAII before selecting the data.
         let data = Value::from_raw(ctx.clone(), descriptor.value);
-        let _getter = Value::from_raw(ctx.clone(), descriptor.getter);
-        let _setter = Value::from_raw(ctx.clone(), descriptor.setter);
+        let getter = Value::from_raw(ctx.clone(), descriptor.getter);
+        let setter = Value::from_raw(ctx.clone(), descriptor.setter);
         if descriptor.flags & qjs::JS_PROP_GETSET as i32 != 0 {
-            Property::Accessor
+            Property::Accessor {
+                getter: !getter.is_undefined(),
+                setter: !setter.is_undefined(),
+            }
         } else {
             Property::Data(data)
         }
@@ -171,14 +188,7 @@ pub(crate) fn host_data_property<'js>(
     key: Value<'js>,
 ) -> rquickjs::Result<Value<'js>> {
     let ctx = value.ctx();
-    let array = value.is_object()
-        && !value.is_proxy()
-        && ctx
-            .userdata::<DiagnosticIntrinsics>()
-            .is_some_and(|intrinsics| unsafe {
-                qjs::JS_GetClassID(value.as_raw()) == intrinsics.array_class
-            });
-    if !safe_object(&value) && !array {
+    if !safe_object(&value) && !safe_array(&value) {
         return Ok(Value::new_undefined(ctx.clone()));
     }
     if key.is_string() {
@@ -247,7 +257,7 @@ fn data_property<'js>(value: &Value<'js>, name: &CStr) -> Option<Value<'js>> {
         }
         match own_property(&owner, name) {
             Property::Data(data) => return Some(data),
-            Property::Accessor => return None,
+            Property::Accessor { .. } => return None,
             Property::Absent => {}
         }
         // Ordinary objects and native Errors have no prototype exotic method.
@@ -289,12 +299,14 @@ fn primitive(value: &Value<'_>) -> String {
         "<BigInt>".to_owned()
     } else if value.is_symbol() {
         "<Symbol>".to_owned()
+    } else if value.is_function() {
+        "<Function>".to_owned()
     } else {
         "<object>".to_owned()
     }
 }
 
-fn native_error(value: &Value<'_>) -> Option<String> {
+fn error_header(value: &Value<'_>) -> Option<String> {
     if !is_error_like(value) {
         return None;
     }
@@ -306,11 +318,15 @@ fn native_error(value: &Value<'_>) -> Option<String> {
         .as_ref()
         .and_then(|message| bounded_string(message, MAX_FIELD_LENGTH))
         .unwrap_or_else(|| "<message unavailable>".to_owned());
-    let header = match (name.is_empty(), message.is_empty()) {
+    Some(match (name.is_empty(), message.is_empty()) {
         (true, _) => message,
         (_, true) => name,
         _ => format!("{name}: {message}"),
-    };
+    })
+}
+
+fn native_error(value: &Value<'_>) -> Option<String> {
+    let header = error_header(value)?;
     // Clone and release userdata/RefCell guards before any engine call.
     let stack_readers = value
         .ctx()
@@ -361,12 +377,242 @@ fn native_error(value: &Value<'_>) -> Option<String> {
     })
 }
 
+/// Own-key discovery is engine-proportional, not constant-space/time. It never
+/// invokes application code on the admitted ordinary class. Keep its native
+/// table under RAII, render only a small subset, and fall back on engine OOM.
+struct OwnKeys<'js> {
+    ctx: Ctx<'js>,
+    table: *mut qjs::JSPropertyEnum,
+    length: u32,
+}
+
+impl<'js> OwnKeys<'js> {
+    fn new(value: &Value<'js>) -> Option<Self> {
+        let mut table = std::ptr::null_mut();
+        let mut length = 0;
+        let found = unsafe {
+            qjs::JS_GetOwnPropertyNames(
+                value.ctx().as_raw().as_ptr(),
+                &mut table,
+                &mut length,
+                value.as_raw(),
+                (qjs::JS_GPN_STRING_MASK | qjs::JS_GPN_ENUM_ONLY) as i32,
+            )
+        };
+        if found < 0 {
+            return None;
+        }
+        Some(Self {
+            ctx: value.ctx().clone(),
+            table,
+            length,
+        })
+    }
+
+    fn atom(&self, index: u32) -> qjs::JSAtom {
+        // The caller only visits indices below the successful native length.
+        unsafe { (*self.table.add(index as usize)).atom }
+    }
+}
+
+impl Drop for OwnKeys<'_> {
+    fn drop(&mut self) {
+        unsafe { qjs::JS_FreePropertyEnum(self.ctx.as_raw().as_ptr(), self.table, self.length) };
+    }
+}
+
+struct Summary<'js> {
+    text: String,
+    ancestors: Vec<Value<'js>>,
+    remaining: usize,
+    truncated: bool,
+    failed: bool,
+}
+
+impl<'js> Summary<'js> {
+    fn push(&mut self, text: &str) {
+        if self.truncated {
+            return;
+        }
+        let remaining = (MAX_SUMMARY_BYTES - '…'.len_utf8()).saturating_sub(self.text.len());
+        let mut end = text.len().min(remaining);
+        while !text.is_char_boundary(end) {
+            end -= 1;
+        }
+        self.text.push_str(&text[..end]);
+        self.truncated = end != text.len();
+    }
+
+    fn property(&mut self, owner: &Value<'js>, property: Property<'js>, depth: usize) {
+        if owner.ctx().has_exception() {
+            self.failed = true;
+            self.push("<inspection unavailable>");
+            return;
+        }
+        match property {
+            Property::Data(value) => self.value(&value, depth),
+            Property::Accessor { getter, setter } => self.push(match (getter, setter) {
+                (true, true) => "[Getter/Setter]",
+                (true, false) => "[Getter]",
+                (false, true) => "[Setter]",
+                (false, false) => "undefined",
+            }),
+            Property::Absent => self.push("[empty]"),
+        }
+    }
+
+    fn value(&mut self, value: &Value<'js>, depth: usize) {
+        if self.truncated || self.failed {
+            return;
+        }
+        if !value.is_object() || value.is_proxy() {
+            let text = primitive(value);
+            if depth > 0 && value.is_string() {
+                self.push(&format!("{text:?}"));
+            } else {
+                self.push(&text);
+            }
+            if value.ctx().has_exception() {
+                self.failed = true;
+            }
+            return;
+        }
+        if let Some(header) = error_header(value) {
+            self.push(&header);
+            if value.ctx().has_exception() {
+                self.failed = true;
+            }
+            return;
+        }
+        if value.ctx().has_exception() {
+            self.failed = true;
+            self.push("<inspection unavailable>");
+            return;
+        }
+        let array = safe_array(value);
+        if !array && !safe_object(value) {
+            self.push(&primitive(value));
+            return;
+        }
+        if self.ancestors.iter().any(|ancestor| ancestor == value) {
+            self.push("[Circular]");
+            return;
+        }
+        if depth >= MAX_SUMMARY_DEPTH || self.remaining == 0 {
+            self.push(if array { "[…]" } else { "{…}" });
+            return;
+        }
+        self.ancestors.push(value.clone());
+        if array {
+            self.array(value, depth);
+        } else {
+            self.record(value, depth);
+        }
+        self.ancestors.pop();
+    }
+
+    fn array(&mut self, value: &Value<'js>, depth: usize) {
+        let length = own_property(value, c"length");
+        if value.ctx().has_exception() {
+            self.failed = true;
+            self.push("<array unavailable>");
+            return;
+        }
+        let Property::Data(length) = length else {
+            self.failed = true;
+            self.push("<array unavailable>");
+            return;
+        };
+        let Some(length) = length.as_number() else {
+            self.push("<array unavailable>");
+            return;
+        };
+        // A genuine Array has a native uint32 length, including sparse arrays.
+        let length = length as u64;
+        self.push("[");
+        let mut index = 0;
+        while index < length && self.remaining > 0 && !self.truncated && !self.failed {
+            if index > 0 {
+                self.push(", ");
+            }
+            self.remaining -= 1;
+            let atom =
+                unsafe { qjs::JS_NewAtomUInt32(value.ctx().as_raw().as_ptr(), index as u32) };
+            if atom == qjs::JS_ATOM_NULL {
+                self.failed = true;
+                self.push("<inspection unavailable>");
+                break;
+            }
+            let property = property_by_atom(value, atom);
+            unsafe { qjs::JS_FreeAtom(value.ctx().as_raw().as_ptr(), atom) };
+            self.property(value, property, depth + 1);
+            index += 1;
+        }
+        if index < length {
+            self.push(if index == 0 { "…" } else { ", …" });
+        }
+        self.push("]");
+    }
+
+    fn record(&mut self, value: &Value<'js>, depth: usize) {
+        let Some(keys) = OwnKeys::new(value) else {
+            self.failed = true;
+            self.push("<object: keys unavailable>");
+            return;
+        };
+        self.push("{");
+        let mut index = 0;
+        while index < keys.length && self.remaining > 0 && !self.truncated && !self.failed {
+            if index > 0 {
+                self.push(", ");
+            }
+            self.remaining -= 1;
+            let atom = keys.atom(index);
+            let key = unsafe {
+                Value::from_raw(
+                    value.ctx().clone(),
+                    qjs::JS_AtomToString(value.ctx().as_raw().as_ptr(), atom),
+                )
+            };
+            let Some(key) = bounded_string(&key, 256) else {
+                self.failed = true;
+                self.push("<key unavailable>");
+                break;
+            };
+            self.push(&format!("{key:?}: "));
+            if !self.truncated {
+                self.property(value, property_by_atom(value, atom), depth + 1);
+            }
+            index += 1;
+        }
+        if index < keys.length {
+            self.push(if index == 0 { "…" } else { ", …" });
+        }
+        self.push("}");
+    }
+}
+
+fn summary<'js>(value: &Value<'js>) -> String {
+    let mut summary = Summary {
+        text: String::new(),
+        ancestors: Vec::with_capacity(MAX_SUMMARY_DEPTH),
+        remaining: MAX_SUMMARY_PROPERTIES,
+        truncated: false,
+        failed: false,
+    };
+    summary.value(value, 0);
+    if summary.truncated {
+        summary.text.push('…');
+    }
+    summary.text
+}
+
 fn tagged_error(value: &Value<'_>) -> Option<String> {
     let tag = data_property(value, c"tag")?;
     let tag = bounded_string(&tag, MAX_FIELD_LENGTH)?;
     Some(
         match data_property(value, c"val").filter(|value| !value.is_undefined()) {
-            Some(value) => format!("Error: {tag}: {}", primitive(&value)),
+            Some(value) => format!("Error: {tag}: {}", summary(&value)),
             None => format!("Error: {tag}"),
         },
     )
@@ -376,7 +622,7 @@ pub fn format_js_exception(value: &Value<'_>) -> String {
     preserving_exception(value, || {
         native_error(value)
             .or_else(|| tagged_error(value))
-            .unwrap_or_else(|| format!("JavaScript exception: {}", primitive(value)))
+            .unwrap_or_else(|| format!("JavaScript exception: {}", summary(value)))
     })
 }
 
