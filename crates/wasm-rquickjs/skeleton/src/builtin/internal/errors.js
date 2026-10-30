@@ -16,6 +16,7 @@ const nativeArrayJoin = Array.prototype.join;
 const nativeRegExpExec = RegExp.prototype.exec;
 const nativeStringLastIndexOf = String.prototype.lastIndexOf;
 const nativeStringSlice = String.prototype.slice;
+const nativeStringCharCodeAt = String.prototype.charCodeAt;
 const nativeStringSplit = String.prototype.split;
 const nativeParseInt = globalThis.parseInt;
 
@@ -288,7 +289,76 @@ const initialPublicPrepareStackTrace = typeof NativeError.prepareStackTrace === 
     : ErrorPrepareStackTrace;
 const defaultPublicPrepareStackTrace = initialPublicPrepareStackTrace;
 const preparedNativeStacks = createPrivateWeakMap();
+let hostCallSiteReaders;
+let hostSourceMapReader;
 let formattingNativeStack = false;
+
+// Installed by the existing node:module bootstrap dependency before user code.
+// Later private-module callers cannot replace the captured lookup.
+export function installHostSourceMapReader(reader) {
+    if (hostSourceMapReader === undefined && typeof reader === 'function') {
+        hostSourceMapReader = reader;
+    }
+}
+
+// Host diagnostics use the existing private native frames, never public
+// .stack, prepareStackTrace, CallSite overrides or a mutable source-map hook.
+function hostFrameText(value) {
+    if (typeof value !== 'string') return '';
+    // QuickJS slice/index conversion can flatten a whole rope. Check stored
+    // primitive length before any such operation, including on prepared text.
+    if (value.length > 512) return '<string exceeds diagnostic limit>';
+    const text = value;
+    let result = '';
+    for (let i = 0; i < text.length; i++) {
+        const code = nativeReflectApply(nativeStringCharCodeAt, text, [i]);
+        result += code < 32 || code === 127 ? ' ' : text[i];
+    }
+    return result;
+}
+
+export function readHostErrorStack(error) {
+    const state = nativeWeakMapGet(preparedNativeStacks, error);
+    if (state === undefined) return undefined;
+    if (state.prepared) {
+        // An earlier application read may already have cleared the frames.
+        // Preserve bounded primitive text without running the hook again.
+        return typeof state.value === 'string'
+            ? [state.value.length > 12288 ? '<string exceeds diagnostic limit>' : state.value, true]
+            : undefined;
+    }
+    const sites = state.callSites;
+    if (!hostCallSiteReaders || !nativeArrayIsArray(sites)) return undefined;
+    let stack = '';
+    for (let i = 0; i < sites.length && i < 12; i++) {
+        const site = sites[i];
+        let file = nativeReflectApply(hostCallSiteReaders.file, site, []);
+        if (_isInternalErrorFrame(file)) continue;
+        const name = hostFrameText(nativeReflectApply(hostCallSiteReaders.name, site, []));
+        let line = nativeReflectApply(hostCallSiteReaders.line, site, []);
+        let column = nativeReflectApply(hostCallSiteReaders.column, site, []);
+        if (hostSourceMapReader && typeof file === 'string' && file.length <= 512) {
+            const origin = hostSourceMapReader(file, line, column);
+            if (origin !== undefined) {
+                // The captured reader returns its own primitive-only record.
+                file = origin.fileName; line = origin.lineNumber; column = origin.columnNumber;
+            }
+        }
+        const fileName = hostFrameText(file);
+        let location = fileName;
+        if (typeof line === 'number') location += ':' + line;
+        if (typeof column === 'number') location += ':' + column;
+        const native = nativeReflectApply(hostCallSiteReaders.native, site, []);
+        const frame = location
+            ? (name ? name + ' (' + location + ')' : location)
+            : (name || '<anonymous>') + (native === true ? ' (native)' : '');
+        stack += (stack ? '\n' : '') + '    at ' + frame;
+    }
+    // A deliberate minimal adapter: the host path uses saved native methods,
+    // while public formatting may call hooks. 12 * (2*512 + 64) < Rust's
+    // 16384 UTF-16 stack budget; prepared text has its own 12288-unit ceiling.
+    return stack ? [stack, false] : undefined;
+}
 
 const preparedNativeStackDescriptor = nativeObjectCreate(null);
 preparedNativeStackDescriptor.get = _getPreparedNativeStack;
@@ -465,6 +535,22 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
                 ]);
             }
         }
+
+        // Capture native methods while their prototype is still pristine.
+        // The private original CallSites never pass through user wrappers.
+        (function captureHostCallSiteReaders() {
+            const probe = nativeObjectCreate(null);
+            const sites = captureCallSites(probe);
+            if (sites.length > 0) {
+                const prototype = nativeObjectGetPrototypeOf(sites[0]);
+                hostCallSiteReaders = nativeObjectCreate(null);
+                hostCallSiteReaders.file = prototype.getFileName;
+                hostCallSiteReaders.name = prototype.getFunctionName;
+                hostCallSiteReaders.line = prototype.getLineNumber;
+                hostCallSiteReaders.column = prototype.getColumnNumber;
+                hostCallSiteReaders.native = prototype.isNative;
+            }
+        })();
 
         globalThis.Error.captureStackTrace = function captureStackTrace(targetObject, constructorOpt) {
             if ((typeof targetObject === 'object' && targetObject !== null) ||

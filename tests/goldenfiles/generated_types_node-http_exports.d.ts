@@ -39,4 +39,6 @@ declare module 'node-http' {
   export function httpCustomConnectionRejected(): Promise<boolean>;
   export function httpResponsePersistence(): Promise<boolean>;
   export function httpFalsyPortUsesProtocolDefault(): Promise<boolean>;
+  export function httpBufferedRequestFin(testCase: number): Promise<string>;
+  export function netReadCallbackTurns(testCase: number): Promise<string>;
 }

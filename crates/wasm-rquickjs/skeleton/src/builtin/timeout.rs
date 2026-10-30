@@ -255,10 +255,14 @@ fn invoke_scheduled_task(
     run_scheduled_task(ctx.clone(), code_or_fn, args, timer_key)
         .catch(&ctx)
         .unwrap_or_else(|e| {
-            eprintln!(
-                "Timer callback error escaped JS uncaught handler: {}",
+            let output = ctx
+                .userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .output_sink();
+            output.write_stderr(&format!(
+                "Timer callback error escaped JS uncaught handler: {}\n",
                 format_caught_error(e)
-            );
+            ));
         });
     ctx.userdata::<RuntimeServices>()
         .expect("runtime services not initialized")
@@ -303,7 +307,13 @@ fn run_scheduled_task(
     } else if let Some(code) = restored_code_or_fn.as_string() {
         ctx.eval(code.to_string()?)
     } else {
-        eprintln!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        let output = ctx
+            .userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .output_sink();
+        output.write_stderr(&format!(
+            "Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}\n"
+        ));
         Ok(())
     };
 

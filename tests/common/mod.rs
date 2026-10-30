@@ -1804,6 +1804,25 @@ fn newest_modified_time_of_existing(paths: &[Utf8PathBuf]) -> anyhow::Result<Sys
     Ok(newest)
 }
 
+fn optimize_cache_inputs(input: &Utf8Path) -> Vec<Utf8PathBuf> {
+    vec![
+        input.to_path_buf(),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("src")
+            .join("optimize.rs"),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("src")
+            .join("optimize"),
+        Utf8Path::new("Cargo.toml").to_path_buf(),
+        Utf8Path::new("Cargo.lock").to_path_buf(),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("Cargo.toml"),
+    ]
+}
+
 fn compile_cache_inputs(path: &Utf8Path) -> Vec<Utf8PathBuf> {
     vec![
         path.to_path_buf(),
@@ -2797,21 +2816,34 @@ mod tests {
     }
 
     #[test]
-    fn bridge_changes_invalidate_compiled_artifact_cache() -> anyhow::Result<()> {
+    fn source_changes_invalidate_artifact_caches() -> anyhow::Result<()> {
         if test_drop_cache_enabled() {
             return Ok(());
         }
 
-        for relative in [
-            "src/lib.rs",
-            "wit/deps/golem-websocket/websocket.wit",
-            "wit-p3/deps/golem-websocket/websocket.wit",
+        for (relative, source_inputs) in [
+            (
+                "crates/golem-websocket/src/lib.rs",
+                compile_cache_inputs(Utf8Path::new("fixture")),
+            ),
+            (
+                "crates/golem-websocket/wit/deps/golem-websocket/websocket.wit",
+                compile_cache_inputs(Utf8Path::new("fixture")),
+            ),
+            (
+                "crates/golem-websocket/wit-p3/deps/golem-websocket/websocket.wit",
+                compile_cache_inputs(Utf8Path::new("fixture")),
+            ),
+            (
+                "crates/wasm-rquickjs/src/optimize/preinit.rs",
+                optimize_cache_inputs(Utf8Path::new("fixture.wasm")),
+            ),
         ] {
             let temp = Utf8TempDir::new()?;
-            let bridge_input = temp.path().join("crates/golem-websocket").join(relative);
+            let bridge_input = temp.path().join(relative);
             fs::create_dir_all(bridge_input.parent().unwrap())?;
             fs::write(&bridge_input, "bridge-v1")?;
-            let inputs: Vec<_> = compile_cache_inputs(Utf8Path::new("fixture"))
+            let inputs: Vec<_> = source_inputs
                 .iter()
                 .map(|path| temp.path().join(path))
                 .collect();
@@ -2828,7 +2860,7 @@ mod tests {
             )?;
             assert!(
                 !output_fresh_for_inputs(&output, &stamp, &inputs, signature),
-                "a bridge-only change to {relative} must invalidate the component"
+                "a source-only change to {relative} must invalidate the component"
             );
         }
         Ok(())
@@ -4747,18 +4779,7 @@ impl CompiledTest {
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
         let optimize_stamp = input.with_extension("optimized.stamp");
-        let optimize_inputs = vec![
-            input.to_path_buf(),
-            Utf8Path::new("crates")
-                .join("wasm-rquickjs")
-                .join("src")
-                .join("optimize.rs"),
-            Utf8Path::new("Cargo.toml").to_path_buf(),
-            Utf8Path::new("Cargo.lock").to_path_buf(),
-            Utf8Path::new("crates")
-                .join("wasm-rquickjs")
-                .join("Cargo.toml"),
-        ];
+        let optimize_inputs = optimize_cache_inputs(input);
         let optimize_signature = cache_stamp_signature(
             input.file_stem().unwrap_or("component"),
             FeatureCombination::Normal,

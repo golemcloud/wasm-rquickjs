@@ -6,12 +6,13 @@
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
 
+use super::{format_caught_error, format_js_exception};
 use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::promise::Promised;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Exception, Filter, FromJs,
-    Function, IntoJs, Module, Object, Persistent, Promise, Value,
+    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Exception, Filter, FromJs, Function,
+    IntoJs, Module, Object, Persistent, Promise, Value,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -381,10 +382,6 @@ enum InitState {
 static mut STATE: Option<JsState> = None;
 static mut INIT: InitState = InitState::NotStarted;
 
-/// True while `wizer_initialize` is running. Builtins use this to avoid snapshotting
-/// wasi-libc caches populated from Wizer's empty filesystem and environment.
-static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 /// Cooperative yield: returns `Pending` exactly once (re-waking immediately) so
 /// that another concurrent task can make progress. Used to wait for an in-flight
 /// initialization without busy-spinning the host.
@@ -417,6 +414,7 @@ pub async fn ensure_initialized() -> &'static JsState {
                 unsafe {
                     INIT = InitState::InProgress;
                 }
+                super::refresh_component_cwd();
                 let state = JsState::new_base().await;
                 unsafe {
                     STATE = Some(state);
@@ -450,11 +448,6 @@ pub async fn ensure_initialized() -> &'static JsState {
             }
         }
     }
-}
-
-#[inline]
-pub fn is_wizer_active() -> bool {
-    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Returns the already-initialized shared state. Only valid to call after
@@ -1026,7 +1019,7 @@ pub fn run_sync<T: 'static>(future: impl Future<Output = T>) -> T {
 /// Fully initializes the P3 QuickJS runtime and leaves it quiescent for Wizer to snapshot.
 #[allow(static_mut_refs)]
 pub async fn wizer_initialize() {
-    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::begin();
 
     unsafe {
         INIT = InitState::InProgress;
@@ -1059,7 +1052,7 @@ pub async fn wizer_initialize() {
         INIT = InitState::WizerPreInitialized;
     }
 
-    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::complete();
 }
 
 pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {
@@ -1599,89 +1592,6 @@ fn dump_cannot_find_export(
     keys.sort();
     panic_message.push_str(&format!("  {}\n", keys.join(", ")));
     panic_message
-}
-
-pub fn format_js_exception(exc: &Value) -> String {
-    try_format_js_error(exc)
-        .or_else(|| try_format_tagged_error(exc))
-        .unwrap_or_else(|| {
-            let formatted_exc = pretty_stringify_or_debug_print(exc);
-            if formatted_exc.contains('\n') {
-                format!("JavaScript exception:\n{formatted_exc}")
-            } else {
-                format!("JavaScript exception: {formatted_exc}")
-            }
-        })
-}
-
-pub fn try_format_js_error(err: &Value) -> Option<String> {
-    let error_ctor: Object = err.ctx().globals().get("Error").ok()?;
-    let obj = err.as_object()?;
-
-    if !obj.is_instance_of(error_ctor) {
-        return None;
-    }
-
-    let message: Option<String> = obj.get("message").ok();
-    let stack: Option<String> = obj.get("stack").ok();
-
-    match (message, stack) {
-        (Some(msg), Some(st)) => Some(format!("JavaScript error: {msg}\nStack:\n{st}")),
-        (Some(msg), None) => Some(format!("JavaScript error: {msg}")),
-        (None, Some(st)) => Some(format!("JavaScript error: <no message>\nStack:\n{st}")),
-        _ => None,
-    }
-}
-
-pub fn try_format_tagged_error(err: &Value) -> Option<String> {
-    let obj = err.as_object()?;
-    let tag: Option<String> = obj.get("tag").ok();
-    let val: Option<Value> = obj.get("val").ok();
-    let val = val.and_then(|v| (!v.is_undefined()).then_some(v));
-
-    match (tag, val) {
-        (Some(tag), Some(val)) => {
-            let formatted_val = pretty_stringify_or_debug_print(&val);
-            if formatted_val.contains('\n') {
-                Some(format!("Error: {tag}:\n{formatted_val}"))
-            } else {
-                Some(format!("Error: {tag}: {formatted_val}"))
-            }
-        }
-        (Some(tag), None) => Some(format!("Error: {tag}")),
-        _ => None,
-    }
-}
-
-fn pretty_stringify_or_debug_print(val: &Value) -> String {
-    if let Some(formatted) = try_pretty_stringify(val) {
-        formatted
-    } else {
-        format!("{val:#?}")
-    }
-}
-
-fn try_pretty_stringify(val: &Value) -> Option<String> {
-    if val.is_undefined() {
-        return Some("undefined".to_string());
-    }
-
-    if let Some(str) = val.as_string() {
-        return str.to_string().ok();
-    }
-
-    let json: Object = val.ctx().globals().get("JSON").ok()?;
-    let stringify: Function = json.get("stringify").ok()?;
-    let res: Result<String, Error> = stringify.call((val, rquickjs::Undefined, 2));
-    res.ok()
-}
-
-pub fn format_caught_error(caught: CaughtError) -> String {
-    match caught {
-        CaughtError::Error(e) => format!("Host error: {e:?}"),
-        CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
-        CaughtError::Value(val) => format_js_exception(&val),
-    }
 }
 
 // ---------------------------------------------------------------------------

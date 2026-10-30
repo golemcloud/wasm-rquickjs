@@ -41,4 +41,6 @@ world node-http {
   export http-custom-connection-rejected: func() -> bool;
   export http-response-persistence: func() -> bool;
   export http-falsy-port-uses-protocol-default: func() -> bool;
+  export http-buffered-request-fin: func(test-case: u8) -> string;
+  export net-read-callback-turns: func(test-case: u8) -> string;
 }

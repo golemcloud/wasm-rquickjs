@@ -221,6 +221,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn create_job(ctx: Ctx<'_>, options_json: String) -> rquickjs::Result<usize> {
+        crate::internal::preinit::check("execution job creation", "wasm-rquickjs:execution");
         // The public JS wrapper owns option validation and defaults. These
         // checks defend the private native protocol against direct callers.
         let options: ExecutionOptions = serde_json::from_str(&options_json)

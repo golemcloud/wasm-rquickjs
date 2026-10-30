@@ -405,6 +405,7 @@ impl ProcessServices {
         cwd: PathBuf,
     ) -> std::io::Result<()> {
         let cwd = normalize_absolute_path(&cwd)?;
+        super::preinit::check("execution cwd validation", cwd.display());
         if !cwd.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -432,6 +433,9 @@ impl ProcessServices {
     }
 
     pub(crate) fn cwd(&self) -> PathBuf {
+        if super::preinit::is_active() {
+            return PathBuf::from("/");
+        }
         self.isolated
             .borrow()
             .as_ref()
@@ -454,6 +458,7 @@ impl ProcessServices {
     }
 
     pub(crate) fn chdir(&self, path: &Path) -> std::io::Result<()> {
+        super::preinit::check("process.chdir", path.display());
         let mut isolated = self.isolated.borrow_mut();
         let Some(state) = isolated.as_mut() else {
             return std::env::set_current_dir(path);
@@ -511,13 +516,43 @@ pub(crate) trait RuntimeOutputSink {
 
 struct ComponentOutputSink;
 
+fn write_preinit_stdio(stream: wasip2::io::streams::OutputStream, data: &str) {
+    // Own and drop this stream within the call. libc caches its stdio handles
+    // in linear memory; those optimizer-store resources cannot survive Wizer.
+    // The P2 bindings are shared by both targets, like Rust's residual P2 stdio.
+    let mut start = 0;
+    while start < data.len() {
+        // WASI blocking-write-and-flush accepts at most 4096 bytes. Preserve
+        // UTF-8 boundaries for hosts that consume each flushed write as text.
+        let mut end = (start + 4096).min(data.len());
+        while !data.is_char_boundary(end) {
+            end -= 1;
+        }
+        if stream
+            .blocking_write_and_flush(&data.as_bytes()[start..end])
+            .is_err()
+        {
+            break;
+        }
+        start = end;
+    }
+}
+
 impl RuntimeOutputSink for ComponentOutputSink {
     fn write_stdout(&self, data: &str) {
+        if super::preinit::is_active() {
+            write_preinit_stdio(wasip2::cli::stdout::get_stdout(), data);
+            return;
+        }
         let _ = std::io::stdout().write_all(data.as_bytes());
         let _ = std::io::stdout().flush();
     }
 
     fn write_stderr(&self, data: &str) {
+        if super::preinit::is_active() {
+            write_preinit_stdio(wasip2::cli::stderr::get_stderr(), data);
+            return;
+        }
         let _ = std::io::stderr().write_all(data.as_bytes());
         let _ = std::io::stderr().flush();
     }
@@ -706,6 +741,8 @@ impl OwnedJsRuntime {
             };
             ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
+            super::error_formatting::initialize(&ctx)
+                .expect("Failed to initialize diagnostic intrinsics");
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
             #[cfg(feature = "test-observability")]
@@ -836,23 +873,34 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
             return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
         };
     "#);
+    source.push_str(r#"
+        export { readHostErrorStack as __hostStackReader } from '__wasm_rquickjs_builtin/internal/errors';
+    "#);
     rquickjs::AsyncContext::async_with(ctx, async |ctx| {
-        Module::evaluate(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
+        let module = Module::declare(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
             .catch(&ctx)
             .map_err(|error| {
                 format!(
                     "Failed to evaluate built-in wiring:\n{}",
                     super::format_caught_error(error)
                 )
-            })?
-            .finish::<()>()
-            .catch(&ctx)
-            .map_err(|error| {
-                format!(
-                    "Failed to finish built-in wiring:\n{}",
-                    super::format_caught_error(error)
-                )
             })?;
+        let (module, promise) = module.eval().catch(&ctx).map_err(|error| {
+            format!(
+                "Failed to start built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        promise.finish::<()>().catch(&ctx).map_err(|error| {
+            format!(
+                "Failed to finish built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        let reader = module
+            .get("__hostStackReader")
+            .map_err(|error| format!("Failed to capture host stack reader: {error}"))?;
+        super::error_formatting::install_host_stack_reader(&ctx, reader);
         Ok::<(), String>(())
     })
     .await

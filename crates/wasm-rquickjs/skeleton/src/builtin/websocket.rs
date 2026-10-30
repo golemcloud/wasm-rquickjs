@@ -68,6 +68,7 @@ fn ws_connect_impl(
     url: String,
     protocols: Vec<String>,
 ) -> rquickjs::Result<WsConnection> {
+    crate::internal::preinit::check("WebSocket connection", "remote endpoint");
     let headers = if protocols.is_empty() {
         None
     } else {

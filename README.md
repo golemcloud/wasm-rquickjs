@@ -175,6 +175,56 @@ initialization must become quiescent before the snapshot and cannot leave timers
 Runtime arguments and environment variables are restored before the first export runs; modules
 must not capture their values or immutable aliases during top-level initialization.
 
+**External I/O during pre-initialization is rejected.** Top-level filesystem
+probes (including `existsSync` and module/package lookup), socket/DNS/HTTP/WebSocket
+acquisition, SQLite opens (including `:memory:`), execution-job creation, and
+`process.chdir()` fail the
+build immediately. Catching a JavaScript exception cannot suppress this failure.
+The diagnostic identifies the operation and recommends moving it into an exported
+function or lazy initialization after restoration. This avoids saving unavailable
+build-time capabilities or false filesystem results in the snapshot. The optimizer
+also traps filesystem preopens, network acquisition and outgoing HTTP for older
+templates and custom initializers. Rebuild templates to get native guards,
+restore-safe pre-init stdio and guest diagnostics.
+
+Importing these builtins, embedded/data modules and explicitly supplied module
+sources remains supported. Logging and pure computation remain available.
+`process.cwd()` is the logical `/` during pre-initialization and refreshes from the
+runtime environment after restoration. `wasm-rquickjs:execution` may be imported,
+but `runJavaScript()` and `startJavaScript()` are runtime-only, including for pure
+computation. Create jobs from an exported function or lazy runtime initialization.
+On cold start and after
+restoration, the main runtime honors `wasi:cli/environment`'s initial cwd. Hosts
+must implement this standard WASI import; `none` retains `/`. A supplied cwd must
+be an accessible directory, or runtime initialization fails. Owned jobs retain
+their separate cwd.
+
+Supplied CommonJS reexports that require filesystem analysis are still rejected
+during pre-initialization, even if a loader could supply the child at runtime.
+Defer those chains to runtime until loader-aware reexport analysis is supported.
+Defer SQLite connections with `new DatabaseSync(path, { open: false })`, then call `.open()` after restoration.
+Applications that require top-level external I/O should skip `optimize` and
+initialize at runtime instead.
+
+Host exception diagnostics recognize native Errors and legacy Error-prototype
+objects and use bounded native stack
+frames without invoking application getters, coercion, `toJSON`, or
+`Error.prepareStackTrace`. Ordinary records and arrays show own data with a
+two-level depth limit, a shared 16-property budget and a 4096-byte summary limit;
+accessors, cycles and omitted entries are marked explicitly. Proxies and exotic
+objects remain opaque. Array inspection reads only a bounded prefix, while native
+record key discovery allocates a native table per visited record and may sort
+integer keys. Its cost grows with record size, including repeated visits to shared
+records; allocation failure falls back to an unavailable marker. Oversized strings receive
+bounded descriptions. When the engine supplies no usable position, the
+diagnostic explicitly says that the source location is unavailable. Existing
+source maps and wrapper offsets are read through guarded data lookup; unsafe,
+missing or overly expensive mappings fall back to generated code locations.
+Previously prepared stack text is reused within the same bounds without running
+its hook again. Readable bundles and source map configuration remain the
+responsibility of the build tooling. Public
+JavaScript `.stack` and `prepareStackTrace` behavior is unchanged.
+
 **Deterministic pre-initialization:** newly generated P2 and P3 templates export
 `wasm-rquickjs-wizer-restore-v1`. When optimizing their `wizer-initialize` export,
 the optimizer supplies fixed-seed entropy, Unix-epoch wall time, and a zero
@@ -759,7 +809,8 @@ Compatibility stubs — HTTP/2 is not supported.
 
 Runs JavaScript asynchronously in a fresh QuickJS runtime. `startJavaScript(options)` returns live
 `stdout`/`stderr` readable streams, a `result` promise resolving to `{ value, overflowed }`, and
-`cancel()`. `runJavaScript(options)` collects the streams and resolves to
+`cancel()`. Jobs are runtime-only; importing this module during pre-initialization
+is safe. `runJavaScript(options)` collects the streams and resolves to
 `{ value, overflowed, stdout, stderr }`. `value` crosses the runtime boundary through structured
 clone.
 

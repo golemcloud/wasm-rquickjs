@@ -2268,6 +2268,10 @@ fn cjs_named_import_error_module_source(
     filename: &str,
     source: &str,
 ) -> Option<String> {
+    // Diagnostic enrichment must not replace the original linking error with an I/O violation.
+    if super::preinit::is_active() {
+        return None;
+    }
     let esm_conditions = NodeModulesResolver::conditions_from_global(
         ctx,
         NodePackageResolveMode::EsmImport.condition_mode(),
@@ -3893,7 +3897,6 @@ fn registered_file_url_base_path(registered: &RegisteredFileUrl) -> Option<Strin
 struct FileModuleLoadContext {
     logical_path: String,
     fs_path: String,
-    source_path: String,
     format_path: String,
     public_url: String,
     registered_identity_url: Option<String>,
@@ -3906,7 +3909,6 @@ impl FileModuleLoadContext {
     fn for_module(ctx: &Ctx<'_>, module_id: &str) -> Option<Self> {
         if let Some(registered) = registered_file_url_from_id(ctx, module_id) {
             let fs_path = registered_file_url_base_path(&registered)?;
-            let source_path = module_source_filesystem_literal_path(ctx, &fs_path);
             let format_path =
                 FileUrlResolver::file_url_authority_path_and_suffix(&registered.public_url)
                     .map(|(_, path, _)| path.to_string())
@@ -3914,7 +3916,6 @@ impl FileModuleLoadContext {
             return Some(Self {
                 logical_path: registered.public_url.clone(),
                 fs_path,
-                source_path,
                 format_path,
                 public_url: registered.public_url,
                 registered_identity_url: Some(registered.identity_url),
@@ -3927,7 +3928,6 @@ impl FileModuleLoadContext {
         let logical_path = module_id.to_string();
         Some(Self {
             fs_path: module_filesystem_path(module_id).to_string(),
-            source_path: module_source_filesystem_path(ctx, module_id),
             format_path: module_filesystem_path(module_id).to_string(),
             public_url: path_to_file_url(module_id),
             logical_path,
@@ -3936,6 +3936,16 @@ impl FileModuleLoadContext {
             explicit_format: None,
             attributes_validated: false,
         })
+    }
+
+    // Only derive a physical source path after selecting filesystem-backed
+    // provenance. Registered/supplied source can have a file URL without I/O.
+    fn source_path(&self, ctx: &Ctx<'_>) -> String {
+        if self.registered_identity_url.is_some() {
+            module_source_filesystem_literal_path(ctx, &self.fs_path)
+        } else {
+            module_source_filesystem_path(ctx, &self.logical_path)
+        }
     }
 
     fn consume_import_attr_type(&self, module_id: &str) -> Option<String> {
@@ -4497,7 +4507,10 @@ impl NodeFileResolver {
             FileCandidateSemantics::ModuleResolution => {
                 Self::module_resolution_is_file(ctx, normalized)
             }
-            FileCandidateSemantics::DirectFilesystem => std::path::Path::new(normalized).is_file(),
+            FileCandidateSemantics::DirectFilesystem => {
+                super::preinit::check("module path probe", normalized);
+                std::path::Path::new(normalized).is_file()
+            }
         }
     }
 
@@ -4803,6 +4816,41 @@ impl Resolver for NodeBuiltinNamespaceGuard {
     }
 }
 
+fn unsupported_esm_url_scheme(name: &str) -> Option<&str> {
+    let scheme_end = name.find("://")?;
+    if scheme_end > 0
+        && name[..scheme_end].bytes().enumerate().all(|(index, byte)| {
+            byte.is_ascii_alphabetic()
+                || (index > 0 && (byte.is_ascii_digit() || matches!(byte, b'+' | b'-' | b'.')))
+        })
+    {
+        let scheme = &name[..scheme_end];
+        if scheme != "file" && scheme != "data" {
+            return Some(scheme);
+        }
+    }
+    None
+}
+
+struct RuntimeFileResolver(FileResolver);
+
+impl Resolver for RuntimeFileResolver {
+    fn resolve<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        base: &str,
+        name: &str,
+        attributes: Option<ImportAttributes<'js>>,
+    ) -> rquickjs::Result<String> {
+        let input = FileUrlResolver::preprocess_url_input(name);
+        if unsupported_esm_url_scheme(&input).is_some() {
+            return NodeModuleErrorResolver.resolve(ctx, base, name, attributes);
+        }
+        super::preinit::check("module filesystem resolution", name);
+        self.0.resolve(ctx, base, name, attributes)
+    }
+}
+
 impl Resolver for NodeModuleErrorResolver {
     fn resolve<'js>(
         &mut self,
@@ -4819,26 +4867,12 @@ impl Resolver for NodeModuleErrorResolver {
             return throw_native_coded_error(ctx, &msg, "ERR_UNKNOWN_BUILTIN_MODULE", true);
         }
 
-        if let Some(scheme_end) = name.find("://")
-            && scheme_end > 0
-            && name[..scheme_end].bytes().enumerate().all(|(index, byte)| {
-                byte.is_ascii_alphabetic()
-                    || (index > 0 && (byte.is_ascii_digit() || matches!(byte, b'+' | b'-' | b'.')))
-            })
-        {
-            let scheme = &name[..scheme_end];
-            if scheme != "file" && scheme != "data" {
-                let msg = format!(
-                    "Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol '{}:'",
-                    scheme
-                );
-                return throw_native_coded_error(
-                    ctx,
-                    &msg,
-                    "ERR_UNSUPPORTED_ESM_URL_SCHEME",
-                    false,
-                );
-            }
+        if let Some(scheme) = unsupported_esm_url_scheme(name) {
+            let msg = format!(
+                "Only URLs with a scheme in: file, data, and node are supported by the default ESM loader. Received protocol '{}:'",
+                scheme
+            );
+            return throw_native_coded_error(ctx, &msg, "ERR_UNSUPPORTED_ESM_URL_SCHEME", false);
         }
 
         let msg = format!("Cannot find module '{}'", name);
@@ -5073,6 +5107,7 @@ impl CjsModuleProbeSession {
     }
 
     fn probe(&self, normalized: &str) -> ModulePathProbe {
+        super::preinit::check("module path probe", normalized);
         let cached = {
             let state = self.0.borrow();
             (state.depth > 0 && state.cache_enabled())
@@ -5224,6 +5259,7 @@ fn module_resolution_path_matches(
 }
 
 fn cjs_module_path_stat(ctx: Ctx<'_>, filename: String) -> i32 {
+    super::preinit::check("module path stat", &filename);
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized");
@@ -5737,6 +5773,7 @@ impl NodeModulesResolver {
         pkg_path: &std::path::Path,
         resolution: &NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
+        super::preinit::check("package.json read", pkg_path.display());
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
         #[cfg(feature = "typescript-compiler-profiling")]
         if let Some(profile) = &resolution.profile {
@@ -10224,7 +10261,7 @@ fn analyze_cjs_reexport_specifier_names(
             } else {
                 physical_path
             };
-            let Ok(source) = std::fs::read_to_string(&child_filename) else {
+            let Ok(source) = required_module_source(std::path::Path::new(&child_filename)) else {
                 continue;
             };
             #[cfg(feature = "typescript-runtime")]
@@ -10311,6 +10348,7 @@ fn analyze_cjs_reexport_specifier_names(
                 seen,
                 conditions,
                 prepared_typescript.as_deref_mut(),
+                CjsAnalysisOrigin::Filesystem,
             );
             if let Some(graph) = prepared_typescript.as_deref_mut()
                 && let Some(prepared) = graph.get_mut(&child_filename)
@@ -10341,7 +10379,21 @@ fn analyze_cjs_exports_for_file(
     seen: &mut HashSet<String>,
     conditions: &[String],
 ) -> CjsExportAnalysis {
-    analyze_cjs_exports_for_file_impl(ctx, filename, source, seen, conditions, None)
+    analyze_cjs_exports_for_file_impl(
+        ctx,
+        filename,
+        source,
+        seen,
+        conditions,
+        None,
+        CjsAnalysisOrigin::Filesystem,
+    )
+}
+
+#[derive(Clone, Copy)]
+enum CjsAnalysisOrigin {
+    Filesystem,
+    ProvidedSource,
 }
 
 fn analyze_cjs_exports_for_file_impl(
@@ -10351,10 +10403,15 @@ fn analyze_cjs_exports_for_file_impl(
     seen: &mut HashSet<String>,
     conditions: &[String],
     prepared_typescript: Option<&mut PreparedCjsTypeScriptGraph>,
+    origin: CjsAnalysisOrigin,
 ) -> CjsExportAnalysis {
     record_commonjs_export_analysis(ctx);
     let mut analysis = analyze_cjs_exports(source);
-    if !seen.insert(canonical_cjs_analysis_path(ctx, filename)) {
+    let identity = match origin {
+        CjsAnalysisOrigin::Filesystem => canonical_cjs_analysis_path(ctx, filename),
+        CjsAnalysisOrigin::ProvidedSource => filename.to_string(),
+    };
+    if !seen.insert(identity) {
         return analysis;
     }
     let reexports = analysis.reexports.clone();
@@ -10631,12 +10688,14 @@ fn build_loader_cjs_facade(
         &ctx,
         NodePackageResolveMode::CjsAnalysis.condition_mode(),
     );
-    let analysis = analyze_cjs_exports_for_file(
+    let analysis = analyze_cjs_exports_for_file_impl(
         &ctx,
         &filename,
         &source,
         &mut HashSet::new(),
         &cjs_conditions,
+        None,
+        CjsAnalysisOrigin::ProvidedSource,
     );
     let filename = escape_js_string(&filename);
     let source = escape_js_string(&source);
@@ -10694,12 +10753,20 @@ impl Loader for CjsCompatLoader {
         }
 
         let fs_abs_path = ensure_absolute_path(fs_path);
-        let package_scope =
-            if fs_abs_path.ends_with(".js") || fs_abs_path.ends_with(".ts") || is_extensionless {
-                package_scope_info_or_throw(ctx, &fs_abs_path)?
-            } else {
-                None
-            };
+        let url = target.public_url.clone();
+        let source_override = require_esm_source_override(ctx, &fs_abs_path, &url);
+        let source_origin = if source_override.is_some() {
+            CjsAnalysisOrigin::ProvidedSource
+        } else {
+            CjsAnalysisOrigin::Filesystem
+        };
+        let package_scope = if !(force_commonjs && super::preinit::is_active())
+            && (fs_abs_path.ends_with(".js") || fs_abs_path.ends_with(".ts") || is_extensionless)
+        {
+            package_scope_info_or_throw(ctx, &fs_abs_path)?
+        } else {
+            None
+        };
         let package_type = package_scope
             .as_ref()
             .and_then(|scope| scope.package_type.clone());
@@ -10710,11 +10777,10 @@ impl Loader for CjsCompatLoader {
                     .as_ref()
                     .is_some_and(|scope| scope.is_node_modules_package));
 
-        let url = target.public_url.clone();
-        let source = if let Some(source) = require_esm_source_override(ctx, &fs_abs_path, &url) {
+        let source = if let Some(source) = source_override {
             source
         } else {
-            read_module_source_or_throw(ctx, &target.public_url, &target.source_path)?
+            read_module_source_or_throw(ctx, &target.public_url, &target.source_path(ctx))?
         };
         #[cfg(feature = "typescript-runtime")]
         let original_source_for_cache = source.clone();
@@ -10830,6 +10896,7 @@ impl Loader for CjsCompatLoader {
                 &mut HashSet::new(),
                 &cjs_conditions,
                 Some(&mut prepared_typescript),
+                source_origin,
             )
         };
         #[cfg(feature = "typescript-runtime")]
@@ -11301,6 +11368,11 @@ fn module_source_filesystem_literal_path(ctx: &Ctx<'_>, fs_path: &str) -> String
     }
 }
 
+fn required_module_source(path: &std::path::Path) -> std::io::Result<String> {
+    super::preinit::check("module source read", path.display());
+    std::fs::read_to_string(path)
+}
+
 fn read_module_source_or_throw<'js>(
     ctx: &Ctx<'js>,
     module_id: &str,
@@ -11315,7 +11387,7 @@ fn read_module_source_or_throw<'js>(
     if let Some(profile) = &profile {
         profile.increment("modules.sourceRead.calls");
     }
-    match std::fs::read_to_string(source_path) {
+    match required_module_source(std::path::Path::new(source_path)) {
         Ok(source) => {
             #[cfg(feature = "typescript-compiler-profiling")]
             if let Some(profile) = &profile {
@@ -12728,11 +12800,13 @@ pub(crate) async fn initialize_module_loading(rt: &AsyncRuntime, ctx: &AsyncCont
     let builtin_resolver = crate::modules::add_native_module_resolvers(BuiltinResolver::default());
     let builtin_resolver = crate::builtin::add_module_resolvers(builtin_resolver);
 
-    let file_resolver = FileResolver::default()
-        .with_path("/")
-        .with_pattern("{}.js")
-        .with_pattern("{}.mjs")
-        .with_pattern("{}.json");
+    let file_resolver = RuntimeFileResolver(
+        FileResolver::default()
+            .with_path("/")
+            .with_pattern("{}.js")
+            .with_pattern("{}.mjs")
+            .with_pattern("{}.json"),
+    );
     let loader_cjs_facades = LoaderCjsFacadeRegistry::default();
 
     let resolver = (
@@ -13331,7 +13405,7 @@ impl Loader for ImportMetaLoader {
             ctx,
             path,
             fs_path,
-            &target.source_path,
+            &target.source_path(ctx),
             target.public_url,
             EsmFilePreflightMode::RequireOnly,
         )
@@ -13363,7 +13437,7 @@ impl Loader for JsonFileLoader {
         }
 
         let import_attr_type = target.consume_import_attr_type(path);
-        let source = std::fs::read_to_string(&target.source_path)
+        let source = required_module_source(std::path::Path::new(&target.source_path(ctx)))
             .map_err(|_| Error::new_loading(&target.public_url))?;
         let module_source = if import_attr_type.as_deref() != Some("json") {
             json_import_attribute_missing_module_source(&target.public_url)

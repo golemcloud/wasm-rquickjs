@@ -3484,6 +3484,7 @@ name = "wasm-rquickjs"
 version = "0.0.0"
 dependencies = [
  "anyhow",
+ "bytes",
  "camino",
  "camino-tempfile",
  "heck",
