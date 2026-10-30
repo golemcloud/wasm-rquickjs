@@ -164,6 +164,16 @@ export async function run() {
                 `setTimeout(() => {
                     setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 5);
                  }, 1);`,
+                // A timer left unreferenced when the child first goes idle survives
+                // into beforeExit, whether it is referenced again there...
+                `const timer = setTimeout(() => { process.stdout.write('done'); process.exitCode = 7; }, 20).unref();
+                 process.once('beforeExit', () => timer.ref());`,
+                // ...or other referenced work started there keeps the child alive.
+                `let fired = false;
+                 setTimeout(() => { fired = true; }, 20).unref();
+                 process.once('beforeExit', () => setTimeout(() => {
+                    if (fired) { process.stdout.write('done'); process.exitCode = 7; }
+                 }, 100));`,
             ]) await check(source, { status: 7, stdout: 'done', stderr: '' });
             await check(`setTimeout(() => process.stdout.write('unexpected'), 0).unref();`,
                 { status: 0, stdout: '', stderr: '' });
@@ -800,6 +810,25 @@ export async function run() {
     setProcessBackend(null);
     assert.equal(spawnSync('virtual-command').error.code, 'ENOSYS');
     assert.throws(() => execSync('virtual shell program'), error => error.code === 'ENOSYS');
+    // Local Node commands, including direct shebangs, do not depend on whether a
+    // synchronous backend is registered.
+    for (const backend of [null, { spawn: () => undefined }]) {
+        setProcessBackend(backend);
+        assert.equal(spawnSync('./local-script', ['sync'], { cwd: '/local-bin', encoding: 'utf8' }).stdout, 'local:sync\n');
+        assert.equal(execFileSync('local-script', ['file'], { env: localEnv, encoding: 'utf8' }), 'local:file\n');
+        assert.equal(execSync('/local-bin/local-script shell', { encoding: 'utf8' }), 'local:shell\n');
+        assert.equal(execSync('/local-bin/local-script sh-option', { shell: '/bin/sh', encoding: 'utf8' }),
+            'local:sh-option\n');
+        assert.deepEqual(execSync(`${process.execPath} -p 40+2`), Buffer.from('42\n'));
+        assert.equal(spawnSync('/local-bin/local-script', ['shell-form'], { shell: true, encoding: 'utf8' }).stdout,
+            'local:shell-form\n');
+        const shellChild = spawn('/local-bin/local-script async-shell', { shell: true });
+        let shellOutput = '';
+        shellChild.stdout.on('data', chunk => { shellOutput += chunk.toString(); });
+        assert.deepEqual(await once(shellChild, 'close'), [0, null]);
+        assert.equal(shellOutput, 'local:async-shell\n');
+    }
+    setProcessBackend(null);
     await assert.rejects(promisify(execFile)('missing-command'), error => {
         assert.equal(error.code, 'ENOSYS');
         assert.equal(error.stdout, '');

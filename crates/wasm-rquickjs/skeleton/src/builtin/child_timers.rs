@@ -19,11 +19,17 @@ pub(crate) struct ChildTimer {
     pub(crate) args: Persistent<Vec<Value<'static>>>,
 }
 
+type TimerWait = LocalBoxFuture<'static, (ChildTimer, bool)>;
+
 /// Timer waits owned by a child, not by its QuickJS scheduler. Unreferenced
 /// timers can run while ordinary work is pending without keeping that work alive.
 #[derive(Default)]
 pub(crate) struct ChildTimers {
     pending: RefCell<Vec<(ChildTimer, AbortRegistration)>>,
+    /// Started waits outlive each drain: a timer left unreferenced when the child
+    /// first becomes idle can be referenced again from `beforeExit`, or fire while
+    /// work started there runs, on its original deadline.
+    waits: RefCell<FuturesUnordered<TimerWait>>,
     waker: AtomicWaker,
 }
 
@@ -49,8 +55,6 @@ impl ChildTimers {
     }
 
     pub(crate) async fn drain(&self, runtime: &OwnedJsRuntime) -> Result<bool, String> {
-        let mut waits: FuturesUnordered<LocalBoxFuture<'static, (ChildTimer, bool)>> =
-            FuturesUnordered::new();
         let mut ready: Option<(ChildTimer, bool)> = None;
         let mut host_work = false;
         poll_fn(|cx| {
@@ -137,7 +141,7 @@ impl ChildTimers {
                 // Drop the queue borrow before any future poll can call JS.
                 let pending = std::mem::take(&mut *self.pending.borrow_mut());
                 for (timer, registration) in pending {
-                    waits.push(Box::pin(async move {
+                    self.waits.borrow_mut().push(Box::pin(async move {
                         let cancelled = Abortable::new(
                             wasip3::clocks::monotonic_clock::wait_for(
                                 u64::from(timer.delay).saturating_mul(1_000_000),
@@ -155,7 +159,9 @@ impl ChildTimers {
                 if idle.is_ready() && referenced == 0 {
                     return Poll::Ready(Ok(host_work));
                 }
-                match Pin::new(&mut waits).poll_next(cx) {
+                // Polling a wait runs no JavaScript, so the borrow cannot re-enter.
+                let next = Pin::new(&mut *self.waits.borrow_mut()).poll_next(cx);
+                match next {
                     Poll::Ready(Some(timer)) => ready = Some(timer),
                     Poll::Ready(None) | Poll::Pending => return Poll::Pending,
                 }

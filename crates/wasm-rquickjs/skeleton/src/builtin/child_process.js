@@ -1655,6 +1655,9 @@ function runExecCommand(command, options) {
     // shell expansion remain fail-closed.
     const source = expandTemplateEnvRefs(command, env);
     const resolvedOptions = cloneObject(options);
+    // This runner interprets the command line itself; the commands it starts
+    // must not re-enter it through the shell form of spawnSync.
+    delete resolvedOptions.shell;
 
     if (resolvedOptions.encoding === undefined) {
         resolvedOptions.encoding = 'utf8';
@@ -2450,9 +2453,13 @@ export function execFileSync(file, args, options) {
     }
 
     const result = spawnSync(file, normalizedArgs, normalizedOptions);
+    return syncExecOutput(result, String(file) + ' ' + normalizedArgs.join(' '), normalizedOptions);
+}
 
+// Throws for a failed synchronous exec, as Node does, or returns its stdout.
+function syncExecOutput(result, label, options) {
     if (result.error || result.status !== 0) {
-        const err = result.error || new Error('Command failed: ' + String(file) + ' ' + normalizedArgs.join(' ') + '\n' + String(result.stderr || ''));
+        const err = result.error || new Error('Command failed: ' + label + '\n' + String(result.stderr || ''));
         err.status = result.status;
         err.signal = result.signal;
         err.stdout = result.stdout;
@@ -2463,7 +2470,7 @@ export function execFileSync(file, args, options) {
     }
 
     if (result.stdout === null) return null;
-    const encoding = getOutputEncoding(normalizedOptions);
+    const encoding = getOutputEncoding(options);
     if (encoding && encoding !== 'buffer') {
         return result.stdout ? result.stdout.toString(encoding) : '';
     }
@@ -2472,29 +2479,26 @@ export function execFileSync(file, args, options) {
 }
 
 export function execSync(command, options) {
-    const backend = getProcessBackend();
-    if (!backend || !backend.spawnSync) throw createNotSupportedError('execSync');
     const opts = options || {};
-    return execFileSync(String(command), [], { ...opts, shell: opts.shell === undefined ? true : opts.shell });
+    // As in `exec`, a registered backend runs the shell command; without one, or
+    // when it declines, the local runner handles the Node commands it supports.
+    const result = delegatedSpawnSync(String(command), [], { ...opts, shell: opts.shell === undefined ? true : opts.shell }) ||
+        runExecCommand(String(command), { ...opts, encoding: opts.encoding ?? 'buffer' });
+    return syncExecOutput(result, String(command), opts);
 }
 
 export function spawnSync(command, args, options) {
     const { args: normalizedArgs, options: normalizedOptions } = normalizeSpawnParams(args, options);
     if (normalizedOptions.shell) {
+        // As in `exec`, the shell command line runs locally without a backend or
+        // when it declines; the local runner fails closed on unsupported syntax.
+        const line = [String(command)].concat(normalizedArgs.map(String)).join(' ');
         return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
-            unsupportedSpawnSyncResult(String(command) + ' with shell option');
+            runExecCommand(line, { ...normalizedOptions, encoding: normalizedOptions.encoding ?? 'buffer' });
     }
-    const backend = getProcessBackend();
-    // The unconfigured path keeps its existing lookup cost. Only a registered
-    // fallback requires resolving direct Node shebangs before delegation.
-    const shellCommand = backend && backend.spawnSync
-        ? resolveBackendInlineCommand(String(command), normalizedArgs, normalizedOptions)
-        : resolveJavaScriptShellCommand(
-        String(command),
-        normalizedArgs,
-        normalizedOptions.env || process.env,
-        normalizedOptions.cwd,
-    );
+    // Local Node commands, including direct Node shebangs, resolve whether or not a
+    // backend is registered, as in `spawn`; a backend only handles the rest.
+    const shellCommand = resolveBackendInlineCommand(String(command), normalizedArgs, normalizedOptions);
     const cmd = shellCommand ? shellCommand.command : String(command);
     const resolvedArgs = shellCommand ? shellCommand.args : normalizedArgs;
     if (cmd !== process.execPath) {
