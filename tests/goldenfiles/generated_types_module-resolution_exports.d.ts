@@ -4,6 +4,7 @@ declare module 'module-resolution' {
   export function testEsmInvalidPackageSpecifiers(): Promise<boolean>;
   export function testEsmDataUrlImportAttributes(): Promise<boolean>;
   export function testEsmInjectedHelpersIgnoreLexicalGlobalThis(): Promise<boolean>;
+  export function testEsmImportNamedClassMethods(): Promise<boolean>;
   export function testEsmJsonUrlCacheKeys(): Promise<boolean>;
   export function testEsmJsonImportIgnoresGlobalThisProperty(): Promise<boolean>;
   export function testStaticLoaderAbsoluteEntrySpecifier(): Promise<boolean>;
