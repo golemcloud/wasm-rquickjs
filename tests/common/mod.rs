@@ -4050,6 +4050,8 @@ impl TestInstance {
             .env("TEST_KEY_2", "TEST_VALUE_2")
             .preopened_dir(&temp_dir, "/", FsPerms::ReadWrite)?
             .inherit_network()
+            .allow_tcp(true)
+            .allow_udp(true)
             .allow_ip_name_lookup(true);
         #[cfg(feature = "use-golem-wasmtime")]
         let (ctx, io_ctx) = ctx_builder.build();
