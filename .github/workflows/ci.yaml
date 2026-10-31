@@ -235,10 +235,10 @@ jobs:
       - name: Install wasmtime CLI
         if: matrix.suite == 'generation'
         # `p3_generation` shells out to the `wasmtime` CLI to run generated P3
-        # components. Pin it to the workspace wasmtime version (46.x) used by the
+        # components. Pin it to the workspace wasmtime version (50.x) used by the
         # embedded-host P3 tests so both paths agree on the Component Model async ABI.
         run: |
-          curl -sSf https://wasmtime.dev/install.sh | bash -s -- --version v46.0.1
+          curl -sSf https://wasmtime.dev/install.sh | bash -s -- --version v50.0.1
           echo "$HOME/.wasmtime/bin" >> "$GITHUB_PATH"
       - name: WASI Preview 3 tests
         # These are ordinary libtest tests (default harness), so they do not take

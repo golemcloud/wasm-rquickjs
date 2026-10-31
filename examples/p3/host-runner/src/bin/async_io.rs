@@ -24,11 +24,8 @@ impl wasmtime_wasi::WasiView for Host {
 
 impl test::async_io::host::Host for Host {}
 
-impl test::async_io::host::HostWithStore for HasSelf<Host> {
-    async fn host_delay<T: Send>(
-        _accessor: &wasmtime::component::Accessor<T, Self>,
-        ms: u32,
-    ) -> u32 {
+impl<T> test::async_io::host::HostWithStore<T> for HasSelf<Host> {
+    async fn host_delay(_accessor: &wasmtime::component::Accessor<T, Self>, ms: u32) -> u32 {
         tokio::time::sleep(std::time::Duration::from_millis(ms as u64)).await;
         ms + 1000
     }

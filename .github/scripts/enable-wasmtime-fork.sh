@@ -10,8 +10,8 @@
 #   that rely on it (e.g. dynamic `import('data:...')`), causing tests
 #   such as `es_module__test_esm_invalid_data_urls_js` to hang.
 #
-#   Golem's fork (`golem-wasmtime-v46.0.1-p3`) carries the alternative fix
-#   (commit `6d349ad9` "Yield fix"), preserving the `pollable.ready()`
+#   Golem's fork (`golem-wasmtime-v50.0.1-p3`) carries the alternative fix,
+#   preserving the `pollable.ready()`
 #   contract while still yielding once per `poll`/`block` call.
 #
 # Why not in Cargo.toml unconditionally:
@@ -47,7 +47,7 @@ tmp=$(mktemp "$output_dir/.enable-wasmtime-fork.XXXXXX")
 # commented block without needing portability-fragile regex alternation.
 sed \
     -e 's|^#\[patch\.crates-io\]$|[patch.crates-io]|' \
-    -e 's|^#\(wasmtime[a-z-]* = { git = "https://github.com/golemcloud/wasmtime\.git", branch = "golem-wasmtime-v46\.0\.1-p3" }\)$|\1|' \
+    -e 's|^#\(wasmtime[a-z-]* = { git = "https://github.com/golemcloud/wasmtime\.git", branch = "golem-wasmtime-v50\.0\.1-p3" }\)$|\1|' \
     "$source_manifest" > "$tmp"
 mv "$tmp" "$output_manifest"
 

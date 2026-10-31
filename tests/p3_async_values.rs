@@ -37,8 +37,7 @@ use wasmtime::component::{
 use wasmtime::{Config, Engine, Result, Store, StoreContextMut};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 mod p3_build;
 
@@ -113,7 +112,7 @@ impl WasiHttpView for Host {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: wasmtime_wasi_http::default_hooks(),
         }
     }
 }
@@ -265,12 +264,7 @@ fn new_store(engine: &Engine) -> Store<Host> {
     let mut builder = WasiCtxBuilder::new();
     builder.inherit_stdout().stderr(stderr.clone());
     builder
-        .preopened_dir(
-            "examples/p3",
-            "/",
-            wasmtime_wasi::DirPerms::READ,
-            wasmtime_wasi::FilePerms::READ,
-        )
+        .preopened_dir("examples/p3", "/", wasmtime_wasi::FsPerms::ReadOnly)
         .expect("failed to preopen fixture directory");
     #[cfg(feature = "use-golem-wasmtime")]
     let (wasi, io_ctx) = builder.build();

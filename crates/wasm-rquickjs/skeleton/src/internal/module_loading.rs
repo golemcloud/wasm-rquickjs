@@ -1750,10 +1750,11 @@ fn matching_paren_end(source: &str, open_paren: usize) -> Option<usize> {
 }
 
 fn is_object_method_shorthand_import(source: &str, import_start: usize, open_paren: usize) -> bool {
-    if matching_paren_end(source, open_paren)
-        .and_then(|close| next_non_whitespace_byte(source, close))
-        != Some(b'{')
-    {
+    let Some(close) = matching_paren_end(source, open_paren) else {
+        return false;
+    };
+    let body = skip_ws_comments(source, close);
+    if source.as_bytes().get(body) != Some(&b'{') {
         return false;
     }
     if previous_word(source, import_start).is_some_and(|(word, _)| word == "static") {
@@ -1768,6 +1769,9 @@ fn is_object_method_shorthand_import(source: &str, import_start: usize, open_par
         };
         match bytes[prev] {
             b'{' | b',' | b';' => return true,
+            // Adjacent class methods need no separator. An import expression before
+            // a block instead needs a line terminator for automatic semicolon insertion.
+            b'}' => return !source[close..body].contains(['\n', '\r', '\u{2028}', '\u{2029}']),
             b'*' => {
                 pos = prev;
                 continue;

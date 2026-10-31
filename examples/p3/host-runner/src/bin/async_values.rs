@@ -13,8 +13,7 @@ use p3_host_runner::util::{OneshotConsumer, OneshotProducer, PipeConsumer, PipeP
 use wasmtime::component::{Accessor, Component, FutureReader, HasSelf, Linker, StreamReader};
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 mod bindings {
     use wasmtime::component::bindgen;
@@ -54,7 +53,7 @@ impl WasiHttpView for Host {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: wasmtime_wasi_http::default_hooks(),
         }
     }
 }
@@ -63,8 +62,8 @@ impl test::async_values::observer::Host for Host {
     fn cleanup_complete(&mut self) {}
 }
 
-impl test::async_values::observer::HostWithStore for HasSelf<Host> {
-    async fn gate<T: Send>(_: &Accessor<T, Self>, _: u8) {}
+impl<T> test::async_values::observer::HostWithStore<T> for HasSelf<Host> {
+    async fn gate(_: &Accessor<T, Self>, _: u8) {}
 }
 
 impl test::async_values::observer::HostWrappedStream for Host {
@@ -77,8 +76,8 @@ impl test::async_values::observer::HostWrappedStream for Host {
     }
 }
 
-impl test::async_values::observer::HostWrappedStreamWithStore for HasSelf<Host> {
-    async fn wrap<T: Send>(
+impl<T> test::async_values::observer::HostWrappedStreamWithStore<T> for HasSelf<Host> {
+    async fn wrap(
         accessor: &Accessor<T, Self>,
         reader: StreamReader<u8>,
     ) -> wasmtime::component::Resource<WrappedStream> {
