@@ -2827,6 +2827,22 @@ export const testEsmInjectedHelpersIgnoreLexicalGlobalThis = async () => {
     }
 };
 
+// Minified class members follow each other without separators. A member named `import` is a
+// method definition, not a dynamic import, in embedded, file and data: URL modules alike.
+class EmbeddedImportMethod{traversal(e){return e}import(...e){return e.length}precompilation;}
+
+export const testEsmImportNamedClassMethods = async () => {
+    assert.strictEqual(new EmbeddedImportMethod().import(1, 2), 2);
+    fs.mkdirSync('/esm-import-method-app', { recursive: true });
+    fs.writeFileSync('/esm-import-method-app/minified.mjs',
+        'class M{a(e){return e}import(...e){return e.length}}export default new M().import(1,2,3);');
+    assert.strictEqual((await import('/esm-import-method-app/minified.mjs')).default, 3);
+    const fromData = await import('data:text/javascript,' + encodeURIComponent(
+        'class M{a(){}import(e){return e*2}}export default new M().import(21);'));
+    assert.strictEqual(fromData.default, 42);
+    return true;
+};
+
 export const testEsmJsonUrlCacheKeys = async () => {
     try {
         const root = '/esm-json-url-cache-keys-app';
