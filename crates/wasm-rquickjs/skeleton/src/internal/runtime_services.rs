@@ -131,6 +131,8 @@ pub(crate) struct RuntimeServices {
     pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
     pub(crate) next_execution_job_id: Cell<usize>,
     pub(crate) execution_enabled: Cell<bool>,
+    #[cfg(feature = "p3")]
+    pub(crate) node_child: RefCell<Option<Rc<crate::builtin::child_process::p3::ChildState>>>,
     pub(crate) exported_resources: ExportedResourceLedger,
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) execution_profile: Option<Rc<ExecutionProfile>>,
@@ -162,6 +164,8 @@ impl Default for RuntimeServices {
             execution_jobs: RefCell::default(),
             next_execution_job_id: Cell::new(1),
             execution_enabled: Cell::new(true),
+            #[cfg(feature = "p3")]
+            node_child: RefCell::default(),
             exported_resources: ExportedResourceLedger::default(),
             #[cfg(feature = "typescript-compiler-profiling")]
             execution_profile: None,
@@ -667,6 +671,13 @@ pub(crate) fn run_process_turn_checkpoint(ctx: &rquickjs::Ctx<'_>) -> rquickjs::
 
 impl OwnedJsRuntime {
     pub(crate) async fn new() -> Self {
+        Self::try_new()
+            .await
+            .expect("Failed to create JavaScript runtime")
+    }
+
+    /// Fails when QuickJS cannot allocate the runtime or its context.
+    pub(crate) async fn try_new() -> rquickjs::Result<Self> {
         Self::new_inner(
             #[cfg(feature = "typescript-compiler-profiling")]
             None,
@@ -676,13 +687,15 @@ impl OwnedJsRuntime {
 
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) async fn new_profiled(profile: Rc<ExecutionProfile>) -> Self {
-        Self::new_inner(Some(profile)).await
+        Self::new_inner(Some(profile))
+            .await
+            .expect("Failed to create JavaScript runtime")
     }
 
     async fn new_inner(
         #[cfg(feature = "typescript-compiler-profiling")] profile: Option<Rc<ExecutionProfile>>,
-    ) -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+    ) -> rquickjs::Result<Self> {
+        let rt = AsyncRuntime::new()?;
         // QuickJS defines zero as unlimited. The component's shared wasm32
         // linear memory remains the outer bound, so do not impose a smaller
         // per-runtime ceiling on execution jobs.
@@ -690,9 +703,7 @@ impl OwnedJsRuntime {
         // Bound bootstrap garbage before the first automatic collection. The
         // engine subsequently adapts this threshold to the retained live heap.
         rt.set_gc_threshold(32 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
+        let ctx = AsyncContext::full(&rt).await?;
 
         #[cfg(feature = "typescript-compiler-profiling")]
         let stored_profile = profile.clone();
@@ -738,7 +749,7 @@ impl OwnedJsRuntime {
         )))
         .await;
 
-        Self { rt, ctx }
+        Ok(Self { rt, ctx })
     }
 
     /// Install the ordinary Node-compatible global environment without loading
@@ -855,7 +866,25 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
             })?;
         Ok::<(), String>(())
     })
-    .await
+    .await?;
+    // An embedding can supply this ordinary additional JS module to configure
+    // runtime-local adapters. Import after builtins but before entry code, also
+    // in fresh execution jobs. Registration must be lazy: Wizer evaluates it.
+    if crate::JS_ADDITIONAL_MODULES
+        .iter()
+        .any(|(name, _)| *name == "wasm-rquickjs-runtime-init")
+    {
+        rquickjs::AsyncContext::async_with(ctx, async |ctx| {
+            Module::import(&ctx, "wasm-rquickjs-runtime-init")
+                .catch(&ctx)
+                .map_err(super::format_caught_error)?
+                .finish::<()>()
+                .catch(&ctx)
+                .map_err(super::format_caught_error)
+        })
+        .await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn initialize_exported_resource_id_map(
@@ -900,6 +929,9 @@ unsafe impl<'js> JsLifetime<'js> for RuntimeServices {
 
 #[derive(Default)]
 pub(crate) struct TimerServices {
+    #[cfg(feature = "p3")]
+    pub(crate) child_owner:
+        RefCell<Option<std::rc::Weak<crate::builtin::child_timers::ChildTimers>>>,
     pub(crate) wake_hub: Arc<ComponentWakeHub>,
     pub(crate) component_owned: Cell<bool>,
     pub(crate) abort_handles: RefCell<HashMap<usize, AbortHandle>>,

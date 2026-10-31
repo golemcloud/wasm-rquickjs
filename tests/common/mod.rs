@@ -4201,6 +4201,7 @@ impl TestInstance {
             io_ctx: Arc::new(Mutex::new(io_ctx)),
             golem_spans: golem_spans.clone(),
             linear_memory_high_water: track_linear_memory.then(|| Arc::new(AtomicUsize::new(0))),
+            linear_memory_limit: None,
         };
 
         let mut store = Store::new(engine, host);
@@ -4312,6 +4313,12 @@ impl TestInstance {
     pub fn set_epoch_deadline(&mut self, timeout_secs: u64) {
         self.store.data_mut().timeout = Duration::from_secs(timeout_secs);
         self.store.data_mut().started_at = Instant::now();
+    }
+
+    /// Caps the guest's linear memory: growth past `bytes` fails like `memory.grow` would.
+    pub fn set_linear_memory_limit(&mut self, bytes: usize) {
+        self.store.data_mut().linear_memory_limit = Some(bytes);
+        self.store.limiter(|host| host);
     }
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
@@ -4918,6 +4925,8 @@ pub struct Host {
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
     pub golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
     pub linear_memory_high_water: Option<Arc<AtomicUsize>>,
+    /// Refuses linear-memory growth past this size, as an embedder's memory cap does.
+    pub linear_memory_limit: Option<usize>,
 }
 
 impl wasmtime::ResourceLimiter for Host {
@@ -4935,7 +4944,10 @@ impl wasmtime::ResourceLimiter for Host {
         if is_linear_memory && let Some(high_water) = &self.linear_memory_high_water {
             high_water.fetch_max(current.max(desired), Ordering::Relaxed);
         }
-        Ok(true)
+        Ok(!is_linear_memory
+            || self
+                .linear_memory_limit
+                .is_none_or(|limit| desired <= limit))
     }
 
     fn table_growing(
