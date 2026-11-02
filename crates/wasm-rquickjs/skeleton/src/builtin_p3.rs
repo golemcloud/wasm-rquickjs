@@ -306,6 +306,7 @@ pub fn add_module_resolvers(
         .with_module("node:vm")
         .with_module("vm")
         .with_module("__wasm_rquickjs_builtin/structured_clone")
+        .with_module("__wasm_rquickjs_builtin/structured_clone_native")
         .with_module("node:async_hooks")
         .with_module("async_hooks")
         .with_module("node:cluster")
@@ -446,6 +447,10 @@ pub fn module_loader() -> (
             web_crypto::js_native_module,
         )
         .with_module("__wasm_rquickjs_builtin/vm_native", vm::js_native_module)
+        .with_module(
+            "__wasm_rquickjs_builtin/structured_clone_native",
+            structured_clone::js_native_module,
+        )
         .with_module("__wasm_rquickjs_builtin/v8_native", v8::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/string_decoder_native",

@@ -1,3 +1,5 @@
+import { markTransferableSignal, isAbortSignal } from '__wasm_rquickjs_builtin/internal/clone_policy';
+import { AbortController as NativeAbortController } from '__wasm_rquickjs_builtin/abort_controller';
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2070,7 +2072,7 @@ globalThis.__wasm_rquickjs_pre_gc = function () {
 };
 
 export function aborted(signal, resource) {
-    if (!(signal instanceof AbortSignal)) {
+    if (!isAbortSignal(signal)) {
         return Promise.reject(new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal));
     }
     if (resource === null || resource === undefined ||
@@ -2090,19 +2092,16 @@ export function aborted(signal, resource) {
     });
 }
 
-const TRANSFERABLE_ABORT_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
-
 export function transferableAbortController() {
-    const ac = new AbortController();
-    ac.signal[TRANSFERABLE_ABORT_SIGNAL] = true;
+    const ac = new NativeAbortController();
+    markTransferableSignal(ac.signal);
     return ac;
 }
 
 export function transferableAbortSignal(signal) {
-    if (!(signal instanceof AbortSignal)) {
+    if (!markTransferableSignal(signal)) {
         throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
     }
-    signal[TRANSFERABLE_ABORT_SIGNAL] = true;
     return signal;
 }
 

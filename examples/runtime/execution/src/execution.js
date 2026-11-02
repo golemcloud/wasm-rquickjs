@@ -202,11 +202,13 @@ export async function run() {
     const clone = await runJavaScript({ source: `
         const cycle = { label: 'cycle' };
         cycle.self = cycle;
+        const bytes = new Uint8Array([1, 2, 3]);
         return {
             missing: undefined, nan: NaN, infinity: Infinity, negativeInfinity: -Infinity,
             negativeZero: -0, bigint: 12345678901234567890n, cycle,
+            zeroPairs: [0, -0, -0, 0],
             map: new Map([['key', 7]]), set: new Set(['value']),
-            bytes: new Uint8Array([1, 2, 3]),
+            bytes, buffer: bytes.buffer, view: new DataView(bytes.buffer, 1, 1),
         };
     ` });
     const cloneChecks = {
@@ -215,20 +217,35 @@ export async function run() {
         infinity: clone.value.infinity === Infinity,
         negativeInfinity: clone.value.negativeInfinity === -Infinity,
         negativeZero: Object.is(clone.value.negativeZero, -0),
+        zeroPairs: clone.value.zeroPairs.every((value, index) => Object.is(value, [0, -0, -0, 0][index])),
         bigint: clone.value.bigint === 12345678901234567890n,
         cycle: clone.value.cycle.self === clone.value.cycle,
         map: clone.value.map instanceof Map && clone.value.map.get('key') === 7,
         set: clone.value.set instanceof Set && clone.value.set.has('value'),
         bytes: clone.value.bytes instanceof Uint8Array && clone.value.bytes.join(',') === '1,2,3',
+        byteAliases: clone.value.bytes.buffer === clone.value.buffer &&
+            clone.value.view.buffer === clone.value.buffer && clone.value.view.getUint8(0) === 2,
     };
     let resourceError;
     try {
         await runJavaScript({ source: `
-            return { [Symbol.for('__wasm_rquickjs.structuredClone')]() { return 1; } };
+            return (await import('node:crypto')).createSecretKey(new Uint8Array([1, 2, 3]));
         ` });
     } catch (error) {
         resourceError = error.message;
     }
+
+    let blobResultError;
+    try {
+        await runJavaScript({source: "return {nested: [new Blob(['unsupported transport'])]};"});
+    } catch (error) { blobResultError = error.message; }
+    const clonePolicyIsolation = await runJavaScript({source: `
+        const worker = await import('node:worker_threads');
+        const value = Object.freeze({});
+        const initiallyMarked = worker.isMarkedAsUntransferable(value);
+        worker.markAsUntransferable(value);
+        return {initiallyMarked, marked: worker.isMarkedAsUntransferable(value)};
+    `});
 
     const pathAliases = await runJavaScript({ source: `
         const fs = await import('node:fs');
@@ -445,7 +462,7 @@ export async function run() {
         overflowError, truncated, entry, defaultArgv, largeJavaScript,
         typescriptDisabled: process.features.typescript === false,
         disabledStripError, disabledExecutionError, imports,
-        privateImport, removedAliases, cloneChecks, resourceError, pathAliases,
+        privateImport, removedAliases, cloneChecks, resourceError, blobResultError, clonePolicyIsolation, pathAliases,
         persistentSymlinkCreated, persistentSymlinkRead, persistentSymlinkEdges,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },

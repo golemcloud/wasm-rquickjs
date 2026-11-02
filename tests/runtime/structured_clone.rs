@@ -1,4 +1,4 @@
-use crate::common::{CompiledTest, invoke_and_capture_output};
+use crate::common::{CompiledTest, TestInstance, invoke_and_capture_output};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasmtime::component::Val;
@@ -188,5 +188,336 @@ async fn structured_clone_circular_refs(
         anyhow::bail!("Expected string result");
     }
 
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_markers(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(0)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_intrinsic_exemptions(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(1)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_graph_edges(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(2)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_transfer_aliases(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(3)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_transfer_atomicity(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(4)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_trusted_messaging(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(5)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_blob_bytes(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(6)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_blob_hooks(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(7)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_host_objects(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(8)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_signal_initial_state(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(9)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_signal_forwarding(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(10)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_unsupported_capabilities(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(11)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_public_conversion(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(12)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_message_lifecycle(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(13)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_signal_weak_lifetime(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(14)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+#[ignore]
+async fn structured_clone_policy_measurement(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+    if let Ok(path) = std::env::var("WASM_RQUICKJS_CLONE_BENCH_BASELINE") {
+        std::fs::copy(path, instance.temp_dir_path().join("baseline-clone.js"))?;
+    }
+    let (result, output) = instance
+        .invoke_and_capture_output(None, "test-policy-case", &[Val::U8(250)])
+        .await;
+    println!("clone policy measurement: {:?}; {output}", result?);
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_immutable_buffer(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(15)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_trusted_owner_intrinsics(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(16)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_signal_forwarding_errors(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(17)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_signal_transfer_chain(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(18)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_synchronous_port_receive(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(19)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_array_shapes(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(20)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
     Ok(())
 }

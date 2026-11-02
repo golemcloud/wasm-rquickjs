@@ -213,21 +213,29 @@ async fn execution_isolation(
         "infinity",
         "negativeInfinity",
         "negativeZero",
+        "zeroPairs",
         "bigint",
         "cycle",
         "map",
         "set",
         "bytes",
+        "byteAliases",
     ] {
         assert_eq!(report["cloneChecks"][check], true, "clone check {check}");
     }
     assert!(
-        report["resourceError"]
-            .as_str()
-            .is_some_and(|message| message.contains("execution results cannot contain resources")),
+        report["resourceError"].as_str().is_some_and(
+            |message| message.contains("execution results cannot contain KeyObject values")
+        ),
         "unexpected resource error: {}",
         report["resourceError"]
     );
+    assert!(report["blobResultError"].as_str().is_some_and(|message| message.contains("execution results cannot contain Blob values")));
+    assert_eq!(
+        report["clonePolicyIsolation"]["value"]["initiallyMarked"],
+        false
+    );
+    assert_eq!(report["clonePolicyIsolation"]["value"]["marked"], true);
     assert_eq!(report["pathAliases"]["value"]["mode"], 0o611);
     assert_eq!(report["pathAliases"]["value"]["link"], "./sub/../file.txt");
     assert_eq!(

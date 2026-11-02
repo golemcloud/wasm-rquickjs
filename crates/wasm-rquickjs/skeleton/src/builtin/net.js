@@ -1,3 +1,4 @@
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import Duplex from '__wasm_rquickjs_builtin/internal/streams/duplex';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
@@ -17,7 +18,6 @@ import { validateAbortSignal } from '__wasm_rquickjs_builtin/internal/validators
 import { getTimerDuration, toTimerDelay } from '__wasm_rquickjs_builtin/internal/timers';
 
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
-const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
 
 // --- IP address utilities ---
 
@@ -1751,15 +1751,20 @@ Server.prototype[Symbol.asyncDispose] = function () {
 
 // --- BlockList ---
 
+const blockListCloneAdapter = {__proto__: null,kind: 'BlockList', clone: value => cloneBlockList(value)};
+let cloneBlockList;
 class BlockList {
+    #rules;
+    static { cloneBlockList = value => new BlockList(value.#rules); }
     constructor(rules) {
-        this._rules = rules || [];
+        this.#rules = rules || [];
+        registerCloneAdapter(this, blockListCloneAdapter);
     }
 
     addAddress(address, type) {
         const normalized = normalizeSocketAddressLike(address, 'address');
         const parsed = parseBlockListAddress(normalized.address, type !== undefined ? type : normalized.family);
-        this._rules.unshift({
+        this.#rules.unshift({
             type: 'address',
             address: parsed.address,
             family: parsed.family,
@@ -1779,7 +1784,7 @@ class BlockList {
         if (parsedEnd.value < parsedStart.value) {
             throw new ERR_INVALID_ARG_VALUE('end', normalizedEnd.address);
         }
-        this._rules.unshift({
+        this.#rules.unshift({
             type: 'range',
             start: parsedStart.address,
             end: parsedEnd.address,
@@ -1799,7 +1804,7 @@ class BlockList {
         validatePrefix(prefix, family);
         const bits = family === 'ipv6' ? 128 : 32;
         const mask = subnetMask(bits, prefix);
-        this._rules.unshift({
+        this.#rules.unshift({
             type: 'subnet',
             network: parsed.address,
             prefix,
@@ -1821,7 +1826,7 @@ class BlockList {
             }
             throw err;
         }
-        for (const rule of this._rules) {
+        for (const rule of this.#rules) {
             if (rule.family !== parsed.family && (parsed.mapped4 === null || rule.family !== 'ipv4') && (rule.mapped4 === null || parsed.family !== 'ipv4')) {
                 continue;
             }
@@ -1852,7 +1857,7 @@ class BlockList {
     }
 
     get rules() {
-        return this._rules.map(r => {
+        return this.#rules.map(r => {
             if (r.type === 'address') return `Address: ${familyLabel(r.family)} ${r.address}`;
             if (r.type === 'range') return `Range: ${familyLabel(r.family)} ${r.start}-${r.end}`;
             if (r.type === 'subnet') return `Subnet: ${familyLabel(r.family)} ${r.network}/${r.prefix}`;
@@ -1863,10 +1868,6 @@ class BlockList {
     [customInspectSymbol](depth, opts, inspect) {
         if (depth !== null && depth < 0) return '[BlockList]';
         return `BlockList { rules: ${inspect(this.rules, opts)} }`;
-    }
-
-    [structuredCloneSymbol]() {
-        return new BlockList(this._rules);
     }
 
     static isBlockList(value) {

@@ -1,25 +1,26 @@
-// node:worker_threads compatibility shim for single-threaded WASM runtimes.
-//
-// This runtime does not support real worker threads: there is no separate
-// JavaScript context or thread of execution. The `Worker` class below is an
-// inert API stub — it validates some constructor / postMessage inputs, but it
-// does NOT execute worker code, deliver messages, or simulate worker
-// lifecycle events.
-//
-// Tests or applications that require real worker execution / isolation are
-// intentionally unsupported here and should be classified in node_compat as
-// `known-gap` or `wasi-impossible`, depending on whether the behavior is
-// fundamentally unavailable in this environment.
+// node:worker_threads supports runtime-local messaging and clone policy.
+// Real worker execution/isolation is unavailable and fails explicitly.
 
 import { _emitInit } from 'node:async_hooks';
+import { cloneWithTransferList } from '__wasm_rquickjs_builtin/structured_clone';
+import { markAsUncloneable, markAsUntransferable, isMarkedAsUntransferable, registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
+import { DOMException } from '__wasm_rquickjs_builtin/abort_controller';
+export { markAsUncloneable, markAsUntransferable, isMarkedAsUntransferable };
 
 const NOT_SUPPORTED_ERROR = 'worker_threads is not supported in WebAssembly environment';
-const UNTRANSFERABLE_SYMBOL = Symbol.for('__wasm_rquickjs.untransferable');
-const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
-
-function createDataCloneError(message) {
-    return new DOMException(message, 'DataCloneError');
-}
+const apply = Reflect.apply;
+const hasOwn = Object.hasOwn;
+const shift = Function.prototype.call.bind(Array.prototype.shift);
+const arrayIsArray = Array.isArray;
+const push = Function.prototype.call.bind(Array.prototype.push);
+const iteratorSymbol = Symbol.iterator;
+const promiseThen = Function.prototype.call.bind(Promise.prototype.then);
+const resolved = Promise.resolve();
+const INVALID_ITERABLE = Symbol('invalid iterable');
+const defineProperty = Object.defineProperty;
+const portCloneAdapter = {__proto__: null, kind: 'MessagePort', reject() {
+    throw new DOMException('Object that needs transfer was found in message but not listed in transferList', 'DataCloneError');
+}};
 
 function createTargetContextUnavailableError() {
     const error = new Error('Message target context unavailable');
@@ -28,7 +29,7 @@ function createTargetContextUnavailableError() {
 }
 
 function createClosedMessagePortError() {
-    const error = new Error('MessagePort was closed');
+    const error = new Error('Cannot send data on closed MessagePort');
     error.code = 'ERR_CLOSED_MESSAGE_PORT';
     return error;
 }
@@ -37,77 +38,54 @@ function isObjectLike(value) {
     return value !== null && (typeof value === 'object' || typeof value === 'function');
 }
 
-function normalizeTransferList(transferListOrOptions) {
-    if (transferListOrOptions == null) {
-        return [];
+function readTransferIterable(value) {
+    if (!isObjectLike(value)) return INVALID_ITERABLE;
+    const method = value[iteratorSymbol];
+    if (typeof method !== 'function') return INVALID_ITERABLE;
+    const iterator = apply(method, value, []);
+    if (!isObjectLike(iterator)) return INVALID_ITERABLE;
+    const next = iterator.next;
+    if (typeof next !== 'function') return INVALID_ITERABLE;
+    const result = [];
+    while (true) {
+        const item = apply(next, iterator, []);
+        if (!isObjectLike(item)) return INVALID_ITERABLE;
+        if (item.done) return result;
+        push(result, item.value);
     }
-
-    if (Array.isArray(transferListOrOptions)) {
-        return transferListOrOptions;
-    }
-
-    if (typeof transferListOrOptions === 'object') {
-        if (!Object.prototype.hasOwnProperty.call(transferListOrOptions, 'transfer')) {
-            return [];
-        }
-        const transfer = transferListOrOptions.transfer;
-        return transfer == null ? [] : [...transfer];
-    }
-
-    return [...transferListOrOptions];
 }
 
-function ensureTransferListItemsAreTransferable(transferList) {
-    for (const transferItem of transferList) {
-        if (isObjectLike(transferItem) && transferItem[FILE_HANDLE_IN_USE_SYMBOL] === true) {
-            throw createDataCloneError('Cannot transfer FileHandle while in use');
-        }
-
-        if (isObjectLike(transferItem) && transferItem[UNTRANSFERABLE_SYMBOL] === true) {
-            throw createDataCloneError('Cannot transfer object of unsupported type.');
-        }
+function normalizeTransferList(value) {
+    if (value == null) return [];
+    // Node's native array path reads indexed entries, ignoring iterator overrides.
+    if (arrayIsArray(value)) {
+        const result = [];
+        const length = value.length;
+        for (let i = 0; i < length; i++) push(result, value[i]);
+        return result;
     }
+    const iterable = readTransferIterable(value);
+    if (iterable !== INVALID_ITERABLE) return iterable;
+    let argument = 'transferList';
+    if (isObjectLike(value)) {
+        const transfer = value.transfer;
+        if (transfer === undefined) return [];
+        argument = 'options.transfer';
+        const converted = arrayIsArray(transfer) ? normalizeTransferList(transfer) : readTransferIterable(transfer);
+        if (converted !== INVALID_ITERABLE) return converted;
+    }
+    const error = new TypeError(`Optional ${argument} argument must be an iterable`);
+    error.code = 'ERR_INVALID_ARG_TYPE';
+    throw error;
 }
 
 function cloneMessagePayload(value, transferList) {
-    const TRANSFERABLE_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
-    const signalMap = new Map();
-    const remainingTransfers = [];
-
-    for (const item of transferList) {
-        if (item instanceof AbortSignal && item[TRANSFERABLE_SIGNAL] === true) {
-            if (item.aborted) {
-                signalMap.set(item, AbortSignal.abort(item.reason));
-            } else {
-                const ac = new AbortController();
-                item.addEventListener('abort', () => {
-                    ac.abort(item.reason);
-                }, { once: true });
-                signalMap.set(item, ac.signal);
-            }
-        } else {
-            remainingTransfers.push(item);
-        }
-    }
-
-    let valueWasTransferableSignal = false;
-    if (signalMap.size > 0 && signalMap.has(value)) {
-        value = signalMap.get(value);
-        valueWasTransferableSignal = true;
-    }
-
-    if (remainingTransfers.length === 0) {
-        if (valueWasTransferableSignal) {
-            return value;
-        }
-        return structuredClone(value);
-    }
-
-    return structuredClone(value, { transfer: remainingTransfers });
+    return cloneWithTransferList(value, transferList);
 }
 
 function createListenerMap() {
     return {
+        __proto__: null,
         message: [],
         messageerror: [],
         close: [],
@@ -119,10 +97,10 @@ function addListener(listeners, event, fn, once) {
     if (typeof fn !== 'function') {
         return;
     }
-    if (!Object.prototype.hasOwnProperty.call(listeners, event)) {
+    if (!hasOwn(listeners, event)) {
         listeners[event] = [];
     }
-    listeners[event].push({ fn, once: once === true });
+    push(listeners[event], { fn, once: once === true });
 }
 
 function removeListener(listeners, event, fn) {
@@ -130,21 +108,27 @@ function removeListener(listeners, event, fn) {
     if (!eventListeners) {
         return;
     }
-    const idx = eventListeners.findIndex((entry) => entry.fn === fn);
-    if (idx !== -1) {
-        eventListeners.splice(idx, 1);
+    for (let i = 0; i < eventListeners.length; i++) {
+        if (eventListeners[i].fn !== fn) continue;
+        for (let j = i + 1; j < eventListeners.length; j++) eventListeners[j - 1] = eventListeners[j];
+        eventListeners.length--;
+        return true;
     }
+    return false;
 }
 
-function emitListeners(listeners, event, value) {
+function emitListeners(listeners, event, value, afterRemoval) {
     const eventListeners = listeners[event];
     if (!eventListeners || eventListeners.length === 0) {
         return;
     }
-    const snapshot = [...eventListeners];
-    for (const entry of snapshot) {
+    const snapshot = [];
+    for (let i = 0; i < eventListeners.length; i++) push(snapshot, eventListeners[i]);
+    for (let i = 0; i < snapshot.length; i++) {
+        const entry = snapshot[i];
         if (entry.once) {
             removeListener(listeners, event, entry.fn);
+            if (afterRemoval) afterRemoval();
         }
         entry.fn(value);
     }
@@ -157,64 +141,10 @@ export const threadId = 0;
 export const resourceLimits = {};
 
 export class Worker {
-    #closed = false;
-    #listeners = createListenerMap();
-
-    constructor(filename, options) {
-        // Validate transferList eagerly so callers see the same DataCloneError
-        // they would on real Node.js, even though no work is dispatched.
-        const transferList = normalizeTransferList(options?.transferList);
-        ensureTransferListItemsAreTransferable(transferList);
-
-        this.filename = filename;
-        // NOTE: We intentionally do NOT execute `filename` inline in the main
-        // context. Doing so created a fake worker semantics (shared globals,
-        // shared `process`, no real terminate(), broken FileHandle transfer)
-        // that silently passed some tests by violating Node.js's isolation
-        // contract. Tests that depend on real worker execution are classified
-        // as `known-gap` in node_compat config instead.
-    }
-
-    on(event, fn) {
-        addListener(this.#listeners, event, fn, false);
-        return this;
-    }
-
-    once(event, fn) {
-        addListener(this.#listeners, event, fn, true);
-        return this;
-    }
-
-    removeListener(event, fn) {
-        removeListener(this.#listeners, event, fn);
-        return this;
-    }
-
-    off(event, fn) {
-        return this.removeListener(event, fn);
-    }
-
-    postMessage(value, transferListOrOptions) {
-        // No worker exists to deliver to. Validate the transfer list shape
-        // (so callers see the same TypeError / DataCloneError they would on
-        // real Node.js for clearly invalid inputs), but do NOT clone the
-        // payload — cloning with `transfer` would detach the caller's
-        // ArrayBuffers / disentangle their MessagePorts even though there is
-        // no recipient, which would silently consume caller state.
-        if (this.#closed) {
-            return;
-        }
-        const transferList = normalizeTransferList(transferListOrOptions);
-        ensureTransferListItemsAreTransferable(transferList);
-    }
-
-    ref() {}
-
-    unref() {}
-
-    terminate() {
-        this.#closed = true;
-        return Promise.resolve(0);
+    constructor() {
+        const error = new Error(NOT_SUPPORTED_ERROR);
+        error.code = 'ERR_UNSUPPORTED_OPERATION';
+        throw error;
     }
 }
 
@@ -224,18 +154,39 @@ export class BroadcastChannel {
     }
 }
 
-export class MessagePort {
+class RuntimeMessagePort {
     #onmessage = null;
     #onmessageerror = null;
     #closed = false;
     #pendingClose = false;
     #refed = false;
     #queue = [];
-    #draining = false;
+    #drainPhase = 0;
+    #receiving = false;
+    #peerClosing = false;
     #listeners = createListenerMap();
 
     constructor() {
+        registerCloneAdapter(this, portCloneAdapter);
         _emitInit('MESSAGEPORT', this);
+    }
+
+    static receive(port) {
+        if (!isObjectLike(port) || !(#queue in port)) {
+            const error = new TypeError('The "port" argument must be a MessagePort instance');
+            error.code = 'ERR_INVALID_ARG_TYPE';
+            throw error;
+        }
+        if (port.#closed) return undefined;
+        const item = port.#queue[0];
+        if (!item || item.close) {
+            port.#scheduleDrain();
+            return undefined;
+        }
+        shift(port.#queue);
+        port.#scheduleDrain();
+        // A deserialization failure is not a received message.
+        return item.messageError ? undefined : {message: item.value};
     }
 
     get onmessage() {
@@ -243,7 +194,10 @@ export class MessagePort {
     }
 
     set onmessage(fn) {
+        const previous = this.#onmessage;
         this.#onmessage = typeof fn === 'function' ? fn : null;
+        if (this.#onmessage) this.start();
+        else if (previous) this.#pauseIfUnobserved();
     }
 
     get onmessageerror() {
@@ -254,84 +208,90 @@ export class MessagePort {
         this.#onmessageerror = typeof fn === 'function' ? fn : null;
     }
 
-    _enqueueDelivery(value, messageError) {
-        // Already-queued messages must still drain after close() per Node docs
-        // example (https://nodejs.org/api/worker_threads.html#class-messageport),
-        // so we only refuse new deposits once the port is fully closed *or*
-        // has been disentangled by close().
-        if (this.#closed || this.#pendingClose) {
-            return;
-        }
-        this.#queue.push({ value, messageError: messageError === true });
-        if (this.#draining) {
-            return;
-        }
-        this.#draining = true;
-        Promise.resolve().then(() => {
-            while (this.#queue.length > 0) {
-                const { value: queuedValue, messageError: queuedMessageError } = this.#queue.shift();
-                if (queuedMessageError) {
-                    const error = createTargetContextUnavailableError();
-                    emitListeners(this.#listeners, 'messageerror', error);
-                    if (typeof this.#onmessageerror === 'function') {
-                        this.#onmessageerror({ data: error });
-                    }
-                    continue;
-                }
+    #pauseIfUnobserved() {
+        if (!this.#onmessage && this.#listeners.message.length === 0) this.#receiving = false;
+    }
 
-                emitListeners(this.#listeners, 'message', queuedValue);
-                if (typeof this.#onmessage === 'function') {
-                    this.#onmessage({ data: queuedValue });
+    #finishClose() {
+        if (this.#closed) return;
+        this.#closed = true;
+        this.#pendingClose = false;
+        this.#receiving = false;
+        this._target = null;
+        this.#queue.length = 0;
+        emitListeners(this.#listeners, 'close');
+    }
+
+    #scheduleDrain() {
+        if (this.#closed || this.#pendingClose || this.#drainPhase || this.#queue.length === 0) return;
+        if (!this.#receiving && !this.#queue[0].close) return;
+        this.#drainPhase = 1;
+        promiseThen(resolved, () => {
+            this.#drainPhase = 2;
+            try {
+                if (this.#pendingClose) return;
+                while (this.#queue.length > 0 && (this.#receiving || this.#queue[0].close)) {
+                    const item = shift(this.#queue);
+                    if (item.close) {
+                        this.#finishClose();
+                        break;
+                    }
+                    if (item.messageError) {
+                        const error = createTargetContextUnavailableError();
+                        emitListeners(this.#listeners, 'messageerror', error);
+                        if (this.#onmessageerror) this.#onmessageerror({data: error});
+                    } else {
+                        emitListeners(this.#listeners, 'message', item.value, () => this.#pauseIfUnobserved());
+                        if (this.#onmessage) this.#onmessage({data: item.value});
+                    }
                 }
+            } finally {
+                this.#drainPhase = 0;
+                this.#scheduleDrain();
             }
-            this.#draining = false;
         });
     }
 
+    _enqueueDelivery(value, messageError) {
+        if (this.#closed || this.#pendingClose || this.#peerClosing) return;
+        push(this.#queue, {__proto__: null, value, messageError: messageError === true});
+        this.#scheduleDrain();
+    }
+
+    _enqueuePeerClose() {
+        if (this.#closed || this.#pendingClose || this.#peerClosing) return;
+        this.#peerClosing = true;
+        push(this.#queue, {__proto__: null, close: true});
+        this.#scheduleDrain();
+    }
+
     postMessage(value, transferListOrOptions) {
-        // Once close() has been called the port is disentangled immediately,
-        // even though the 'close' event is asynchronous, so no further
-        // messages may be queued in either direction.
-        if (this.#closed || this.#pendingClose) {
-            return;
+        if (arguments.length === 0) {
+            const error = new TypeError('The "value" argument must be specified');
+            error.code = 'ERR_MISSING_ARGS';
+            throw error;
         }
-
         const transferList = normalizeTransferList(transferListOrOptions);
-        ensureTransferListItemsAreTransferable(transferList);
         const payload = cloneMessagePayload(value, transferList);
-
+        // Node still serializes and commits transfers on a closed endpoint.
+        if (this.#closed || this.#pendingClose || this.#peerClosing) return;
         const target = this._target;
-        if (target && typeof target._enqueueDelivery === 'function') {
-            target._enqueueDelivery(payload, false);
-        }
+        if (target && typeof target._enqueueDelivery === 'function') target._enqueueDelivery(payload, false);
     }
 
     close(callback) {
-        if (typeof callback === 'function') {
-            this.once('close', callback);
-        }
-        if (this.#closed || this.#pendingClose) {
-            return;
-        }
-        // Disentangle synchronously so further postMessage() calls are dropped,
-        // but defer the observable #closed flip and the 'close' event emission
-        // to a microtask so callers like Node's `hasRef()` semantics still see
-        // the port as ref'd between close() and the close event.
-        const target = this._target;
+        if (typeof callback === 'function') this.once('close', callback);
+        if (this.#closed || this.#pendingClose) return;
         this.#pendingClose = true;
-        if (target instanceof MessagePort) {
-            target.#pendingClose = true;
-        }
-        Promise.resolve().then(() => {
-            this.#closed = true;
-            this._target = null;
-            if (target instanceof MessagePort) {
-                target.#closed = true;
-                target._target = null;
-            }
-            emitListeners(this.#listeners, 'close');
-            if (target instanceof MessagePort) {
-                emitListeners(target.#listeners, 'close');
+        const target = this._target;
+        this._target = null;
+        // Pending local close suppresses a new dispatch batch. Synchronous
+        // polling can still consume data until close finalization; an already
+        // accepted dispatch batch finishes before that finalization.
+        promiseThen(resolved, () => {
+            try { this.#finishClose(); }
+            finally {
+                if (target && typeof target._enqueuePeerClose === 'function') target._enqueuePeerClose();
             }
         });
     }
@@ -350,20 +310,28 @@ export class MessagePort {
         return !this.#closed && (this.#refed || this.#listeners.message.length > 0 || this.#listeners.close.length > 0);
     }
 
-    start() {}
+    start() {
+        this.#receiving = true;
+        this.#scheduleDrain();
+    }
 
     on(event, fn) {
         addListener(this.#listeners, event, fn, false);
+        if (event === 'message' && typeof fn === 'function') this.start();
         return this;
     }
 
+    addListener(event, fn) { return this.on(event, fn); }
+
     once(event, fn) {
         addListener(this.#listeners, event, fn, true);
+        if (event === 'message' && typeof fn === 'function') this.start();
         return this;
     }
 
     removeListener(event, fn) {
-        removeListener(this.#listeners, event, fn);
+        const removed = removeListener(this.#listeners, event, fn);
+        if (removed && event === 'message') this.#pauseIfUnobserved();
         return this;
     }
 
@@ -378,13 +346,24 @@ export class MessagePort {
     }
 }
 
-export class MessageChannel {
-    constructor() {
-        this.port1 = new MessagePort();
-        this.port2 = new MessagePort();
-        this.port1._target = this.port2;
-        this.port2._target = this.port1;
+export function MessagePort() {
+    const error = new TypeError('Cannot construct MessagePort');
+    error.code = 'ERR_CONSTRUCT_CALL_INVALID';
+    throw error;
+}
+defineProperty(MessagePort, 'prototype', {__proto__: null, value: RuntimeMessagePort.prototype, writable: false});
+defineProperty(RuntimeMessagePort.prototype, 'constructor', {__proto__: null, value: MessagePort, writable: true, configurable: true});
+
+export function MessageChannel() {
+    if (!new.target) {
+        const error = new TypeError("Cannot call constructor without `new`");
+        error.code = 'ERR_CONSTRUCT_CALL_REQUIRED';
+        throw error;
     }
+    this.port1 = new RuntimeMessagePort();
+    this.port2 = new RuntimeMessagePort();
+    this.port1._target = this.port2;
+    this.port2._target = this.port1;
 }
 
 function createContextPortProxy() {
@@ -464,22 +443,6 @@ function createContextPortProxy() {
     return port;
 }
 
-export function markAsUntransferable(value) {
-    if (!isObjectLike(value)) {
-        return;
-    }
-
-    try {
-        Object.defineProperty(value, UNTRANSFERABLE_SYMBOL, {
-            value: true,
-            enumerable: false,
-            configurable: false,
-            writable: false,
-        });
-    } catch {
-        // Ignore non-extensible values.
-    }
-}
 
 export function moveMessagePortToContext(port) {
     if (!(port instanceof MessagePort)) {
@@ -499,8 +462,8 @@ export function moveMessagePortToContext(port) {
     return movedPort;
 }
 
-export function receiveMessageOnPort() {
-    throw new Error(NOT_SUPPORTED_ERROR);
+export function receiveMessageOnPort(port) {
+    return RuntimeMessagePort.receive(port);
 }
 
 export function getEnvironmentData() {
@@ -521,7 +484,9 @@ export default {
     BroadcastChannel,
     MessagePort,
     MessageChannel,
+    markAsUncloneable,
     markAsUntransferable,
+    isMarkedAsUntransferable,
     moveMessagePortToContext,
     receiveMessageOnPort,
     getEnvironmentData,

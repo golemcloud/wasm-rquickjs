@@ -1,5 +1,32 @@
 /*! fetch-blob. MIT License. Jimmy Wärting <https://jimmy.warting.se/opensource> */
 
+
+import { registerCloneAdapter, getCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
+import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { DOMException } from '__wasm_rquickjs_builtin/abort_controller';
+
+const CLONE_TOKEN = Symbol('Blob.clone');
+const NativeUint8Array = Uint8Array;
+const isView = ArrayBuffer.isView;
+const typedPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const call = Function.prototype.call;
+const bytesBuffer = call.bind(Object.getOwnPropertyDescriptor(typedPrototype, 'buffer').get);
+const bytesOffset = call.bind(Object.getOwnPropertyDescriptor(typedPrototype, 'byteOffset').get);
+const bytesLength = call.bind(Object.getOwnPropertyDescriptor(typedPrototype, 'byteLength').get);
+const bytesSet = call.bind(Uint8Array.prototype.set);
+let cloneRawBlob;
+const rawCloneAdapter = {__proto__: null,kind: 'Blob', clone: value => cloneBlobBacking(value), cloneBacking: (value, memo) => cloneRawBlob(value, memo)};
+
+// Only actual owners expose backing to this private operation. Foreign Blob-like
+// objects and file backing never run application methods or perform IO here.
+export function cloneBlobBacking(value, memo = createPrivateWeakMap()) {
+    if (memo.has(value)) return memo.get(value);
+    const adapter = getCloneAdapter(value);
+    if (adapter?.kind === 'Blob' && adapter.cloneBacking) return adapter.cloneBacking(value, memo);
+    if (adapter?.reject) return adapter.reject();
+    throw new DOMException('Blob contains unsupported backing data', 'DataCloneError');
+}
+
 // 64 KiB (same size chrome slice theirs blob into Uint8array's)
 const POOL_SIZE = 65536
 
@@ -46,6 +73,14 @@ const _Blob = class Blob {
      * @param {{ type?: string, endings?: string }} [options]
      */
     constructor (blobParts = [], options = {}) {
+        if (blobParts === CLONE_TOKEN) {
+            this.#parts = options.parts;
+            this.#type = options.type;
+            this.#size = options.size;
+            this.#endings = options.endings;
+            registerCloneAdapter(this, rawCloneAdapter);
+            return;
+        }
         if (typeof blobParts !== 'object' || blobParts === null) {
             throw new TypeError('Failed to construct \'Blob\': The provided value cannot be converted to a sequence.')
         }
@@ -83,7 +118,30 @@ const _Blob = class Blob {
 
         this.#endings = `${options.endings === undefined ? 'transparent' : options.endings}`
         const type = options.type === undefined ? '' : String(options.type)
-        this.#type = /^[\x20-\x7E]*$/.test(type) ? type : ''
+        this.#type = /^[\x20-\x7E]*$/.test(type) ? type.toLowerCase() : ''
+        registerCloneAdapter(this, rawCloneAdapter)
+    }
+
+    static {
+        cloneRawBlob = (source, memo) => {
+            const parts = [];
+            const result = new _Blob(CLONE_TOKEN, {parts, type: source.#type, size: source.#size, endings: source.#endings});
+            memo.set(source, result);
+            // Existing methods can expose backing through patched decoders and
+            // typed-array methods. A clone therefore owns independent bytes.
+            for (let i = 0; i < source.#parts.length; i++) {
+                const part = source.#parts[i];
+                if (isView(part)) {
+                    const bytes = new NativeUint8Array(bytesBuffer(part), bytesOffset(part), bytesLength(part));
+                    const copy = new NativeUint8Array(bytesLength(part));
+                    bytesSet(copy, bytes);
+                    parts[parts.length] = copy;
+                } else {
+                    parts[parts.length] = cloneBlobBacking(part, memo);
+                }
+            }
+            return result;
+        };
     }
 
     /**

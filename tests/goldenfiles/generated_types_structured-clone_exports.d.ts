@@ -1,4 +1,5 @@
 declare module 'structured-clone' {
+  export function testPolicyCase(index: number): Promise<string>;
   export function testPrimitives(): Promise<string>;
   export function testObjects(): Promise<string>;
   export function testArrays(): Promise<string>;

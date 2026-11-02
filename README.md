@@ -533,7 +533,16 @@ When the `timezone` feature is enabled (default), `DateTimeFormat` supports all 
 <details>
 <summary><strong>Structured Clone</strong></summary>
 
-Implemented by https://github.com/ungap/structured-clone — `structuredClone`
+`structuredClone` preserves object graphs, ArrayBuffer/view aliases and genuine in-memory Blob data.
+CryptoKey metadata participates in the same graph, including aliases and cycles.
+Transfer buffers detach only after the complete graph and host metadata validate; unlike Node.js,
+a rejected CryptoKey metadata graph leaves these buffers attached.
+ArrayBuffer transfer and runtime-local transferable AbortSignals are supported. Clone/transfer markers
+are enforced by the same private policy used by MessageChannel; nonstandard `json`/`lossy` options
+cannot disable rejection. Blob clones own independent byte data. File-backed/foreign Blob backing,
+SharedArrayBuffer or immutable ArrayBuffer cloning, resizable-ArrayBuffer-backed views, and stream/MessagePort/FileHandle transfer are unsupported and rejected.
+Execution-job results reject Blob and other host values rather than transporting opaque resources.
+The serializer is adapted from https://github.com/ungap/structured-clone.
 
 </details>
 
@@ -1052,14 +1061,17 @@ a security sandbox; both share the enclosing component's capabilities and filesy
 </details>
 
 <details>
-<summary><strong><code>node:worker_threads</code></strong> (stub)</summary>
+<summary><strong><code>node:worker_threads</code></strong> (runtime-local messaging)</summary>
 
-Compatibility stubs — workers are not supported in single-threaded WASM.
+MessageChannel and MessagePort work within one runtime. Worker and BroadcastChannel construction
+throws immediately. Environment-data APIs are unavailable.
 
 - `isMainThread`, `parentPort`, `workerData`, `threadId`, `resourceLimits`
-- `Worker`, `BroadcastChannel`, `MessagePort`, `MessageChannel`
-- `markAsUntransferable`, `moveMessagePortToContext`, `receiveMessageOnPort`
-- `getEnvironmentData`, `setEnvironmentData`
+- `MessagePort`, `MessageChannel`, `receiveMessageOnPort`
+- `markAsUncloneable`, `markAsUntransferable`, `isMarkedAsUntransferable`
+- `moveMessagePortToContext` (limited compatibility API; no external execution context)
+- Unsupported compatibility exports: `Worker`, `BroadcastChannel`,
+  `getEnvironmentData`, `setEnvironmentData`
 
 </details>
 

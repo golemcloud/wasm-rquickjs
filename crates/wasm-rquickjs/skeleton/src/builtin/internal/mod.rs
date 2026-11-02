@@ -14,6 +14,7 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/util")
         .with_module("__wasm_rquickjs_builtin/internal/validators")
         .with_module("__wasm_rquickjs_builtin/internal/weak_collections")
+        .with_module("__wasm_rquickjs_builtin/internal/clone_policy")
         .with_module("__wasm_rquickjs_builtin/internal/streams/add-abort-signal")
         .with_module("__wasm_rquickjs_builtin/internal/binding/util_native")
         .with_module("__wasm_rquickjs_builtin/internal/binding/util")
@@ -85,6 +86,10 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/weak_collections",
             include_str!("weak_collections.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/clone_policy",
+            include_str!("clone_policy.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/binding/util",
