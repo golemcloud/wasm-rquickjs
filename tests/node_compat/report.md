@@ -8,15 +8,15 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3254/4450 (73.1%)
+**Primary compatibility (CI-enforced):** 3254/4451 (73.1%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
 | ✅ passing (runnable) | 3254 | 73.1% | 56.0% | 47.1% |
-| 🧩 known gap | 1196 | 26.9% | 20.6% | 17.3% |
-| 🚫 WASI-impossible (excluded) | 1193 | — | 20.5% | 17.3% |
+| 🧩 known gap | 1197 | 26.9% | 20.6% | 17.3% |
+| 🚫 WASI-impossible (excluded) | 1192 | — | 20.5% | 17.2% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1101 | — | — | 15.9% |
@@ -28,7 +28,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 | Module | Total | Passing | Gap | WASI-impossible | Engine diff | Unevaluated | Internals | Primary % | Public compatibility % |
 |--------|-------|----------|-----|-----------------|-------------|-------------|-----------|-----------|--------------------|
-| abort | 28 | 26 | 0 | 1 | 0 | 0 | 1 | 100.0% | 96.3% |
+| abort | 28 | 26 | 1 | 0 | 0 | 0 | 1 | 96.3% | 96.3% |
 | assert | 95 | 95 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | async_hooks | 38 | 4 | 28 | 4 | 0 | 0 | 2 | 12.5% | 11.1% |
 | blob | 43 | 38 | 2 | 0 | 0 | 0 | 3 | 95.0% | 95.0% |
@@ -109,7 +109,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-require-module-with-detection.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-abortcontroller.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
-| `test-aborted-util.js` | 5 | 4 | 0 | 1 | 0 | 0 | 0 |
+| `test-aborted-util.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
 | `test-abortsignal-cloneable.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-accessor-properties.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-assert-async.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
@@ -688,7 +688,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1196)
+### known gap (1197)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1261,6 +1261,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | spawn({ stdio: 'ignore' }) does not null out stdio streams like Node | 1 | `parallel/test-child-process-stdio.js#block_01_test_stdio_ignoring` |
 | spawned process does not honor --max-http-header-size (http.maxHeaderSize mismatch) | 1 | `parallel/test-http-max-header-size.js` |
 | stack-overflow recovery around vm.runInThisContext/runInNewContext traps in WASM | 1 | `parallel/test-vm-low-stack-space.js` |
+| stdin ES module awaiting aborted() reports a null child exit code instead of Node exit code 13 | 1 | `parallel/test-aborted-util.js#test_04_does_not_hang_forever` |
 | stdout redirection to file not implemented | 1 | `parallel/test-stdout-to-file.js` |
 | stream.finished hangs in destroyed-stream callback ordering path | 1 | `parallel/test-stream-finished.js#block_34_block_34` |
 | stream.finished() behavior for destroyed IncomingMessage is not Node-compatible | 1 | `parallel/test-http-client-finished.js` |
@@ -1328,7 +1329,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
 | zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1193)
+### WASI-impossible (1192)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1463,7 +1464,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires child_process.fork(), which is unavailable in WASI | 1 | `parallel/test-http-server-stale-close.js` |
 | requires child_process.spawn of a separate Node process to reproduce stack-overflow behavior | 1 | `sequential/test-fs-stat-sync-overflow.js` |
 | requires child_process.spawn of a separate server process | 1 | `sequential/test-net-response-size.js` |
-| requires child_process.spawn to run a subprocess | 1 | `parallel/test-aborted-util.js#test_04_does_not_hang_forever` |
 | requires cluster module which is not available in WASM | 1 | `parallel/test-cluster-bind-twice.js` |
 | requires cluster workers and tls support, which are unavailable in WASM | 1 | `parallel/test-tls-ticket-cluster.js` |
 | requires cluster.fork/process forking | 1 | `sequential/test-dgram-bind-shared-ports.js` |

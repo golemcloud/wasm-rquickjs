@@ -537,10 +537,12 @@ When the `timezone` feature is enabled (default), `DateTimeFormat` supports all 
 CryptoKey metadata participates in the same graph, including aliases and cycles.
 Transfer buffers detach only after the complete graph and host metadata validate; unlike Node.js,
 a rejected CryptoKey metadata graph leaves these buffers attached.
-ArrayBuffer transfer and runtime-local transferable AbortSignals are supported. Clone/transfer markers
+ArrayBuffer transfer and runtime-local transferable AbortSignals are supported. Transferred signal reasons
+are copied before local abort listeners run; target abort delivery is queued. Clone/transfer markers
 are enforced by the same private policy used by MessageChannel; nonstandard `json`/`lossy` options
 cannot disable rejection. Blob clones own independent byte data. File-backed/foreign Blob backing,
 SharedArrayBuffer or immutable ArrayBuffer cloning, resizable-ArrayBuffer-backed views, and stream/MessagePort/FileHandle transfer are unsupported and rejected.
+FileHandle and web-stream payloads also reject without a transfer list; their ownership transfer is unavailable.
 Execution-job results reject Blob and other host values rather than transporting opaque resources.
 The serializer is adapted from https://github.com/ungap/structured-clone.
 

@@ -254,6 +254,14 @@ export async function run() {
     try {
         await runJavaScript({source: "return {nested: [new Blob(['unsupported transport'])]};"});
     } catch (error) { blobResultError = error.message; }
+    const hostResultErrors = {};
+    for (const [kind, source] of [
+        ['ReadableStream', 'return {nested: new ReadableStream()};'],
+        ['FileHandle', "const fs=await import('node:fs/promises');await fs.mkdir('/tmp',{recursive:true});const handle=await fs.open('/tmp/execution-handle-policy','w+');await handle.close();return {nested:handle};"],
+    ]) {
+        try {await runJavaScript({source});}
+        catch (error) {hostResultErrors[kind] = error.message;}
+    }
     const clonePolicyIsolation = await runJavaScript({source: `
         const worker = await import('node:worker_threads');
         const value = Object.freeze({});
@@ -477,7 +485,7 @@ export async function run() {
         overflowError, truncated, entry, defaultArgv, largeJavaScript,
         typescriptDisabled: process.features.typescript === false,
         disabledStripError, disabledExecutionError, imports,
-        privateImport, removedAliases, cloneChecks, resourceError, blobResultError, clonePolicyIsolation, pathAliases,
+        privateImport, removedAliases, cloneChecks, resourceError, blobResultError, hostResultErrors, clonePolicyIsolation, pathAliases,
         persistentSymlinkCreated, persistentSymlinkRead, persistentSymlinkEdges,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },

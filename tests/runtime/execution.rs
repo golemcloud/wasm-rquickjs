@@ -231,6 +231,16 @@ async fn execution_isolation(
         report["resourceError"]
     );
     assert!(report["blobResultError"].as_str().is_some_and(|message| message.contains("execution results cannot contain Blob values")));
+    for kind in ["ReadableStream", "FileHandle"] {
+        assert!(
+            report["hostResultErrors"][kind]
+                .as_str()
+                .is_some_and(|message| message
+                    .contains(&format!("execution results cannot contain {kind} values"))),
+            "{}",
+            report["hostResultErrors"]
+        );
+    }
     assert_eq!(
         report["clonePolicyIsolation"]["value"]["initiallyMarked"],
         false

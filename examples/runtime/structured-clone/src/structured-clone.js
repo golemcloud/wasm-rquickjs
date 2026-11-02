@@ -665,7 +665,7 @@ export async function testPolicyCase(index) {
             const channel=new MessageChannel(),events=[];
             assert.equal(channel.port1.constructor,MessagePort);
             for(const construct of [()=>MessagePort(),()=>new MessagePort(),()=>Reflect.construct(MessagePort,[],MessageChannel)])
-                assert.throws(construct,{code:'ERR_CONSTRUCT_CALL_INVALID'});
+                assert.throws(construct,{code:'ERR_CONSTRUCT_CALL_INVALID',message:'Constructor cannot be called'});
             assert.throws(()=>MessageChannel(),{code:'ERR_CONSTRUCT_CALL_REQUIRED'});
             for(const value of [null,0,{},Object.create(MessagePort.prototype)])
                 assert.throws(()=>receiveMessageOnPort(value),{code:'ERR_INVALID_ARG_TYPE'});
@@ -768,6 +768,105 @@ export async function testPolicyCase(index) {
             assert.throws(()=>structuredClone(boundary,{transfer:[undetached]}),/nested failure/);assert.equal(undetached.byteLength,1);
             break;
         }
+        case 21: {
+            const source={get first(){Object.defineProperty(source,'later',{enumerable:false});delete source.removed;return 1;},later:2,removed:3};
+            assert.deepEqual(structuredClone(source),{first:1,later:2});
+            const array=[0,1,2,3];
+            Object.defineProperty(array,1,{enumerable:true,get(){Object.defineProperty(array,2,{enumerable:false});delete array[3];return 1;}});
+            const copy=structuredClone(array);
+            assert.equal(copy[2],2);assert.equal(3 in copy,false);
+            assert.equal(Object.getOwnPropertyDescriptor(copy,'2').enumerable,true);
+            for(const value of [42,null,undefined,{toString(){return 'converted';}}]) {
+                const error=new Error();error.stack='fixed';error.message=value;
+                assert.equal(structuredClone(error).message,String(value));
+            }
+            const order=[],error=new Error();
+            error.name={toString(){order.push('name');return 'TypeError';}};
+            error.message={toString(){order.push('message');return 'converted';}};
+            Object.defineProperty(error,'stack',{get(){order.push('stack');return 'fixed';}});
+            const clonedError=structuredClone(error);
+            assert.equal(clonedError.name,'TypeError');assert.equal(clonedError.message,'converted');
+            assert.deepEqual(order,['name','message','stack']);
+            const invalid=new Error();invalid.stack='fixed';invalid.message=Symbol('invalid');
+            const buffer=new ArrayBuffer(1);
+            assert.throws(()=>structuredClone(invalid,{transfer:[buffer]}),TypeError);assert.equal(buffer.byteLength,1);
+            break;
+        }
+        case 22: {
+            const fs=await import('node:fs/promises');await fs.mkdir('/tmp',{recursive:true});
+            const handle=await fs.open('/tmp/clone-handle-policy','w+'),channel=new MessageChannel();
+            try {
+                const fd=handle.fd;
+                cloneFailure(()=>structuredClone({handle}));cloneFailure(()=>channel.port1.postMessage({handle}));
+                cloneFailure(()=>channel.port1.postMessage(handle,[handle]));assert.equal(handle.fd,fd);
+                assert.deepEqual(structuredClone(Object.create(Object.getPrototypeOf(handle))),{});
+                await handle.writeFile('still usable');
+                const web=await import('node:stream/web');
+                assert.equal(web.ReadableStream,ReadableStream);assert.equal(web.WritableStream,WritableStream);assert.equal(web.TransformStream,TransformStream);
+                assert.equal(process.getBuiltinModule('node:stream/web').ReadableStream,ReadableStream);
+                const readable=new ReadableStream({start(controller){controller.close();}}),writable=new WritableStream(),transform=new TransformStream();
+                const branches=readable.tee(),byteStream=new ReadableStream({type:'bytes',start(controller){controller.close();}}),byteBranches=byteStream.tee();
+                for(const stream of [readable,writable,transform,transform.readable,transform.writable,...branches,byteStream,...byteBranches]) {
+                    cloneFailure(()=>structuredClone({stream}));cloneFailure(()=>channel.port1.postMessage({stream}));
+                    const buffer=new ArrayBuffer(1);cloneFailure(()=>structuredClone(stream,{transfer:[buffer,stream]}));assert.equal(buffer.byteLength,1);
+                }
+                if(typeof ReadableStream.from==='function')cloneFailure(()=>structuredClone(ReadableStream.from([])));
+                for(const Constructor of [ReadableStream,WritableStream,TransformStream])assert.deepEqual(structuredClone(Object.create(Constructor.prototype)),{});
+                await Promise.allSettled([writable.abort(),transform.readable.cancel(),transform.writable.abort(),...branches.map(stream=>stream.cancel()),...byteBranches.map(stream=>stream.cancel())]);
+            } finally {await handle.close();channel.port1.close();channel.port2.close();await fs.unlink('/tmp/clone-handle-policy');}
+            break;
+        }
+        case 23: {
+            for(const resource of [{},[],()=>{}])await aborted({aborted:true},resource);
+            let listener;const resource={},duck={aborted:false,addEventListener(type,fn){listener=fn;},removeEventListener(){}};
+            const waiting=aborted(duck,resource);assert.equal(typeof listener,'function');listener();await waiting;
+            let reads=0;const invalidResource={get aborted(){reads++;return true;}};
+            await assert.rejects(aborted(invalidResource,null),{code:'ERR_INVALID_ARG_TYPE'});assert.equal(reads,0);
+            let rejected;assert.doesNotThrow(()=>{rejected=aborted({get aborted(){throw Error('signal getter');}},{});});await assert.rejects(rejected,/signal getter/);
+            const controller=new AbortController(),reason={value:0};
+            controller.signal.addEventListener('abort',()=>{reason.value=1;});
+            const signal=transferableAbortSignal(controller.signal),target=structuredClone(signal,{transfer:[signal]});
+            let timeout;const delivered=new Promise((resolve,reject)=>{target.addEventListener('abort',resolve,{once:true});timeout=setTimeout(()=>reject(Error('signal delivery timeout')),1000);});
+            controller.abort(reason);assert.equal(target.aborted,false);await delivered;clearTimeout(timeout);
+            // Documented divergence: private forwarding captures before local listeners.
+            assert.equal(reason.value,1);assert.equal(target.reason.value,0);
+            break;
+        }
+        case 24: {
+            let removalCalls=0;
+            const ducks=[
+                {aborted:false},
+                {aborted:false,removeEventListener(){removalCalls++;throw Error('duck removal hook');}},
+                {aborted:false,get removeEventListener(){removalCalls++;throw Error('duck removal getter');}},
+            ];
+            const registrations=ducks.map(duck=>{
+                let listener;
+                duck.addEventListener=(type,fn)=>{assert.equal(type,'abort');listener=fn;};
+                const resource={};resource.self=resource;
+                return {weak:new WeakRef(resource),waiting:aborted(duck,resource),fire:()=>listener()};
+            });
+            const controller=new AbortController();
+            controller.signal.removeEventListener=()=>{removalCalls++;throw Error('replaced genuine removal');};
+            let settled=false;
+            function registerGenuine() {
+                const resource={};resource.self=resource;
+                aborted(controller.signal,resource).then(()=>{settled=true;});
+                return new WeakRef(resource);
+            }
+            const genuineResource=registerGenuine();
+            for(let i=0;i<6;i++){await new Promise(resolve=>setTimeout(resolve,0));gc();}
+            await new Promise(resolve=>setTimeout(resolve,0));
+            for(const registration of registrations)assert.equal(registration.weak.deref(),undefined,'duck resource collected');
+            assert.equal(genuineResource.deref(),undefined,'genuine resource collected');
+            assert.doesNotThrow(()=>gc());assert.doesNotThrow(()=>gc());
+            assert.equal(removalCalls,0,'GC does not call application removal hooks');
+            for(const registration of registrations){registration.fire();await registration.waiting;}
+            controller.abort();await Promise.resolve();assert.equal(settled,false,'genuine weak listener stays pending');
+            const retained={},live=new AbortController();
+            const waiting=aborted(live.signal,retained);live.abort();await waiting;
+            assert.equal(retained!==null,true);
+            break;
+        }
         case 250: {
             const graph=Array.from({length:2000},(_,i)=>({value:i,label:`item-${i}`,nested:{x:i}}));
             const fs=await import('node:fs');
@@ -846,6 +945,28 @@ export async function testPolicyCase(index) {
                 if(baseline){const start=performance.now();assert.equal(baseline(input).length,input.length);baselineMs=performance.now()-start;}
                 fallbackSamples.push({mode,length:input.length,currentMs,baselineMs});
             }
+            const tinyInput=Array.from({length:20000},()=>[1,2,3]),tinySamples=[];
+            function measureTiny(clone) {
+                const start=performance.now(),copy=clone(tinyInput);
+                assert.equal(copy.length,20000);assert.deepEqual(copy[19999],[1,2,3]);
+                return performance.now()-start;
+            }
+            for(let trial=0;trial<30;trial++) {
+                let currentMs,baselineMs;
+                if(baseline&&trial%2){baselineMs=measureTiny(baseline);currentMs=measureTiny(structuredClone);}
+                else {currentMs=measureTiny(structuredClone);if(baseline)baselineMs=measureTiny(baseline);}
+                tinySamples.push({trial,currentMs,baselineMs});
+            }
+            const constructionSamples={};
+            let constructionStart=performance.now();
+            for(let i=0;i<100000;i++)new DOMException();
+            constructionSamples.domException={count:100000,ms:performance.now()-constructionStart};
+            constructionStart=performance.now();
+            for(let i=0;i<1000;i++)createSecretKey(new Uint8Array(16));
+            constructionSamples.secretKey={count:1000,ms:performance.now()-constructionStart};
+            constructionStart=performance.now();
+            for(let i=0;i<1000;i++)await webcrypto.subtle.generateKey({name:'AES-GCM',length:128},true,['encrypt']);
+            constructionSamples.cryptoKey={count:1000,ms:performance.now()-constructionStart};
             const largeBufferSamples=[];
             for(const length of [1024*1024,16*1024*1024,64*1024*1024]) {
                 const source=new ArrayBuffer(length);
@@ -862,7 +983,7 @@ export async function testPolicyCase(index) {
             const blob=new Blob([new Uint8Array(1024*1024)]);
             const blobStart=performance.now();
             for(let i=0;i<6;i++)assert.equal(structuredClone(blob).size,1024*1024);
-            return JSON.stringify({graphCopies:5,objectsPerGraph:4001,samples,bufferCopies:2,bufferBytes:buffer.byteLength,bufferSamples,denseProfile,denseSamples,fallbackSamples,largeBufferSamples,blobCopies:6,blobBytes:1024*1024,blobMs:performance.now()-blobStart});
+            return JSON.stringify({graphCopies:5,objectsPerGraph:4001,samples,bufferCopies:2,bufferBytes:buffer.byteLength,bufferSamples,denseProfile,denseSamples,fallbackSamples,tinySamples,constructionSamples,largeBufferSamples,blobCopies:6,blobBytes:1024*1024,blobMs:performance.now()-blobStart});
         }
         default: throw Error(`Unknown clone policy case ${index}`);
     }

@@ -347,7 +347,7 @@ class RuntimeMessagePort {
 }
 
 export function MessagePort() {
-    const error = new TypeError('Cannot construct MessagePort');
+    const error = new TypeError('Constructor cannot be called');
     error.code = 'ERR_CONSTRUCT_CALL_INVALID';
     throw error;
 }

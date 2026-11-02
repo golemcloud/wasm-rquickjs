@@ -34,10 +34,10 @@ const NativeRegExp = RegExp;
 const NativeError = Error;
 const NativeTypeError = TypeError;
 const NativeObject = Object;
+const NativeString = String;
 const NativeBigInt = BigInt;
 const keys = Object.keys;
 const hasOwn = Object.hasOwn;
-const propertyIsEnumerable = uncurry(Object.prototype.propertyIsEnumerable);
 const symbolIterator = Symbol.iterator;
 const descriptor = Object.getOwnPropertyDescriptor;
 const define = Object.defineProperty;
@@ -142,6 +142,11 @@ function bufferRecord(buffer) {
   return {bytes: data, max: bufferResizable && bufferResizable(buffer) ? bufferMaxLength(buffer) : null};
 }
 
+function errorString(value) {
+  if (typeof value === 'symbol') throw new NativeTypeError('Cannot convert a Symbol value to a string');
+  return NativeString(value);
+}
+
 function createSerializer(rejectCustom, transfers, prepareDataArrays = true) {
   const records = [];
   const memo = newMemo();
@@ -192,6 +197,8 @@ function createSerializer(rejectCustom, transfers, prepareDataArrays = true) {
       throw cloneError('Cannot clone object of unsupported type.');
     if (adapter && !adapter.ordinary && adapter.kind !== 'AbortSignal') {
       if (rejectCustom) throw new NativeTypeError(`execution results cannot contain ${adapter.kind} values`);
+      if (adapter.requiresTransfer)
+        throw cloneError('Object that needs transfer was found in message but not listed in transferList');
       if (adapter.prepareClone) {
         const plan = adapter.prepareClone(value);
         const index = as([CUSTOM, plan.target, plan], value);
@@ -235,9 +242,9 @@ function createSerializer(rejectCustom, transfers, prepareDataArrays = true) {
         let count = 0;
         for (let i = 0; i < propertyKeys.length; i++) {
           const key = propertyKeys[i];
-          // Object.keys snapshots keys; deleted/non-enumerable later properties
-          // are omitted, as in the platform serialization algorithm.
-          if (propertyIsEnumerable(value, key)) {
+          // Enumerability is captured in the original key snapshot. Only a
+          // deleted own property is omitted when traversal reaches it.
+          if (hasOwn(value, key)) {
             const child = value[key];
             if (data.target !== undefined) {
               const type = typeof child;
@@ -306,11 +313,11 @@ function createSerializer(rejectCustom, transfers, prepareDataArrays = true) {
         return index;
       }
       case ERROR: {
-        const name = value.name;
+        const name = errorString(value.name);
         const data = {__proto__: null, name: mapHas(errorConstructors, name) ? name : 'Error'};
         const index = as([ERROR, data], value);
         const message = ownData(value, 'message');
-        if (message && typeof message.value === 'string') data.message = message.value;
+        if (message) data.message = errorString(message.value);
         const stack = value.stack;
         if (typeof stack === 'string') data.stack = stack;
         const cause = ownData(value, 'cause');

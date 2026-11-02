@@ -2023,7 +2023,7 @@
         "test_01_aborted_with_gc_cleanup": {},
         "test_02_fails_with_error_if_not_provided_abortsignal": {},
         "test_03_fails_if_not_provided_a_resource": {},
-        "test_04_does_not_hang_forever": { "category": "wasi-impossible", "reason": "requires child_process.spawn to run a subprocess" }
+        "test_04_does_not_hang_forever": { "category": "known-gap", "reason": "stdin ES module awaiting aborted() reports a null child exit code instead of Node exit code 13" }
       }
     },
     "parallel/test-abortsignal-cloneable.js": {
@@ -10275,8 +10275,6 @@
     "parallel/test-worker-message-not-serializable.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/test/binding + internal/worker/io" },
     "parallel/test-worker-message-port-arraybuffer.js": {},
     "parallel/test-worker-message-port-close.js": {
-      "category": "known-gap",
-      "reason": "MessagePort close callback, close-state checks, and closed-port errors are incomplete",
       "split": true,
       "subtests": {
         "block_00_block_00": {

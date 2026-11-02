@@ -521,3 +521,63 @@ async fn structured_clone_policy_array_shapes(
     assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
     Ok(())
 }
+
+#[test]
+async fn structured_clone_policy_node_property_and_error_semantics(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(21)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_transfer_only_hosts(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(22)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_aborted_validation_and_reason_order(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(23)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
+
+#[test]
+async fn structured_clone_policy_aborted_duck_gc_cleanup(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(24)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}
