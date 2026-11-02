@@ -110,6 +110,26 @@ Both targets generate a crate that is still compiled with `cargo build --target 
 (a dedicated `wasm32-wasip3` rustc target does not exist yet; the Preview 3 crate uses the
 [`wasip3`](https://crates.io/crates/wasip3) bindings on top of the Preview 2 target).
 
+#### Native modules and dependencies
+
+A host application can give JavaScript its own Rust modules without editing the generated crate:
+
+```
+wasm-rquickjs generate-wrapper-crate ... \
+  --native-module my-native=my_native::Module \
+  --dependency 'my-native={ path = "../my-native" }'
+```
+
+- `--native-module <name>=<rust path>` registers a type implementing `rquickjs::module::ModuleDef`
+  so that JavaScript can `import ... from '<name>'`. The name must not be a JavaScript module name,
+  an imported WIT interface, or in the reserved `node:` and `__wasm_rquickjs_builtin/` namespaces.
+- `--dependency <key>=<TOML value>` adds a `[dependencies]` entry, a version string or an inline
+  table, and replaces an entry of the skeleton with the same key as a whole. A relative `path` is
+  resolved against the current directory and written relative to the generated crate.
+
+Both options can be repeated and work with both targets. The native module's crate must use the
+same `rquickjs` version as the generated crate; the crate's `[patch.crates-io]` applies to it.
+
 ### Generating TypeScript module definitions
 
 The `generate-dts` command generates TypeScript module definitions for all the exported and imported interfaces:
