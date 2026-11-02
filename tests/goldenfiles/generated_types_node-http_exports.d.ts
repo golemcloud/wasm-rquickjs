@@ -18,6 +18,7 @@ declare module 'node-http' {
   export function httpPipelinedResponseOrder(): boolean;
   export function httpExpectContinueFlow(): boolean;
   export function httpHalfOpenPipelinedRequests(): boolean;
+  export function httpResponseAfterBufferedRequestEnd(): boolean;
   export function httpPipelinedCloseLifecycle(): boolean;
   export function httpPipelinedConnectionClose(): boolean;
   export function httpPipelinedActiveTimeout(): boolean;
@@ -33,6 +34,7 @@ declare module 'node-http' {
   export function httpInformationalWriteAfterClose(): boolean;
   export function httpMaxRequestsClosesSocket(): boolean;
   export function netWritevBoundaries(): boolean;
+  export function netReadEndAfterDataTicks(): boolean;
   export function netWriteTimeoutLifecycle(): boolean;
   export function netWriteProfile(chunkSize: number, chunkCount: number, corked: boolean): string;
   export function httpPipelinedMaxRequests(): boolean;
