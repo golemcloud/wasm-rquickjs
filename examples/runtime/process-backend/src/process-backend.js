@@ -810,9 +810,12 @@ export async function run() {
     setProcessBackend(null);
     assert.equal(spawnSync('virtual-command').error.code, 'ENOSYS');
     assert.throws(() => execSync('virtual shell program'), error => error.code === 'ENOSYS');
-    // Local Node commands, including direct shebangs, do not depend on whether a
-    // synchronous backend is registered.
-    for (const backend of [null, { spawn: () => undefined }]) {
+    // Local Node commands, including direct shebangs and shell lines that consist of one,
+    // do not depend on whether a backend is registered or would claim them.
+    const claiming = (command, args) => {
+        throw new Error(`Backend received the local command ${[command].concat(args).join(' ')}`);
+    };
+    for (const backend of [null, { spawn: () => undefined }, { spawn: claiming, spawnSync: claiming }]) {
         setProcessBackend(backend);
         assert.equal(spawnSync('./local-script', ['sync'], { cwd: '/local-bin', encoding: 'utf8' }).stdout, 'local:sync\n');
         assert.equal(execFileSync('local-script', ['file'], { env: localEnv, encoding: 'utf8' }), 'local:file\n');
