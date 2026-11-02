@@ -609,6 +609,10 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
         return;
     }
 
+    if (typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
+        globalThis.__wasm_rquickjs_child_uncaught(err);
+        return;
+    }
     if (typeof console !== 'undefined') {
         console.error(err);
     }
@@ -1133,7 +1137,12 @@ globalThis.__wasm_rquickjs_unhandled_rejection_checkpoint = function() {
             _emittedUnhandledRejections.add(promise);
             emitted += 1;
             try {
-                process.emit('unhandledRejection', entry.reason, promise);
+                if (process.listenerCount('unhandledRejection') === 0 &&
+                    typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
+                    __wasm_rquickjs_handleUncaughtError(entry.reason);
+                } else {
+                    process.emit('unhandledRejection', entry.reason, promise);
+                }
             } catch (error) {
                 __wasm_rquickjs_handleUncaughtError(error);
             }

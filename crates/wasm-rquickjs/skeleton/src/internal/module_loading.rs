@@ -1750,11 +1750,20 @@ fn matching_paren_end(source: &str, open_paren: usize) -> Option<usize> {
 }
 
 fn is_object_method_shorthand_import(source: &str, import_start: usize, open_paren: usize) -> bool {
-    if matching_paren_end(source, open_paren)
-        .and_then(|close| next_non_whitespace_byte(source, close))
-        != Some(b'{')
-    {
+    let Some(close) = matching_paren_end(source, open_paren) else {
         return false;
+    };
+    if next_non_whitespace_byte(source, close) != Some(b'{') {
+        return false;
+    }
+    // A call is never followed by `{` on the same line, so this is a method whatever
+    // precedes it, e.g. a minified class member right after another member's `}`.
+    let line_break = source.as_bytes()[close..]
+        .iter()
+        .take_while(|byte| byte.is_ascii_whitespace())
+        .any(|byte| matches!(byte, b'\n' | b'\r'));
+    if !line_break {
+        return true;
     }
     if previous_word(source, import_start).is_some_and(|(word, _)| word == "static") {
         return true;
@@ -10902,14 +10911,14 @@ fn initialize_module_import_meta<'js>(
     init: &ImportMetaInit,
 ) -> rquickjs::Result<()> {
     let meta = module.meta()?;
-    let globals = ctx.globals();
-    let internal_meta = meta.clone();
-    let internal_globals = globals.clone();
     meta.prop(
         "__wasm_rquickjs_global",
-        Accessor::from(move || -> rquickjs::Result<Object<'js>> {
-            internal_meta.remove("__wasm_rquickjs_global")?;
-            Ok(internal_globals.clone())
+        // Do not capture JS objects in a native closure: a declared module may
+        // never execute, leaving an opaque closure -> import.meta ownership cycle
+        // that QuickJS cannot trace when the runtime is destroyed.
+        Accessor::from(|ctx: Ctx<'js>, This(meta): This<Object<'js>>| {
+            meta.remove("__wasm_rquickjs_global")?;
+            Ok::<_, rquickjs::Error>(ctx.globals())
         })
         .configurable(),
     )?;
@@ -13615,12 +13624,24 @@ mod cjs_export_analyzer_tests {
             class AsyncGeneratorImportMethod { async * import(value) { yield value; } }
             class GetterImportMethod { get import() { return "getter"; } }
             class SetterImportMethod { set import(value) { this.value = value; } }
+            class Minified{traversal(e){return e}import(...e){return e}precompilation;}
+            class FieldThenMethod { field = 1
+                import(value) { return value; } }
             obj.import("value");
         "#;
 
         let processed = process_static_import_attrs(source, "/app/main.mjs");
         assert_eq!(processed.source, source);
         assert!(processed.dynamic_import_binding_names.is_none());
+    }
+
+    #[test]
+    fn dynamic_import_rewrite_keeps_call_before_block_on_next_line() {
+        // Automatic semicolon insertion makes the block a separate statement.
+        let source = "if (ready) {}import(\"./dep.mjs\")\n{ }";
+        let processed = process_static_import_attrs(source, "/app/main.mjs");
+        assert!(processed.dynamic_import_binding_names.is_some());
+        assert!(!processed.source.contains("}import("));
     }
 
     #[test]
