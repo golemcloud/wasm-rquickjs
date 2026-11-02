@@ -867,6 +867,34 @@ export async function testPolicyCase(index) {
             assert.equal(retained!==null,true);
             break;
         }
+        case 25: {
+            const original=process.env,key='WRQJS_CLONE_ENV_TEST',previous=original[key];
+            try {
+                original[key]=42;
+                const graph=structuredClone({first:original,second:original});
+                assert.equal(graph.first,graph.second);assert.notEqual(graph.first,original);
+                assert.equal(Object.getPrototypeOf(graph.first),Object.prototype);
+                assert.equal(graph.first[key],'42');assert.equal(graph.first.TEST_KEY,'TEST_VALUE');
+                original[key]='after';assert.equal(graph.first[key],'42');
+                graph.first[key]='clone';assert.equal(original[key],'after');
+                const channel=new MessageChannel();
+                try {channel.port1.postMessage(original);assert.equal(receiveMessageOnPort(channel.port2).message[key],'after');}
+                finally {channel.port1.close();channel.port2.close();}
+                let traps=0;
+                for(const target of [{},original]) {
+                    const proxy=new Proxy(target,{ownKeys(){traps++;throw Error('proxy trap');}});
+                    assert.throws(()=>structuredClone(proxy),{name:'DataCloneError'});
+                    process.env=proxy;
+                    assert.throws(()=>structuredClone(process.env),{name:'DataCloneError'});
+                    process.env=original;
+                }
+                assert.equal(traps,0);
+            } finally {
+                process.env=original;
+                if(previous===undefined)delete original[key];else original[key]=previous;
+            }
+            break;
+        }
         case 250: {
             const graph=Array.from({length:2000},(_,i)=>({value:i,label:`item-${i}`,nested:{x:i}}));
             const fs=await import('node:fs');

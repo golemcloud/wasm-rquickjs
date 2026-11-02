@@ -581,3 +581,18 @@ async fn structured_clone_policy_aborted_duck_gc_cleanup(
     assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
     Ok(())
 }
+
+#[test]
+async fn structured_clone_policy_process_environment(
+    #[tagged_as("structured_clone")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-policy-case",
+        &[Val::U8(25)],
+    )
+    .await;
+    assert_eq!(result?, Some(Val::String("ok".into())), "{output}");
+    Ok(())
+}

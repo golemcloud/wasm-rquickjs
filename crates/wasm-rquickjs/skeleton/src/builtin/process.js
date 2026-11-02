@@ -13,6 +13,7 @@ import {
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import { createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 import { time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
 import { validateString } from '__wasm_rquickjs_builtin/internal/validators';
@@ -99,8 +100,10 @@ Object.defineProperty(process, 'argv0', {
     configurable: true,
 });
 
+const envCloneAdapter = { __proto__: null, kind: 'process.env', ordinary: true };
+
 function _createEnv(values) {
-    return new Proxy(values, {
+    const environment = new Proxy(values, {
         get: function(target, key) {
             if (typeof key === 'symbol') return undefined;
             if (key === '') return undefined;
@@ -153,6 +156,8 @@ function _createEnv(values) {
             return true;
         }
     });
+    registerCloneAdapter(environment, envCloneAdapter);
+    return environment;
 }
 
 export var env = _createEnv(_env);

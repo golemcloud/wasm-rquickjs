@@ -241,6 +241,13 @@ export async function run() {
         byteAliases: clone.value.bytes.buffer === clone.value.buffer &&
             clone.value.view.buffer === clone.value.buffer && clone.value.view.getUint8(0) === 2,
     };
+    const envSnapshot = await runJavaScript({
+        source: `return { first: process.env, second: process.env };`,
+        env: { WRQJS_CLONE_ENV_TEST: 'job' },
+    });
+    const environmentSnapshot = envSnapshot.value.first === envSnapshot.value.second &&
+        envSnapshot.value.first.WRQJS_CLONE_ENV_TEST === 'job' &&
+        Object.getPrototypeOf(envSnapshot.value.first) === Object.prototype;
     let resourceError;
     try {
         await runJavaScript({ source: `
@@ -485,7 +492,7 @@ export async function run() {
         overflowError, truncated, entry, defaultArgv, largeJavaScript,
         typescriptDisabled: process.features.typescript === false,
         disabledStripError, disabledExecutionError, imports,
-        privateImport, removedAliases, cloneChecks, resourceError, blobResultError, hostResultErrors, clonePolicyIsolation, pathAliases,
+        privateImport, removedAliases, cloneChecks, environmentSnapshot, resourceError, blobResultError, hostResultErrors, clonePolicyIsolation, pathAliases,
         persistentSymlinkCreated, persistentSymlinkRead, persistentSymlinkEdges,
         cancellationError, nested, capacityError, reclaimed,
         isolation: { left: isolationLeft, right: isolationRight },

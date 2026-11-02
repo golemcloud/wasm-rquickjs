@@ -231,6 +231,7 @@ async fn execution_isolation(
         report["resourceError"]
     );
     assert!(report["blobResultError"].as_str().is_some_and(|message| message.contains("execution results cannot contain Blob values")));
+    assert_eq!(report["environmentSnapshot"], true);
     for kind in ["ReadableStream", "FileHandle"] {
         assert!(
             report["hostResultErrors"][kind]

@@ -230,6 +230,10 @@ export async function run() {
                 assert.deepEqual([...cloned.view], [1, 2, 3]);
                 assert(Object.is(cloned.numbers[1], -0));
                 assert.equal(cloned.numbers[2], 10n);
+                const envGraph = structuredClone({first:process.env, second:process.env});
+                assert.equal(envGraph.first, envGraph.second);
+                assert.notEqual(envGraph.first, process.env);
+                assert.deepEqual(envGraph.first, process.env);
                 process.stdout.write('ok\n');
             `;
             for (let index = 0; index < 2; index++) {

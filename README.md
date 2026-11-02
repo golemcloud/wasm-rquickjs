@@ -534,6 +534,7 @@ When the `timezone` feature is enabled (default), `DateTimeFormat` supports all 
 <summary><strong>Structured Clone</strong></summary>
 
 `structuredClone` preserves object graphs, ArrayBuffer/view aliases and genuine in-memory Blob data.
+The runtime-owned `process.env` clones into an ordinary, independent environment snapshot; application-created proxies remain uncloneable.
 CryptoKey metadata participates in the same graph, including aliases and cycles.
 Transfer buffers detach only after the complete graph and host metadata validate; unlike Node.js,
 a rejected CryptoKey metadata graph leaves these buffers attached.
