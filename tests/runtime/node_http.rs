@@ -438,6 +438,22 @@ async fn node_http_expect_continue_flow(
 }
 
 #[test]
+async fn node_http_response_after_buffered_request_end(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "http-response-after-buffered-request-end",
+        &[],
+    )
+    .await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn node_http_half_open_pipelined_requests(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
@@ -700,6 +716,22 @@ async fn node_net_writev_boundaries(
 ) -> anyhow::Result<()> {
     let (r, output) =
         invoke_and_capture_output(compiled.wasm_path(), None, "net-writev-boundaries", &[]).await;
+    println!("{output}");
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn node_net_read_end_after_data_ticks(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "net-read-end-after-data-ticks",
+        &[],
+    )
+    .await;
     println!("{output}");
     assert_eq!(r?, Some(Val::Bool(true)));
     Ok(())

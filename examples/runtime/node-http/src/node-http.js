@@ -3108,6 +3108,43 @@ export async function httpExpectContinueFlow() {
     return true;
 }
 
+// The server pauses the accepted socket, so the whole request and the client's end of stream
+// are already buffered when it reads them in one go. As in Node, the response written from the
+// request's 'end' must still reach the client before the server ends the connection.
+export async function httpResponseAfterBufferedRequestEnd() {
+    const expected = 'HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\nconnection: close\r\ndate: now\r\n' +
+        'Transfer-Encoding: chunked\r\n\r\n3\r\nbye\r\n0\r\n\r\n';
+    return new Promise((resolve) => {
+        const server = http.createServer((req, res) => {
+            req.on('end', () => {
+                res.writeHead(200, { 'content-type': 'text/plain', connection: 'close', date: 'now' });
+                res.end('bye');
+            });
+            req.resume();
+        });
+        server.on('connection', (socket) => {
+            socket.pause();
+            setTimeout(() => socket.resume(), 50);
+        });
+        let data = '';
+        const guard = setTimeout(() => {
+            console.log(`no end of stream; received ${JSON.stringify(data)}`);
+            server.close();
+            resolve(false);
+        }, 5000);
+        server.listen(0, () => {
+            const sock = net.connect(server.address().port);
+            sock.on('data', (chunk) => { data += chunk.toString('utf-8'); });
+            sock.on('end', () => {
+                clearTimeout(guard);
+                if (data !== expected) console.log(`received ${JSON.stringify(data)}`);
+                server.close(() => resolve(data === expected));
+            });
+            sock.end('GET / HTTP/1.1\r\nHost: localhost\r\nTransfer-Encoding: chunked\r\n\r\n2\r\nAA\r\n0\r\n\r\n');
+        });
+    });
+}
+
 export async function httpHalfOpenPipelinedRequests() {
     return new Promise((resolve) => {
         let settled = false;
@@ -4384,6 +4421,42 @@ export async function netWritevBoundaries() {
 
     return await runBatch([32 * 1024, 32 * 1024]) &&
         await runBatch([32 * 1024, 32 * 1024, 1]);
+}
+
+// Node delivers a peer's end of stream in its own I/O callback, so work the preceding data queues
+// with process.nextTick, such as an HTTP response started from a request's 'end', runs before the
+// socket's 'end'. Both the buffered (paused) and the polled read paths must keep that order.
+export async function netReadEndAfterDataTicks() {
+    const run = (buffered) => new Promise((resolve) => {
+        const reads = buffered ? [] : [Buffer.from('request'), null];
+        const socket = new net.Socket({ allowHalfOpen: true });
+        socket._handle = {
+            read: () => (reads.length > 0 ? Promise.resolve(reads.shift()) : new Promise(() => {})),
+            close() {},
+        };
+        let ticksDone = false;
+        socket.on('data', () => {
+            let depth = 0;
+            const tick = () => {
+                if (++depth < 8) process.nextTick(tick);
+                else ticksDone = true;
+            };
+            process.nextTick(tick);
+        });
+        socket.on('end', () => {
+            socket.destroy();
+            if (!ticksDone) console.log(`${buffered ? 'buffered' : 'polled'}: 'end' overtook the data's ticks`);
+            resolve(ticksDone);
+        });
+        if (buffered) {
+            socket.pause();
+            socket._pendingReadChunks.push(Buffer.from('request'), null);
+        }
+        socket.resume();
+    });
+    const buffered = await run(true);
+    const polled = await run(false);
+    return buffered && polled;
 }
 
 export async function netWriteTimeoutLifecycle() {
