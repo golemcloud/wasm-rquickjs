@@ -6183,6 +6183,23 @@ Object.defineProperties(globalThis, {
 });
 
 Object.defineProperties(moduleExports, {
+    __wasm_rquickjs_resolve_main_filename: {
+        value: (filename, cwd) => toCjsCanonicalFilename(resolveFilename(filename, cwd).filename, true),
+        writable: false,
+        configurable: false,
+    },
+    __wasm_rquickjs_main_import_specifier: {
+        value(filename) {
+            const url = nodeUrl.pathToFileURL(filename).href;
+            // A preserved main symlink can have a different identity from an
+            // ordinary import. Do not create an opaque identity otherwise:
+            // ordinary imports (including self-imports) must share its cache.
+            return toCjsCanonicalFilename(filename, false) === filename ? url
+                : fsNative.fs_register_esm_file_url(url, url, undefined, 'module', false);
+        },
+        writable: false,
+        configurable: false,
+    },
     __wasm_rquickjs_begin_inline_child_module_state: {
         value: beginInlineChildModuleState,
         writable: false,

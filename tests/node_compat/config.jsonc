@@ -2238,7 +2238,7 @@
     "parallel/test-destroy-socket-in-lookup.js": {},
     "parallel/test-ref-unref-return.js": {},
     // === node:child_process tests ===
-    // child_process is not available in WASM — all tests skipped
+    // Local Node children and embedding-backed commands; OS process features remain unavailable.
     "parallel/test-child-process-advanced-serialization-largebuffer.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-advanced-serialization-splitted-length-field.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-advanced-serialization.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
@@ -2297,7 +2297,7 @@
     },
     "parallel/test-child-process-exec-any-shells-windows.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-exec-cwd.js": { "category": "wasi-impossible", "reason": "requires child_process.exec which is not available in WASM" },
-    "parallel/test-child-process-exec-encoding.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-child-process-exec-encoding.js": { "category": "known-gap", "reason": "local exec fallback does not normalize invalid and null output encodings like Node" },
     "parallel/test-child-process-exec-env.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-exec-error.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-exec-kill-throws.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/child_process" },
@@ -2317,7 +2317,7 @@
         "block_10_block_10": {}
       }
     },
-    "parallel/test-child-process-exec-std-encoding.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-child-process-exec-std-encoding.js": { "category": "known-gap", "reason": "local exec fallback does not expose live stdout and stderr streams" },
     "parallel/test-child-process-exec-stdout-stderr-data-string.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-exec-timeout-expire.js": {},
     "parallel/test-child-process-exec-timeout-kill.js": {},
@@ -2333,8 +2333,8 @@
         "block_03_block_03": { "category": "runnable" },
         "block_04_block_04": { "category": "runnable" },
         "block_05_block_05": { "category": "runnable" },
-        "block_06_block_06": { "category": "wasi-impossible", "reason": "inherited: requires child_process which is not available in WASM" },
-        "block_07_block_07": { "category": "known-gap", "reason": "execFile() does not expose child.stdout/child.stderr streams for encoding:null" }
+        "block_06_block_06": { "category": "known-gap", "reason": "Preview 2 inline execFile does not expose streams for caller-set encoding; Preview 3 passes" },
+        "block_07_block_07": { "category": "known-gap", "reason": "Preview 2 inline execFile does not expose streams for caller-set encoding; Preview 3 passes" }
       }
     },
     "parallel/test-child-process-execFile-promisified-abortController.js": {
@@ -2354,7 +2354,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": { "category": "runnable" },
-        "block_01_block_01": { "category": "runnable" },
+        "block_01_block_01": { "category": "known-gap", "reason": "util.getSystemErrorName is not implemented" },
         "block_02_block_02": {},
         "block_03_block_03": { "category": "runnable" },
         "block_04_block_04": { "category": "runnable" },
@@ -2368,9 +2368,9 @@
       "reason": "requires child_process which is not available in WASM",
       "split": true,
       "subtests": {
-        "block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed": { "category": "known-gap", "reason": "execFileSync maxBuffer overflow ENOBUFS error semantics are not implemented" },
+        "block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed": { "category": "known-gap", "reason": "Preview 2 does not enforce inline maxBuffer; util.getSystemErrorName is also unavailable" },
         "block_01_verify_that_a_maxbuffer_size_of_infinity_works": { "category": "runnable" },
-        "block_02_default_maxbuffer_size_is_1024_1024": { "category": "known-gap", "reason": "execFileSync default maxBuffer overflow behavior is not Node-compatible" }
+        "block_02_default_maxbuffer_size_is_1024_1024": { "category": "known-gap", "reason": "Preview 2 does not enforce inline maxBuffer; util.getSystemErrorName is also unavailable" }
       }
     },
     "parallel/test-child-process-execsync-maxbuf.js": {
@@ -2481,7 +2481,7 @@
     "parallel/test-child-process-set-blocking.js": { "category": "wasi-impossible", "reason": "requires spawning an external Python process with inherited stdio, which is unavailable in WASM" },
     "parallel/test-child-process-silent.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-spawn-args.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
-    "parallel/test-child-process-spawn-argv0.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-child-process-spawn-argv0.js": { "category": "known-gap", "reason": "local Node children do not apply the argv0 option" },
     "parallel/test-child-process-spawn-controller.js": {
       "category": "wasi-impossible",
       "reason": "requires child_process which is not available in WASM",
@@ -2515,7 +2515,7 @@
     "parallel/test-child-process-spawn-typeerror.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-spawn-windows-batch-file.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-spawnsync-args.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
-    "parallel/test-child-process-spawnsync-env.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-child-process-spawnsync-env.js": { "category": "known-gap", "reason": "Preview 2 inline children lose caller-mutated environment entries; Preview 3 passes" },
     "parallel/test-child-process-spawnsync-input.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-spawnsync-kill-signal.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/child_process" },
     "parallel/test-child-process-spawnsync-maxbuf.js": {
@@ -2523,14 +2523,14 @@
       "reason": "requires child_process which is not available in WASM",
       "split": true,
       "subtests": {
-        "block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed": { "category": "known-gap", "reason": "spawnSync() maxBuffer limit is not enforced in WASM child emulation" },
+        "block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed": { "category": "known-gap", "reason": "Preview 2 does not enforce inline maxBuffer; util.getSystemErrorName is also unavailable" },
         "block_01_verify_that_a_maxbuffer_size_of_infinity_works": { "category": "runnable" },
-        "block_02_default_maxbuffer_size_is_1024_1024": { "category": "known-gap", "reason": "spawnSync() default maxBuffer (1MiB) limit is not enforced" },
+        "block_02_default_maxbuffer_size_is_1024_1024": { "category": "known-gap", "reason": "Preview 2 does not enforce inline maxBuffer; util.getSystemErrorName is also unavailable" },
         "block_03_default_maxbuffer_size_is_1024_1024": { "category": "runnable" }
       }
     },
     "parallel/test-child-process-spawnsync-shell.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/child_process" },
-    "parallel/test-child-process-spawnsync-timeout.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
+    "parallel/test-child-process-spawnsync-timeout.js": { "category": "known-gap", "reason": "Preview 2 does not time out inline children; util.getSystemErrorName is also unavailable" },
     "parallel/test-child-process-spawnsync-validation-errors.js": {
       "category": "wasi-impossible",
       "reason": "requires child_process which is not available in WASM",
@@ -2556,7 +2556,7 @@
         "block_01_block_01": { "category": "wasi-impossible", "reason": "requires spawning external OS commands (sleep/pwd), unavailable in WASM" }
       }
     },
-    "parallel/test-child-process-stdin-ipc.js": { "category": "runnable" },
+    "parallel/test-child-process-stdin-ipc.js": { "category": "known-gap", "reason": "local JavaScript children do not provide an IPC stdio channel" },
     "parallel/test-child-process-stdin.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-stdio-big-write-end.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
     "parallel/test-child-process-stdio-inherit.js": { "category": "wasi-impossible", "reason": "requires child_process which is not available in WASM" },
@@ -2576,7 +2576,7 @@
     },
     "parallel/test-child-process-stdout-flush-exit.js": { "category": "runnable" },
     "parallel/test-child-process-stdout-flush.js": { "category": "runnable" },
-    "parallel/test-child-process-stdout-ipc.js": { "category": "runnable" },
+    "parallel/test-child-process-stdout-ipc.js": { "category": "known-gap", "reason": "local JavaScript children do not provide IPC stdio or process.send" },
     "parallel/test-child-process-uid-gid.js": {},
     "parallel/test-child-process-validate-stdio.js": {
       "category": "wasi-impossible",

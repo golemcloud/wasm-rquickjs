@@ -2356,21 +2356,24 @@ export let realpath = function realpath(path, optionsOrCallback, callback) {
     const cb = callback;
     validateCallback(cb);
     if (globalThis.__wasm_rquickjs_sync_callbacks) {
+        let result;
         try {
-            const result = realpathSync(path, opts);
-            cb(null, result);
+            result = realpathSync(path, opts);
         } catch (err) {
-            if (err && err.__isProcessExit) throw err;
             cb(err);
+            return;
         }
+        cb(null, result);
     } else {
         queueMicrotask(() => {
+            let result;
             try {
-                const result = realpathSync(path, opts);
-                cb(null, result);
+                result = realpathSync(path, opts);
             } catch (err) {
                 cb(err);
+                return;
             }
+            cb(null, result);
         });
     }
 };
@@ -2386,12 +2389,14 @@ function realpathNative(path, optionsOrCallback, callback) {
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
+        let result;
         try {
-            const result = realpathSyncNative(path, opts);
-            cb(null, result);
+            result = realpathSyncNative(path, opts);
         } catch (err) {
             cb(err);
+            return;
         }
+        cb(null, result);
     });
 }
 
