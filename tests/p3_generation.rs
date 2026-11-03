@@ -3624,6 +3624,10 @@ fn p3_javascript_imports_a_native_module_from_a_dependency() -> anyhow::Result<(
         cargo_toml.contains(r#"test-native-greeting = { path = "../native" }"#),
         "the dependency path is relative to the generated crate:\n{cargo_toml}"
     );
+    assert!(
+        !temp.path().join("out").join("Cargo.lock").exists(),
+        "custom dependencies change the dependency graph, so the skeleton lock is not copied"
+    );
 
     let wasm_path = build_p3(temp.path(), "p3_native_module")?;
     assert_eq!(run_p3_string_export(&wasm_path, "run")?, "native:ok");

@@ -255,9 +255,13 @@ pub fn generate_wrapper_crate_with_options(
     // Generating the Cargo.toml file
     generate_cargo_toml(&context, &options.dependencies)?;
 
-    // Copying the skeleton's Cargo.lock for faster dependency resolution
-    copy_skeleton_lock(context.output, &context.world_name)
-        .context("Failed to copy skeleton Cargo.lock")?;
+    // Copying the skeleton's Cargo.lock for faster dependency resolution. Custom dependencies
+    // change the graph that lock was resolved for, so the crate then gets no lock and Cargo
+    // resolves a matching one on its first build.
+    if options.dependencies.is_empty() {
+        copy_skeleton_lock(context.output, &context.world_name)
+            .context("Failed to copy skeleton Cargo.lock")?;
+    }
 
     // The generated crate carries the reviewed attribution material for its exact WASI target.
     // Distributors should ship this sidecar with the compiled component.
