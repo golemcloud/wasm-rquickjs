@@ -711,7 +711,7 @@ impl OwnedJsRuntime {
             .expect("Failed to create JavaScript runtime")
     }
 
-    /// Fails when QuickJS cannot allocate the runtime or its context.
+    /// Returns errors from QuickJS runtime/context creation and diagnostic capture.
     pub(crate) async fn try_new() -> rquickjs::Result<Self> {
         Self::new_inner(
             #[cfg(feature = "typescript-compiler-profiling")]
@@ -752,15 +752,17 @@ impl OwnedJsRuntime {
             };
             ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
-            super::error_formatting::initialize(&ctx)
-                .expect("Failed to initialize diagnostic intrinsics");
+            // Child bootstrap must return diagnostic allocation failures to its
+            // caller rather than trapping the entire component.
+            super::error_formatting::initialize(&ctx)?;
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
             #[cfg(feature = "test-observability")]
             crate::builtin::install_gc_observability(&ctx)
                 .expect("Failed to initialize GC observability");
+            Ok::<(), rquickjs::Error>(())
         })
-        .await;
+        .await?;
 
         #[cfg(feature = "typescript-compiler-profiling")]
         if let Some(profile) = &profile {
