@@ -1692,6 +1692,19 @@ fn test_cache_stamp_for_target(
     ))
 }
 
+/// One in-process lock per generated wrapper crate root, held while a test generates and builds it.
+fn wrapper_root_lock(root: &Utf8Path) -> Arc<tokio::sync::Mutex<()>> {
+    static LOCKS: OnceLock<Mutex<HashMap<Utf8PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
+        OnceLock::new();
+    LOCKS
+        .get_or_init(Default::default)
+        .lock()
+        .unwrap()
+        .entry(root.to_owned())
+        .or_default()
+        .clone()
+}
+
 fn test_cache_lock(name: &str, feature_combination: FeatureCombination, kind: &str) -> Utf8PathBuf {
     test_cache_stamp_dir().join(format!(
         "{}-{}{}-{kind}.lock",
@@ -4573,6 +4586,10 @@ impl CompiledTest {
         // P2 and P3 builds of the same example never share an output tree.
         let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
         let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
+        // Tests that build the same example share this crate root. Without the artifact cache there
+        // is no file lock, so concurrent tests regenerate, patch and build the same crate at once;
+        // one can read the Cargo.toml the other already patched. Serialize them in-process.
+        let _wrapper_root_guard = wrapper_root_lock(&wrapper_crate_root).lock_owned().await;
 
         // shared_target is relative to wrapper_crate_root. Internal-test builds are isolated from
         // normal builds because runtime group 2 compiles both variants of the same fetch example
