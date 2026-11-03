@@ -123,6 +123,9 @@ wasm-rquickjs generate-wrapper-crate ... \
 - `--native-module <name>=<rust path>` registers a type implementing `rquickjs::module::ModuleDef`
   so that JavaScript can `import ... from '<name>'`. The name must not be a JavaScript module name,
   an imported WIT interface, or in the reserved `node:` and `__wasm_rquickjs_builtin/` namespaces.
+  Like an embedded JavaScript module, a native module named after a schemeless builtin alias, such
+  as `fs`, takes precedence over the alias for the component's own modules; `node:fs` still
+  resolves to the builtin.
 - `--dependency <key>=<TOML value>` adds a `[dependencies]` entry, a version string or an inline
   table, and replaces an entry of the skeleton with the same key as a whole. A relative `path` is
   resolved against the current directory and written relative to the generated crate.

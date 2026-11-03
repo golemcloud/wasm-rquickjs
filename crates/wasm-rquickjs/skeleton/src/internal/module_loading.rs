@@ -562,8 +562,9 @@ impl Resolver for PublicBuiltinAliasResolver {
     }
 }
 
-/// Resolves generated component modules before schemeless builtin aliases while
-/// keeping the `node:` and private namespaces owned by the runtime.
+/// Resolves generated component modules, embedded JavaScript and native, before
+/// schemeless builtin aliases while keeping the `node:` and private namespaces
+/// owned by the runtime.
 struct EmbeddedModuleResolver;
 
 pub(crate) fn is_reserved_embedded_module_name(name: &str) -> bool {
@@ -583,7 +584,8 @@ impl Resolver for EmbeddedModuleResolver {
             && (name == crate::JS_EXPORT_MODULE_NAME
                 || crate::JS_ADDITIONAL_MODULES
                     .iter()
-                    .any(|(module_name, _)| name == *module_name))
+                    .any(|(module_name, _)| name == *module_name)
+                || crate::modules::NATIVE_MODULE_NAMES.contains(&name))
         {
             Ok(name.to_string())
         } else {

@@ -66,7 +66,8 @@ pub enum Command {
         target: WasiTarget,
 
         /// A Rust module JavaScript can import, as `name=rust::path::Type`, where the type
-        /// implements `rquickjs::module::ModuleDef`. Add its crate with `--dependency`
+        /// implements `rquickjs::module::ModuleDef`. Add its crate with `--dependency`. It takes
+        /// precedence over a schemeless builtin alias with the same name, such as `fs`
         #[arg(long)]
         native_module: Vec<NativeModuleSpecArg>,
 

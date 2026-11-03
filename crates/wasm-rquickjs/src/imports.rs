@@ -509,6 +509,10 @@ fn generate_import_module(
             loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
         }
 
+        let native_names = native_modules
+            .iter()
+            .map(|module| LitStr::new(&module.name, Span::call_site()))
+            .collect::<Vec<_>>();
         for module in native_modules {
             let name_lit = LitStr::new(&module.name, Span::call_site());
             let module_def: syn::Path = syn::parse_str(&module.module_def).with_context(|| {
@@ -518,8 +522,15 @@ fn generate_import_module(
             loader_chain.push(quote! { with_module(#name_lit, #module_def) });
         }
 
+        let native_names = quote! {
+            /// Native modules resolve before schemeless builtin aliases, as embedded
+            /// JavaScript modules do.
+            pub const NATIVE_MODULE_NAMES: &[&str] = &[#(#native_names),*];
+        };
         if resolver_chain.is_empty() {
             loader_init = quote! {
+                #native_names
+
                 pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
                     resolver
                 }
@@ -530,6 +541,8 @@ fn generate_import_module(
             };
         } else {
             loader_init = quote! {
+                #native_names
+
                 pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
                     resolver.#(#resolver_chain).*
                 }

@@ -3558,7 +3558,9 @@ fn p3_javascript_imports_a_native_module_from_a_dependency() -> anyhow::Result<(
         "#},
         indoc! {r#"
             import { greet } from 'test-native-greeting';
-            export function run() { return greet('ok'); }
+            // A native module named like a schemeless builtin alias takes precedence.
+            import { greet as viaAlias } from 'fs';
+            export function run() { return `${greet('ok')},${viaAlias('fs')}`; }
         "#},
     )?;
     let native = temp.path().join("native");
@@ -3608,10 +3610,16 @@ fn p3_javascript_imports_a_native_module_from_a_dependency() -> anyhow::Result<(
         None,
         GenerationTarget::WasiP3,
         &WrapperCrateOptions {
-            native_modules: vec![NativeModuleSpec {
-                name: "test-native-greeting".to_string(),
-                module_def: "test_native_greeting::Greeting".to_string(),
-            }],
+            native_modules: vec![
+                NativeModuleSpec {
+                    name: "test-native-greeting".to_string(),
+                    module_def: "test_native_greeting::Greeting".to_string(),
+                },
+                NativeModuleSpec {
+                    name: "fs".to_string(),
+                    module_def: "test_native_greeting::Greeting".to_string(),
+                },
+            ],
             dependencies: vec![DependencySpec {
                 key: "test-native-greeting".to_string(),
                 value: format!("{{ path = {:?} }}", native.as_str()),
@@ -3630,6 +3638,9 @@ fn p3_javascript_imports_a_native_module_from_a_dependency() -> anyhow::Result<(
     );
 
     let wasm_path = build_p3(temp.path(), "p3_native_module")?;
-    assert_eq!(run_p3_string_export(&wasm_path, "run")?, "native:ok");
+    assert_eq!(
+        run_p3_string_export(&wasm_path, "run")?,
+        "native:ok,native:fs"
+    );
     Ok(())
 }
