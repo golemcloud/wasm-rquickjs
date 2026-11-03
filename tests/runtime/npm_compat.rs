@@ -1,5 +1,7 @@
 use crate::common::test_server::TestServerHandle;
-use crate::common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive};
+use crate::common::{
+    CompiledTest, FeatureCombination, TestInstance, TestTarget, copy_dir_recursive, test_target,
+};
 use anyhow::Context;
 use axum::Router;
 use axum::body::Body;
@@ -388,13 +390,19 @@ async fn inline_child_module_state_is_isolated(
         value["frozenPathsChild"]["hooksAreClean"], true,
         "{report:#}"
     );
-    assert_eq!(value["irreversibleChildStatus"], 1, "{report:#}");
-    assert!(
-        value["irreversibleChildStderr"]
-            .as_str()
-            .is_some_and(|value| value.contains("Failed to restore 1 inline child module state")),
-        "{report:#}"
-    );
+    let isolated = test_target() == TestTarget::P3;
+    if isolated {
+        assert_eq!(value["irreversibleChildStatus"], 0, "{report:#}");
+        assert_eq!(value["irreversibleChildStderr"], "", "{report:#}");
+    } else {
+        assert_eq!(value["irreversibleChildStatus"], 1, "{report:#}");
+        assert!(
+            value["irreversibleChildStderr"].as_str().is_some_and(
+                |value| value.contains("Failed to restore 1 inline child module state")
+            ),
+            "{report:#}"
+        );
+    }
     assert_eq!(value["afterIrreversibleChildStatus"], 0, "{report:#}");
     assert_eq!(value["afterIrreversibleChildStderr"], "", "{report:#}");
     assert_eq!(
@@ -402,7 +410,7 @@ async fn inline_child_module_state_is_isolated(
         "{report:#}"
     );
     assert_eq!(
-        value["afterIrreversibleChild"]["irreversibleHookPresent"], true,
+        value["afterIrreversibleChild"]["irreversibleHookPresent"], !isolated,
         "{report:#}"
     );
     let parent = &value["parent"];
