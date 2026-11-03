@@ -74,7 +74,7 @@ pub enum Command {
         /// A `[dependencies]` entry of the generated crate, as `key=<TOML value>`, for example
         /// `my-crate={ path = "../my-crate" }`. It replaces an entry with the same key. A
         /// relative `path` is resolved against the current directory. With any dependency, the
-        /// skeleton's `Cargo.lock` is not copied
+        /// skeleton's `Cargo.lock` is not copied; a lock already in the output directory is kept
         #[arg(long)]
         dependency: Vec<DependencySpecArg>,
     },

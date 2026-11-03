@@ -129,8 +129,9 @@ wasm-rquickjs generate-wrapper-crate ... \
 - `--dependency <key>=<TOML value>` adds a `[dependencies]` entry, a version string or an inline
   table, and replaces an entry of the skeleton with the same key as a whole. A relative `path` is
   resolved against the current directory and written relative to the generated crate.
-  With any `--dependency`, the generated crate gets no `Cargo.lock`: the skeleton's lock was
-  resolved for the unmodified dependencies, so Cargo resolves a matching one on the first build.
+  With any `--dependency`, the skeleton's `Cargo.lock` is not copied: it was resolved for the
+  unmodified dependencies. A fresh output directory then has no lock and Cargo resolves one on the
+  first build; a `Cargo.lock` already in the output directory is kept.
 
 Both options can be repeated and work with both targets. The native module's crate must use the
 same `rquickjs` version as the generated crate; the crate's `[patch.crates-io]` applies to it.

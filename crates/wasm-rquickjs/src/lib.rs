@@ -256,8 +256,9 @@ pub fn generate_wrapper_crate_with_options(
     generate_cargo_toml(&context, &options.dependencies)?;
 
     // Copying the skeleton's Cargo.lock for faster dependency resolution. Custom dependencies
-    // change the graph that lock was resolved for, so the crate then gets no lock and Cargo
-    // resolves a matching one on its first build.
+    // change the graph that lock was resolved for, so it is not copied then: a fresh output
+    // directory has no lock and Cargo resolves one on the first build, while a lock already in
+    // the output directory, possibly a caller's resolved one, is kept.
     if options.dependencies.is_empty() {
         copy_skeleton_lock(context.output, &context.world_name)
             .context("Failed to copy skeleton Cargo.lock")?;
