@@ -857,7 +857,7 @@ fn module_loader_realpath_checks_wizer_before_filesystem_access() {
         .expect("loader realpath helper must have a bounded function body");
     let body = &body[..end];
     let guard = body
-        .find("crate::internal::is_wizer_active()")
+        .find("crate::internal::preinit::check(")
         .expect("loader realpath helper must retain the Wizer filesystem guard");
     let filesystem_access = body
         .find("canonicalize_guest_path_with_cache(")
