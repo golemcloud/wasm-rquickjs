@@ -4,7 +4,7 @@ use crate::types::{
     get_function_name, get_return_type, ident_in_imported_interface_or_global, process_parameter,
     to_unwrapped_param_refs, to_wrapped_func_arg_list,
 };
-use crate::{GeneratorContext, ImportedInterface};
+use crate::{GeneratorContext, ImportedInterface, NativeModuleSpec};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -16,16 +16,31 @@ use wit_parser::{Function, FunctionKind, TypeDefKind, WorldItem, WorldKey};
 /// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
 /// directory.
 /// Each Rust module contains a rquicks `NativeModule` exposing the WIT bindings for the
-/// imported WIT interfaces as JavaScript modules.
-pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
+/// imported WIT interfaces as JavaScript modules. `mod.rs` also registers the caller's
+/// `native_modules`, which are defined in the crate's dependencies.
+pub fn generate_import_modules(
+    context: &GeneratorContext<'_>,
+    native_modules: &[NativeModuleSpec],
+) -> anyhow::Result<()> {
     let (global, interfaces) = collect_imported_interfaces(context)?;
+
+    for module in native_modules {
+        for interface in &interfaces {
+            if interface.fully_qualified_interface_name() == module.name {
+                anyhow::bail!(
+                    "native module name `{}` is also an imported WIT interface",
+                    module.name
+                );
+            }
+        }
+    }
 
     for interface in &interfaces {
         let module_name = interface.module_name()?;
         let file_name = format!("{module_name}.rs");
 
         let module_path = context.output.join("src").join("modules").join(&file_name);
-        let module_tokens = generate_import_module(context, interface, &interfaces)?;
+        let module_tokens = generate_import_module(context, interface, &interfaces, &[])?;
 
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
@@ -36,7 +51,8 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
     }
 
     let global_module_path = context.output.join("src").join("modules").join("mod.rs");
-    let global_module_tokens = generate_import_module(context, &global, &interfaces)?;
+    let global_module_tokens =
+        generate_import_module(context, &global, &interfaces, native_modules)?;
 
     let global_module_ast: syn::File =
         syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
@@ -470,6 +486,7 @@ fn generate_import_module(
     context: &GeneratorContext<'_>,
     import: &ImportedInterface<'_>,
     all_imported_interfaces: &[ImportedInterface<'_>],
+    native_modules: &[NativeModuleSpec],
 ) -> anyhow::Result<TokenStream> {
     let mut submodules = Vec::new();
     let mut loader_init = quote! {};
@@ -492,8 +509,28 @@ fn generate_import_module(
             loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
         }
 
-        if all_imported_interfaces.is_empty() {
+        let native_names = native_modules
+            .iter()
+            .map(|module| LitStr::new(&module.name, Span::call_site()))
+            .collect::<Vec<_>>();
+        for module in native_modules {
+            let name_lit = LitStr::new(&module.name, Span::call_site());
+            let module_def: syn::Path = syn::parse_str(&module.module_def).with_context(|| {
+                format!("invalid Rust path for native module `{}`", module.name)
+            })?;
+            resolver_chain.push(quote! { with_module(#name_lit) });
+            loader_chain.push(quote! { with_module(#name_lit, #module_def) });
+        }
+
+        let native_names = quote! {
+            /// Native modules resolve before schemeless builtin aliases, as embedded
+            /// JavaScript modules do.
+            pub const NATIVE_MODULE_NAMES: &[&str] = &[#(#native_names),*];
+        };
+        if resolver_chain.is_empty() {
             loader_init = quote! {
+                #native_names
+
                 pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
                     resolver
                 }
@@ -504,6 +541,8 @@ fn generate_import_module(
             };
         } else {
             loader_init = quote! {
+                #native_names
+
                 pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
                     resolver.#(#resolver_chain).*
                 }

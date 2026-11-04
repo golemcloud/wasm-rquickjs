@@ -1897,6 +1897,13 @@ function resolveJavaScriptShellCommand(command, args, env, cwd) {
     };
 }
 
+// A shell line the local runner resolves completely, a Node command or a Node shebang script
+// without shell syntax, runs locally ahead of a registered backend, as the non-shell forms do.
+function isLocalShellLine(line, options) {
+    const opts = options || {};
+    return resolveJavaScriptShellCommand('sh', ['-c', String(line)], opts.env || process.env, opts.cwd) !== null;
+}
+
 function resolveBackendInlineCommand(command, args, options) {
     if (command === process.execPath) return { command, args };
     const env = options.env || process.env;
@@ -2206,7 +2213,7 @@ function collectExecChild(child, options, callback, makeError) {
 export function exec(command, options, callback) {
     const normalized = normalizeExecParams(options, callback);
     const backend = getProcessBackend();
-    if (backend && backend.spawn) {
+    if (backend && backend.spawn && !isLocalShellLine(command, normalized.options)) {
         const resolvedOptions = normalizeBackendExecOptions(normalized.options);
         resolvedOptions.shell = typeof resolvedOptions.shell === 'string' ? resolvedOptions.shell : true;
         const delegated = backend.spawn(String(command), [], resolvedOptions);
@@ -2375,7 +2382,8 @@ function spawnCommand(command, args, options, maxBuffer) {
         // A configured adapter is a fallback. Keep inline Node/shebang
         // resolution ahead of host command lookup, including PATH precedence.
         inline = !opts.shell && resolveBackendInlineCommand(cmd, args || [], opts);
-        if (!inline) {
+        const localShell = opts.shell && isLocalShellLine([cmd].concat((args || []).map(String)).join(' '), opts);
+        if (!inline && !localShell) {
             const delegated = backend.spawn(cmd, args || [], opts);
             if (delegated !== undefined) return delegated;
         }
@@ -2480,9 +2488,11 @@ function syncExecOutput(result, label, options) {
 
 export function execSync(command, options) {
     const opts = options || {};
-    // As in `exec`, a registered backend runs the shell command; without one, or
-    // when it declines, the local runner handles the Node commands it supports.
-    const result = delegatedSpawnSync(String(command), [], { ...opts, shell: opts.shell === undefined ? true : opts.shell }) ||
+    // As in `exec`, a registered backend runs the shell command unless the local runner
+    // resolves it completely; without one, or when it declines, the local runner handles
+    // the Node commands it supports.
+    const result = (!isLocalShellLine(command, opts) &&
+        delegatedSpawnSync(String(command), [], { ...opts, shell: opts.shell === undefined ? true : opts.shell })) ||
         runExecCommand(String(command), { ...opts, encoding: opts.encoding ?? 'buffer' });
     return syncExecOutput(result, String(command), opts);
 }
@@ -2493,7 +2503,8 @@ export function spawnSync(command, args, options) {
         // As in `exec`, the shell command line runs locally without a backend or
         // when it declines; the local runner fails closed on unsupported syntax.
         const line = [String(command)].concat(normalizedArgs.map(String)).join(' ');
-        return delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions) ||
+        return (!isLocalShellLine(line, normalizedOptions) &&
+            delegatedSpawnSync(String(command), normalizedArgs, normalizedOptions)) ||
             runExecCommand(line, { ...normalizedOptions, encoding: normalizedOptions.encoding ?? 'buffer' });
     }
     // Local Node commands, including direct Node shebangs, resolve whether or not a
