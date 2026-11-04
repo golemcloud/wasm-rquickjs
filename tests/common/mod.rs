@@ -1692,19 +1692,6 @@ fn test_cache_stamp_for_target(
     ))
 }
 
-/// One in-process lock per generated wrapper crate root, held while a test generates and builds it.
-fn wrapper_root_lock(root: &Utf8Path) -> Arc<tokio::sync::Mutex<()>> {
-    static LOCKS: OnceLock<Mutex<HashMap<Utf8PathBuf, Arc<tokio::sync::Mutex<()>>>>> =
-        OnceLock::new();
-    LOCKS
-        .get_or_init(Default::default)
-        .lock()
-        .unwrap()
-        .entry(root.to_owned())
-        .or_default()
-        .clone()
-}
-
 fn test_cache_lock(name: &str, feature_combination: FeatureCombination, kind: &str) -> Utf8PathBuf {
     test_cache_stamp_dir().join(format!(
         "{}-{}{}-{kind}.lock",
@@ -4586,10 +4573,11 @@ impl CompiledTest {
         // P2 and P3 builds of the same example never share an output tree.
         let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
         let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
-        // Tests that build the same example share this crate root. Without the artifact cache there
-        // is no file lock, so concurrent tests regenerate, patch and build the same crate at once;
-        // one can read the Cargo.toml the other already patched. Serialize them in-process.
-        let _wrapper_root_guard = wrapper_root_lock(&wrapper_crate_root).lock_owned().await;
+        // Test workers are separate processes. Lock the shared output root even when artifact
+        // caching is disabled, so generation and patching cannot overlap another worker's build.
+        fs::create_dir_all(wrapper_crate_root.parent().unwrap())?;
+        let wrapper_root_guard = fs::File::create(wrapper_crate_root.with_extension("lock"))?;
+        wrapper_root_guard.lock()?;
 
         // shared_target is relative to wrapper_crate_root. Internal-test builds are isolated from
         // normal builds because runtime group 2 compiles both variants of the same fetch example
@@ -4833,7 +4821,11 @@ impl CompiledTest {
         }
 
         println!("Optimizing component {input} -> {optimized}");
-        wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
+        // Readers outlive the build lock. Publish a complete component instead of truncating
+        // the shared output while another worker may be loading it.
+        let pending = NamedUtf8TempFile::new_in(optimized.parent().unwrap())?;
+        wasm_rquickjs::optimize_component(input, pending.path(), "wizer-initialize").await?;
+        pending.persist(&optimized)?;
         if test_artifact_cache_enabled() {
             refresh_cache_stamp(&optimize_stamp, &optimize_signature)?;
         }
