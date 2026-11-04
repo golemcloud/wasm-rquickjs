@@ -1,3 +1,4 @@
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     ERR_DIR_CLOSED,
@@ -3880,6 +3881,14 @@ Object.defineProperty(exists, kCustomPromisifiedSymbol, {
 // --- openAsBlob ---
 
 const _kFileBackedBlob = Symbol.for('kFileBackedBlob');
+const fileBlobCloneAdapter = {__proto__: null,
+    kind: 'file-backed Blob',
+    reject() {
+        const error = new Error('Invalid state: File-backed Blobs are not cloneable');
+        error.code = 'ERR_INVALID_STATE';
+        throw error;
+    },
+};
 
 function _createFileBackedStream(readFn, validateFn, chunkSize) {
     let data = null;
@@ -3924,6 +3933,7 @@ class FileBackedBlob {
         this._size = size;
         this._mtimeMs = mtimeMs;
         this[_kFileBackedBlob] = true;
+        registerCloneAdapter(this, fileBlobCloneAdapter);
     }
 
     _validate() {
@@ -3987,6 +3997,7 @@ class FileBackedBlobSlice {
         this._offset = offset;
         this._size = length;
         this[_kFileBackedBlob] = true;
+        registerCloneAdapter(this, fileBlobCloneAdapter);
     }
 
     get size() {

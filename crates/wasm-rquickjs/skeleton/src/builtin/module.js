@@ -162,15 +162,6 @@ function registerBuiltin(map, name, canonicalName) {
     defineLazyBuiltin(map, 'node:' + name, load);
 }
 
-function registerDerivedBuiltin(map, name, canonicalName, property) {
-    const load = () => {
-        const builtin = loadPublicBuiltin(canonicalName);
-        return builtin && builtin[property];
-    };
-    defineLazyBuiltin(map, name, load);
-    defineLazyBuiltin(map, 'node:' + name, load);
-}
-
 const builtinModuleMap = {};
 
 // The Rust synchronization inventory is the source of truth for canonical
@@ -178,7 +169,7 @@ const builtinModuleMap = {};
 // newly syncable builtin cannot be omitted from node:module.
 for (const canonicalName of _syncableBuiltinNames()) {
     const name = canonicalName.slice(5);
-    if (name === 'module' || name === 'console') continue;
+    if (name === 'module') continue;
     if (name === 'sqlite' || name === 'test') {
         defineLazyBuiltin(builtinModuleMap, canonicalName, () => loadPublicBuiltin(canonicalName));
     } else {
@@ -187,29 +178,6 @@ for (const canonicalName of _syncableBuiltinNames()) {
 }
 
 defineLazyBuiltin(builtinModuleMap, 'internal/fs/promises', () => loadPublicBuiltin('node:fs/promises'));
-registerBuiltin(builtinModuleMap, 'sys', 'node:util');
-Object.defineProperty(builtinModuleMap, 'console', {
-    get() {
-        const consoleBuiltin = loadPublicBuiltin('node:console');
-        const c = globalThis.console;
-        if (c && consoleBuiltin.Console) c.Console = consoleBuiltin.Console;
-        return c || consoleBuiltin;
-    },
-    configurable: true,
-    enumerable: true,
-});
-Object.defineProperty(builtinModuleMap, 'node:console', {
-    get() {
-        return builtinModuleMap['console'];
-    },
-    configurable: true,
-    enumerable: true,
-});
-registerDerivedBuiltin(builtinModuleMap, '_stream_readable', 'node:stream', 'Readable');
-registerDerivedBuiltin(builtinModuleMap, '_stream_writable', 'node:stream', 'Writable');
-registerDerivedBuiltin(builtinModuleMap, '_stream_duplex', 'node:stream', 'Duplex');
-registerDerivedBuiltin(builtinModuleMap, '_stream_transform', 'node:stream', 'Transform');
-registerDerivedBuiltin(builtinModuleMap, '_stream_passthrough', 'node:stream', 'PassThrough');
 builtinModuleMap['internal/http'] = internalHttpCjs;
 builtinModuleMap['internal/fs/utils'] = internalFsUtilsCjs;
 builtinModuleMap['internal/url'] = internalUrlCjs;
@@ -599,7 +567,7 @@ const schemelessBlockList = setFromArray(['test', 'sqlite']);
 
 const builtinModuleNames = Object.keys(builtinModuleMap).filter(
     (name) => !name.startsWith('node:') && !name.startsWith('internal/') &&
-        !name.startsWith('_') && !schemelessBlockList.has(name)
+        !schemelessBlockList.has(name)
 );
 
 const publicBuiltinIdSet = new Set();
@@ -6312,6 +6280,17 @@ publicBuiltinIdSet.add('module');
 if (!builtinModuleNames.includes('module')) {
     builtinModuleNames.push('module');
 }
+
+// Share the public require() owner without exposing internal-only modules or
+// traversing user loader hooks, require.cache or Module._load.
+Object.defineProperty(globalThis, '__wasm_rquickjs_get_builtin_module', {
+    value(id) {
+        const specifier = builtinResolveSpecifier(id);
+        return specifier === undefined ? undefined : builtinModuleMap[specifier];
+    },
+    writable: false,
+    configurable: false,
+});
 
 inlineChildModuleBaseline = snapshotInlineChildModuleState();
 

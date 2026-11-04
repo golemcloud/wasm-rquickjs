@@ -202,6 +202,47 @@ export async function run() {
             await check(`
                 process.stdout.write(String(process.env.ISOLATED_CHILD_MUTATION) + '\\n');
             `, { status: 0, stdout: String(original) + '\n', stderr: '' });
+        } else if (config.mode === 'native-clone-registration') {
+            const source = String.raw`
+                const assert = require('node:assert/strict');
+                const worker = require('node:worker_threads');
+                assert.strictEqual(process.getBuiltinModule('worker_threads'), worker);
+                assert.strictEqual(process.getBuiltinModule('node:worker_threads'), worker);
+                assert.strictEqual(process.getBuiltinModule('process'), process);
+                assert.equal(Object.hasOwn(globalThis, '__cloneRegistrationProbe'), false);
+                const marker = globalThis.__cloneRegistrationProbe = Object.freeze({});
+                assert.equal(worker.isMarkedAsUntransferable(marker), false);
+                worker.markAsUntransferable(marker);
+                assert.equal(worker.isMarkedAsUntransferable(marker), true);
+                worker.markAsUncloneable(marker);
+                assert.throws(() => structuredClone(marker), { name: 'DataCloneError' });
+                const buffer = new ArrayBuffer(3);
+                const view = new Uint8Array(buffer);
+                view.set([1, 2, 3]);
+                const cloned = structuredClone({
+                    buffer, view, alias: view, map: new Map([[view, view]]),
+                    numbers: [0, -0, 10n],
+                }, { transfer: [buffer] });
+                assert.equal(buffer.byteLength, 0);
+                assert.strictEqual(cloned.view.buffer, cloned.buffer);
+                assert.strictEqual(cloned.alias, cloned.view);
+                assert.strictEqual(cloned.map.get(cloned.view), cloned.view);
+                assert.deepEqual([...cloned.view], [1, 2, 3]);
+                assert(Object.is(cloned.numbers[1], -0));
+                assert.equal(cloned.numbers[2], 10n);
+                const envGraph = structuredClone({first:process.env, second:process.env});
+                assert.equal(envGraph.first, envGraph.second);
+                assert.notEqual(envGraph.first, process.env);
+                assert.deepEqual(envGraph.first, process.env);
+                process.stdout.write('ok\n');
+            `;
+            for (let index = 0; index < 2; index++) {
+                const result = spawnSync(process.execPath, ['-e', source], { encoding: 'utf8' });
+                if (result.error) throw result.error;
+                assert.equal(result.status, 0, result.stderr);
+                assert.equal(result.stderr, '');
+                assert.equal(result.stdout, 'ok\n');
+            }
         } else if (config.mode === 'module-stdio') {
             let childOrdinal = 0;
             const spawnModuleChild = (...args) => {

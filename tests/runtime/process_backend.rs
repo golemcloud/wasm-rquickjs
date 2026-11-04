@@ -236,6 +236,17 @@ async fn local_node_child_module_and_stdio_contract(
 }
 
 #[test]
+async fn local_node_child_native_clone_registration(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "native-clone-registration" }),
+    )
+    .await
+}
+
+#[test]
 async fn local_node_child_rejected_tla_keeps_runtime_usable(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

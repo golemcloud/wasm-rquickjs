@@ -1,3 +1,7 @@
+import { isAbortSignal, markTransferableSignal } from '__wasm_rquickjs_builtin/internal/clone_policy';
+import { AbortController as NativeAbortController, AbortSignal as NativeAbortSignal } from '__wasm_rquickjs_builtin/abort_controller';
+import { validateAbortSignal, validateObject } from '__wasm_rquickjs_builtin/internal/validators';
+import { NativeWeakRef, nativeWeakRefDeref } from '__wasm_rquickjs_builtin/internal/weak_collections';
 // Copyright Joyent, Inc. and other Node contributors.
 //
 // Permission is hereby granted, free of charge, to any person obtaining a
@@ -2040,22 +2044,27 @@ import { TextEncoder as _TextEncoder, TextDecoder as _TextDecoder } from '__wasm
 export const TextEncoder = _TextEncoder;
 export const TextDecoder = _TextDecoder;
 
-// Track resources registered via util.aborted().  Each entry keeps a strong
+// Track genuine AbortSignal resources registered via util.aborted(). Each entry keeps a strong
 // reference (to survive ref-counting) and stores the signal + listener so the
 // pre-gc hook can proactively remove the listener when the resource has no
 // external references.  This mimics Node.js's kWeakHandler behavior.
 const _abortedResources = new Map();
+const _removeAbortedListener = Function.prototype.call.bind(NativeAbortSignal.prototype.removeEventListener);
 
 function _preGcAbortedCleanup() {
     for (const [listener, entry] of _abortedResources) {
         // Release the strong reference.  With ref-counting, if no other code
         // holds the resource, the WeakRef becomes dead immediately.
         entry.strong = null;
-        if (entry.weak.deref() === undefined) {
-            // Resource already freed — remove the abort listener so the
-            // promise stays forever-pending (Node.js kWeakHandler semantics).
-            entry.signal.removeEventListener('abort', listener);
+        if (nativeWeakRefDeref(entry.weak) === undefined) {
+            // Delete bookkeeping first; mutation of public listener storage must
+            // not poison subsequent GC calls or invoke a replacement method.
             _abortedResources.delete(listener);
+            try {
+                _removeAbortedListener(entry.signal, 'abort', listener);
+            } catch {
+                // The callback also checks the weak resource before resolving.
+            }
         }
     }
 }
@@ -2069,40 +2078,43 @@ globalThis.__wasm_rquickjs_pre_gc = function () {
     _preGcAbortedCleanup();
 };
 
-export function aborted(signal, resource) {
-    if (!(signal instanceof AbortSignal)) {
-        return Promise.reject(new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal));
+export async function aborted(signal, resource) {
+    if (signal === undefined) throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
+    validateAbortSignal(signal, 'signal');
+    validateObject(resource, 'resource', {__proto__: null, allowArray: true, allowFunction: true});
+    if (signal.aborted) return;
+    // Node's weak-handler option belongs to its EventTarget implementation.
+    // A duck's addEventListener owns its listener lifetime; do not schedule
+    // removal callbacks or weak-resource bookkeeping for application objects.
+    if (!isAbortSignal(signal)) {
+        return new Promise(resolve => signal.addEventListener('abort', resolve, { once: true }));
     }
-    if (resource === null || resource === undefined ||
-        (typeof resource !== 'object' && typeof resource !== 'function')) {
-        return Promise.reject(new ERR_INVALID_ARG_TYPE('resource', 'Object', resource));
-    }
-    if (signal.aborted) return Promise.resolve();
-    const weakResource = new WeakRef(resource);
-    const entry = { strong: resource, weak: weakResource, signal: signal };
+    const entry = { strong: resource, weak: new NativeWeakRef(resource), signal };
     return new Promise(function (resolve) {
         function onAbort() {
             _abortedResources.delete(onAbort);
-            resolve();
+            if (nativeWeakRefDeref(entry.weak) !== undefined) resolve();
         }
-        signal.addEventListener('abort', onAbort, { once: true });
         _abortedResources.set(onAbort, entry);
+        try {
+            signal.addEventListener('abort', onAbort, { once: true });
+        } catch (error) {
+            _abortedResources.delete(onAbort);
+            throw error;
+        }
     });
 }
 
-const TRANSFERABLE_ABORT_SIGNAL = Symbol.for('__wasm_rquickjs.transferableAbortSignal');
-
 export function transferableAbortController() {
-    const ac = new AbortController();
-    ac.signal[TRANSFERABLE_ABORT_SIGNAL] = true;
+    const ac = new NativeAbortController();
+    markTransferableSignal(ac.signal);
     return ac;
 }
 
 export function transferableAbortSignal(signal) {
-    if (!(signal instanceof AbortSignal)) {
+    if (!markTransferableSignal(signal)) {
         throw new ERR_INVALID_ARG_TYPE('signal', 'AbortSignal', signal);
     }
-    signal[TRANSFERABLE_ABORT_SIGNAL] = true;
     return signal;
 }
 

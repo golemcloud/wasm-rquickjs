@@ -164,6 +164,13 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/intl_native")
         .with_module("__wasm_rquickjs_builtin/intl")
         .with_module("node:util")
+        .with_module("node:sys")
+        .with_module("sys")
+        .with_module("node:_stream_readable")
+        .with_module("node:_stream_writable")
+        .with_module("node:_stream_duplex")
+        .with_module("node:_stream_transform")
+        .with_module("node:_stream_passthrough")
         .with_module("node:util/types")
         .with_module("util")
         .with_module("util/types")
@@ -237,6 +244,7 @@ pub fn add_module_resolvers(
         .with_module("node:vm")
         .with_module("vm")
         .with_module("__wasm_rquickjs_builtin/structured_clone")
+        .with_module("__wasm_rquickjs_builtin/structured_clone_native")
         .with_module("node:async_hooks")
         .with_module("async_hooks")
         .with_module("node:cluster")
@@ -371,6 +379,10 @@ pub fn module_loader() -> (
             web_crypto::js_native_module,
         )
         .with_module("__wasm_rquickjs_builtin/vm_native", vm::js_native_module)
+        .with_module(
+            "__wasm_rquickjs_builtin/structured_clone_native",
+            structured_clone::js_native_module,
+        )
         .with_module("__wasm_rquickjs_builtin/v8_native", v8::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/zlib_native",
@@ -446,6 +458,8 @@ pub fn module_loader() -> (
         .with_module("__wasm_rquickjs_builtin/encoding", encoding::ENCODING_JS)
         .with_module("__wasm_rquickjs_builtin/intl", intl::INTL_JS)
         .with_syncable_module("node:util", util::UTIL_JS)
+        .with_syncable_module_exports("node:sys", util::SYS_IMPLEMENTATION_JS, util::UTIL_JS)
+        .with_module("sys", util::SYS_REEXPORT_JS)
         .with_syncable_module("node:util/types", util::UTIL_TYPES_JS)
         .with_module("util", util::BARE_UTIL_REEXPORT_JS)
         .with_module("util/types", util::UTIL_TYPES_JS)
@@ -495,6 +509,23 @@ pub fn module_loader() -> (
         .with_syncable_module("node:events", events::EVENTS_JS)
         .with_module("events", events::REEXPORT_JS)
         .with_syncable_module("node:stream", stream::STREAM_JS)
+        .with_syncable_module_exports(
+            "node:_stream_readable",
+            stream::READABLE_ALIAS_JS,
+            stream::READABLE_ALIAS_EXPORTS_JS,
+        )
+        .with_syncable_module_exports(
+            "node:_stream_writable",
+            stream::WRITABLE_ALIAS_JS,
+            stream::WRITABLE_ALIAS_EXPORTS_JS,
+        )
+        .with_syncable_module_exports(
+            "node:_stream_duplex",
+            stream::DUPLEX_ALIAS_JS,
+            stream::DUPLEX_ALIAS_EXPORTS_JS,
+        )
+        .with_syncable_module("node:_stream_transform", stream::TRANSFORM_ALIAS_JS)
+        .with_syncable_module("node:_stream_passthrough", stream::PASSTHROUGH_ALIAS_JS)
         .with_module("stream", stream::REEXPORT_JS)
         .with_syncable_module("node:stream/promises", stream::STREAM_PROMISES_JS)
         .with_module("stream/promises", stream::REEXPORT_PROMISES_JS)

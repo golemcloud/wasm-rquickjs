@@ -189,32 +189,137 @@
 
     // === blob tests ===
     "parallel/test-blob.js": {
-      "category": "node-internals",
-      "reason": "Tests use internal/webstreams/util kState symbol to inspect web stream internals",
       "split": true,
+      "isolateBlockSubtests": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {},
-        "block_02_block_02": {},
-        "block_03_block_03": {},
-        "block_04_block_04": {},
-        "block_05_block_05": {},
-        "block_06_block_06": {},
-        "block_07_block_07": {},
-        "block_08_block_08": {},
-        "block_09_block_09": {},
-        "block_10_block_10": {},
-        "block_11_block_11": {},
-        "block_12_block_12": {},
-        "block_13_block_13": {},
-        "block_14_block_14": {},
-        "block_15_block_15": {},
-        "block_16_block_16": {},
-        "block_17_block_17": {},
-        "block_18_block_18": {},
-        "block_19_block_19": {},
-        "block_20_block_20": {},
-        "block_21_block_21": {}
+        "block_00_block_00": {
+          "category": "runnable"
+        },
+        "block_01_statement_01": {
+          "category": "runnable"
+        },
+        "block_02_statement_02": {
+          "category": "runnable"
+        },
+        "block_03_statement_03": {
+          "category": "runnable"
+        },
+        "block_04_block_04": {
+          "category": "runnable"
+        },
+        "block_05_block_05": {
+          "category": "runnable"
+        },
+        "block_06_block_06": {
+          "category": "runnable"
+        },
+        "block_07_block_07": {
+          "category": "runnable"
+        },
+        "block_08_block_08": {
+          "category": "runnable"
+        },
+        "block_09_block_09": {
+          "category": "runnable"
+        },
+        "block_10_block_10": {
+          "category": "runnable"
+        },
+        "block_11_block_11": {
+          "category": "runnable"
+        },
+        "block_12_block_12": {
+          "category": "runnable"
+        },
+        "block_13_block_13": {
+          "category": "runnable"
+        },
+        "block_14_block_14": {
+          "category": "runnable"
+        },
+        "block_15_block_15": {
+          "category": "runnable"
+        },
+        "block_16_block_16": {
+          "category": "runnable"
+        },
+        "block_17_block_17": {
+          "category": "runnable"
+        },
+        "block_18_block_18": {
+          "category": "runnable"
+        },
+        "block_19_block_19": {
+          "category": "runnable"
+        },
+        "block_20_block_20": {
+          "category": "runnable"
+        },
+        "block_21_statement_21": {
+          "category": "runnable"
+        },
+        "block_22_statement_22": {
+          "category": "runnable"
+        },
+        "block_23_statement_23": {
+          "category": "runnable"
+        },
+        "block_24_statement_24": {
+          "category": "runnable"
+        },
+        "block_25_statement_25": {
+          "category": "runnable"
+        },
+        "block_26_statement_26": {
+          "category": "runnable"
+        },
+        "block_27_statement_27": {
+          "category": "known-gap",
+          "reason": "fetch does not resolve registered blob:nodedata URLs; requests currently require wasi:http transport"
+        },
+        "block_28_statement_28": {
+          "category": "node-internals",
+          "reason": "Asserts internal webstreams kState"
+        },
+        "block_29_statement_29": {
+          "category": "known-gap",
+          "reason": "Blob byte-stream BYOB final read does not settle at end of stream"
+        },
+        "block_30_statement_30": {
+          "category": "node-internals",
+          "reason": "Asserts internal webstreams kState"
+        },
+        "block_31_statement_31": {
+          "category": "node-internals",
+          "reason": "Asserts internal webstreams kState"
+        },
+        "block_32_block_32": {
+          "category": "runnable"
+        },
+        "block_33_block_33": {
+          "category": "runnable"
+        },
+        "block_34_statement_34": {
+          "category": "runnable"
+        },
+        "block_35_statement_35": {
+          "category": "runnable"
+        },
+        "block_36_block_36": {
+          "category": "runnable"
+        },
+        "block_37_statement_37": {
+          "category": "runnable"
+        },
+        "block_38_block_38": {
+          "category": "runnable"
+        },
+        "block_39_statement_39": {
+          "category": "runnable"
+        },
+        "block_40_statement_40": {
+          "category": "runnable"
+        }
       }
     },
     "parallel/test-blob-createobjecturl.js": {},
@@ -1918,7 +2023,7 @@
         "test_01_aborted_with_gc_cleanup": {},
         "test_02_fails_with_error_if_not_provided_abortsignal": {},
         "test_03_fails_if_not_provided_a_resource": {},
-        "test_04_does_not_hang_forever": { "category": "wasi-impossible", "reason": "requires child_process.spawn to run a subprocess" }
+        "test_04_does_not_hang_forever": { "category": "known-gap", "reason": "stdin ES module awaiting aborted() reports a null child exit code instead of Node exit code 13" }
       }
     },
     "parallel/test-abortsignal-cloneable.js": {
@@ -2968,6 +3073,7 @@
     "parallel/test-performanceobserver-gc.js": {},
     "parallel/test-pipe-return-val.js": {},
     "parallel/test-process-default.js": {},
+    "parallel/test-process-get-builtin.mjs": {},
     "parallel/test-process-abort.js": {},
     "parallel/test-process-available-memory.js": {},
     "parallel/test-process-chdir-errormessage.js": { "category": "runnable" },
@@ -5849,7 +5955,7 @@
     "es-module/test-cjs-prototype-pollution.js": { "category": "runnable" },
     "es-module/test-disable-require-module-with-detection.js": { "category": "known-gap", "reason": "requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module" },
     "es-module/test-esm-assertionless-json-import.js": { "category": "runnable" },
-    "es-module/test-esm-cjs-builtins.js": { "category": "known-gap", "reason": "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process builtin and CJS interop are covered by runtime and node_compat tests" },
+    "es-module/test-esm-cjs-builtins.js": {},
     "es-module/test-esm-cjs-exports.js": { "category": "known-gap", "reason": "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js" },
     "es-module/test-esm-cjs-main.js": { "category": "known-gap", "reason": "child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process CJS import/require interop is covered by module-interop runtime tests" },
     "es-module/test-esm-data-urls.js": { "category": "runnable" },
@@ -6078,7 +6184,7 @@
     "es-module/test-esm-loader-http-imports.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-invalid-format.mjs": { "category": "runnable" },
     "es-module/test-esm-loader-invalid-url.mjs": { "category": "runnable" },
-    "es-module/test-esm-loader-mock.mjs": { "category": "wasi-impossible", "reason": "fixture depends on worker_threads MessageChannel and receiveMessageOnPort support, unavailable in the single-threaded WASM runtime" },
+    "es-module/test-esm-loader-mock.mjs": { "category": "known-gap", "reason": "module.register does not transfer MessagePort ownership from transferList into an isolated loader context" },
     "es-module/test-esm-loader-not-found.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-loader-programmatically.mjs": { "category": "known-gap", "reason": "programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode" },
     "es-module/test-esm-loader-resolve-type.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
@@ -8799,7 +8905,53 @@
         "block_02_https_github_com_nodejs_node_issues_1024": { "category": "engine-difference", "reason": "targets V8 external string internals/limits that QuickJS does not replicate" }
       }
     },
-    "parallel/test-structuredClone-global.js": { "category": "runnable" },
+    "parallel/test-structuredClone-global.js": {
+      "split": true,
+      "isolateBlockSubtests": true,
+      "subtests": {
+        "block_00_statement_00": {
+          "category": "node-internals",
+          "reason": "Common test harness setup only; no public API assertion"
+        },
+        "block_01_statement_01": {
+          "category": "runnable"
+        },
+        "block_02_statement_02": {
+          "category": "runnable"
+        },
+        "block_03_statement_03": {
+          "category": "runnable"
+        },
+        "block_04_statement_04": {
+          "category": "runnable"
+        },
+        "block_05_statement_05": {
+          "category": "runnable"
+        },
+        "block_06_statement_06": {
+          "category": "runnable"
+        },
+        "block_07_options_can_be_null_or_undefined": {
+          "category": "runnable"
+        },
+        "block_08_statement_08": {
+          "category": "runnable"
+        },
+        "block_09_transfer_can_be_null_or_undefined": {
+          "category": "runnable"
+        },
+        "block_10_transferables_or_its_subclasses_should_be_received_with_its_": {
+          "category": "known-gap",
+          "reason": "Usable stream transfer is not implemented; prototype-only stream shells are not supported"
+        },
+        "block_11_block_11": {
+          "category": "runnable"
+        },
+        "block_12_statement_12": {
+          "category": "runnable"
+        }
+      }
+    },
     "parallel/test-sync-io-option.js": { "category": "known-gap", "reason": "--trace-sync-io diagnostics are not implemented in execPath emulation" },
     "parallel/test-sys.js": {},
     "parallel/test-tcp-wrap-connect.js": { "category": "node-internals", "reason": "requires internal/test/binding internalBinding('tcp_wrap')" },
@@ -9082,7 +9234,10 @@
     "parallel/test-trace-env-stack.js": { "category": "known-gap", "reason": "--trace-env-{js,native}-stack diagnostics are not implemented in execPath emulation" },
     "parallel/test-trace-env.js": { "category": "known-gap", "reason": "--trace-env diagnostics are not implemented in execPath emulation" },
     "parallel/test-trace-events-all.js": {},
-    "parallel/test-trace-events-api-worker-disabled.js": {},
+    "parallel/test-trace-events-api-worker-disabled.js": {
+      "category": "wasi-impossible",
+      "reason": "Requires real Worker execution; constructing an inert Worker is not supported"
+    },
     "parallel/test-trace-events-api.js": { "category": "node-internals", "reason": "uses --expose-internals and internalBinding('trace_events')" },
     "parallel/test-trace-events-async-hooks-dynamic.js": { "category": "known-gap", "reason": "trace_events dynamic file output for node.async_hooks is incomplete" },
     "parallel/test-trace-events-async-hooks-worker.js": { "category": "wasi-impossible", "reason": "requires worker_threads trace propagation" },
@@ -9108,8 +9263,14 @@
     "parallel/test-trace-events-threadpool.js": { "category": "wasi-impossible", "reason": "requires libuv threadpool trace categories" },
     "parallel/test-trace-events-v8.js": {},
     "parallel/test-trace-events-vm.js": {},
-    "parallel/test-trace-events-worker-metadata-with-name.js": {},
-    "parallel/test-trace-events-worker-metadata.js": {},
+    "parallel/test-trace-events-worker-metadata-with-name.js": {
+      "category": "wasi-impossible",
+      "reason": "Requires real Worker execution; constructing an inert Worker is not supported"
+    },
+    "parallel/test-trace-events-worker-metadata.js": {
+      "category": "wasi-impossible",
+      "reason": "Requires real Worker execution; constructing an inert Worker is not supported"
+    },
     "parallel/test-trace-exit-stack-limit.js": { "category": "known-gap", "reason": "--trace-exit stack diagnostics are incomplete in execPath emulation" },
     "parallel/test-trace-exit.js": { "category": "known-gap", "reason": "--trace-exit warning behavior across process/worker variants is incomplete" },
     "parallel/test-tracing-no-crash.js": { "category": "known-gap", "reason": "child_process spawn stdio/event behavior is incomplete in execPath emulation" },
@@ -9545,7 +9706,10 @@
         "block_05_block_05": {}
       }
     },
-    "parallel/test-webstreams-clone-unref.js": {},
+    "parallel/test-webstreams-clone-unref.js": {
+      "category": "known-gap",
+      "reason": "Usable stream transfer is not implemented; prototype-only stream clones are not supported"
+    },
     "parallel/test-webstreams-finished.js": {
       "split": true,
       "subtests": {
@@ -10069,7 +10233,10 @@
     "parallel/test-worker-http2-generic-streams-terminate.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-http2-stream-terminate.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-init-failure.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
-    "parallel/test-worker-invalid-workerdata.js": { "category": "known-gap", "reason": "Worker constructor does not enforce DataCloneError for unserializable workerData" },
+    "parallel/test-worker-invalid-workerdata.js": {
+      "category": "known-gap",
+      "reason": "Worker fails with ERR_UNSUPPORTED_OPERATION before validating or cloning workerData"
+    },
     "parallel/test-worker-load-file-with-extension-other-than-js.js": { "category": "wasi-impossible", "reason": "depends on Worker actually loading and executing a .ts file as TypeScript, which requires real worker_threads execution that is not available in single-threaded WASM" },
     "parallel/test-worker-memory.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-message-channel-sharedarraybuffer.js": { "category": "known-gap", "reason": "Worker message delivery does not preserve SharedArrayBuffer shared-memory semantics" },
@@ -10077,8 +10244,13 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "category": "known-gap", "reason": "MessagePort close events are not emitted with Node-compatible timing/behavior" },
-        "block_02_block_02": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" }
+        "block_01_block_01": {
+          "category": "runnable"
+        },
+        "block_02_block_02": {
+          "category": "wasi-impossible",
+          "reason": "requires worker_threads which is not available in WASM"
+        }
       }
     },
     "parallel/test-worker-message-event.js": {
@@ -10092,8 +10264,6 @@
       }
     },
     "parallel/test-worker-message-mark-as-uncloneable.js": {
-      "category": "known-gap",
-      "reason": "markAsUncloneable and DataCloneError semantics are incomplete",
       "split": true,
       "subtests": {
         "block_00_uncloneables_cannot_be_cloned_during_message_posting": {},
@@ -10103,19 +10273,25 @@
       }
     },
     "parallel/test-worker-message-not-serializable.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/test/binding + internal/worker/io" },
-    "parallel/test-worker-message-port-arraybuffer.js": { "category": "known-gap", "reason": "MessagePort transfer-list DataCloneError details for detached ArrayBuffer are incomplete" },
+    "parallel/test-worker-message-port-arraybuffer.js": {},
     "parallel/test-worker-message-port-close.js": {
-      "category": "known-gap",
-      "reason": "MessagePort close callback, close-state checks, and closed-port errors are incomplete",
       "split": true,
       "subtests": {
-        "block_00_block_00": {},
-        "block_01_block_01": {},
-        "block_02_block_02": {},
-        "block_03_refs_https_github_com_nodejs_node_issues_42296": { "category": "runnable" }
+        "block_00_block_00": {
+          "category": "runnable"
+        },
+        "block_01_block_01": {
+          "category": "runnable"
+        },
+        "block_02_block_02": {
+          "category": "runnable"
+        },
+        "block_03_refs_https_github_com_nodejs_node_issues_42296": {
+          "category": "runnable"
+        }
       }
     },
-    "parallel/test-worker-message-port-constructor.js": { "category": "known-gap", "reason": "MessagePort/MessageChannel constructor error codes are not Node-compatible" },
+    "parallel/test-worker-message-port-constructor.js": {},
     "parallel/test-worker-message-port-drain.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-message-port-infinite-message-loop.js": { "category": "known-gap", "reason": "MessagePort async delivery can recurse too aggressively and starve loop turn boundaries" },
     "parallel/test-worker-message-port-inspect-during-init-hook.js": { "category": "known-gap", "reason": "MessagePort util.inspect output/shape is not Node-compatible" },
@@ -10123,8 +10299,11 @@
     "parallel/test-worker-message-port-message-before-close.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-message-port-message-port-transferring.js": { "category": "known-gap", "reason": "MessagePort transfer-list handling does not support transferring nested MessagePort values" },
     "parallel/test-worker-message-port-move.js": { "category": "known-gap", "reason": "moveMessagePortToContext cross-context object/prototype semantics are incomplete" },
-    "parallel/test-worker-message-port-multiple-sharedarraybuffers.js": {},
-    "parallel/test-worker-message-port-receive-message.js": { "category": "known-gap", "reason": "receiveMessageOnPort() behavior and argument validation are not implemented" },
+    "parallel/test-worker-message-port-multiple-sharedarraybuffers.js": {
+      "category": "known-gap",
+      "reason": "SharedArrayBuffer cloning requires shared backing lifetime support; byte copies do not provide shared-memory semantics"
+    },
+    "parallel/test-worker-message-port-receive-message.js": {},
     "parallel/test-worker-message-port-terminate-transfer-list.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-message-port-transfer-closed.js": { "category": "known-gap", "reason": "MessagePort transfer of closed/detached ports returns non-Node DataCloneError message/handling" },
     "parallel/test-worker-message-port-transfer-duplicate.js": {
@@ -10132,8 +10311,12 @@
       "reason": "MessagePort transfer-list duplicate detection throws non-Node DataCloneError messages",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "reason": "MessagePort duplicate transfer entries report a generic non-transferable error" },
-        "block_01_block_01": { "reason": "ArrayBuffer duplicate transfer entries report a non-Node duplicate-transfer error message" }
+        "block_00_block_00": {
+          "reason": "MessagePort duplicate transfer entries report a generic non-transferable error"
+        },
+        "block_01_block_01": {
+          "category": "runnable"
+        }
       }
     },
     "parallel/test-worker-message-port-transfer-fake-js-transferable-internal.js": { "category": "node-internals", "reason": "depends on Node's internal JSTransferable protocol (messaging_transfer_symbol)" },
@@ -10144,8 +10327,13 @@
       "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "postMessage function cloning should throw DataCloneError" },
-        "block_01_block_01": { "category": "node-internals", "reason": "uses --expose-internals and internal/test/binding" }
+        "block_00_block_00": {
+          "category": "runnable"
+        },
+        "block_01_block_01": {
+          "category": "node-internals",
+          "reason": "uses --expose-internals and internal/test/binding"
+        }
       }
     },
     "parallel/test-worker-message-port-transfer-self.js": { "category": "known-gap", "reason": "MessagePort source-port transfer validation and DataCloneError message are not Node-compatible" },
@@ -10164,20 +10352,40 @@
     "parallel/test-worker-message-port.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "MessagePort close callback behavior is not Node-compatible" },
-        "block_01_block_01": { "category": "known-gap", "reason": "MessagePort EventTarget API integration is incomplete" },
-        "block_02_block_02": { "category": "known-gap", "reason": "MessageEvent.target/ports fields are incomplete" },
-        "block_03_block_03": { "category": "known-gap", "reason": "MessagePort does not reliably deliver queued messages when listeners are attached later" },
-        "block_04_block_04": { "category": "known-gap", "reason": "MessagePort listener queueing semantics are incomplete" },
-        "block_05_block_05": { "category": "known-gap", "reason": "postMessage transferList argument validation is not Node-compatible yet" },
-        "block_06_block_06": { "category": "known-gap", "reason": "ArrayBuffer transfer detachment semantics are incomplete" },
-        "block_07_block_07": { "category": "known-gap", "reason": "transferability checks and DataCloneError behavior are incomplete" },
-        "block_08_block_08": { "category": "known-gap", "reason": "MessagePort prototype surface differs from Node.js" }
+        "block_00_block_00": {
+          "category": "runnable"
+        },
+        "block_01_block_01": {
+          "category": "known-gap",
+          "reason": "MessagePort EventTarget API integration is incomplete"
+        },
+        "block_02_block_02": {
+          "category": "known-gap",
+          "reason": "MessageEvent.target/ports fields are incomplete"
+        },
+        "block_03_block_03": {
+          "category": "runnable"
+        },
+        "block_04_block_04": {
+          "category": "runnable"
+        },
+        "block_05_block_05": {
+          "category": "runnable"
+        },
+        "block_06_block_06": {
+          "category": "runnable"
+        },
+        "block_07_block_07": {
+          "category": "known-gap",
+          "reason": "Real MessagePort transfer is unsupported; genuine ports reject cloning instead of producing prototype shells"
+        },
+        "block_08_block_08": {
+          "category": "known-gap",
+          "reason": "MessagePort prototype surface differs from Node.js"
+        }
       }
     },
     "parallel/test-worker-message-transfer-port-mark-as-untransferable.js": {
-      "category": "known-gap",
-      "reason": "isMarkedAsUntransferable() and related mark/query behavior are incomplete",
       "split": true,
       "subtests": {
         "block_00_block_00": {},
@@ -10205,7 +10413,10 @@
     "parallel/test-worker-onmessage-not-a-function.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads execution (HAS_STARTED_WORKER round-trip and parentPort.onmessage setter side effects), not available in single-threaded WASM" },
     "parallel/test-worker-onmessage.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-parent-port-ref.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
-    "parallel/test-worker-process-argv.js": { "category": "known-gap", "reason": "Worker constructor argv option validation/stringification is not Node-compatible" },
+    "parallel/test-worker-process-argv.js": {
+      "category": "wasi-impossible",
+      "reason": "Real Worker construction/execution is unavailable and fails with ERR_UNSUPPORTED_OPERATION"
+    },
     "parallel/test-worker-process-cwd.js": { "category": "wasi-impossible", "reason": "worker_threads is not supported in WASM" },
     "parallel/test-worker-process-env-shared.js": { "category": "wasi-impossible", "reason": "requires worker_threads which is not available in WASM" },
     "parallel/test-worker-process-env.js": { "category": "known-gap", "reason": "Worker options.env validation and env-isolation semantics are incomplete" },

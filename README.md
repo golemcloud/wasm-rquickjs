@@ -583,7 +583,19 @@ When the `timezone` feature is enabled (default), `DateTimeFormat` supports all 
 <details>
 <summary><strong>Structured Clone</strong></summary>
 
-Implemented by https://github.com/ungap/structured-clone — `structuredClone`
+`structuredClone` preserves object graphs, ArrayBuffer/view aliases and genuine in-memory Blob data.
+The runtime-owned `process.env` clones into an ordinary, independent environment snapshot; application-created proxies remain uncloneable.
+CryptoKey metadata participates in the same graph, including aliases and cycles.
+Transfer buffers detach only after the complete graph and host metadata validate; unlike Node.js,
+a rejected CryptoKey metadata graph leaves these buffers attached.
+ArrayBuffer transfer and runtime-local transferable AbortSignals are supported. Transferred signal reasons
+are copied before local abort listeners run; target abort delivery is queued. Clone/transfer markers
+are enforced by the same private policy used by MessageChannel; nonstandard `json`/`lossy` options
+cannot disable rejection. Blob clones own independent byte data. File-backed/foreign Blob backing,
+SharedArrayBuffer or immutable ArrayBuffer cloning, resizable-ArrayBuffer-backed views, and stream/MessagePort/FileHandle transfer are unsupported and rejected.
+FileHandle and web-stream payloads also reject without a transfer list; their ownership transfer is unavailable.
+Execution-job results reject Blob and other host values rather than transporting opaque resources.
+The serializer is adapted from https://github.com/ungap/structured-clone.
 
 </details>
 
@@ -917,6 +929,8 @@ Compatibility stubs — no V8 inspector in WASM.
 <details>
 <summary><strong><code>node:module</code></strong></summary>
 
+Builtin ESM export names are fixed by the runtime, including aliases. Changing builtin properties before the first ESM import does not add or remove named exports; `syncBuiltinESMExports()` updates their values.
+
 - `require`, `require.resolve`, `createRequire`, `builtinModules`, `isBuiltin`, `runMain`, `_nodeModulePaths`
 - `stripTypeScriptTypes(code[, options])` with Node-compatible strip and transform modes when the
   generated crate enables `typescript-runtime`
@@ -981,7 +995,8 @@ TCP sockets and servers built on WASI sockets.
 <summary><strong><code>node:process</code></strong></summary>
 
 - **Properties:** `argv`, `argv0`, `env`, `pid`, `ppid`, `platform` (`'wasi'`), `arch` (`'wasm32'`), `version`, `versions`, `config`, `features`, `execArgv`, `execPath`, `exitCode`, `stdout`, `stderr`
-- **Methods:** `exit(code)`, `cwd()`, `nextTick(callback, ...args)`, `hrtime()`, `hrtime.bigint()`, `uptime()`, `cpuUsage()`, `memoryUsage()`, `kill(pid, signal)`, `abort()`, `emitWarning()`
+- **Methods:** `exit(code)`, `cwd()`, `nextTick(callback, ...args)`, `getBuiltinModule(id)`, `hrtime()`, `hrtime.bigint()`, `uptime()`, `cpuUsage()`, `memoryUsage()`, `kill(pid, signal)`, `abort()`, `emitWarning()`
+- `getBuiltinModule(id)` returns the existing object for builtins registered by this runtime, and `undefined` for unavailable IDs. The supported set is smaller than Node.js: `node:sea`, `node:test/reporters`, `node:inspector/promises`, `node:wasi`, `_stream_wrap`, and unimplemented `_http_*`/`_tls_*` wrappers are unavailable.
 - **User/Group:** `getuid`, `getgid`, `geteuid`, `getegid`, `getgroups`, `setuid`, `setgid`
 - Inherits from `EventEmitter` — supports `on('uncaughtException')`, `on('unhandledRejection')`, etc.
 
@@ -1032,6 +1047,8 @@ Requires the `sqlite` feature flag. Provides a synchronous SQLite database API w
 
 <details>
 <summary><strong><code>node:stream</code></strong></summary>
+
+- Legacy `_stream_readable`, `_stream_writable`, `_stream_duplex`, `_stream_transform` and `_stream_passthrough` aliases support CommonJS and ESM, with the same constructor defaults.
 
 - `Readable` (with `from`, `fromWeb`, `toWeb`, `wrap`, and functional methods: `map`, `filter`, `flatMap`, `take`, `drop`, `toArray`, `forEach`, `reduce`, `some`, `every`, `find`)
 - `Writable`, `Duplex`, `Transform`, `PassThrough`, `Stream`
@@ -1112,6 +1129,8 @@ Partial compatibility API to unblock modules that inspect tracing state.
 <details>
 <summary><strong><code>node:util</code></strong></summary>
 
+- `sys` / `node:sys` aliases share the util object and support CommonJS and ESM.
+
 - `format`, `inspect`, `deprecate`, `debugLog`, `log`
 - Type checks: `isArray`, `isBoolean`, `isNull`, `isNullOrUndefined`, `isNumber`, `isString`, `isSymbol`, `isUndefined`, `isRegExp`, `isObject`, `isDate`, `isError`, `isFunction`, `isPrimitive`, `isBuffer`
 - `promisify`, `callbackify`
@@ -1143,14 +1162,17 @@ a security sandbox; both share the enclosing component's capabilities and filesy
 </details>
 
 <details>
-<summary><strong><code>node:worker_threads</code></strong> (stub)</summary>
+<summary><strong><code>node:worker_threads</code></strong> (runtime-local messaging)</summary>
 
-Compatibility stubs — workers are not supported in single-threaded WASM.
+MessageChannel and MessagePort work within one runtime. Worker and BroadcastChannel construction
+throws immediately. Environment-data APIs are unavailable.
 
 - `isMainThread`, `parentPort`, `workerData`, `threadId`, `resourceLimits`
-- `Worker`, `BroadcastChannel`, `MessagePort`, `MessageChannel`
-- `markAsUntransferable`, `moveMessagePortToContext`, `receiveMessageOnPort`
-- `getEnvironmentData`, `setEnvironmentData`
+- `MessagePort`, `MessageChannel`, `receiveMessageOnPort`
+- `markAsUncloneable`, `markAsUntransferable`, `isMarkedAsUntransferable`
+- `moveMessagePortToContext` (limited compatibility API; no external execution context)
+- Unsupported compatibility exports: `Worker`, `BroadcastChannel`,
+  `getEnvironmentData`, `setEnvironmentData`
 
 </details>
 

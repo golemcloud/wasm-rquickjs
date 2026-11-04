@@ -13,8 +13,12 @@ import {
 } from '__wasm_rquickjs_builtin/process_native';
 
 import EventEmitter from 'node:events';
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import { createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 import { time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
+import { validateString } from '__wasm_rquickjs_builtin/internal/validators';
+
+const builtinModuleGlobalThis = globalThis;
 
 function _invalidArgTypeHelper(value) {
     if (value == null) return ' Received ' + String(value);
@@ -62,6 +66,13 @@ function _makeError(code, message) {
 
 var process = new EventEmitter();
 
+process.getBuiltinModule = function getBuiltinModule(id) {
+    validateString(id, 'id');
+    // node:module owns public IDs, lazy loading and runtime-local identity.
+    // Its immutable bridge is installed after bootstrap, without a module cycle.
+    return builtinModuleGlobalThis.__wasm_rquickjs_get_builtin_module(id);
+};
+
 Object.defineProperty(process, '_awaitRuntimeIdle', {
     value: await_runtime_idle,
     writable: false,
@@ -89,8 +100,10 @@ Object.defineProperty(process, 'argv0', {
     configurable: true,
 });
 
+const envCloneAdapter = { __proto__: null, kind: 'process.env', ordinary: true };
+
 function _createEnv(values) {
-    return new Proxy(values, {
+    const environment = new Proxy(values, {
         get: function(target, key) {
             if (typeof key === 'symbol') return undefined;
             if (key === '') return undefined;
@@ -143,6 +156,8 @@ function _createEnv(values) {
             return true;
         }
     });
+    registerCloneAdapter(environment, envCloneAdapter);
+    return environment;
 }
 
 export var env = _createEnv(_env);
@@ -1222,6 +1237,7 @@ export var kill = process.kill;
 export var emitWarning = process.emitWarning;
 export var allowedNodeEnvironmentFlags = process.allowedNodeEnvironmentFlags;
 export var features = process.features;
+export var getBuiltinModule = process.getBuiltinModule;
 export var title = process.title;
 export var ppid = process.ppid;
 export var umask = process.umask;
