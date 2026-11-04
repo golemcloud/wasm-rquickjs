@@ -3,6 +3,123 @@ import * as https from 'node:https';
 import * as net from 'node:net';
 import { EventEmitter } from 'node:events';
 
+export async function netReadCallbackTurns(testCase) {
+    const events = [];
+    let accepted;
+    let client;
+    let response = '';
+    let bytes = 0;
+    let connected;
+    const ready = new Promise(resolve => { connected = resolve; });
+    let finish;
+    let done = false;
+    const completed = new Promise(resolve => { finish = () => { done = true; resolve(); }; });
+    const server = net.createServer({ allowHalfOpen: true, pauseOnConnect: true }, socket => {
+        accepted = socket;
+        socket.on('data', chunk => {
+            bytes += chunk.length;
+            events.push('data');
+            process.nextTick(() => {
+                events.push('tick');
+                if (testCase === 1) {
+                    socket.pause();
+                    setImmediate(() => socket.resume());
+                } else if (testCase === 2) {
+                    events.push('destroy');
+                    socket.destroy();
+                }
+            });
+        });
+        socket.on('end', () => { events.push('end'); socket.end('ok'); });
+        socket.on('close', () => events.push('server-close'));
+        connected();
+    });
+    const deadline = setTimeout(() => { events.push('deadline'); finish(); }, 30000);
+    try {
+        await new Promise((resolve, reject) => {
+            server.once('error', reject);
+            server.listen(0, resolve);
+        });
+        client = net.connect(server.address().port);
+        client.on('data', chunk => { response += chunk.toString(); });
+        client.on('error', error => { events.push(['client-error', error.code]); finish(); });
+        client.on('end', finish);
+        await Promise.race([ready, completed]);
+        if (accepted && !done) {
+            const written = new Promise(resolve => client.once('finish', resolve));
+            client.end(Buffer.alloc(48 * 1024, 120));
+            await Promise.race([written, completed]);
+            // The payload and FIN are already written before reading begins,
+            // exercising ready reads and deferred resume without sleeps/hooks.
+            if (!done) accepted.resume();
+        }
+        await completed;
+    } finally {
+        clearTimeout(deadline);
+        if (client) client.destroy();
+        if (accepted) accepted.destroy();
+        await new Promise(resolve => server.close(resolve));
+    }
+    return JSON.stringify({ response, bytes, events });
+}
+
+// Preserve resume-only consumption: adding a request data listener changes the
+// Readable delivery path that this regression observes.
+export async function httpBufferedRequestFin(testCase) {
+    const events = [];
+    let accepted;
+    let client;
+    let response = '';
+    let finish;
+    const completed = new Promise(resolve => { finish = resolve; });
+    const server = http.createServer((req, res) => {
+        const snapshot = name => events.push([name, req.complete, req.readableEnded,
+            req.readableLength, req.socket.writableEnded]);
+        accepted = req.socket;
+        snapshot('request');
+        req.socket.prependListener('end', () => snapshot('socket-end'));
+        req.on('aborted', () => snapshot('aborted'));
+        res.on('finish', () => snapshot('response-finish'));
+        res.on('close', () => snapshot('response-close'));
+        req.on('end', () => {
+            snapshot('request-end');
+            res.writeHead(200, { 'content-type': 'text/plain', connection: 'close', date: 'now' });
+            res.end('bye');
+        });
+        if (testCase === 3) req.on('data', () => {});
+        req.resume();
+    });
+    server.on('connection', socket => { accepted = socket; });
+    const deadline = setTimeout(() => {
+        events.push(['deadline']);
+        finish();
+    }, 30000);
+    try {
+        server.once('error', error => { events.push(['server-error', error.code]); finish(); });
+        server.listen(0, () => {
+            const port = server.address().port;
+            client = net.connect(port);
+            client.on('data', chunk => { response += chunk.toString(); });
+            client.on('error', error => { events.push(['client-error', error.code]); finish(); });
+            client.on('end', () => { events.push(['client-end', response.length]); finish(); });
+            const body = testCase === 2 ? 'A'.repeat(32 * 1024) :
+                ('2' + (testCase === 1 ? '' : ';' + 'A'.repeat(10000) + '=bar') +
+                    '\r\nAA\r\n').repeat(3) + '0\r\n\r\n';
+            const framing = testCase === 2 ? `Content-Length: ${body.length}` :
+                'Transfer-Encoding: chunked';
+            client.end('GET / HTTP/1.1\r\n' + `Host: localhost:${port}\r\n` +
+                framing + '\r\n\r\n' + body);
+        });
+        await completed;
+    } finally {
+        clearTimeout(deadline);
+        if (client) client.destroy();
+        if (accepted) accepted.destroy();
+        await new Promise(resolve => server.close(resolve));
+    }
+    return JSON.stringify({ response, events });
+}
+
 // Public stream operations only: the fixture never completes the pending body. The control
 // round trip gives its next read time to become pending without using a timer for synchronization.
 export async function httpResponseCancellation(port, testCase) {

@@ -424,6 +424,7 @@ impl HttpRequest {
     /// JS loop, which creates a fresh `HttpRequest` per attempt, so this method only sets up one
     /// request.
     pub fn init_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
+        crate::internal::preinit::check("HTTP request", "remote endpoint");
         // Validate mode constraints before sending, mirroring the buffered `simple_send` path so
         // that the public `fetch` contract (e.g. rejecting `no-cors` with an unsafe method) does
         // not depend on whether the request body is buffered or a `ReadableStream`.
@@ -595,6 +596,7 @@ impl HttpRequest {
     }
 
     async fn simple_send_inner<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
+        crate::internal::preinit::check("HTTP request", "remote endpoint");
         // Validate mode constraints (mirrors the Preview 2 path). The streaming request-body path
         // performs the same validation in `init_send`.
         self.validate_request_mode(&ctx)?;

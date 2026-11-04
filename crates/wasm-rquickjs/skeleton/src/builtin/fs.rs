@@ -414,9 +414,7 @@ pub(super) fn realpath_for_module_resolution(
 ) -> std::io::Result<String> {
     // Wizer has no guest preopens. Touching wasi-libc's lazy preopen cache here
     // would snapshot the empty build-time filesystem into every runtime.
-    if crate::internal::is_wizer_active() {
-        return Err(wizer_enoent_io());
-    }
+    crate::internal::preinit::check("fs.realpath", path);
 
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
@@ -700,27 +698,6 @@ fn make_badf_error<'js>(ctx: &rquickjs::Ctx<'js>, syscall: &str) -> rquickjs::Ob
     obj
 }
 
-/// Synthesize an ENOENT std::io::Error without ever touching wasi-libc.
-///
-/// Used to short-circuit path-based fs operations during Wizer pre-init so
-/// that wasi-libc's lazy preopen-cache initialization never runs against the
-/// (empty) wizer environment. See `crate::internal::is_wizer_active` and
-/// issue #91.
-fn wizer_enoent_io() -> std::io::Error {
-    std::io::Error::new(
-        std::io::ErrorKind::NotFound,
-        "ENOENT during wizer pre-initialization",
-    )
-}
-
-fn wizer_enoent_obj<'js>(
-    ctx: &rquickjs::Ctx<'js>,
-    syscall: &str,
-    path: Option<&str>,
-) -> rquickjs::Object<'js> {
-    make_fs_error(ctx, &wizer_enoent_io(), syscall, path)
-}
-
 fn is_dev_stdio_path(path: &str) -> bool {
     matches!(path, "/dev/stdin" | "/dev/stdout" | "/dev/stderr")
 }
@@ -908,6 +885,15 @@ pub mod native_module {
             .into_owned()
     }
 
+    fn check_fd_preinit(ctx: &Ctx<'_>, operation: &'static str, fd: i32) {
+        if crate::internal::preinit::is_active() {
+            let has_file = super::with_fs(ctx, |fs| fs.files.contains_key(&fd));
+            if has_file {
+                crate::internal::preinit::check(operation, format_args!("fd {fd}"));
+            }
+        }
+    }
+
     fn has_excessive_js_stack_depth(ctx: &Ctx<'_>) -> bool {
         for depth in 0..STACK_DEPTH_SCAN_LIMIT {
             if ctx.script_or_module_name(depth).is_none() {
@@ -930,6 +916,7 @@ pub mod native_module {
         path: String,
         encoding: String,
     ) -> List<(Option<String>, Option<String>)> {
+        crate::internal::preinit::check("fs.readFile", &path);
         let resolved_path = runtime_path(&ctx, &path);
         let List((value, error)) = super::read_file_with_encoding_impl(&resolved_path, &encoding);
         List((
@@ -943,6 +930,7 @@ pub mod native_module {
         path: String,
         ctx: Ctx<'_>,
     ) -> List<(Option<TypedArray<'_, u8>>, Option<String>)> {
+        crate::internal::preinit::check("fs.readFile", &path);
         let resolved_path = runtime_path(&ctx, &path);
         match std::fs::read(&resolved_path) {
             Ok(bytes) => {
@@ -967,12 +955,7 @@ pub mod native_module {
         use std::io::Read;
 
         let result = Object::new(ctx.clone()).unwrap();
-        if crate::internal::is_wizer_active() {
-            result
-                .set("error", super::wizer_enoent_obj(&ctx, "open", Some(&path)))
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.read_file", &path);
 
         let resolved_path = runtime_path(&ctx, &path);
         let mut file = match std::fs::File::open(&resolved_path) {
@@ -1042,6 +1025,7 @@ pub mod native_module {
         encoding: String,
         content: String,
     ) -> Option<String> {
+        crate::internal::preinit::check("fs.writeFile", &path);
         if encoding != "utf8" {
             Some("Only 'utf8' encoding is supported".to_string())
         } else {
@@ -1065,6 +1049,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn write_file(ctx: Ctx<'_>, path: String, content: TypedArray<'_, u8>) -> Option<String> {
+        crate::internal::preinit::check("fs.writeFile", &path);
         // SAFETY: No JS executes while the rooted input is read by synchronous file I/O.
         if let Some(bytes) = unsafe { content.as_bytes() } {
             let resolved_path = runtime_path(&ctx, &path);
@@ -1088,6 +1073,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn unlink(ctx: Ctx<'_>, path: String) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.unlink", &path);
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::remove_file(Path::new(&fs_path)) {
             Ok(_) => {
@@ -1101,6 +1087,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn rename(ctx: Ctx<'_>, old_path: String, new_path: String) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.rename", format_args!("{old_path} -> {new_path}"));
         let old_fs_path = runtime_path(&ctx, &old_path);
         let new_fs_path = runtime_path(&ctx, &new_path);
         match std::fs::rename(Path::new(&old_fs_path), Path::new(&new_fs_path)) {
@@ -1122,6 +1109,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn mkdir(ctx: Ctx<'_>, path: String, recursive: bool) -> Option<String> {
+        crate::internal::preinit::check("fs.mkdir", &path);
         let resolved_path = runtime_path(&ctx, &path);
         let fs_path = Path::new(&resolved_path);
         let result = if recursive {
@@ -1147,12 +1135,7 @@ pub mod native_module {
 
         let result = Object::new(ctx.clone()).unwrap();
 
-        if crate::internal::is_wizer_active() {
-            result
-                .set("error", super::wizer_enoent_obj(&ctx, "open", Some(&path)))
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.open", &path);
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1215,6 +1198,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_close(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.close", fd);
         let removed = super::with_fs_mut(&ctx, |fs| fs.files.remove(&fd));
         if removed.is_some() {
             #[cfg(feature = "typescript-compiler-profiling")]
@@ -1236,6 +1220,7 @@ pub mod native_module {
         length: usize,
         position: Value<'js>,
     ) -> Object<'js> {
+        check_fd_preinit(&ctx, "fs.read", fd);
         use std::io::{Read, Seek, SeekFrom};
 
         let result = Object::new(ctx.clone()).unwrap();
@@ -1299,6 +1284,7 @@ pub mod native_module {
         length: usize,
         position: Value<'js>,
     ) -> Object<'js> {
+        check_fd_preinit(&ctx, "fs.write_buffer", fd);
         use std::io::{Seek, SeekFrom, Write};
 
         let result = Object::new(ctx.clone()).unwrap();
@@ -1367,6 +1353,7 @@ pub mod native_module {
         data: String,
         position: Value<'js>,
     ) -> Object<'js> {
+        check_fd_preinit(&ctx, "fs.write_string", fd);
         use std::io::{Seek, SeekFrom, Write};
 
         let result = Object::new(ctx.clone()).unwrap();
@@ -1412,6 +1399,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_ftruncate(ctx: Ctx<'_>, fd: i32, len: f64) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.ftruncate", fd);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
@@ -1430,6 +1418,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fsync(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.fsync", fd);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
@@ -1448,6 +1437,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fdatasync(ctx: Ctx<'_>, fd: i32) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.fdatasync", fd);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
@@ -1474,12 +1464,7 @@ pub mod native_module {
             return result;
         }
 
-        if crate::internal::is_wizer_active() {
-            result
-                .set("error", super::wizer_enoent_obj(&ctx, "stat", Some(&path)))
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.stat", &path);
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1517,12 +1502,7 @@ pub mod native_module {
             return result;
         }
 
-        if crate::internal::is_wizer_active() {
-            result
-                .set("error", super::wizer_enoent_obj(&ctx, "lstat", Some(&path)))
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.lstat", &path);
 
         let absolute_path = runtime_path(&ctx, &path);
 
@@ -1561,6 +1541,7 @@ pub mod native_module {
             result.set("stat", stat).unwrap();
             return result;
         }
+        check_fd_preinit(&ctx, "fs.fstat", fd);
 
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
@@ -1611,15 +1592,7 @@ pub mod native_module {
             return result;
         }
 
-        if crate::internal::is_wizer_active() {
-            result
-                .set(
-                    "error",
-                    super::wizer_enoent_obj(&ctx, "scandir", Some(&path)),
-                )
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.readdir", &path);
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1675,9 +1648,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_access(ctx: Ctx<'_>, path: String, _mode: i32) -> Option<Object<'_>> {
-        if crate::internal::is_wizer_active() {
-            return Some(super::wizer_enoent_obj(&ctx, "access", Some(&path)));
-        }
+        crate::internal::preinit::check("fs.access", &path);
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1744,15 +1715,7 @@ pub mod native_module {
             return result;
         }
 
-        if crate::internal::is_wizer_active() {
-            result
-                .set(
-                    "error",
-                    super::wizer_enoent_obj(&ctx, "realpath", Some(&path)),
-                )
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.realpath", &path);
 
         let absolute_path = runtime_path(&ctx, &path);
         match super::canonicalize_guest_path(&absolute_path) {
@@ -1777,6 +1740,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_truncate(ctx: Ctx<'_>, path: String, len: f64) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.truncate", &path);
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::OpenOptions::new().write(true).open(&fs_path) {
             Ok(file) => {
@@ -1792,6 +1756,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_copy_file(ctx: Ctx<'_>, src: String, dest: String) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.copy_file", format_args!("{src} -> {dest}"));
         let fs_src = runtime_path(&ctx, &src);
         let fs_dest = runtime_path(&ctx, &dest);
         match std::fs::copy(&fs_src, &fs_dest) {
@@ -1811,6 +1776,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_link(ctx: Ctx<'_>, existing_path: String, new_path: String) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.link", format_args!("{existing_path} -> {new_path}"));
         let fs_existing_path = runtime_path(&ctx, &existing_path);
         let fs_new_path = runtime_path(&ctx, &new_path);
         match std::fs::hard_link(&fs_existing_path, &fs_new_path) {
@@ -1830,9 +1796,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_symlink(ctx: Ctx<'_>, target: String, path: String) -> Option<Object<'_>> {
-        if crate::internal::is_wizer_active() {
-            return Some(super::wizer_enoent_obj(&ctx, "symlink", Some(&path)));
-        }
+        crate::internal::preinit::check("fs.symlink", &path);
 
         let fs_path = runtime_path(&ctx, &path);
         match super::symlink_at_path(&target, &fs_path) {
@@ -1855,15 +1819,7 @@ pub mod native_module {
         let result = Object::new(ctx.clone()).unwrap();
         let fs_path = runtime_path(&ctx, &path);
 
-        if crate::internal::is_wizer_active() {
-            result
-                .set(
-                    "error",
-                    super::wizer_enoent_obj(&ctx, "readlink", Some(&path)),
-                )
-                .unwrap();
-            return result;
-        }
+        crate::internal::preinit::check("fs.readlink", &path);
 
         match std::fs::read_link(&fs_path) {
             Ok(target) => {
@@ -1885,6 +1841,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_chmod(ctx: Ctx<'_>, path: String, mode: u32) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.chmod", &path);
         let fs_path = runtime_path(&ctx, &path);
         // chmod is not supported on WASI; verify path exists
         match std::fs::metadata(&fs_path) {
@@ -1898,6 +1855,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fchmod(ctx: Ctx<'_>, fd: i32, mode: u32) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.fchmod", fd);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
@@ -1921,6 +1879,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_chown(ctx: Ctx<'_>, path: String, _uid: u32, _gid: u32) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.chown", &path);
         let fs_path = runtime_path(&ctx, &path);
         // chown is not supported on WASI; just verify path exists
         match std::fs::metadata(&fs_path) {
@@ -1931,6 +1890,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_fchown(ctx: Ctx<'_>, fd: i32, _uid: u32, _gid: u32) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.fchown", fd);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
@@ -1943,6 +1903,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_lchown(ctx: Ctx<'_>, path: String, _uid: u32, _gid: u32) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.lchown", &path);
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::symlink_metadata(&fs_path) {
             Ok(_) => None,
@@ -1957,6 +1918,7 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.utimes", &path);
         let fs_path = runtime_path(&ctx, &path);
         match super::set_path_times(&fs_path, atime_secs, mtime_secs, true) {
             Ok(_) => None,
@@ -1971,6 +1933,7 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.lutimes", &path);
         let fs_path = runtime_path(&ctx, &path);
         match super::set_path_times(&fs_path, atime_secs, mtime_secs, false) {
             Ok(_) => None,
@@ -1985,6 +1948,7 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
+        check_fd_preinit(&ctx, "fs.futimes", fd);
         let services = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()
             .unwrap();
@@ -2000,6 +1964,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_mkdir(ctx: Ctx<'_>, path: String, recursive: bool, mode: u32) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.mkdir", &path);
         let fs_path = runtime_path(&ctx, &path);
         let p = Path::new(&fs_path);
         let mode = mode & 0o7777;
@@ -2026,6 +1991,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_rmdir(ctx: Ctx<'_>, path: String) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.rmdir", &path);
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::remove_dir(&fs_path) {
             Ok(_) => {
@@ -2039,6 +2005,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_rm(ctx: Ctx<'_>, path: String, recursive: bool, force: bool) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.rm", &path);
         let fs_path = runtime_path(&ctx, &path);
         let meta = std::fs::symlink_metadata(&fs_path);
         match meta {
@@ -2088,6 +2055,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_mkdtemp(ctx: Ctx<'_>, prefix: String) -> Object<'_> {
+        crate::internal::preinit::check("fs.mkdtemp", &prefix);
         use rand::Rng;
 
         let result = Object::new(ctx.clone()).unwrap();
@@ -2129,6 +2097,7 @@ pub mod native_module {
         path: String,
         data: TypedArray<'js, u8>,
     ) -> Option<Object<'js>> {
+        crate::internal::preinit::check("fs.append_file", &path);
         // SAFETY: The bytes are consumed by synchronous file I/O without JS re-entry.
         let Some(bytes) = (unsafe { data.as_bytes() }) else {
             return Some(super::make_fs_error(
@@ -2160,6 +2129,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_append_file_string(ctx: Ctx<'_>, path: String, data: String) -> Option<Object<'_>> {
+        crate::internal::preinit::check("fs.append_file_string", &path);
         let file = std::fs::OpenOptions::new()
             .append(true)
             .create(true)
@@ -2181,6 +2151,7 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_exists(ctx: Ctx<'_>, path: String) -> bool {
+        crate::internal::preinit::check("fs.exists", &path);
         let fs_path = runtime_path(&ctx, &path);
 
         std::path::Path::new(&fs_path).exists()

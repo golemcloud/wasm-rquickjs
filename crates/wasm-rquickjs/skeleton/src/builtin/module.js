@@ -20,6 +20,7 @@ import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { get_diagnostic_data as diagnosticData } from '__wasm_rquickjs_builtin/internal/binding/util_native';
 import {
     eval_with_filename as _evalWithFilename,
     require_builtin as _requireBuiltin,
@@ -42,6 +43,10 @@ const numberParseInt = Number.parseInt.bind(Number);
 const wasmRquickjsModuleGlobalThis = globalThis;
 const wasmRquickjsModulePromiseResolve = Promise.resolve.bind(Promise);
 const wasmRquickjsModuleEval = eval;
+const sourceMapFloor = Math.floor;
+const sourceMapIsFinite = Number.isFinite;
+const sourceMapWeakRefDeref = typeof WeakRef === 'function'
+    ? Function.prototype.call.bind(WeakRef.prototype.deref) : undefined;
 
 function cjsFacadeHasOwnProperty(value, key) {
     return objectPrototypeHasOwnProperty(value, key);
@@ -1524,21 +1529,34 @@ function cloneSourceMapEntry(entry) {
     };
 }
 
-function findSourceMapMapping(lines, lineOffset, columnOffset) {
-    lineOffset = Math.floor(lineOffset);
-    columnOffset = Math.floor(columnOffset);
+function sourceMapProperty(value, key) { return value[key]; }
+
+function findSourceMapMapping(lines, lineOffset, columnOffset, read = sourceMapProperty, budget = Infinity) {
+    lineOffset = sourceMapFloor(lineOffset);
+    columnOffset = sourceMapFloor(columnOffset);
     for (let lineIndex = lineOffset; lineIndex >= 0; lineIndex--) {
-        const line = lines[lineIndex];
-        if (!line || line.length === 0) continue;
+        if (--budget < 0) return null;
+        const line = read(lines, '' + lineIndex);
+        if (line === undefined || line === null) continue;
+        const length = read(line, 'length');
+        if (typeof length !== 'number' || !sourceMapIsFinite(length) || length <= 0) continue;
         let match = null;
         if (lineIndex === lineOffset) {
-            for (let i = 0; i < line.length; i++) {
-                if (line[i].generatedColumn <= columnOffset) match = line[i];
-                else break;
+            // Decoding sorts each line. Rightmost <= preserves the public
+            // lookup while keeping dense single-line bundles logarithmic.
+            let low = 0, high = length;
+            while (low < high) {
+                if (--budget < 0) return null;
+                const middle = low + sourceMapFloor((high - low) / 2);
+                const segment = read(line, '' + middle);
+                const generatedColumn = read(segment, 'generatedColumn');
+                if (typeof generatedColumn !== 'number' || !sourceMapIsFinite(generatedColumn)) return null;
+                if (generatedColumn <= columnOffset) { match = segment; low = middle + 1; }
+                else high = middle;
             }
             if (match) return match;
         } else {
-            return line[line.length - 1];
+            return read(line, '' + (length - 1));
         }
     }
     return null;
@@ -1774,6 +1792,54 @@ function remapSourceMappedPosition(
     }
     return origin;
 }
+
+// Host diagnostics never call a user-visible SourceMap method or dereference
+// mutable registry/metadata properties. Native own-data reads reject proxies,
+// exotics and accessors. One shared search owns both public and host lookup.
+function readHostSourceMappedPosition(scriptName, lineNumber, columnNumber) {
+    if (typeof scriptName !== 'string' || scriptName.length > 512 ||
+        typeof lineNumber !== 'number' || !sourceMapIsFinite(lineNumber) ||
+        typeof columnNumber !== 'number' || !sourceMapIsFinite(columnNumber)) return undefined;
+    const registry = diagnosticData(wasmRquickjsModuleGlobalThis, '__wasm_rquickjs_simple_source_maps');
+    let map = diagnosticData(registry, scriptName);
+    if (diagnosticData(map, weakSourceMapEntrySymbol) === true) {
+        try {
+            map = sourceMapWeakRefDeref
+                ? sourceMapWeakRefDeref(diagnosticData(map, 'ref')) : undefined;
+        } catch { map = undefined; }
+    }
+    const offsets = diagnosticData(wasmRquickjsModuleGlobalThis, '__wasm_rquickjs_cjs_line_offsets');
+    const forced = diagnosticData(wasmRquickjsModuleGlobalThis, '__wasm_rquickjs_forced_source_map_line_offsets');
+    const offset = diagnosticData(offsets, scriptName);
+    const forceOffset = diagnosticData(forced, scriptName) === true;
+    if (typeof offset === 'number' && sourceMapIsFinite(offset) && offset > 0 && forceOffset &&
+        (map === undefined || map === null)) lineNumber -= offset;
+    if (lineNumber <= 0) return undefined;
+    if (!sourceMapsSupportEnabled || map === undefined || map === null) {
+        return forceOffset ? {fileName:scriptName, lineNumber, columnNumber} : undefined;
+    }
+    const generatedOffset = diagnosticData(map, '_generatedLineOffset');
+    const originalOffset = diagnosticData(map, '_originalLineOffset');
+    if (typeof generatedOffset !== 'number' || !sourceMapIsFinite(generatedOffset) ||
+        typeof originalOffset !== 'number' || !sourceMapIsFinite(originalOffset)) return undefined;
+    const generatedLine = lineNumber - 1 - generatedOffset;
+    const generatedColumn = columnNumber - 1;
+    const match = findSourceMapMapping(diagnosticData(map, '_decodedMappings'), generatedLine,
+        generatedColumn, diagnosticData, 512);
+    if (!match) return undefined;
+    const fileName = diagnosticData(match, 'originalSource');
+    const originalLine = diagnosticData(match, 'originalLine');
+    const originalColumn = diagnosticData(match, 'originalColumn');
+    const matchedColumn = diagnosticData(match, 'generatedColumn');
+    if (typeof fileName !== 'string' || fileName.length > 512 || typeof originalLine !== 'number' ||
+        typeof originalColumn !== 'number' || typeof matchedColumn !== 'number') return undefined;
+    const line = originalLine + 1 - originalOffset;
+    const column = originalColumn + (generatedColumn - matchedColumn) + 1;
+    if (!sourceMapIsFinite(line) || !sourceMapIsFinite(column) || line <= 0 || column <= 0) return undefined;
+    return {fileName, lineNumber:line, columnNumber:column};
+}
+
+internalErrors.installHostSourceMapReader(readHostSourceMappedPosition);
 
 Object.defineProperties(globalThis, {
     __wasm_rquickjs_source_maps_enabled: {
@@ -5451,7 +5517,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         })();
     }
 
-    async function prepareStaticRegisteredLoaderGraph(parentUrl, seen) {
+    async function prepareStaticRegisteredLoaderGraph(parentUrl, seen, loaded) {
+        // The normalized load record owns supplied source. A logical file URL
+        // alone must never turn that source into a deployment filesystem read.
+        // CommonJS reexports have a separate Rust analysis owner; JSON has no
+        // static ESM edges to prepare.
+        if (loaded && (loaded.format === 'commonjs' || loaded.format === 'json')) return;
         parentUrl = normalizeLoaderResolvedUrl(String(parentUrl));
         const physicalParentUrl = internalLoaderBaseUrl(parentUrl);
         seen = seen || Object.create(null);
@@ -5463,6 +5534,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const logicalParentUrl = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_lookup_loader_source_url(parentUrl) || parentUrl;
         const internalParentUrl = internalLoaderBaseUrl(logicalParentUrl);
 
+        // Supplied ESM has already been materialized into the data URL selected
+        // by staticRegisteredLoaderChildUrl. Reuse those stable bytes rather
+        // than converting a potentially mutated loader ArrayBuffer again.
         const source = staticRegisteredLoaderSourceForUrl(parentUrl);
         if (source === null) return;
         const edges = rustModuleSourceAnalysis(source).staticEdges;
@@ -5483,6 +5557,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 await prepareStaticRegisteredLoaderGraph(
                     staticRegisteredLoaderChildUrl(cached, cached.value),
                     seen,
+                    cached,
                 );
             }
         }
@@ -5493,6 +5568,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache = Object.create(null);
         }
         let graphUrl = entryUrl;
+        let graphLoad;
         if (entrySpecifier !== undefined && entryParentUrl !== undefined) {
             const parentUrl = normalizeLoaderResolvedUrl(String(entryParentUrl));
             const internalParentUrl = internalLoaderBaseUrl(parentUrl);
@@ -5505,9 +5581,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                 parentUrl,
             );
             if (isLoaderThenable(cacheEntry)) cacheEntry = await cacheEntry;
-            const { cached, created } = cacheEntry;
-            if (created && cached && cached.error) return;
+            const { cached } = cacheEntry;
+            if (cached && cached.error) return;
             graphUrl = staticRegisteredLoaderChildUrl(cached, entryUrl);
+            graphLoad = cached;
             const aliases = staticRegisteredLoaderParentAliases(internalParentUrl);
             const specifierAliases = [specifier];
             if (cached && cached.url && isLoaderFileUrl(cached.url)) {
@@ -5528,7 +5605,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             }
             if (cached && cached.format === 'json') return;
         }
-        await prepareStaticRegisteredLoaderGraph(graphUrl, Object.create(null));
+        await prepareStaticRegisteredLoaderGraph(graphUrl, Object.create(null), graphLoad);
     }
     Object.defineProperty(globalThis, '__wasm_rquickjs_prepare_static_registered_loader_graph', {
         value: prepareStaticRegisteredLoaderEntry,

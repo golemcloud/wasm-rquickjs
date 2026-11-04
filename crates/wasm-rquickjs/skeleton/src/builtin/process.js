@@ -155,6 +155,10 @@ Object.defineProperty(process, 'env', {
 
 Object.defineProperty(process, Symbol.for('__wasm_rquickjs_refresh_process_state'), {
     value: function(nextArgv, nextEnv) {
+        // Refresh before argv/env operations can invoke application callbacks.
+        // Native relative I/O and captured cwd functions must agree throughout.
+        _cwd = get_cwd();
+
         let argvRefreshed = false;
         const currentArgv = argv;
         if (Array.isArray(currentArgv)) {
