@@ -52,6 +52,10 @@ async fn fetch_post_json_and_get(
     assert!(output.contains(
         "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
     ));
+    assert!(output.contains("Override bodyUsed: false\n"));
+    assert!(output.contains("Override body: overridden\n"));
+    assert!(output.contains("Request override method: POST\n"));
+    assert!(output.contains("Request override body: overridden-in-request\n"));
 
     Ok(())
 }
