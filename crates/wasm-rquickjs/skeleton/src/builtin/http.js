@@ -49,8 +49,8 @@ export function fetch(resource, options = {}) {
         let signal;
 
         if (typeof resource === 'object' && resource instanceof Request) {
-            method = normalizeFetchMethod(resource.method);
-            const headers = resource.headers;
+            method = normalizeFetchMethod(options.method || resource.method);
+            const headers = new Headers(options.headers || resource.headers);
             if (!headers.has('Accept')) {
                 headers.set('Accept', '*/*');
             }
@@ -66,11 +66,17 @@ export function fetch(resource, options = {}) {
             redirect = options.redirect || resource.redirect || 'follow';
             signal = options.signal || resource.signal;
 
-            if (resource._bodyUsed) {
-                throw new TypeError("Request body is already used");
+            if (options.body !== undefined) {
+                body = options.body instanceof ArrayBuffer || ArrayBuffer.isView(options.body)
+                    ? snapshotBufferSource(options.body)
+                    : options.body;
+            } else {
+                if (resource._bodyUsed) {
+                    throw new TypeError("Request body is already used");
+                }
+                resource._bodyUsed = true;
+                body = resource._body;
             }
-            resource._bodyUsed = true;
-            body = resource._body;
             url = resource.url;
         } else {
             method = normalizeFetchMethod(options.method || 'GET');
@@ -970,18 +976,19 @@ export class Headers {
 export class Request {
     constructor(input, options = {}) {
         if (input instanceof Request) {
-            if (input._bodyUsed && input._body != null) {
+            if (options.body === undefined && input._bodyUsed && input._body != null) {
                 throw new TypeError('Request body is already consumed');
             }
             this._url = input._url;
-            this._headers = new Headers(input._headers);
+            this._headers = new Headers(options.headers || input._headers);
             this._bodyUsed = false;
-            this._options = { ...input._options };
-            // Clone the request body. Buffered bodies have already been extracted from any mutable
-            // caller-owned BufferSource, so the internal value is replayable. A ReadableStream body
-            // has a single reader, so it is tee'd per the Fetch standard: the original keeps one
-            // branch and the clone gets the other.
-            if (input._body instanceof ReadableStream) {
+            this._options = { ...input._options, ...options };
+            // If options.body is explicitly provided, it takes precedence over the input Request's body.
+            if (options.body !== undefined) {
+                this._body = options.body instanceof ArrayBuffer || ArrayBuffer.isView(options.body)
+                    ? snapshotBufferSource(options.body)
+                    : options.body;
+            } else if (input._body instanceof ReadableStream) {
                 const [originalBranch, clonedBranch] = input._body.tee();
                 input._body = originalBranch;
                 this._body = clonedBranch;
