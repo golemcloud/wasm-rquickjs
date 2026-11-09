@@ -702,18 +702,19 @@ Used by:
 
 --- Apache License 2.0 ---
 Used by:
+* wit-bindgen 0.63.0
+* wit-bindgen 0.63.0
+* wit-bindgen-core 0.63.0
+* wit-bindgen-rust-macro 0.63.0
+* wit-bindgen-rust 0.63.0
 * wasi 0.11.1+wasi-snapshot-preview1
 * wasip2 1.0.4+wasi-0.2.12
 * wasip3 0.7.0+wasi-0.3.0
 * wasm-encoder 0.262.0
 * wasm-metadata 0.262.0
 * wasmparser 0.262.0
-* wit-bindgen-core 0.63.0
 * wit-bindgen-rt 0.42.1
-* wit-bindgen-rust-macro 0.63.0
-* wit-bindgen-rust 0.63.0
 * wit-bindgen 0.57.1
-* wit-bindgen 0.63.0
 * wit-component 0.262.0
 * wit-parser 0.262.0
 
@@ -2809,6 +2810,11 @@ limitations under the License.
 
 --- Apache License 2.0 ---
 Used by:
+* wit-bindgen 0.63.0
+* wit-bindgen 0.63.0
+* wit-bindgen-core 0.63.0
+* wit-bindgen-rust-macro 0.63.0
+* wit-bindgen-rust 0.63.0
 * ahash 0.8.12
 * async-lock 3.4.2
 * autocfg 1.5.1
@@ -2871,12 +2877,8 @@ Used by:
 * wasm-encoder 0.262.0
 * wasm-metadata 0.262.0
 * wasmparser 0.262.0
-* wit-bindgen-core 0.63.0
 * wit-bindgen-rt 0.42.1
-* wit-bindgen-rust-macro 0.63.0
-* wit-bindgen-rust 0.63.0
 * wit-bindgen 0.57.1
-* wit-bindgen 0.63.0
 * wit-component 0.262.0
 * wit-parser 0.262.0
 

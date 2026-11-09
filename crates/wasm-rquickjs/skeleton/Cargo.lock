@@ -3286,8 +3286,7 @@ dependencies = [
 [[package]]
 name = "wit-bindgen"
 version = "0.63.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b85a987ab61d365382d25c7d47e26edd48941b3bf6e3fbf76eff918bc71dab06"
+source = "git+https://github.com/golemcloud/wit-bindgen?rev=6f161c1bce440d7b0506950ee38338ce36742957#6f161c1bce440d7b0506950ee38338ce36742957"
 dependencies = [
  "futures",
  "wit-bindgen-rust-macro 0.63.0",
@@ -3329,8 +3328,7 @@ dependencies = [
 [[package]]
 name = "wit-bindgen-core"
 version = "0.63.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "775e122e390603abfacd548027016cd0113a6e2bf2f8ce6bdd3658b013456ea8"
+source = "git+https://github.com/golemcloud/wit-bindgen?rev=6f161c1bce440d7b0506950ee38338ce36742957#6f161c1bce440d7b0506950ee38338ce36742957"
 dependencies = [
  "anyhow",
  "heck",
@@ -3397,8 +3395,7 @@ dependencies = [
 [[package]]
 name = "wit-bindgen-rust"
 version = "0.63.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "84e26e13b9d972026778d2ffb7985736de116026fdc8d9464f966e12df2eb240"
+source = "git+https://github.com/golemcloud/wit-bindgen?rev=6f161c1bce440d7b0506950ee38338ce36742957#6f161c1bce440d7b0506950ee38338ce36742957"
 dependencies = [
  "anyhow",
  "heck",
@@ -3458,8 +3455,7 @@ dependencies = [
 [[package]]
 name = "wit-bindgen-rust-macro"
 version = "0.63.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "16a008a0d6b4840677326beb4edbeb210a2f1b7d0183fb7cc33f466b90fd7fb6"
+source = "git+https://github.com/golemcloud/wit-bindgen?rev=6f161c1bce440d7b0506950ee38338ce36742957#6f161c1bce440d7b0506950ee38338ce36742957"
 dependencies = [
  "anyhow",
  "prettyplease 0.3.0",

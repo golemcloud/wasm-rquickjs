@@ -178,7 +178,8 @@ wstd = { version = "=0.6.5", optional = true }
 # Preview 2 0.42 versions can coexist in this single skeleton; the generated Preview 3
 # bindings use `runtime_path: "wit_bindgen_p3::rt"` and the Wasmtime 50 async runtime contract.
 wasip3 = { version = "=0.7.0", optional = true }
-wit-bindgen-p3 = { package = "wit-bindgen", version = "0.63.0", default-features = false, features = ["async", "async-spawn", "macros", "inter-task-wakeup"], optional = true }
+# Pin generator and runtime together for indirect async parameter cleanup (Golem fork PR #5).
+wit-bindgen-p3 = { package = "wit-bindgen", version = "=0.63.0", git = "https://github.com/golemcloud/wit-bindgen", rev = "6f161c1bce440d7b0506950ee38338ce36742957", default-features = false, features = ["async", "async-spawn", "macros", "inter-task-wakeup"], optional = true }
 # Pure-Rust HTTP primitives used by the Preview 3 `fetch`/HTTP bridge (`builtin/http_p3.rs`) to
 # validate header names/values, HTTP versions, and to resolve canonical status reason phrases.
 # This matches the validation the Preview 2 path gets from `golem-wasi-http` (which re-exports the
