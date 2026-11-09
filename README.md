@@ -48,6 +48,18 @@ to run JavaScript code, but it is different in the following ways:
 - It does not provide support for using the component model from JS (defining imports and exports using WIT)
 - The imports the resulting WASM component has are WasmEdge specific
 
+## Release lines
+
+- `main` targets upcoming Golem 2.0 and releases wasm-rquickjs **0.5.x**, starting with `v0.5.0`.
+- `v0.4.x` is the maintenance branch for Golem 1.6.x bug fixes and wasm-rquickjs **0.4.x** releases.
+  It preserves main before the Wasmtime 50 upgrade.
+
+Cargo manifests intentionally retain the development version `0.0.0`. Release CI replaces it
+with the pushed Git tag's version when building binaries and publishing crates. Create `v0.5.x`
+tags from the Golem 2.0 line and `v0.4.x` tags from the maintenance branch only. The main-line
+workflow accepts only `v0.5.*` release tags; the maintenance branch retains its existing workflow.
+Branch preparation does not itself create a release tag or publish a release.
+
 ## Usage
 
 The tool can be used as a command line tool or as a library. The command line tool has two top level commands:
