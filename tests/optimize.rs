@@ -177,21 +177,12 @@ async fn run_probe_inner(
             }
         }
     }
-    impl wasmtime_wasi_http::p2::WasiHttpView for Host {
-        fn http(&mut self) -> wasmtime_wasi_http::p2::WasiHttpCtxView<'_> {
-            wasmtime_wasi_http::p2::WasiHttpCtxView {
+    impl wasmtime_wasi_http::WasiHttpView for Host {
+        fn http(&mut self) -> wasmtime_wasi_http::WasiHttpCtxView<'_> {
+            wasmtime_wasi_http::WasiHttpCtxView {
                 ctx: &mut self.http,
                 table: &mut self.table,
-                hooks: wasmtime_wasi_http::p2::default_hooks(),
-            }
-        }
-    }
-    impl wasmtime_wasi_http::p3::WasiHttpView for Host {
-        fn http(&mut self) -> wasmtime_wasi_http::p3::WasiHttpCtxView<'_> {
-            wasmtime_wasi_http::p3::WasiHttpCtxView {
-                ctx: &mut self.http,
-                table: &mut self.table,
-                hooks: wasmtime_wasi_http::p3::default_hooks(),
+                hooks: wasmtime_wasi_http::default_hooks(),
             }
         }
     }
@@ -210,12 +201,7 @@ async fn run_probe_inner(
     builder.stdout(stdout.clone()).stderr(stderr.clone());
     builder.env("GOL787_RUNTIME", "live").arg(path.as_str());
     if let Some(filesystem) = filesystem {
-        builder.preopened_dir(
-            filesystem,
-            "/",
-            wasmtime_wasi::DirPerms::all(),
-            wasmtime_wasi::FilePerms::all(),
-        )?;
+        builder.preopened_dir(filesystem, "/", wasmtime_wasi::FsPerms::ReadWrite)?;
     }
     if let Some(cwd) = cwd {
         builder.initial_cwd(cwd);

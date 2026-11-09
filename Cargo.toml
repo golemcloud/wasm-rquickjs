@@ -186,10 +186,10 @@ tokio = "1.47.1"
 tokio-util = "0.7.16"
 toml_edit = "0.22.27"
 wac-graph = "0.10.0"
-wasmtime = "=46.0.1"
-wasmtime-wasi = { version = "=46.0.1", default-features = false, features = ["p2"] }
-wasmtime-wasi-http = "=46.0.1"
-wasmtime-wizer = "=46.0.1"
+wasmtime = "=50.0.1"
+wasmtime-wasi = { version = "=50.0.1", default-features = false, features = ["p2"] }
+wasmtime-wasi-http = "=50.0.1"
+wasmtime-wizer = "=50.0.1"
 wit-bindgen-core = "0.58.0"
 wasm-encoder = "0.251.0"
 wasmparser_encoder = { package = "wasmparser", version = "0.251.0" }
@@ -203,7 +203,7 @@ oxc_span = "0.115"
 # Golem's forked wasmtime — uncomment these patches together with enabling the
 # `use-golem-wasmtime` feature.
 #[patch.crates-io]
-#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
-#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
-#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
-#wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v46.0.1-p3" }
+#wasmtime = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v50.0.1-p3" }
+#wasmtime-wasi = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v50.0.1-p3" }
+#wasmtime-wasi-http = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v50.0.1-p3" }
+#wasmtime-wizer = { git = "https://github.com/golemcloud/wasmtime.git", branch = "golem-wasmtime-v50.0.1-p3" }

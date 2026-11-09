@@ -369,7 +369,7 @@ fn wasmtime_fork_transform_supports_copied_manifests_and_new_patch_crates() {
     let temp = Utf8TempDir::new().expect("temporary directory should be created");
     let source = temp.path().join("source.toml");
     let output = temp.path().join("output.toml");
-    let branch = "golem-wasmtime-v46.0.1-p3";
+    let branch = "golem-wasmtime-v50.0.1-p3";
     fs::write(
         &source,
         format!(

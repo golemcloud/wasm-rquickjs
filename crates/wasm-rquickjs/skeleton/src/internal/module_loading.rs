@@ -1755,15 +1755,13 @@ fn is_object_method_shorthand_import(source: &str, import_start: usize, open_par
     let Some(close) = matching_paren_end(source, open_paren) else {
         return false;
     };
-    if next_non_whitespace_byte(source, close) != Some(b'{') {
+    let body = skip_ws_comments(source, close);
+    if source.as_bytes().get(body) != Some(&b'{') {
         return false;
     }
     // A call is never followed by `{` on the same line, so this is a method whatever
     // precedes it, e.g. a minified class member right after another member's `}`.
-    let line_break = source.as_bytes()[close..]
-        .iter()
-        .take_while(|byte| byte.is_ascii_whitespace())
-        .any(|byte| matches!(byte, b'\n' | b'\r'));
+    let line_break = source[close..body].contains(['\n', '\r', '\u{2028}', '\u{2029}']);
     if !line_break {
         return true;
     }

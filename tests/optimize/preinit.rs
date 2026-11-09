@@ -58,7 +58,7 @@ async fn optimizer_denies_external_io_for_all_initializers() -> anyhow::Result<(
                     (export "descriptor" (type (eq $descriptor)))
                     (export "get-directories" (func (result (list (tuple (own $descriptor) string)))))))"#,
             r#"(alias export $io "get-directories" (func $io))
-                (core func $io (canon lower (func $io) (memory $memory) (realloc (func $realloc))))"#,
+                (core func $io (canon lower (func $io) (memory $memory) (realloc (core func $realloc))))"#,
             "i32.const 0 call $io",
             "wasi:filesystem/preopens@0.3.0#get-directories",
         ),
@@ -71,7 +71,7 @@ async fn optimizer_denies_external_io_for_all_initializers() -> anyhow::Result<(
                     (export "descriptor" (type (eq $descriptor)))
                     (export "get-directories" (func (result (list (tuple (own $descriptor) string)))))))"#,
             r#"(alias export $io "get-directories" (func $io))
-                (core func $io (canon lower (func $io) (memory $memory) (realloc (func $realloc))))"#,
+                (core func $io (canon lower (func $io) (memory $memory) (realloc (core func $realloc))))"#,
             "i32.const 0 call $io",
             "wasi:filesystem/preopens@0.2.0#get-directories",
         ),
