@@ -147,6 +147,35 @@ impl JsModuleSpec {
     }
 }
 
+/// A Rust module that JavaScript can import from the generated component under `name`.
+///
+/// `module_def` is the Rust path of a type implementing `rquickjs::module::ModuleDef`, for example
+/// `my_crate::MyModule`. The crate that defines it is added with a [`DependencySpec`].
+#[derive(Debug, Clone)]
+pub struct NativeModuleSpec {
+    pub name: String,
+    pub module_def: String,
+}
+
+/// An entry added to the generated crate's `[dependencies]` table, or replacing the entry with the
+/// same key as a whole.
+///
+/// `value` is a TOML value: a version string or an inline table such as
+/// `{ path = "../my-crate" }`. A relative `path` is resolved against the current working directory
+/// and written relative to the generated crate.
+#[derive(Debug, Clone)]
+pub struct DependencySpec {
+    pub key: String,
+    pub value: String,
+}
+
+/// Additional inputs for [`generate_wrapper_crate_with_options`].
+#[derive(Debug, Clone, Default)]
+pub struct WrapperCrateOptions {
+    pub native_modules: Vec<NativeModuleSpec>,
+    pub dependencies: Vec<DependencySpec>,
+}
+
 /// Generates a Rust wrapper crate for a combination of a WIT package and a JavaScript module.
 ///
 /// The `wit` parameter should point to a WIT root (holding the WIT package of the component, with
@@ -183,7 +212,30 @@ pub fn generate_wrapper_crate_with_target(
     world: Option<&str>,
     target: GenerationTarget,
 ) -> anyhow::Result<()> {
+    generate_wrapper_crate_with_options(
+        wit,
+        js_modules,
+        output,
+        world,
+        target,
+        &WrapperCrateOptions::default(),
+    )
+}
+
+/// Generates a Rust wrapper crate with additional native modules and dependencies.
+///
+/// See [`generate_wrapper_crate`] for the common parameters and [`WrapperCrateOptions`] for the
+/// additional inputs.
+pub fn generate_wrapper_crate_with_options(
+    wit: &Utf8Path,
+    js_modules: &[JsModuleSpec],
+    output: &Utf8Path,
+    world: Option<&str>,
+    target: GenerationTarget,
+    options: &WrapperCrateOptions,
+) -> anyhow::Result<()> {
     validate_js_module_names(js_modules)?;
+    validate_native_modules(js_modules, &options.native_modules)?;
 
     if target.is_p3() && uses_composition(js_modules) {
         anyhow::bail!(
@@ -201,11 +253,16 @@ pub fn generate_wrapper_crate_with_target(
     let context = GeneratorContext::new(output, wit, world, target)?;
 
     // Generating the Cargo.toml file
-    generate_cargo_toml(&context)?;
+    generate_cargo_toml(&context, &options.dependencies)?;
 
-    // Copying the skeleton's Cargo.lock for faster dependency resolution
-    copy_skeleton_lock(context.output, &context.world_name)
-        .context("Failed to copy skeleton Cargo.lock")?;
+    // Copying the skeleton's Cargo.lock for faster dependency resolution. Custom dependencies
+    // change the graph that lock was resolved for, so it is not copied then: a fresh output
+    // directory has no lock and Cargo resolves one on the first build, while a lock already in
+    // the output directory, possibly a caller's resolved one, is kept.
+    if options.dependencies.is_empty() {
+        copy_skeleton_lock(context.output, &context.world_name)
+            .context("Failed to copy skeleton Cargo.lock")?;
+    }
 
     // The generated crate carries the reviewed attribution material for its exact WASI target.
     // Distributors should ship this sidecar with the compiled component.
@@ -241,7 +298,8 @@ pub fn generate_wrapper_crate_with_target(
         .context("Failed to generate the component export implementations")?;
 
     // Generating the native modules implementing the component imports
-    generate_import_modules(&context).context("Failed to generate the component import modules")?;
+    generate_import_modules(&context, &options.native_modules)
+        .context("Failed to generate the component import modules")?;
 
     // Generating the conversions.rs file implementing the IntoJs and FromJs typeclass instances
     // This step must be done after `generate_export_impls` to ensure all visited types are registered.
@@ -771,11 +829,88 @@ fn validate_js_module_names(js_modules: &[JsModuleSpec]) -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Native modules share the module namespace with the JavaScript modules and the runtime's
+/// reserved names; collisions with imported WIT interfaces are checked while generating them.
+fn validate_native_modules(
+    js_modules: &[JsModuleSpec],
+    native_modules: &[NativeModuleSpec],
+) -> anyhow::Result<()> {
+    let mut names = BTreeSet::new();
+    for module in native_modules {
+        if module.name.is_empty() {
+            anyhow::bail!("native module name must not be empty");
+        }
+        if module.name.starts_with("node:") || module.name.starts_with("__wasm_rquickjs_builtin/") {
+            anyhow::bail!(
+                "native module name `{}` uses a reserved runtime namespace",
+                module.name
+            );
+        }
+        if js_modules.iter().any(|js| js.name == module.name) {
+            anyhow::bail!(
+                "native module name `{}` is also a JavaScript module name",
+                module.name
+            );
+        }
+        if !names.insert(module.name.as_str()) {
+            anyhow::bail!(
+                "native module name `{}` is given more than once",
+                module.name
+            );
+        }
+        syn::parse_str::<syn::Path>(&module.module_def).map_err(|error| {
+            anyhow!(
+                "native module `{}` has an invalid Rust path `{}`: {error}",
+                module.name,
+                module.module_def
+            )
+        })?;
+    }
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
-    use super::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
+    use super::{
+        DependencySpec, EmbeddingMode, GenerationTarget, JsModuleSpec, NativeModuleSpec,
+        WrapperCrateOptions, generate_wrapper_crate, generate_wrapper_crate_with_options,
+    };
     use camino::Utf8Path;
     use camino_tempfile::Utf8TempDir;
+
+    fn native(name: &str, module_def: &str) -> NativeModuleSpec {
+        NativeModuleSpec {
+            name: name.to_string(),
+            module_def: module_def.to_string(),
+        }
+    }
+
+    fn generate_with_native_modules(
+        root: &Utf8Path,
+        target: GenerationTarget,
+        options: &WrapperCrateOptions,
+    ) -> anyhow::Result<()> {
+        std::fs::create_dir_all(root.join("wit"))?;
+        std::fs::write(
+            root.join("wit").join("world.wit"),
+            "package test:native;\n\nworld native {\n  export run: func() -> string;\n}\n",
+        )?;
+        std::fs::write(
+            root.join("module.js"),
+            "export function run() { return 'ok'; }\n",
+        )?;
+        generate_wrapper_crate_with_options(
+            &root.join("wit"),
+            &[JsModuleSpec {
+                name: "module".to_string(),
+                mode: EmbeddingMode::EmbedFile(root.join("module.js")),
+            }],
+            &root.join("out"),
+            None,
+            target,
+            options,
+        )
+    }
 
     fn module(name: &str) -> JsModuleSpec {
         JsModuleSpec {
@@ -821,5 +956,140 @@ mod tests {
             "additional JavaScript module name `__wasm_rquickjs_builtin/internal/test` uses reserved runtime namespace `__wasm_rquickjs_builtin/`"
         );
         assert!(!output.path().join("out").exists());
+    }
+
+    #[test]
+    fn rejects_invalid_native_modules() {
+        let output = Utf8TempDir::new().unwrap();
+        for (modules, expected) in [
+            (
+                vec![native("node:fs", "a::B")],
+                "native module name `node:fs` uses a reserved runtime namespace",
+            ),
+            (
+                vec![native("main", "a::B")],
+                "native module name `main` is also a JavaScript module name",
+            ),
+            (
+                vec![native("x", "a::B"), native("x", "a::C")],
+                "native module name `x` is given more than once",
+            ),
+            (
+                vec![native("", "a::B")],
+                "native module name must not be empty",
+            ),
+        ] {
+            let error = generate_wrapper_crate_with_options(
+                Utf8Path::new("unused-wit"),
+                &[module("main")],
+                &output.path().join("out"),
+                None,
+                GenerationTarget::WasiP2,
+                &WrapperCrateOptions {
+                    native_modules: modules,
+                    dependencies: vec![],
+                },
+            )
+            .unwrap_err();
+            assert_eq!(error.to_string(), expected);
+        }
+        let error = generate_wrapper_crate_with_options(
+            Utf8Path::new("unused-wit"),
+            &[module("main")],
+            &output.path().join("out"),
+            None,
+            GenerationTarget::WasiP2,
+            &WrapperCrateOptions {
+                native_modules: vec![native("x", "not a path")],
+                dependencies: vec![],
+            },
+        )
+        .unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .starts_with("native module `x` has an invalid Rust path `not a path`"),
+            "{error}"
+        );
+        assert!(!output.path().join("out").exists());
+    }
+
+    #[test]
+    fn registers_native_modules_and_replaces_dependencies() -> anyhow::Result<()> {
+        let temp = Utf8TempDir::new()?;
+        std::fs::create_dir_all(temp.path().join("native"))?;
+        let replacement = r#"{ package = "wit-bindgen", version = "=0.59.0", optional = true }"#;
+        for target in [GenerationTarget::WasiP2, GenerationTarget::WasiP3] {
+            generate_with_native_modules(
+                temp.path(),
+                target,
+                &WrapperCrateOptions {
+                    native_modules: vec![native("my-native", "my_native::Module")],
+                    dependencies: vec![
+                        DependencySpec {
+                            key: "my-native".to_string(),
+                            value: format!(
+                                "{{ path = {:?} }}",
+                                temp.path().join("native").as_str()
+                            ),
+                        },
+                        DependencySpec {
+                            key: "wit-bindgen-p3".to_string(),
+                            value: replacement.to_string(),
+                        },
+                    ],
+                },
+            )?;
+
+            let cargo_toml = std::fs::read_to_string(temp.path().join("out").join("Cargo.toml"))?;
+            assert!(
+                cargo_toml.contains(r#"my-native = { path = "../native" }"#),
+                "{cargo_toml}"
+            );
+            assert!(
+                cargo_toml.contains(&format!("wit-bindgen-p3 = {replacement}\n")),
+                "{cargo_toml}"
+            );
+            assert_eq!(cargo_toml.matches("wit-bindgen-p3 =").count(), 1);
+
+            let modules = std::fs::read_to_string(
+                temp.path()
+                    .join("out")
+                    .join("src")
+                    .join("modules")
+                    .join("mod.rs"),
+            )?;
+            let compact: String = modules.chars().filter(|c| !c.is_whitespace()).collect();
+            assert!(
+                compact.contains(r#"resolver.with_module("my-native")"#),
+                "{modules}"
+            );
+            assert!(
+                compact.contains(r#"with_module("my-native",my_native::Module)"#),
+                "{modules}"
+            );
+        }
+        Ok(())
+    }
+
+    #[test]
+    fn rejects_dependency_values_that_are_not_versions_or_tables() {
+        let temp = Utf8TempDir::new().unwrap();
+        let error = generate_with_native_modules(
+            temp.path(),
+            GenerationTarget::WasiP2,
+            &WrapperCrateOptions {
+                native_modules: vec![],
+                dependencies: vec![DependencySpec {
+                    key: "x".to_string(),
+                    value: "[1, 2]".to_string(),
+                }],
+            },
+        )
+        .unwrap_err();
+        assert_eq!(
+            error.to_string(),
+            "dependency `x` must be a version string or an inline table"
+        );
     }
 }

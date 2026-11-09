@@ -108,6 +108,7 @@ impl NodeHttpClientRequest {
     }
 
     pub async fn start<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
+        crate::internal::preinit::check("HTTP request", "remote endpoint");
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }

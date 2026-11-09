@@ -134,7 +134,11 @@ jobs:
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
       - name: Optimizer copy budget contracts (Golem fork)
-        run: cargo test --test optimize $CI_WASMTIME_FORK_FEATURES
+        # Full guest templates spawn Cargo/Wasmtime compiler pools. Reuse only
+        # build artifacts and bound competing cases; runtime state stays fresh.
+        env:
+          WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
+        run: cargo test --test optimize $CI_WASMTIME_FORK_FEATURES -- --test-threads 2
       - name: Collect Test Report
         uses: ./.github/actions/collect-test-report
         if: always()

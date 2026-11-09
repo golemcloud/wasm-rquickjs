@@ -1,8 +1,6 @@
-use crate::{GenerationTarget, GeneratorContext};
-use anyhow::anyhow;
-use camino::Utf8Path;
-#[cfg(feature = "external-skeleton")]
-use camino::Utf8PathBuf;
+use crate::{DependencySpec, GenerationTarget, GeneratorContext};
+use anyhow::{Context, anyhow};
+use camino::{Utf8Path, Utf8PathBuf};
 #[cfg(not(feature = "external-skeleton"))]
 use include_dir::{Dir, include_dir};
 use std::borrow::Cow;
@@ -77,7 +75,11 @@ fn skeleton_cargo_toml() -> anyhow::Result<Cow<'static, str>> {
 ///   user-owned JavaScript, so its package policy must be chosen by that user.
 /// - For the Preview 3 target, replacing the default feature set with `["p3", "normal-p3"]` so
 ///   the crate compiles the async runtime spine and standard capability tier.
-pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
+/// - Adding the caller's `dependencies`, each replacing a skeleton entry with the same key.
+pub fn generate_cargo_toml(
+    context: &GeneratorContext<'_>,
+    dependencies: &[DependencySpec],
+) -> anyhow::Result<()> {
     // Loading the skeleton Cargo.toml file
     let cargo_toml = skeleton_cargo_toml()?;
 
@@ -91,10 +93,83 @@ pub fn generate_cargo_toml(context: &GeneratorContext<'_>) -> anyhow::Result<()>
         set_p3_default_features(&mut doc);
     }
 
+    add_dependencies(&mut doc, context.output, dependencies)?;
+
     // Writing the result
     let output_path = context.output.join("Cargo.toml");
     crate::write_if_changed(output_path, doc.to_string())?;
     Ok(())
+}
+
+fn add_dependencies(
+    doc: &mut DocumentMut,
+    output: &Utf8Path,
+    dependencies: &[DependencySpec],
+) -> anyhow::Result<()> {
+    for dependency in dependencies {
+        let mut parsed = dependency
+            .value
+            .parse::<toml_edit::Value>()
+            .map_err(|error| {
+                anyhow!(
+                    "dependency `{}` is not a TOML value: {error}",
+                    dependency.key
+                )
+            })?;
+        if let Some(table) = parsed.as_inline_table_mut() {
+            if let Some(path) = table.get("path").and_then(|path| path.as_str()) {
+                let relative =
+                    relative_dependency_path(Utf8Path::new(path), output).with_context(|| {
+                        format!("dependency `{}` has an unusable path", dependency.key)
+                    })?;
+                table.insert("path", relative.as_str().into());
+            }
+        } else if !parsed.is_str() {
+            anyhow::bail!(
+                "dependency `{}` must be a version string or an inline table",
+                dependency.key
+            );
+        }
+        parsed.decor_mut().clear();
+        doc["dependencies"]
+            .as_table_mut()
+            .ok_or_else(|| anyhow!("Cargo.toml skeleton has no [dependencies] table"))?
+            .insert(&dependency.key, toml_edit::Item::Value(parsed));
+    }
+    Ok(())
+}
+
+/// Resolves `path` against the current working directory and expresses it relative to the
+/// generated crate, so the crate stays valid when its checkout moves.
+fn relative_dependency_path(path: &Utf8Path, output: &Utf8Path) -> anyhow::Result<Utf8PathBuf> {
+    let target = Utf8PathBuf::try_from(std::fs::canonicalize(path)?)?;
+    let base = Utf8PathBuf::try_from(std::fs::canonicalize(output)?)?;
+    let mut target_components = target.components().peekable();
+    let mut base_components = base.components().peekable();
+    let mut shared = 0;
+    while let (Some(left), Some(right)) = (target_components.peek(), base_components.peek()) {
+        if left != right {
+            break;
+        }
+        target_components.next();
+        base_components.next();
+        shared += 1;
+    }
+    if shared == 0 {
+        // Different roots, such as Windows drives, have no relative form.
+        return Ok(target);
+    }
+    let mut relative = Utf8PathBuf::new();
+    for _ in base_components {
+        relative.push("..");
+    }
+    for component in target_components {
+        relative.push(component);
+    }
+    if relative.as_str().is_empty() {
+        relative.push(".");
+    }
+    Ok(relative)
 }
 
 /// Changes the crate's package name to the selected WIT world's name

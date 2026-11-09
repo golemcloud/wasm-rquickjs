@@ -331,11 +331,15 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
 #[test]
 #[test_r::tag(report_contract)]
 fn module_known_gap_deferrals_require_an_exact_reason() {
-    let accepted = "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source";
-    assert!(is_accepted_module_known_gap_reason(Some(accepted)));
-    assert!(!is_accepted_module_known_gap_reason(Some(&format!(
-        "unrelated module failure; {accepted}"
-    ))));
+    for accepted in [
+        "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source",
+        "module.register does not transfer MessagePort ownership from transferList into an isolated loader context",
+    ] {
+        assert!(is_accepted_module_known_gap_reason(Some(accepted)));
+        assert!(!is_accepted_module_known_gap_reason(Some(&format!(
+            "unrelated module failure; {accepted}"
+        ))));
+    }
 }
 
 #[test]
@@ -384,6 +388,7 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
         "loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support",
         "QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361",
         "programmatic loader registration in this vendored file is exercised through spawned process.execPath --eval/--import/--loader CLI mode",
+        "module.register does not transfer MessagePort ownership from transferList into an isolated loader context",
         "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps",
         "remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes",
         "requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture",

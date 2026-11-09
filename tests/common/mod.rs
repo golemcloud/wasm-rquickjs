@@ -1648,6 +1648,25 @@ fn newest_modified_time_of_existing(paths: &[Utf8PathBuf]) -> anyhow::Result<Sys
     Ok(newest)
 }
 
+fn optimize_cache_inputs(input: &Utf8Path) -> Vec<Utf8PathBuf> {
+    vec![
+        input.to_path_buf(),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("src")
+            .join("optimize.rs"),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("src")
+            .join("optimize"),
+        Utf8Path::new("Cargo.toml").to_path_buf(),
+        Utf8Path::new("Cargo.lock").to_path_buf(),
+        Utf8Path::new("crates")
+            .join("wasm-rquickjs")
+            .join("Cargo.toml"),
+    ]
+}
+
 fn compile_cache_inputs(path: &Utf8Path) -> Vec<Utf8PathBuf> {
     vec![
         path.to_path_buf(),
@@ -2667,21 +2686,34 @@ mod tests {
     }
 
     #[test]
-    fn bridge_changes_invalidate_compiled_artifact_cache() -> anyhow::Result<()> {
+    fn source_changes_invalidate_artifact_caches() -> anyhow::Result<()> {
         if test_drop_cache_enabled() {
             return Ok(());
         }
 
-        for relative in [
-            "src/lib.rs",
-            "wit/deps/golem-websocket/websocket.wit",
-            "wit-p3/deps/golem-websocket/websocket.wit",
+        for (relative, source_inputs) in [
+            (
+                "crates/golem-websocket/src/lib.rs",
+                compile_cache_inputs(Utf8Path::new("fixture")),
+            ),
+            (
+                "crates/golem-websocket/wit/deps/golem-websocket/websocket.wit",
+                compile_cache_inputs(Utf8Path::new("fixture")),
+            ),
+            (
+                "crates/golem-websocket/wit-p3/deps/golem-websocket/websocket.wit",
+                compile_cache_inputs(Utf8Path::new("fixture")),
+            ),
+            (
+                "crates/wasm-rquickjs/src/optimize/preinit.rs",
+                optimize_cache_inputs(Utf8Path::new("fixture.wasm")),
+            ),
         ] {
             let temp = Utf8TempDir::new()?;
-            let bridge_input = temp.path().join("crates/golem-websocket").join(relative);
+            let bridge_input = temp.path().join(relative);
             fs::create_dir_all(bridge_input.parent().unwrap())?;
             fs::write(&bridge_input, "bridge-v1")?;
-            let inputs: Vec<_> = compile_cache_inputs(Utf8Path::new("fixture"))
+            let inputs: Vec<_> = source_inputs
                 .iter()
                 .map(|path| temp.path().join(path))
                 .collect();
@@ -2698,7 +2730,7 @@ mod tests {
             )?;
             assert!(
                 !output_fresh_for_inputs(&output, &stamp, &inputs, signature),
-                "a bridge-only change to {relative} must invalidate the component"
+                "a source-only change to {relative} must invalidate the component"
             );
         }
         Ok(())
@@ -4072,6 +4104,7 @@ impl TestInstance {
             io_ctx: Arc::new(Mutex::new(io_ctx)),
             golem_spans: golem_spans.clone(),
             linear_memory_high_water: track_linear_memory.then(|| Arc::new(AtomicUsize::new(0))),
+            linear_memory_limit: None,
         };
 
         let mut store = Store::new(engine, host);
@@ -4183,6 +4216,12 @@ impl TestInstance {
     pub fn set_epoch_deadline(&mut self, timeout_secs: u64) {
         self.store.data_mut().timeout = Duration::from_secs(timeout_secs);
         self.store.data_mut().started_at = Instant::now();
+    }
+
+    /// Caps the guest's linear memory: growth past `bytes` fails like `memory.grow` would.
+    pub fn set_linear_memory_limit(&mut self, bytes: usize) {
+        self.store.data_mut().linear_memory_limit = Some(bytes);
+        self.store.limiter(|host| host);
     }
 
     pub fn temp_dir_path(&self) -> &Utf8Path {
@@ -4437,6 +4476,11 @@ impl CompiledTest {
         // P2 and P3 builds of the same example never share an output tree.
         let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
         let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
+        // Test workers are separate processes. Lock the shared output root even when artifact
+        // caching is disabled, so generation and patching cannot overlap another worker's build.
+        fs::create_dir_all(wrapper_crate_root.parent().unwrap())?;
+        let wrapper_root_guard = fs::File::create(wrapper_crate_root.with_extension("lock"))?;
+        wrapper_root_guard.lock()?;
 
         // shared_target is relative to wrapper_crate_root. Internal-test builds are isolated from
         // normal builds because runtime group 2 compiles both variants of the same fetch example
@@ -4618,18 +4662,7 @@ impl CompiledTest {
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
         let optimize_stamp = input.with_extension("optimized.stamp");
-        let optimize_inputs = vec![
-            input.to_path_buf(),
-            Utf8Path::new("crates")
-                .join("wasm-rquickjs")
-                .join("src")
-                .join("optimize.rs"),
-            Utf8Path::new("Cargo.toml").to_path_buf(),
-            Utf8Path::new("Cargo.lock").to_path_buf(),
-            Utf8Path::new("crates")
-                .join("wasm-rquickjs")
-                .join("Cargo.toml"),
-        ];
+        let optimize_inputs = optimize_cache_inputs(input);
         let optimize_signature = cache_stamp_signature(
             input.file_stem().unwrap_or("component"),
             FeatureCombination::Normal,
@@ -4680,7 +4713,11 @@ impl CompiledTest {
         }
 
         println!("Optimizing component {input} -> {optimized}");
-        wasm_rquickjs::optimize_component(input, &optimized, "wizer-initialize").await?;
+        // Readers outlive the build lock. Publish a complete component instead of truncating
+        // the shared output while another worker may be loading it.
+        let pending = NamedUtf8TempFile::new_in(optimized.parent().unwrap())?;
+        wasm_rquickjs::optimize_component(input, pending.path(), "wizer-initialize").await?;
+        pending.persist(&optimized)?;
         if test_artifact_cache_enabled() {
             refresh_cache_stamp(&optimize_stamp, &optimize_signature)?;
         }
@@ -4788,6 +4825,8 @@ pub struct Host {
     pub io_ctx: Arc<Mutex<wasmtime_wasi::IoCtx>>,
     pub golem_spans: Option<Arc<Mutex<Vec<GolemSpan>>>>,
     pub linear_memory_high_water: Option<Arc<AtomicUsize>>,
+    /// Refuses linear-memory growth past this size, as an embedder's memory cap does.
+    pub linear_memory_limit: Option<usize>,
 }
 
 impl wasmtime::ResourceLimiter for Host {
@@ -4805,7 +4844,10 @@ impl wasmtime::ResourceLimiter for Host {
         if is_linear_memory && let Some(high_water) = &self.linear_memory_high_water {
             high_water.fetch_max(current.max(desired), Ordering::Relaxed);
         }
-        Ok(true)
+        Ok(!is_linear_memory
+            || self
+                .linear_memory_limit
+                .is_none_or(|limit| desired <= limit))
     }
 
     fn table_growing(

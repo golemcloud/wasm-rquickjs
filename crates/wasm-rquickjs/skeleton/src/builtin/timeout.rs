@@ -35,6 +35,28 @@ pub mod native_module {
 
         let timers = services.timers.clone();
         drop(services);
+        #[cfg(feature = "p3")]
+        if let Some(owner) = timers
+            .child_owner
+            .borrow()
+            .as_ref()
+            .and_then(std::rc::Weak::upgrade)
+        {
+            let (handle, registration) = futures::future::AbortHandle::new_pair();
+            timers.abort_handles.borrow_mut().insert(key, handle);
+            owner.schedule(
+                super::super::child_timers::ChildTimer {
+                    key,
+                    delay,
+                    periodic,
+                    callback: code_or_fn,
+                    args,
+                },
+                registration,
+            );
+            timers.changed();
+            return key;
+        }
         if timers.component_owned.get() {
             let (task, handle) = abortable(super::scheduled_component_task(
                 code_or_fn, delay, periodic, args, key,
@@ -246,7 +268,7 @@ async fn scheduled_component_task(
     .await;
 }
 
-fn invoke_scheduled_task(
+pub(crate) fn invoke_scheduled_task(
     ctx: Ctx<'_>,
     code_or_fn: Persistent<Value<'static>>,
     args: Persistent<Vec<Value<'static>>>,
@@ -255,10 +277,14 @@ fn invoke_scheduled_task(
     run_scheduled_task(ctx.clone(), code_or_fn, args, timer_key)
         .catch(&ctx)
         .unwrap_or_else(|e| {
-            eprintln!(
-                "Timer callback error escaped JS uncaught handler: {}",
+            let output = ctx
+                .userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .output_sink();
+            output.write_stderr(&format!(
+                "Timer callback error escaped JS uncaught handler: {}\n",
                 format_caught_error(e)
-            );
+            ));
         });
     ctx.userdata::<RuntimeServices>()
         .expect("runtime services not initialized")
@@ -303,7 +329,13 @@ fn run_scheduled_task(
     } else if let Some(code) = restored_code_or_fn.as_string() {
         ctx.eval(code.to_string()?)
     } else {
-        eprintln!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        let output = ctx
+            .userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .output_sink();
+        output.write_stderr(&format!(
+            "Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}\n"
+        ));
         Ok(())
     };
 

@@ -1,7 +1,9 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::str::FromStr;
-use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+use wasm_rquickjs::{
+    DependencySpec, EmbeddingMode, GenerationTarget, JsModuleSpec, NativeModuleSpec,
+};
 
 /// The WASI generation target selectable on the command line.
 #[derive(ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
@@ -62,6 +64,19 @@ pub enum Command {
         /// synchronous Preview 2 wrapper; `wasi-p3` generates the opt-in Preview 3 wrapper.
         #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
         target: WasiTarget,
+
+        /// A Rust module JavaScript can import, as `name=rust::path::Type`, where the type
+        /// implements `rquickjs::module::ModuleDef`. Add its crate with `--dependency`. It takes
+        /// precedence over a schemeless builtin alias with the same name, such as `fs`
+        #[arg(long)]
+        native_module: Vec<NativeModuleSpecArg>,
+
+        /// A `[dependencies]` entry of the generated crate, as `key=<TOML value>`, for example
+        /// `my-crate={ path = "../my-crate" }`. It replaces an entry with the same key. A
+        /// relative `path` is resolved against the current directory. With any dependency, the
+        /// skeleton's `Cargo.lock` is not copied; a lock already in the output directory is kept
+        #[arg(long)]
+        dependency: Vec<DependencySpecArg>,
     },
     /// Generate TypeScript module definitions
     GenerateDTS {
@@ -111,6 +126,40 @@ pub enum Command {
         #[arg(long, required = true)]
         js: Vec<Utf8PathBuf>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeModuleSpecArg(pub NativeModuleSpec);
+
+impl FromStr for NativeModuleSpecArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (name, module_def) = s
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid native module spec: {s}"))?;
+        Ok(NativeModuleSpecArg(NativeModuleSpec {
+            name: name.to_string(),
+            module_def: module_def.to_string(),
+        }))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DependencySpecArg(pub DependencySpec);
+
+impl FromStr for DependencySpecArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (key, value) = s
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid dependency spec: {s}"))?;
+        Ok(DependencySpecArg(DependencySpec {
+            key: key.trim().to_string(),
+            value: value.trim().to_string(),
+        }))
+    }
 }
 
 #[derive(Debug, Clone)]

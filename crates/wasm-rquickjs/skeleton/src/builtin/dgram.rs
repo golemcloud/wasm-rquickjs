@@ -39,6 +39,7 @@ pub mod native_module {
 
 #[cfg(feature = "p2")]
 fn create_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<DgramSocket> {
+    crate::internal::preinit::check("UDP socket creation", "network socket");
     let ip_family = match family {
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,
@@ -92,6 +93,7 @@ struct DgramInner {
 // borrow across the suspension point.
 #[cfg(feature = "p3")]
 fn create_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<DgramSocket> {
+    crate::internal::preinit::check("UDP socket creation", "network socket");
     let ip_family = match family {
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,

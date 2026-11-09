@@ -3,6 +3,345 @@ import fs from 'node:fs';
 import { createRequire } from 'node:module';
 import { pathToFileURL } from 'node:url';
 
+// Pure builtin discovery must also work during pre-initialization and retain
+// the same runtime-local object after the component is restored.
+const bootstrapDiscoveredPath = process.getBuiltinModule('path');
+
+export async function testBuiltinDiscovery(testCase) {
+    const processModule = await import('node:process');
+    const get = processModule.getBuiltinModule;
+    assert.strictEqual(get, processModule.default.getBuiltinModule);
+    assert.strictEqual(get, process.getBuiltinModule);
+    assert.strictEqual(get.length, 1);
+    const module = get('module');
+    const require = createRequire(import.meta.url);
+    assert.strictEqual(bootstrapDiscoveredPath, get('node:path'));
+
+    if (testCase === 0) {
+        let coercions = 0;
+        const coercible = {
+            toString() { coercions += 1; return 'fs'; },
+            [Symbol.toPrimitive]() { coercions += 1; return 'fs'; },
+        };
+        for (const value of [undefined, null, 1, false, [], {}, () => {}, Symbol('id'),
+            new String('fs'), coercible]) {
+            assert.throws(() => get(value), { code: 'ERR_INVALID_ARG_TYPE' });
+        }
+        assert.strictEqual(coercions, 0);
+        for (const id of ['missing', './fs', 'fs/', 'NODE:fs', 'node:node:fs',
+            'internal/util', 'node:internal/util', '__wasm_rquickjs_builtin/fs_native',
+            'node:__wasm_rquickjs_builtin/fs_native', 'toString', '__proto__',
+            'constructor', 'node:__proto__', 'test', 'sqlite', 'sea']) {
+            assert.strictEqual(get(id), undefined, id);
+        }
+        for (const id of ['fs', 'module', 'process', 'sys', 'assert/strict', 'path/posix',
+            'path/win32', 'fs/promises', 'stream/promises', '_stream_readable',
+            '_stream_writable', '_stream_duplex', '_stream_transform', '_stream_passthrough']) {
+            assert.strictEqual(get(id), require(id), id);
+            assert.strictEqual(get('node:' + id), get(id), id);
+        }
+        for (const id of ['node:test', 'node:sqlite']) {
+            assert.strictEqual(get(id), require(id), id);
+        }
+        // Actual package capability probes: keep absent SEA/zstd capabilities
+        // absent, so callers can take their ordinary-runtime/uncompressed path.
+        assert.strictEqual(get('node:sea'), undefined);
+        assert.strictEqual(get('node:sea')?.isSea() ?? false, false);
+        const zlib = get('node:zlib');
+        assert.strictEqual(zlib, require('zlib'));
+        assert.strictEqual(zlib.zstdCompressSync, undefined);
+        assert.strictEqual(typeof zlib.gzipSync, 'function');
+    } else if (testCase === 1) {
+        const originalLoad = module._load;
+        const originalResolve = module._resolveFilename;
+        const originalRequire = globalThis.require;
+        const previousEntry = require.cache.punycode;
+        const fake = {};
+        const hookError = new Error('builtin discovery traversed a loader hook');
+        const unexpected = () => { throw hookError; };
+        try {
+            require.cache.punycode = { exports: fake };
+            assert.strictEqual(require('punycode'), fake);
+            module._load = unexpected;
+            assert.throws(() => require('node:os'), error => error === hookError);
+            module._load = originalLoad;
+            module._resolveFilename = unexpected;
+            module._load = unexpected;
+            globalThis.require = unexpected;
+            const punycode = get('node:punycode');
+            assert.notStrictEqual(punycode, fake);
+            assert.strictEqual(punycode.toASCII('mañana.com'), 'xn--maana-pta.com');
+            assert.strictEqual(get('punycode'), punycode);
+            assert.strictEqual(get('not-a-builtin'), undefined);
+        } finally {
+            module._load = originalLoad;
+            module._resolveFilename = originalResolve;
+            if (originalRequire === undefined) delete globalThis.require;
+            else globalThis.require = originalRequire;
+            if (previousEntry === undefined) delete require.cache.punycode;
+            else require.cache.punycode = previousEntry;
+        }
+        module.register('data:text/javascript,' + encodeURIComponent(
+            'export function resolve(id) {\n' +
+            '  if (id === "discovery-hook-control") return {\n' +
+            '    url: "data:text/javascript,export default 1", shortCircuit: true };\n' +
+            '  throw new Error("unexpected resolve hook");\n' +
+            '}\n' +
+            'export function load() { throw new Error("unexpected load hook"); }',
+        ), import.meta.url);
+        await assert.rejects(import('node:os'), /unexpected resolve hook/);
+        await assert.rejects(import('discovery-hook-control'), /unexpected load hook/);
+        const querystring = get('node:querystring');
+        assert.strictEqual(querystring.stringify({ answer: 42 }), 'answer=42');
+        assert.strictEqual(querystring, get('querystring'));
+        assert.strictEqual(typeof get('node:_stream_readable').from, 'function');
+    } else if (testCase === 2) {
+        const originalConsole = globalThis.console;
+        const originalLog = originalConsole.log;
+        const replacementLog = function replacementLog() {};
+        const replacementGlobal = {};
+        try {
+            originalConsole.log = replacementLog;
+            globalThis.console = replacementGlobal;
+            const found = get('node:console');
+            assert.strictEqual(found, originalConsole);
+            assert.strictEqual(get('console'), found);
+            assert.strictEqual(require('console'), found);
+            assert.strictEqual(found.log, replacementLog);
+            assert.strictEqual(globalThis.console, replacementGlobal);
+            assert.strictEqual(Object.hasOwn(replacementGlobal, 'Console'), false);
+            const bare = await import('console');
+            const canonical = await import('node:console');
+            assert.strictEqual(bare.default, originalConsole);
+            assert.strictEqual(canonical.default, originalConsole);
+            assert.strictEqual(bare.log, replacementLog);
+            assert.strictEqual(canonical.log, replacementLog);
+        } finally {
+            originalConsole.log = originalLog;
+            globalThis.console = originalConsole;
+            module.syncBuiltinESMExports();
+        }
+    } else if (testCase === 3) {
+        const namespace = await import('node:fs');
+        const original = namespace.readFileSync;
+        const replacement = function replacementReadFileSync() {};
+        const found = get('fs');
+        try {
+            found.readFileSync = replacement;
+            assert.strictEqual(get('node:fs').readFileSync, replacement);
+            assert.strictEqual(require('fs'), found);
+            assert.strictEqual(namespace.readFileSync, original);
+            module.syncBuiltinESMExports();
+            assert.strictEqual(namespace.readFileSync, replacement);
+        } finally {
+            found.readFileSync = original;
+            module.syncBuiltinESMExports();
+        }
+        const vm = get('vm');
+        assert.strictEqual(vm.runInNewContext('process.getBuiltinModule("path")', { process }),
+            get('path'));
+    } else if (testCase === 4) {
+        const { runJavaScript } = await import('wasm-rquickjs:execution');
+        const parent = get('path');
+        parent.discoveryParentMarker = true;
+        try {
+            const first = await runJavaScript({ source: `
+                const { getBuiltinModule, default: processModule } = await import('node:process');
+                if (getBuiltinModule !== processModule.getBuiltinModule ||
+                    getBuiltinModule !== process.getBuiltinModule) throw new Error('process identity');
+                const path = getBuiltinModule('path');
+                if (path.discoveryParentMarker !== undefined) throw new Error('parent cache leaked');
+                path.discoveryJobMarker = true;
+                return path === (await import('node:path')).default;
+            ` });
+            assert.strictEqual(first.value, true);
+            const second = await runJavaScript({ source: `
+                const path = process.getBuiltinModule('node:path');
+                return path.discoveryJobMarker === undefined &&
+                    path.discoveryParentMarker === undefined;
+            ` });
+            assert.strictEqual(second.value, true);
+            assert.strictEqual(parent.discoveryJobMarker, undefined);
+        } finally {
+            delete parent.discoveryParentMarker;
+        }
+    } else if (testCase === 5) {
+        const util = get('util');
+        const original = util.format;
+        const canonical = await import('node:util');
+        const first = function firstFormat() {};
+        const second = function secondFormat() {};
+        try {
+            util.format = first;
+            const alias = await import('node:sys');
+            assert.notStrictEqual(alias, canonical);
+            assert.strictEqual(alias.default, util);
+            assert.strictEqual(alias.format, first);
+            assert.strictEqual(canonical.format, original);
+            assert.strictEqual(await import('sys'), alias);
+            util.format = second;
+            module.syncBuiltinESMExports();
+            assert.strictEqual(alias.format, second);
+            assert.strictEqual(canonical.format, second);
+        } finally {
+            util.format = original;
+            module.syncBuiltinESMExports();
+        }
+    } else if (testCase === 6) {
+        const stream = get('stream');
+        for (const [id, property, names] of [
+            ['_stream_readable', 'Readable', ['ReadableState', '_fromList', 'from', 'fromWeb', 'toWeb', 'wrap']],
+            ['_stream_writable', 'Writable', ['WritableState', 'fromWeb', 'toWeb']],
+            ['_stream_duplex', 'Duplex', ['from', 'fromWeb', 'toWeb']],
+            ['_stream_transform', 'Transform', []],
+            ['_stream_passthrough', 'PassThrough', []],
+        ]) {
+            assert.strictEqual(module.builtinModules.includes(id), true, id);
+            const value = get(id);
+            assert.strictEqual(value, stream[property], id);
+            assert.strictEqual(require(id), value, id);
+            const namespace = await import('node:' + id);
+            assert.strictEqual(await import(id), namespace, id);
+            assert.strictEqual(namespace.default, value, id);
+            assert.deepStrictEqual(Object.keys(namespace).sort(), ['default', ...names].sort(), id);
+            for (const name of names) assert.strictEqual(namespace[name], value[name], id + '.' + name);
+        }
+    } else if (testCase === 7) {
+        const stream = get('stream');
+        const readable = get('_stream_readable');
+        const originalFrom = readable.from;
+        const originalWritable = stream.Writable;
+        const replacementWritable = Object.assign(function ReplacementWritable() {}, originalWritable);
+        const firstFrom = function firstFrom() {};
+        const secondFrom = function secondFrom() {};
+        try {
+            stream.Readable = function ReplacementReadable() {};
+            assert.strictEqual(get('_stream_readable'), readable);
+            assert.strictEqual(require('node:_stream_readable'), readable);
+            // A not-yet-loaded alias captures the current constructor once.
+            stream.Writable = replacementWritable;
+            assert.strictEqual(get('_stream_writable'), replacementWritable);
+            stream.Writable = originalWritable;
+            assert.strictEqual(get('_stream_writable'), replacementWritable);
+            readable.from = firstFrom;
+            const namespace = await import('node:_stream_readable');
+            assert.strictEqual(namespace.default, readable);
+            assert.strictEqual(namespace.from, firstFrom);
+            readable.from = secondFrom;
+            module.syncBuiltinESMExports();
+            assert.strictEqual(namespace.from, secondFrom);
+        } finally {
+            stream.Readable = readable;
+            stream.Writable = originalWritable;
+            readable.from = originalFrom;
+            module.syncBuiltinESMExports();
+        }
+    } else if ((testCase >= 8 && testCase <= 10) || testCase === 13) {
+        const stream = get('stream');
+        const original = stream.Readable;
+        const replacement = function Replacement() {};
+        const getterError = new Error('alias static getter failed');
+        let reads = 0;
+        const getter = () => {
+            reads += 1;
+            if (testCase === 10 || testCase === 13) throw getterError;
+            return 'tracked-from';
+        };
+        Object.defineProperty(replacement, 'from', {
+            get: getter, enumerable: true, configurable: true,
+        });
+        const keys = Object.keys(replacement);
+        stream.Readable = replacement;
+        try {
+            if (testCase === 8 || testCase === 10) {
+                assert.strictEqual(get('_stream_readable'), replacement);
+                assert.strictEqual(require('node:_stream_readable'), replacement);
+                assert.strictEqual(reads, 0);
+            }
+            if (testCase === 10 || testCase === 13) {
+                await assert.rejects(import('node:_stream_readable'), error => error === getterError);
+            } else {
+                const namespace = await import('node:_stream_readable');
+                assert.strictEqual(namespace.default, replacement);
+                assert.strictEqual(namespace.from, 'tracked-from');
+            }
+            assert.strictEqual(reads, 1);
+            assert.deepStrictEqual(Object.keys(replacement), keys);
+            assert.strictEqual(Object.hasOwn(replacement, 'fromWeb'), false);
+            assert.strictEqual(Object.getOwnPropertyDescriptor(replacement, 'from').get, getter);
+            assert.strictEqual(get('_stream_readable'), replacement);
+            assert.strictEqual(reads, 1);
+        } finally {
+            stream.Readable = original;
+        }
+    } else if (testCase === 11) {
+        const stream = get('stream');
+        const original = Object.getOwnPropertyDescriptor(stream, 'Readable');
+        const loadError = new Error('alias constructor load failed');
+        Object.defineProperty(stream, 'Readable', {
+            get() { throw loadError; }, configurable: true,
+        });
+        try {
+            assert.throws(() => get('_stream_readable'), error => error === loadError);
+        } finally {
+            Object.defineProperty(stream, 'Readable', original);
+        }
+    } else if (testCase === 12) {
+        const util = get('util');
+        const format = Object.getOwnPropertyDescriptor(util, 'format');
+        const inspect = Object.getOwnPropertyDescriptor(util, 'inspect');
+        let reads = 0;
+        delete util.format;
+        Object.defineProperty(util, 'inspect', {
+            get() { reads += 1; return inspect.value; },
+            enumerable: true, configurable: true,
+        });
+        try {
+            assert.strictEqual(get('sys'), util);
+            assert.strictEqual(require('node:sys'), util);
+            assert.strictEqual(reads, 0);
+            assert.strictEqual(Object.hasOwn(util, 'format'), false);
+            const namespace = await import('node:sys');
+            assert.strictEqual(namespace.default, util);
+            assert.strictEqual(namespace.inspect, inspect.value);
+            assert.strictEqual(reads, 1);
+            assert.strictEqual(Object.hasOwn(util, 'format'), false);
+        } finally {
+            Object.defineProperty(util, 'format', format);
+            Object.defineProperty(util, 'inspect', inspect);
+            module.syncBuiltinESMExports();
+        }
+    } else if (testCase === 14) {
+        const originalConsole = globalThis.console;
+        const log = Object.getOwnPropertyDescriptor(originalConsole, 'log');
+        const warn = Object.getOwnPropertyDescriptor(originalConsole, 'warn');
+        let reads = 0;
+        Object.defineProperty(originalConsole, 'log', {
+            get() { reads += 1; return log.value; },
+            enumerable: true, configurable: true,
+        });
+        delete originalConsole.warn;
+        try {
+            assert.strictEqual(get('console'), originalConsole);
+            assert.strictEqual(require('node:console'), originalConsole);
+            assert.strictEqual(reads, 0);
+            assert.strictEqual(Object.hasOwn(originalConsole, 'warn'), false);
+            const namespace = await import('node:console');
+            assert.strictEqual(namespace.default, originalConsole);
+            assert.strictEqual(namespace.log, log.value);
+            assert.strictEqual(reads, 1);
+            assert.strictEqual(Object.hasOwn(originalConsole, 'warn'), false);
+        } finally {
+            Object.defineProperty(originalConsole, 'log', log);
+            Object.defineProperty(originalConsole, 'warn', warn);
+            module.syncBuiltinESMExports();
+        }
+    } else {
+        throw new Error('unknown discovery test case');
+    }
+    return true;
+}
+
 async function expectImportError(specifier, code) {
     let thrown = false;
     try {
@@ -2749,7 +3088,7 @@ export const testEsmDataUrlImportAttributes = async () => {
             '  if (new ImportMethods().import("value")[0] !== "class") throw new Error("class import method was rewritten");',
             '  class AdjacentImportMethod { value(){return "prefix"}import(...values){return [this.value(), ...values]} }',
             '  assert.deepStrictEqual(new AdjacentImportMethod().import("first", "second"), ["prefix", "first", "second"]);',
-            '  class AdjacentParameterMethod { value(){return "prefix"}import(value){return value} }',
+            '  class AdjacentParameterMethod { value(){return "prefix"}import(value)/* method body */{return value} }',
             '  assert.strictEqual(new AdjacentParameterMethod().import("argument"), "argument");',
             '  const asiObserved = Promise.withResolvers(); const asiSpecifier = { toString() { asiObserved.resolve("imported"); return "data:text/javascript,export default 8"; } };',
             '  if (true) {} import(asiSpecifier)',
@@ -2832,6 +3171,22 @@ export const testEsmInjectedHelpersIgnoreLexicalGlobalThis = async () => {
         console.error(error);
         throw error;
     }
+};
+
+// Minified class members follow each other without separators. A member named `import` is a
+// method definition, not a dynamic import, in embedded, file and data: URL modules alike.
+class EmbeddedImportMethod{traversal(e){return e}import(...e){return e.length}precompilation;}
+
+export const testEsmImportNamedClassMethods = async () => {
+    assert.strictEqual(new EmbeddedImportMethod().import(1, 2), 2);
+    fs.mkdirSync('/esm-import-method-app', { recursive: true });
+    fs.writeFileSync('/esm-import-method-app/minified.mjs',
+        'class M{a(e){return e}import(...e){return e.length}}export default new M().import(1,2,3);');
+    assert.strictEqual((await import('/esm-import-method-app/minified.mjs')).default, 3);
+    const fromData = await import('data:text/javascript,' + encodeURIComponent(
+        'class M{a(){}import(e){return e*2}}export default new M().import(21);'));
+    assert.strictEqual(fromData.default, 42);
+    return true;
 };
 
 export const testEsmJsonUrlCacheKeys = async () => {
@@ -10829,14 +11184,18 @@ export const testVmMainContextDefaultLoader = async () => {
         const lateCwdScript = new vm.Script('import("./message.mjs")', {
             importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
         });
-        const lateCwdFunction = vm.compileFunction('return import("./message.mjs")', [], {
-            importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
-        });
+        const lateCwdFunctions = [undefined, 'relative-function.js', 'subdir/relative.js', '[eval]']
+            .map(filename => vm.compileFunction('return import("./message.mjs")', [], {
+                filename,
+                importModuleDynamically: vm.constants.USE_MAIN_CONTEXT_DEFAULT_LOADER,
+            }));
         const originalCwd = process.cwd();
         try {
             process.chdir('/vm-default-loader-app');
             assert.deepStrictEqual((await lateCwdScript.runInThisContext()).default, { value: 'from-cwd' });
-            assert.deepStrictEqual((await lateCwdFunction()).default, { value: 'from-cwd' });
+            for (const lateCwdFunction of lateCwdFunctions) {
+                assert.deepStrictEqual((await lateCwdFunction()).default, { value: 'from-cwd' });
+            }
 
             const relativeFilenameScript = new vm.Script('import("./message.mjs")', {
                 filename: 'subdir/relative.js',

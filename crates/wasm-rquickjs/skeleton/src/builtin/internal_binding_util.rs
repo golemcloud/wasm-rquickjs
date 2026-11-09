@@ -3,6 +3,14 @@ pub mod native_module {
     use rquickjs::{Array, Ctx, FromJs, Promise, Value, promise::PromiseState, qjs};
 
     #[rquickjs::function]
+    pub fn get_diagnostic_data<'js>(
+        value: Value<'js>,
+        key: Value<'js>,
+    ) -> rquickjs::Result<Value<'js>> {
+        crate::internal::error_formatting::host_data_property(value, key)
+    }
+
+    #[rquickjs::function]
     pub fn get_proxy_details<'js>(
         ctx: Ctx<'js>,
         value: Value<'js>,

@@ -9,7 +9,8 @@ use std::sync::{Arc, Condvar, Mutex};
 use std::thread;
 use std::time::Duration;
 use wasm_rquickjs::{
-    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_dts_with_target,
+    DependencySpec, EmbeddingMode, GenerationTarget, JsModuleSpec, NativeModuleSpec,
+    WrapperCrateOptions, generate_dts_with_target, generate_wrapper_crate_with_options,
     generate_wrapper_crate_with_target,
 };
 
@@ -3540,5 +3541,106 @@ fn p3_dts_generates_for_async_values_examples() -> anyhow::Result<()> {
             "missing `{needle}` in generated host.d.ts:\n{host}"
         );
     }
+    Ok(())
+}
+
+#[test]
+fn p3_javascript_imports_a_native_module_from_a_dependency() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package test:p3-native-module;
+
+            world p3-native-module {
+              export run: func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            import { greet } from 'test-native-greeting';
+            // A native module named like a schemeless builtin alias takes precedence.
+            import { greet as viaAlias } from 'fs';
+            export function run() { return `${greet('ok')},${viaAlias('fs')}`; }
+        "#},
+    )?;
+    let native = temp.path().join("native");
+    std::fs::create_dir_all(native.join("src"))?;
+    std::fs::write(
+        native.join("Cargo.toml"),
+        indoc! {r#"
+            [package]
+            name = "test-native-greeting"
+            version = "0.0.0"
+            edition = "2024"
+
+            [dependencies]
+            rquickjs = { version = "0.14.0", default-features = false, features = ["std"] }
+        "#},
+    )?;
+    std::fs::write(
+        native.join("src").join("lib.rs"),
+        indoc! {r#"
+            use rquickjs::module::{Declarations, Exports, ModuleDef};
+            use rquickjs::{Ctx, Function};
+
+            pub struct Greeting;
+
+            impl ModuleDef for Greeting {
+                fn declare(decl: &Declarations) -> rquickjs::Result<()> {
+                    decl.declare("greet")?;
+                    Ok(())
+                }
+
+                fn evaluate<'js>(ctx: &Ctx<'js>, exports: &Exports<'js>) -> rquickjs::Result<()> {
+                    let greet = Function::new(ctx.clone(), |name: String| format!("native:{name}"))?;
+                    exports.export("greet", greet)?;
+                    Ok(())
+                }
+            }
+        "#},
+    )?;
+
+    generate_wrapper_crate_with_options(
+        &temp.path().join("wit"),
+        &[JsModuleSpec {
+            name: "module".to_string(),
+            mode: EmbeddingMode::EmbedFile(temp.path().join("src").join("module.js")),
+        }],
+        &temp.path().join("out"),
+        None,
+        GenerationTarget::WasiP3,
+        &WrapperCrateOptions {
+            native_modules: vec![
+                NativeModuleSpec {
+                    name: "test-native-greeting".to_string(),
+                    module_def: "test_native_greeting::Greeting".to_string(),
+                },
+                NativeModuleSpec {
+                    name: "fs".to_string(),
+                    module_def: "test_native_greeting::Greeting".to_string(),
+                },
+            ],
+            dependencies: vec![DependencySpec {
+                key: "test-native-greeting".to_string(),
+                value: format!("{{ path = {:?} }}", native.as_str()),
+            }],
+        },
+    )?;
+
+    let cargo_toml = std::fs::read_to_string(temp.path().join("out").join("Cargo.toml"))?;
+    assert!(
+        cargo_toml.contains(r#"test-native-greeting = { path = "../native" }"#),
+        "the dependency path is relative to the generated crate:\n{cargo_toml}"
+    );
+    assert!(
+        !temp.path().join("out").join("Cargo.lock").exists(),
+        "custom dependencies change the dependency graph, so the skeleton lock is not copied"
+    );
+
+    let wasm_path = build_p3(temp.path(), "p3_native_module")?;
+    assert_eq!(
+        run_p3_string_export(&wasm_path, "run")?,
+        "native:ok,native:fs"
+    );
     Ok(())
 }

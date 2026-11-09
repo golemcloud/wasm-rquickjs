@@ -1,3 +1,4 @@
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import Duplex from '__wasm_rquickjs_builtin/internal/streams/duplex';
 import { EventEmitter } from 'node:events';
 import { Buffer } from 'node:buffer';
@@ -16,8 +17,11 @@ import {
 import { validateAbortSignal } from '__wasm_rquickjs_builtin/internal/validators';
 import { getTimerDuration, toTimerDelay } from '__wasm_rquickjs_builtin/internal/timers';
 
+// Readable imports process, so its private queue owner is initialized before
+// this module. Capture it before application code can replace global hooks.
+const drainReadCallbackTicks = globalThis.__wasm_rquickjs_drainNextTick;
+
 const customInspectSymbol = Symbol.for('nodejs.util.inspect.custom');
-const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone');
 
 // --- IP address utilities ---
 
@@ -993,6 +997,12 @@ Socket.prototype._read = function _read(n) {
         return;
     }
     if (!this._handle || this.destroyed) return;
+    if (this._netPaused) {
+        // Readable may request prefetch while paused. No native read starts,
+        // so do not leave its pending-read flag blocking the later resume.
+        this._readableState.reading = false;
+        return;
+    }
     if (this._handle._writeProfile) {
         this._handle._writeProfile.streamReadRequests++;
         this._handle._writeProfile.lastReadRequestSize = n;
@@ -1043,7 +1053,8 @@ Socket.prototype._drainPendingReadChunks = function _drainPendingReadChunks() {
 Socket.prototype._startPollLoop = function _startPollLoop() {
     const token = ++this._readToken;
     (async () => {
-        while (this._reading && this._handle && token === this._readToken) {
+        while (this._reading && this._handle && !this.destroyed && !this._netPaused &&
+            token === this._readToken) {
             try {
                 this._readInFlight = true;
                 const profile = this._handle._writeProfile;
@@ -1051,9 +1062,9 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                 if (profile) profile.nativeReadCrossings++;
                 const chunk = await this._handle.read(16384);
                 if (profile) profile.readElapsedMs += Date.now() - readStartedAt;
-                this._readInFlight = false;
                 if (token !== this._readToken) break;
                 if (chunk === null || chunk === undefined) {
+                    this._readInFlight = false;
                     if (this._netPaused) {
                         this._pendingReadChunks.push(null);
                     } else {
@@ -1070,20 +1081,29 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                 this._resetTimeout();
                 const buffer = Buffer.from(chunk);
                 if (this._netPaused) {
+                    this._readInFlight = false;
                     this._pendingReadChunks.push(buffer);
                     this._reading = false;
                     break;
                 }
                 const keepGoing = this.push(buffer);
-                if (!keepGoing) {
+                if (!keepGoing && token === this._readToken) {
                     this._reading = false;
-                    break;
                 }
             } catch (e) {
-                this._readInFlight = false;
                 if (token !== this._readToken) break;
+                this._readInFlight = false;
                 this.destroy(parseNativeError(e));
                 break;
+            }
+            // A native read is a callback boundary. In particular, Readable's
+            // deferred resume/end must run before an immediately-ready EOF.
+            // Callbacks can pause, destroy or replace this loop; the loop gate
+            // rechecks their state without overwriting a newer read's flags.
+            try {
+                drainReadCallbackTicks();
+            } finally {
+                if (token === this._readToken) this._readInFlight = false;
             }
         }
     })();
@@ -1751,15 +1771,20 @@ Server.prototype[Symbol.asyncDispose] = function () {
 
 // --- BlockList ---
 
+const blockListCloneAdapter = {__proto__: null,kind: 'BlockList', clone: value => cloneBlockList(value)};
+let cloneBlockList;
 class BlockList {
+    #rules;
+    static { cloneBlockList = value => new BlockList(value.#rules); }
     constructor(rules) {
-        this._rules = rules || [];
+        this.#rules = rules || [];
+        registerCloneAdapter(this, blockListCloneAdapter);
     }
 
     addAddress(address, type) {
         const normalized = normalizeSocketAddressLike(address, 'address');
         const parsed = parseBlockListAddress(normalized.address, type !== undefined ? type : normalized.family);
-        this._rules.unshift({
+        this.#rules.unshift({
             type: 'address',
             address: parsed.address,
             family: parsed.family,
@@ -1779,7 +1804,7 @@ class BlockList {
         if (parsedEnd.value < parsedStart.value) {
             throw new ERR_INVALID_ARG_VALUE('end', normalizedEnd.address);
         }
-        this._rules.unshift({
+        this.#rules.unshift({
             type: 'range',
             start: parsedStart.address,
             end: parsedEnd.address,
@@ -1799,7 +1824,7 @@ class BlockList {
         validatePrefix(prefix, family);
         const bits = family === 'ipv6' ? 128 : 32;
         const mask = subnetMask(bits, prefix);
-        this._rules.unshift({
+        this.#rules.unshift({
             type: 'subnet',
             network: parsed.address,
             prefix,
@@ -1821,7 +1846,7 @@ class BlockList {
             }
             throw err;
         }
-        for (const rule of this._rules) {
+        for (const rule of this.#rules) {
             if (rule.family !== parsed.family && (parsed.mapped4 === null || rule.family !== 'ipv4') && (rule.mapped4 === null || parsed.family !== 'ipv4')) {
                 continue;
             }
@@ -1852,7 +1877,7 @@ class BlockList {
     }
 
     get rules() {
-        return this._rules.map(r => {
+        return this.#rules.map(r => {
             if (r.type === 'address') return `Address: ${familyLabel(r.family)} ${r.address}`;
             if (r.type === 'range') return `Range: ${familyLabel(r.family)} ${r.start}-${r.end}`;
             if (r.type === 'subnet') return `Subnet: ${familyLabel(r.family)} ${r.network}/${r.prefix}`;
@@ -1863,10 +1888,6 @@ class BlockList {
     [customInspectSymbol](depth, opts, inspect) {
         if (depth !== null && depth < 0) return '[BlockList]';
         return `BlockList { rules: ${inspect(this.rules, opts)} }`;
-    }
-
-    [structuredCloneSymbol]() {
-        return new BlockList(this._rules);
     }
 
     static isBlockList(value) {

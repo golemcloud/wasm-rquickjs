@@ -131,6 +131,8 @@ pub(crate) struct RuntimeServices {
     pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
     pub(crate) next_execution_job_id: Cell<usize>,
     pub(crate) execution_enabled: Cell<bool>,
+    #[cfg(feature = "p3")]
+    pub(crate) node_child: RefCell<Option<Rc<crate::builtin::child_process::p3::ChildState>>>,
     pub(crate) exported_resources: ExportedResourceLedger,
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) execution_profile: Option<Rc<ExecutionProfile>>,
@@ -162,6 +164,8 @@ impl Default for RuntimeServices {
             execution_jobs: RefCell::default(),
             next_execution_job_id: Cell::new(1),
             execution_enabled: Cell::new(true),
+            #[cfg(feature = "p3")]
+            node_child: RefCell::default(),
             exported_resources: ExportedResourceLedger::default(),
             #[cfg(feature = "typescript-compiler-profiling")]
             execution_profile: None,
@@ -405,6 +409,7 @@ impl ProcessServices {
         cwd: PathBuf,
     ) -> std::io::Result<()> {
         let cwd = normalize_absolute_path(&cwd)?;
+        super::preinit::check("execution cwd validation", cwd.display());
         if !cwd.is_dir() {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::NotFound,
@@ -432,6 +437,9 @@ impl ProcessServices {
     }
 
     pub(crate) fn cwd(&self) -> PathBuf {
+        if super::preinit::is_active() {
+            return PathBuf::from("/");
+        }
         self.isolated
             .borrow()
             .as_ref()
@@ -454,6 +462,7 @@ impl ProcessServices {
     }
 
     pub(crate) fn chdir(&self, path: &Path) -> std::io::Result<()> {
+        super::preinit::check("process.chdir", path.display());
         let mut isolated = self.isolated.borrow_mut();
         let Some(state) = isolated.as_mut() else {
             return std::env::set_current_dir(path);
@@ -511,13 +520,43 @@ pub(crate) trait RuntimeOutputSink {
 
 struct ComponentOutputSink;
 
+fn write_preinit_stdio(stream: wasip2::io::streams::OutputStream, data: &str) {
+    // Own and drop this stream within the call. libc caches its stdio handles
+    // in linear memory; those optimizer-store resources cannot survive Wizer.
+    // The P2 bindings are shared by both targets, like Rust's residual P2 stdio.
+    let mut start = 0;
+    while start < data.len() {
+        // WASI blocking-write-and-flush accepts at most 4096 bytes. Preserve
+        // UTF-8 boundaries for hosts that consume each flushed write as text.
+        let mut end = (start + 4096).min(data.len());
+        while !data.is_char_boundary(end) {
+            end -= 1;
+        }
+        if stream
+            .blocking_write_and_flush(&data.as_bytes()[start..end])
+            .is_err()
+        {
+            break;
+        }
+        start = end;
+    }
+}
+
 impl RuntimeOutputSink for ComponentOutputSink {
     fn write_stdout(&self, data: &str) {
+        if super::preinit::is_active() {
+            write_preinit_stdio(wasip2::cli::stdout::get_stdout(), data);
+            return;
+        }
         let _ = std::io::stdout().write_all(data.as_bytes());
         let _ = std::io::stdout().flush();
     }
 
     fn write_stderr(&self, data: &str) {
+        if super::preinit::is_active() {
+            write_preinit_stdio(wasip2::cli::stderr::get_stderr(), data);
+            return;
+        }
         let _ = std::io::stderr().write_all(data.as_bytes());
         let _ = std::io::stderr().flush();
     }
@@ -667,6 +706,13 @@ pub(crate) fn run_process_turn_checkpoint(ctx: &rquickjs::Ctx<'_>) -> rquickjs::
 
 impl OwnedJsRuntime {
     pub(crate) async fn new() -> Self {
+        Self::try_new()
+            .await
+            .expect("Failed to create JavaScript runtime")
+    }
+
+    /// Returns errors from QuickJS runtime/context creation and diagnostic capture.
+    pub(crate) async fn try_new() -> rquickjs::Result<Self> {
         Self::new_inner(
             #[cfg(feature = "typescript-compiler-profiling")]
             None,
@@ -676,13 +722,15 @@ impl OwnedJsRuntime {
 
     #[cfg(feature = "typescript-compiler-profiling")]
     pub(crate) async fn new_profiled(profile: Rc<ExecutionProfile>) -> Self {
-        Self::new_inner(Some(profile)).await
+        Self::new_inner(Some(profile))
+            .await
+            .expect("Failed to create JavaScript runtime")
     }
 
     async fn new_inner(
         #[cfg(feature = "typescript-compiler-profiling")] profile: Option<Rc<ExecutionProfile>>,
-    ) -> Self {
-        let rt = AsyncRuntime::new().expect("Failed to create AsyncRuntime");
+    ) -> rquickjs::Result<Self> {
+        let rt = AsyncRuntime::new()?;
         // QuickJS defines zero as unlimited. The component's shared wasm32
         // linear memory remains the outer bound, so do not impose a smaller
         // per-runtime ceiling on execution jobs.
@@ -690,9 +738,7 @@ impl OwnedJsRuntime {
         // Bound bootstrap garbage before the first automatic collection. The
         // engine subsequently adapts this threshold to the retained live heap.
         rt.set_gc_threshold(32 * 1024 * 1024).await;
-        let ctx = AsyncContext::full(&rt)
-            .await
-            .expect("Failed to create AsyncContext");
+        let ctx = AsyncContext::full(&rt).await?;
 
         #[cfg(feature = "typescript-compiler-profiling")]
         let stored_profile = profile.clone();
@@ -706,13 +752,17 @@ impl OwnedJsRuntime {
             };
             ctx.store_userdata(services)
                 .expect("Failed to initialize runtime services");
+            // Child bootstrap must return diagnostic allocation failures to its
+            // caller rather than trapping the entire component.
+            super::error_formatting::initialize(&ctx)?;
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
             #[cfg(feature = "test-observability")]
             crate::builtin::install_gc_observability(&ctx)
                 .expect("Failed to initialize GC observability");
+            Ok::<(), rquickjs::Error>(())
         })
-        .await;
+        .await?;
 
         #[cfg(feature = "typescript-compiler-profiling")]
         if let Some(profile) = &profile {
@@ -738,7 +788,7 @@ impl OwnedJsRuntime {
         )))
         .await;
 
-        Self { rt, ctx }
+        Ok(Self { rt, ctx })
     }
 
     /// Install the ordinary Node-compatible global environment without loading
@@ -836,26 +886,55 @@ pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), 
             return (value >>> 0) / 281474976710656 + Math.floor(value / 4294967296) / 65536;
         };
     "#);
+    source.push_str(r#"
+        export { readHostErrorStack as __hostStackReader } from '__wasm_rquickjs_builtin/internal/errors';
+    "#);
     rquickjs::AsyncContext::async_with(ctx, async |ctx| {
-        Module::evaluate(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
+        let module = Module::declare(ctx.clone(), "__wasm_rquickjs_init_wiring", source)
             .catch(&ctx)
             .map_err(|error| {
                 format!(
                     "Failed to evaluate built-in wiring:\n{}",
                     super::format_caught_error(error)
                 )
-            })?
-            .finish::<()>()
-            .catch(&ctx)
-            .map_err(|error| {
-                format!(
-                    "Failed to finish built-in wiring:\n{}",
-                    super::format_caught_error(error)
-                )
             })?;
+        let (module, promise) = module.eval().catch(&ctx).map_err(|error| {
+            format!(
+                "Failed to start built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        promise.finish::<()>().catch(&ctx).map_err(|error| {
+            format!(
+                "Failed to finish built-in wiring:\n{}",
+                super::format_caught_error(error)
+            )
+        })?;
+        let reader = module
+            .get("__hostStackReader")
+            .map_err(|error| format!("Failed to capture host stack reader: {error}"))?;
+        super::error_formatting::install_host_stack_reader(&ctx, reader);
         Ok::<(), String>(())
     })
-    .await
+    .await?;
+    // An embedding can supply this ordinary additional JS module to configure
+    // runtime-local adapters. Import after builtins but before entry code, also
+    // in fresh execution jobs. Registration must be lazy: Wizer evaluates it.
+    if crate::JS_ADDITIONAL_MODULES
+        .iter()
+        .any(|(name, _)| *name == "wasm-rquickjs-runtime-init")
+    {
+        rquickjs::AsyncContext::async_with(ctx, async |ctx| {
+            Module::import(&ctx, "wasm-rquickjs-runtime-init")
+                .catch(&ctx)
+                .map_err(super::format_caught_error)?
+                .finish::<()>()
+                .catch(&ctx)
+                .map_err(super::format_caught_error)
+        })
+        .await?;
+    }
+    Ok(())
 }
 
 pub(crate) async fn initialize_exported_resource_id_map(
@@ -900,6 +979,9 @@ unsafe impl<'js> JsLifetime<'js> for RuntimeServices {
 
 #[derive(Default)]
 pub(crate) struct TimerServices {
+    #[cfg(feature = "p3")]
+    pub(crate) child_owner:
+        RefCell<Option<std::rc::Weak<crate::builtin::child_timers::ChildTimers>>>,
     pub(crate) wake_hub: Arc<ComponentWakeHub>,
     pub(crate) component_owned: Cell<bool>,
     pub(crate) abort_handles: RefCell<HashMap<usize, AbortHandle>>,

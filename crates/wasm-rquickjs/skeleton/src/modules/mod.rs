@@ -1,5 +1,7 @@
 // Empty file, to be generated
 
+pub const NATIVE_MODULE_NAMES: &[&str] = &[];
+
 pub fn add_native_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
 ) -> rquickjs::loader::BuiltinResolver {

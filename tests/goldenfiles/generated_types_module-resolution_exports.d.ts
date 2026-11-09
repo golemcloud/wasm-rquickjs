@@ -4,6 +4,7 @@ declare module 'module-resolution' {
   export function testEsmInvalidPackageSpecifiers(): Promise<boolean>;
   export function testEsmDataUrlImportAttributes(): Promise<boolean>;
   export function testEsmInjectedHelpersIgnoreLexicalGlobalThis(): Promise<boolean>;
+  export function testEsmImportNamedClassMethods(): Promise<boolean>;
   export function testEsmJsonUrlCacheKeys(): Promise<boolean>;
   export function testEsmJsonImportIgnoresGlobalThisProperty(): Promise<boolean>;
   export function testStaticLoaderAbsoluteEntrySpecifier(): Promise<boolean>;
@@ -27,6 +28,7 @@ declare module 'module-resolution' {
   export function testCjsLoaderRealpathCache(): Promise<boolean>;
   export function testSyncBuiltinEsmExports(): Promise<boolean>;
   export function testBuiltinFirstImport(specifier: string): Promise<boolean>;
+  export function testBuiltinDiscovery(testCase: number): Promise<boolean>;
   export function testEsmResolutionErrorUrls(): Promise<boolean>;
   export function testCjsDirectNamedExports(): Promise<boolean>;
   export function testEsmImportsSideEffectCommonJs(): Promise<boolean>;

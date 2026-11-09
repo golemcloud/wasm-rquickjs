@@ -132,6 +132,7 @@ impl TcpWriteProfile {
 
 #[cfg(feature = "p2")]
 fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSocket> {
+    crate::internal::preinit::check("TCP socket creation", "network socket");
     let ip_family = match family {
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,
@@ -228,6 +229,7 @@ fn write_timeout_checkpoint_is_current(
 
 #[cfg(feature = "p3")]
 fn create_tcp_socket_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpSocket> {
+    crate::internal::preinit::check("TCP socket creation", "network socket");
     let ip_family = match family {
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,
@@ -1816,6 +1818,7 @@ impl TcpSocket {
 
 #[cfg(feature = "p2")]
 fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpListener> {
+    crate::internal::preinit::check("TCP listener creation", "network listener");
     let ip_family = match family {
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,
@@ -1869,6 +1872,7 @@ impl ListenerInner {
 
 #[cfg(feature = "p3")]
 fn create_tcp_listener_impl(ctx: &Ctx<'_>, family: u32) -> rquickjs::Result<TcpListener> {
+    crate::internal::preinit::check("TCP listener creation", "network listener");
     let ip_family = match family {
         4 => IpAddressFamily::Ipv4,
         6 => IpAddressFamily::Ipv6,
