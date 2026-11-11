@@ -1,13 +1,13 @@
 declare module 'response-static' {
   export namespace responseExports {
-    export function testResponseError(): Promise<ResponseResult>;
-    export function testResponseRedirect(): Promise<ResponseResult>;
-    export function testResponseRedirectDefault(): Promise<ResponseResult>;
-    export function testResponseJson(): Promise<ResponseJsonResult>;
-    export function testResponseJsonCustomStatus(): Promise<ResponseJsonResult>;
-    export function testResponseJsonString(): Promise<ResponseJsonResult>;
-    export function testResponseJsonWithHeaders(): Promise<ResponseJsonHeadersResult>;
-    export function testResponseRedirectInvalidStatus(): Promise<RedirectInvalidResult>;
+    export function testResponseError(): ResponseResult;
+    export function testResponseRedirect(): ResponseResult;
+    export function testResponseRedirectDefault(): ResponseResult;
+    export function testResponseJson(): ResponseJsonResult;
+    export function testResponseJsonCustomStatus(): ResponseJsonResult;
+    export function testResponseJsonString(): ResponseJsonResult;
+    export function testResponseJsonWithHeaders(): ResponseJsonHeadersResult;
+    export function testResponseRedirectInvalidStatus(): RedirectInvalidResult;
     export type ResponseResult = {
       status: number;
       statusText: string;

@@ -1,7 +1,6 @@
 // node:child_process implementation for WASM.
 //
-// Local Node commands run in the component. Preview 3 gives each child a fresh
-// runtime; Preview 2 retains inline execution with a temporary process view.
+// Local Node commands run in the component. Each child gets a fresh runtime.
 // Optional embedding backends handle other commands without host subprocesses.
 
 import * as path from 'node:path';

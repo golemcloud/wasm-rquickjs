@@ -8,11 +8,8 @@ use wasm_rquickjs::{
 /// The WASI generation target selectable on the command line.
 #[derive(ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WasiTarget {
-    /// WASI Preview 2 (default): synchronous exports, full Node.js builtins.
+    /// WASI Preview 3 (default and only target): component-model async exports and imports.
     #[default]
-    #[value(name = "wasi-p2")]
-    WasiP2,
-    /// WASI Preview 3 (opt-in): component-model async support and the Preview 3 runtime spine.
     #[value(name = "wasi-p3")]
     WasiP3,
 }
@@ -20,7 +17,6 @@ pub enum WasiTarget {
 impl From<WasiTarget> for GenerationTarget {
     fn from(value: WasiTarget) -> Self {
         match value {
-            WasiTarget::WasiP2 => GenerationTarget::WasiP2,
             WasiTarget::WasiP3 => GenerationTarget::WasiP3,
         }
     }
@@ -60,9 +56,9 @@ pub enum Command {
         #[arg(long)]
         world: Option<String>,
 
-        /// The WASI generation target. `wasi-p2` (default) generates the historical
-        /// synchronous Preview 2 wrapper; `wasi-p3` generates the opt-in Preview 3 wrapper.
-        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        /// The WASI generation target. `wasi-p3` is the default and only target; the option is
+        /// kept so existing invocations that pass it explicitly keep working.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP3)]
         target: WasiTarget,
 
         /// A Rust module JavaScript can import, as `name=rust::path::Type`, where the type
@@ -92,8 +88,9 @@ pub enum Command {
         #[arg(long)]
         world: Option<String>,
 
-        /// The WASI generation target whose JavaScript export contract is described.
-        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        /// The WASI generation target whose JavaScript export contract is described. `wasi-p3`
+        /// is the default and only target.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP3)]
         target: WasiTarget,
     },
     /// Pre-initialize a WebAssembly component using Wizer to speed up startup

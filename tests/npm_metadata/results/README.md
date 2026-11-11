@@ -3,7 +3,8 @@
 ## Matched production release baseline
 
 `tests/npm_metadata/run.sh --release` produces the checked production evidence
-pair. It uses the pinned Node 22.14.0/npm 10.9.2 toolchain, locked host and guest
+report, now P3 only; the checked-in 2026-10-05 P2/P3 pair predates the removal of
+P2 generation and remains historical. It uses the pinned Node 22.14.0/npm 10.9.2 toolchain, locked host and guest
 release builds, and the production `normal` component feature. Five iterations
 compare the same deterministic loopback registry on host Node and Wasm:
 

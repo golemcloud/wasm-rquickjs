@@ -1,3 +1,3 @@
 declare module 'source-map' {
-  export function testSourceMapApi(): Promise<boolean>;
+  export function testSourceMapApi(): boolean;
 }

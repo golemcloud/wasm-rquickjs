@@ -2,10 +2,10 @@
 
 `tools/check-component-licenses.sh` audits the locked Cargo dependency graph used by generated
 components. It checks both `typescript-runtime` and `typescript-transform-runtime` for the
-standard P2 `normal` and P3 `normal-p3` profiles, all targeting `wasm32-wasip2`.
+standard `normal-p3` profile, targeting `wasm32-wasip2`.
 
-The repository retains one notice per WASI generation covering the union of both public
-TypeScript feature closures rather than four near-duplicates. Build dependencies are included;
+The repository retains one notice covering the union of both public TypeScript feature
+closures rather than two near-duplicates. Build dependencies are included;
 development dependencies are not. The policy is feature-driven and intentionally does not name
 the current TypeScript backend, so replacing it changes the audited graph without bypassing the
 gate.

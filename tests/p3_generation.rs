@@ -1030,17 +1030,15 @@ fn p3_generated_crate_builds_with_multiple_wasi_package_versions() -> anyhow::Re
 /// features, on the `wasm32-wasip2` build target that P3 actually compiles to) and asserts that
 /// none of the Preview 2 runtime dependencies are active, while the Preview 3 bindings are.
 ///
-/// Note on scope: the check deliberately targets the P2 *runtime* crates our own skeleton would
-/// pull in via the `p2`/`fetch` features (`wstd`, `golem-wasi-http`). It does **not** assert the
-/// absence of:
-/// - the `wasip2` crate: that appears purely as `getrandom`'s WASI backend for the
-///   `wasm32-wasip2` target and is unavoidable until a dedicated `wasm32-wasip3` rustc target
-///   exists — it is not evidence of a Preview 2 runtime leak in our code;
+/// Note on scope: the check deliberately targets the P2 *runtime* crates the removed Preview 2
+/// skeleton pulled in (`wstd`, `golem-wasi-http`). It does **not** assert the absence of:
+/// - the `wasip2` crate: the skeleton binds the synchronous Preview 2 `set-times-at` through it,
+///   and it is also `getrandom`'s WASI backend for the `wasm32-wasip2` target — it is not evidence
+///   of a Preview 2 runtime leak in our code;
 /// - the 0.42 `wit-bindgen-rt` and the target-agnostic binding crates that use it
 ///   (`wasi-logging`, `golem-context`, `golem-websocket`): they bind fully synchronous
 ///   interfaces that work on both targets (P3 components legitimately import residual 0.2-style
-///   sync interfaces), and `wasi-logging` is part of the default `normal-p3` tier, mirroring the
-///   Preview 2 `normal` tier.
+///   sync interfaces), and `wasi-logging` is part of the default `normal-p3` tier.
 #[test]
 fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
@@ -1898,8 +1896,8 @@ fn p3_rejects_world_level_freestanding_import() -> anyhow::Result<()> {
 fn p3_fetch_get_returns_body_on_wasi_p3() -> anyhow::Result<()> {
     // Strong functional check that `fetch`/HTTP actually *executes* on the Preview 3 path: the
     // request is driven through `wasip3::http::client::send` (Component Model async bodies), not
-    // through P2 pollables. A regression back to the `http_disabled` stub (which throws for every
-    // call) would fail this test.
+    // through P2 pollables. A regression to a disabled HTTP stub (which throws for every call)
+    // would fail this test.
     let port = spawn_test_http_server();
     let temp = Utf8TempDir::new()?;
     write_fixture(
@@ -1967,7 +1965,7 @@ fn p3_fetch_post_echoes_body_on_wasi_p3() -> anyhow::Result<()> {
 
 #[test]
 fn p3_fetch_follows_redirect_on_wasi_p3() -> anyhow::Result<()> {
-    // Validates the redirect-following logic in `http_p3.rs`: `GET /redirect` returns a 302 to
+    // Validates the redirect-following logic in `builtin/http.rs`: `GET /redirect` returns a 302 to
     // `/hello`, and the default `redirect: 'follow'` policy must transparently follow it and
     // surface `redirected === true` plus the final body.
     let port = spawn_test_http_server();

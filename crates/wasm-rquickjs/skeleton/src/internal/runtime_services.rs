@@ -131,7 +131,6 @@ pub(crate) struct RuntimeServices {
     pub(crate) execution_jobs: RefCell<HashMap<usize, Rc<crate::builtin::execution::ExecutionJob>>>,
     pub(crate) next_execution_job_id: Cell<usize>,
     pub(crate) execution_enabled: Cell<bool>,
-    #[cfg(feature = "p3")]
     pub(crate) node_child: RefCell<Option<Rc<crate::builtin::child_process::p3::ChildState>>>,
     pub(crate) exported_resources: ExportedResourceLedger,
     #[cfg(feature = "typescript-compiler-profiling")]
@@ -164,7 +163,6 @@ impl Default for RuntimeServices {
             execution_jobs: RefCell::default(),
             next_execution_job_id: Cell::new(1),
             execution_enabled: Cell::new(true),
-            #[cfg(feature = "p3")]
             node_child: RefCell::default(),
             exported_resources: ExportedResourceLedger::default(),
             #[cfg(feature = "typescript-compiler-profiling")]
@@ -177,7 +175,7 @@ impl Default for RuntimeServices {
 ///
 /// Every live host `own<T>` handle contributes one owner. The JavaScript resource table keeps
 /// the object reachable while at least one owner remains; borrowed handles do not affect this
-/// ledger. The ledger is runtime userdata so P2 and P3 share exactly the same lifecycle rules.
+/// ledger. The ledger is runtime userdata.
 pub(crate) struct ExportedResourceLedger {
     next_id: Cell<usize>,
     owners: RefCell<HashMap<usize, NonZeroUsize>>,
@@ -523,7 +521,7 @@ struct ComponentOutputSink;
 fn write_preinit_stdio(stream: wasip2::io::streams::OutputStream, data: &str) {
     // Own and drop this stream within the call. libc caches its stdio handles
     // in linear memory; those optimizer-store resources cannot survive Wizer.
-    // The P2 bindings are shared by both targets, like Rust's residual P2 stdio.
+    // These are the residual P2 bindings, like Rust's own P2 stdio.
     let mut start = 0;
     while start < data.len() {
         // WASI blocking-write-and-flush accepts at most 4096 bytes. Preserve
@@ -796,7 +794,6 @@ impl OwnedJsRuntime {
     pub(crate) async fn initialize_node_builtins(&self) -> Result<(), String> {
         initialize_dispose_symbols(&self.ctx).await?;
         self.rt.idle().await;
-        #[cfg(feature = "p3")]
         super::p3::JsState::initialize_async_value_helpers(&self.ctx).await;
         initialize_builtin_wiring(&self.ctx).await?;
         self.rt.idle().await;
@@ -872,7 +869,7 @@ pub(crate) async fn initialize_dispose_symbols(ctx: &AsyncContext) -> Result<(),
 
 pub(crate) async fn initialize_builtin_wiring(ctx: &AsyncContext) -> Result<(), String> {
     let mut source = crate::builtin::wire_builtins();
-    // Shared by P2/P3 and all crypto tiers, before user modules can capture a
+    // Shared by all crypto tiers, before user modules can capture a
     // reference. QuickJS's context-local PRNG seed remains in the snapshot but
     // is never used by these functions after restoration.
     source.push_str(r#"
@@ -979,7 +976,6 @@ unsafe impl<'js> JsLifetime<'js> for RuntimeServices {
 
 #[derive(Default)]
 pub(crate) struct TimerServices {
-    #[cfg(feature = "p3")]
     pub(crate) child_owner:
         RefCell<Option<std::rc::Weak<crate::builtin::child_timers::ChildTimers>>>,
     pub(crate) wake_hub: Arc<ComponentWakeHub>,

@@ -1,14 +1,45 @@
+//! WASI Preview 3 `node:http` client native bridge.
+//!
+//! It exposes the native class contract (`NodeHttpClientRequest` and `NodeHttpIncomingResponse`)
+//! that the JavaScript implementation in `node_http.js` / `node_http_server.js` uses, and keeps the
+//! contract of the removed Preview 2 bridge. Requests use the `wasip3` crate's `wasi:http/client`
+//! binding (`wasip3::http::client::send`) and Component Model async `stream<u8>` / `future`
+//! bodies. No `wstd`, `wasip2`, or Preview 2 pollables are used.
+//!
+//! Per the project's `node:http` transport rule, every client request goes through `wasi:http`;
+//! there is no `node:net` loopback fallback. The `node:http` *server* is built on `node:net`
+//! (which is itself ported to Preview 3), so it works on this path unchanged.
+//!
+//! ## Request lifecycle
+//!
+//! `node_http.js` drives a client request as: create → `start()` → `writeStream()`* → `finish()` →
+//! `waitForResponse()` → `getResponse()`, then reads the response body incrementally via
+//! `NodeHttpIncomingResponse::readBodyChunk()`.
+//!
+//! The request body is **buffered** across the `write*` calls and sent once the body is finished.
+//! The outgoing `wasi:http/client.send` subtask and the request-body upload are then driven
+//! **concurrently** via [`futures::future::join`] (mirroring the buffered `send_once` path in the
+//! Preview 3 `fetch` transport). This concurrency is required: the `send` subtask only drains the
+//! request body `stream<u8>` while it is being polled, so writing body chunks while the send future
+//! sits unpolled would deadlock the shared async executor. The response body is still streamed
+//! chunk-by-chunk (not read to completion eagerly).
+
+use super::http_body::ResponseBody;
 use futures::future::{AbortHandle, Abortable};
 use rquickjs::class::Trace;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 use std::cell::RefCell;
+use std::future::Future;
+use std::pin::Pin;
 #[cfg(feature = "net-write-profiling")]
 use std::time::Instant;
-use wasip2::http::outgoing_handler;
-use wasip2::http::types as wasi_http;
-use wasip2::io::streams::{InputStream, OutputStream, StreamError};
-use wstd::runtime::AsyncPollable;
+use url::Url;
+use wasip3::http::types::{ErrorCode, Fields, Method, Request, Response, Scheme, Trailers};
+
+/// Boxed, pinned future that drives a `wasi:http/client.send` and the request-body upload
+/// concurrently, resolving once the response head is available.
+type SendFuture = Pin<Box<dyn Future<Output = Result<Response, ErrorCode>>>>;
 
 #[rquickjs::module]
 pub mod native_module {
@@ -16,62 +47,27 @@ pub mod native_module {
     pub use super::NodeHttpIncomingResponse;
 }
 
-enum ResponseBodyState {
-    WasiNative {
-        incoming_response: wasi_http::IncomingResponse,
-    },
-    Stream {
-        // Drop children before parents, including when a pending read future is cancelled.
-        stream: InputStream,
-        _body: wasi_http::IncomingBody,
-        _incoming_response: wasi_http::IncomingResponse,
-    },
-    Consumed,
-}
-
 pub(crate) struct RawResponse {
     status: u16,
     headers: Vec<Vec<String>>,
-    incoming_response: wasi_http::IncomingResponse,
+    response: Response,
 }
 
 enum RequestState {
-    Created {
-        buffered_body: Vec<u8>,
+    /// Accumulating request headers and body. The body is buffered here across `write*` calls.
+    Building {
+        body: Vec<u8>,
     },
-    Started {
-        body: wasi_http::OutgoingBody,
-        stream: OutputStream,
-        future_response: wasi_http::FutureIncomingResponse,
-    },
-    /// Transient state while an async write or finish is in progress.
-    /// Prevents re-entrant calls from seeing Aborted incorrectly.
+    /// Transient state while an async write/finish is in progress. Prevents re-entrant calls from
+    /// seeing `Aborted` incorrectly.
     Writing,
-    BodyFinished {
-        future_response: wasi_http::FutureIncomingResponse,
+    /// The request body is finished; the joined send+upload future is in flight.
+    Sending {
+        send_future: SendFuture,
     },
     ResponseReady(RawResponse),
     Consumed,
     Aborted,
-}
-
-fn discard_request_state(state: RequestState) {
-    match state {
-        RequestState::Started {
-            body,
-            stream,
-            future_response,
-        } => {
-            // WASI resources form a parent/child tree. The output stream must
-            // be dropped and the outgoing body finished before either parent
-            // resource can be released. This also covers requests abandoned
-            // by userland without end() or abort().
-            drop(stream);
-            let _ = wasi_http::OutgoingBody::finish(body, None);
-            drop(future_response);
-        }
-        other => drop(other),
-    }
 }
 
 #[derive(Trace, JsLifetime)]
@@ -100,109 +96,21 @@ impl NodeHttpClientRequest {
             method,
             url,
             headers: Vec::new(),
-            state: RequestState::Created {
-                buffered_body: Vec::new(),
-            },
+            state: RequestState::Building { body: Vec::new() },
             aborted: false,
         }
     }
 
     pub async fn start<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
-        crate::internal::preinit::check("HTTP request", "remote endpoint");
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
-        if !matches!(self.state, RequestState::Created { .. }) {
-            return Ok(());
+        // The request body is buffered until `finish`, so `start` only validates the URL eagerly
+        // (matching the Preview 2 path, which fails a malformed URL when the request starts).
+        if matches!(self.state, RequestState::Building { .. }) {
+            Url::parse(&self.url)
+                .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
         }
-
-        // Build the outgoing request BEFORE taking ownership of state,
-        // so that errors leave the buffered body intact.
-        let parsed_url: url::Url = self
-            .url
-            .parse()
-            .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
-
-        let scheme = match parsed_url.scheme() {
-            "http" => wasi_http::Scheme::Http,
-            "https" => wasi_http::Scheme::Https,
-            other => wasi_http::Scheme::Other(other.to_string()),
-        };
-
-        let header_entries: Vec<(String, Vec<u8>)> = self
-            .headers
-            .iter()
-            .map(|(name, value)| (name.clone(), value.as_bytes().to_vec()))
-            .collect();
-
-        let fields = wasi_http::Fields::from_list(&header_entries)
-            .map_err(|_| Exception::throw_message(&ctx, "failed to create request headers"))?;
-
-        let outgoing_request = wasi_http::OutgoingRequest::new(fields);
-
-        let wasi_method = match self.method.as_str() {
-            "GET" => wasi_http::Method::Get,
-            "POST" => wasi_http::Method::Post,
-            "PUT" => wasi_http::Method::Put,
-            "DELETE" => wasi_http::Method::Delete,
-            "HEAD" => wasi_http::Method::Head,
-            "OPTIONS" => wasi_http::Method::Options,
-            "CONNECT" => wasi_http::Method::Connect,
-            "PATCH" => wasi_http::Method::Patch,
-            "TRACE" => wasi_http::Method::Trace,
-            other => wasi_http::Method::Other(other.to_string()),
-        };
-
-        outgoing_request
-            .set_method(&wasi_method)
-            .map_err(|_| Exception::throw_message(&ctx, "failed to set method"))?;
-
-        let path_with_query = match parsed_url.query() {
-            Some(query) => format!("{}?{}", parsed_url.path(), query),
-            None => parsed_url.path().to_string(),
-        };
-        outgoing_request
-            .set_path_with_query(Some(&path_with_query))
-            .map_err(|_| Exception::throw_message(&ctx, "failed to set path"))?;
-        outgoing_request
-            .set_scheme(Some(&scheme))
-            .map_err(|_| Exception::throw_message(&ctx, "failed to set scheme"))?;
-        outgoing_request
-            .set_authority(Some(parsed_url.authority()))
-            .map_err(|_| Exception::throw_message(&ctx, "failed to set authority"))?;
-
-        let body = outgoing_request
-            .body()
-            .map_err(|_| Exception::throw_message(&ctx, "failed to get request body"))?;
-        let stream = body
-            .write()
-            .map_err(|_| Exception::throw_message(&ctx, "failed to get body stream"))?;
-
-        let future_response = outgoing_handler::handle(outgoing_request, None).map_err(|err| {
-            Exception::throw_message(&ctx, &format!("HTTP request failed: {err:?}"))
-        })?;
-
-        // Now take the buffered body — all fallible construction succeeded.
-        let buffered_body = if let RequestState::Created { buffered_body } = std::mem::replace(
-            &mut self.state,
-            RequestState::Started {
-                body,
-                stream,
-                future_response,
-            },
-        ) {
-            buffered_body
-        } else {
-            unreachable!("checked Created above")
-        };
-
-        // Flush any data that was buffered via sync write() before start().
-        if !buffered_body.is_empty()
-            && let RequestState::Started { stream: ref s, .. } = self.state
-        {
-            write_all_to_stream(&ctx, s, &buffered_body).await?;
-        }
-
         Ok(())
     }
 
@@ -215,22 +123,13 @@ impl NodeHttpClientRequest {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
 
-        // SAFETY: This synchronous path only copies into the native body buffer;
-        // it neither executes JavaScript nor suspends while reading the slice.
+        // SAFETY: append_body copies into a native Vec without executing JS or
+        // suspending, so the rooted JS backing buffer cannot change here.
         let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
             Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
         })?;
 
-        match &mut self.state {
-            RequestState::Created { buffered_body } => {
-                buffered_body.extend_from_slice(bytes);
-                Ok(())
-            }
-            _ => Err(Exception::throw_message(
-                &ctx,
-                "Cannot write after request has been started",
-            )),
-        }
+        self.append_body(&ctx, bytes)
     }
 
     pub fn write_string<'js>(&mut self, ctx: Ctx<'js>, data: String) -> rquickjs::Result<()> {
@@ -238,16 +137,7 @@ impl NodeHttpClientRequest {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
 
-        match &mut self.state {
-            RequestState::Created { buffered_body } => {
-                buffered_body.extend_from_slice(data.as_bytes());
-                Ok(())
-            }
-            _ => Err(Exception::throw_message(
-                &ctx,
-                "Cannot write after request has been started",
-            )),
-        }
+        self.append_body(&ctx, data.as_bytes())
     }
 
     pub async fn write_stream<'js>(
@@ -258,33 +148,14 @@ impl NodeHttpClientRequest {
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
-        self.ensure_started(&ctx).await?;
 
-        let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
+        // SAFETY: This async adapter does not suspend: append_body only copies
+        // into a native Vec and never executes JavaScript.
+        let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
             Exception::throw_message(&ctx, "the Uint8Array passed to write is detached")
         })?;
 
-        let taken = std::mem::replace(&mut self.state, RequestState::Writing);
-        if let RequestState::Started {
-            body,
-            stream,
-            future_response,
-        } = taken
-        {
-            let result = write_all_to_stream(&ctx, &stream, &bytes).await;
-            self.state = RequestState::Started {
-                body,
-                stream,
-                future_response,
-            };
-            result
-        } else {
-            self.state = taken;
-            Err(Exception::throw_message(
-                &ctx,
-                "Cannot write after request body has been finished",
-            ))
-        }
+        self.append_body(&ctx, bytes)
     }
 
     pub async fn write_string_stream<'js>(
@@ -295,29 +166,8 @@ impl NodeHttpClientRequest {
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
-        self.ensure_started(&ctx).await?;
 
-        let taken = std::mem::replace(&mut self.state, RequestState::Writing);
-        if let RequestState::Started {
-            body,
-            stream,
-            future_response,
-        } = taken
-        {
-            let result = write_all_to_stream(&ctx, &stream, data.as_bytes()).await;
-            self.state = RequestState::Started {
-                body,
-                stream,
-                future_response,
-            };
-            result
-        } else {
-            self.state = taken;
-            Err(Exception::throw_message(
-                &ctx,
-                "Cannot write after request body has been finished",
-            ))
-        }
+        self.append_body(&ctx, data.as_bytes())
     }
 
     pub fn set_header<'js>(
@@ -326,7 +176,7 @@ impl NodeHttpClientRequest {
         name: String,
         value: String,
     ) -> rquickjs::Result<()> {
-        if !matches!(self.state, RequestState::Created { .. }) {
+        if !matches!(self.state, RequestState::Building { .. }) {
             return Err(Exception::throw_message(
                 &ctx,
                 "Cannot set headers after request has been sent",
@@ -345,7 +195,7 @@ impl NodeHttpClientRequest {
         name: String,
         value: String,
     ) -> rquickjs::Result<()> {
-        if !matches!(self.state, RequestState::Created { .. }) {
+        if !matches!(self.state, RequestState::Building { .. }) {
             return Err(Exception::throw_message(
                 &ctx,
                 "Cannot set headers after request has been sent",
@@ -356,7 +206,7 @@ impl NodeHttpClientRequest {
     }
 
     pub fn remove_header<'js>(&mut self, ctx: Ctx<'js>, name: String) -> rquickjs::Result<()> {
-        if !matches!(self.state, RequestState::Created { .. }) {
+        if !matches!(self.state, RequestState::Building { .. }) {
             return Err(Exception::throw_message(
                 &ctx,
                 "Cannot remove headers after request has been sent",
@@ -373,64 +223,92 @@ impl NodeHttpClientRequest {
         ctx: Ctx<'js>,
         chunk: Option<TypedArray<'js, u8>>,
     ) -> rquickjs::Result<()> {
+        crate::internal::preinit::check("HTTP request", "remote endpoint");
         if self.aborted {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
-        self.ensure_started(&ctx).await?;
 
         if let Some(chunk) = chunk {
-            let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
+            // SAFETY: The copy finishes in this block before any await or JS
+            // execution, while chunk roots the backing buffer.
+            let bytes = unsafe { chunk.as_bytes() }.ok_or_else(|| {
                 Exception::throw_message(&ctx, "the Uint8Array passed to finish is detached")
             })?;
-            let taken = std::mem::replace(&mut self.state, RequestState::Writing);
-            if let RequestState::Started {
-                body,
-                stream,
-                future_response,
-            } = taken
-            {
-                let result = write_all_to_stream(&ctx, &stream, &bytes).await;
-                if result.is_err() {
-                    self.state = RequestState::Started {
-                        body,
-                        stream,
-                        future_response,
-                    };
-                    return result;
-                }
-                self.state = RequestState::Started {
-                    body,
-                    stream,
-                    future_response,
-                };
-            } else {
-                self.state = taken;
-                return Err(Exception::throw_message(
-                    &ctx,
-                    "Cannot finish: request not in started state",
-                ));
-            }
+            self.append_body(&ctx, bytes)?;
         }
 
+        // Take the buffered body and build the outgoing request. The send subtask and the body
+        // upload are driven concurrently by the joined future so the request body stream is drained
+        // while `send` is in flight.
         let taken = std::mem::replace(&mut self.state, RequestState::Writing);
-        if let RequestState::Started {
-            body,
-            stream,
-            future_response,
-        } = taken
-        {
-            drop(stream);
-            wasi_http::OutgoingBody::finish(body, None)
-                .map_err(|_| Exception::throw_message(&ctx, "failed to finish request body"))?;
-            self.state = RequestState::BodyFinished { future_response };
-            Ok(())
-        } else {
+        let RequestState::Building { body } = taken else {
             self.state = taken;
-            Err(Exception::throw_message(
+            return Err(Exception::throw_message(
                 &ctx,
-                "Cannot finish: request not in started state",
-            ))
-        }
+                "Cannot finish: request has already been sent",
+            ));
+        };
+
+        let parsed_url = match Url::parse(&self.url) {
+            Ok(url) => url,
+            Err(_) => {
+                self.state = RequestState::Aborted;
+                self.aborted = true;
+                return Err(Exception::throw_message(&ctx, "failed to parse url"));
+            }
+        };
+
+        let fields = build_fields(&self.headers);
+        let (mut body_tx, body_rx) = wasip3::wit_stream::new();
+        let (trailers_tx, trailers_rx) =
+            wasip3::wit_future::new(|| Ok::<Option<Trailers>, ErrorCode>(None));
+        // `_transmit` resolves to the request body transmission result; upload failures surface as
+        // a rejected `send`, so it is dropped here.
+        let (request, _transmit) = Request::new(fields, Some(body_rx), trailers_rx, None);
+
+        let method = parse_method(&self.method);
+        let scheme = parse_scheme(parsed_url.scheme());
+        let authority = url_authority(&parsed_url);
+        let path_with_query = url_path_with_query(&parsed_url);
+        apply_request_targets(
+            &ctx,
+            &request,
+            &method,
+            scheme.as_ref(),
+            authority.as_deref(),
+            &path_with_query,
+        )?;
+
+        let send_future: SendFuture = Box::pin(async move {
+            let write_fut = async move {
+                // `write_all` returns any bytes it could not deliver; dropping the writer closes
+                // the request body stream and dropping the trailers writer resolves it to the
+                // default `Ok(None)` (no trailers).
+                #[cfg(feature = "net-write-profiling")]
+                let body_len = body.len();
+                #[cfg(feature = "net-write-profiling")]
+                let write_started_at = Instant::now();
+                let _remaining = body_tx.write_all(body).await;
+                #[cfg(feature = "net-write-profiling")]
+                eprintln!(
+                    "[node-http-write-profile]{}",
+                    serde_json::json!({
+                        "bytes": body_len,
+                        "completedBytes": body_len - _remaining.len(),
+                        "writeAllCalls": 1,
+                        "elapsedNs": write_started_at.elapsed().as_nanos() as u64,
+                    })
+                );
+                drop(body_tx);
+                drop(trailers_tx);
+            };
+            let (send_result, ()) =
+                futures::future::join(wasip3::http::client::send(request), write_fut).await;
+            send_result
+        });
+
+        self.state = RequestState::Sending { send_future };
+        Ok(())
     }
 
     pub async fn wait_for_response<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
@@ -439,27 +317,18 @@ impl NodeHttpClientRequest {
         }
 
         let taken = std::mem::replace(&mut self.state, RequestState::Writing);
-        if let RequestState::BodyFinished { future_response } = taken {
-            let incoming_response = get_incoming_response(&ctx, &future_response).await?;
+        if let RequestState::Sending { send_future } = taken {
+            let response = send_future
+                .await
+                .map_err(|err| throw_http_error(&ctx, &err))?;
 
-            let status = incoming_response.status();
-            let response_fields = incoming_response.headers();
-            let raw_entries = response_fields.entries();
-            let headers: Vec<Vec<String>> = raw_entries
-                .into_iter()
-                .map(|(name, value)| {
-                    vec![
-                        name,
-                        String::from_utf8(value)
-                            .unwrap_or_else(|_| "Invalid header value".to_string()),
-                    ]
-                })
-                .collect();
+            let status = response.get_status_code();
+            let headers = fields_to_pairs(&response.get_headers());
 
             self.state = RequestState::ResponseReady(RawResponse {
                 status,
                 headers,
-                incoming_response,
+                response,
             });
             Ok(())
         } else {
@@ -501,24 +370,22 @@ impl NodeHttpClientRequest {
 
     pub fn abort(&mut self) {
         self.aborted = true;
-        let state = std::mem::replace(&mut self.state, RequestState::Aborted);
-        discard_request_state(state);
-    }
-}
-
-impl Drop for NodeHttpClientRequest {
-    fn drop(&mut self) {
-        let state = std::mem::replace(&mut self.state, RequestState::Aborted);
-        discard_request_state(state);
+        self.state = RequestState::Aborted;
     }
 }
 
 impl NodeHttpClientRequest {
-    async fn ensure_started<'js>(&mut self, ctx: &Ctx<'js>) -> rquickjs::Result<()> {
-        if matches!(self.state, RequestState::Created { .. }) {
-            self.start(ctx.clone()).await
-        } else {
-            Ok(())
+    /// Appends bytes to the buffered request body, erroring if the request has already been sent.
+    fn append_body(&mut self, ctx: &Ctx<'_>, bytes: &[u8]) -> rquickjs::Result<()> {
+        match &mut self.state {
+            RequestState::Building { body } => {
+                body.extend_from_slice(bytes);
+                Ok(())
+            }
+            _ => Err(Exception::throw_message(
+                ctx,
+                "Cannot write after request body has been finished",
+            )),
         }
     }
 }
@@ -533,7 +400,7 @@ pub struct NodeHttpIncomingResponse {
 }
 
 struct IncomingBody {
-    source: Option<ResponseBodyState>,
+    source: Option<ResponseBody>,
     active_abort: Option<AbortHandle>,
     discarded: bool,
 }
@@ -550,7 +417,7 @@ impl NodeHttpIncomingResponse {
     pub fn new() -> Self {
         NodeHttpIncomingResponse {
             body: RefCell::new(IncomingBody {
-                source: Some(ResponseBodyState::Consumed),
+                source: Some(ResponseBody::empty()),
                 active_abort: None,
                 discarded: false,
             }),
@@ -563,9 +430,7 @@ impl NodeHttpIncomingResponse {
     pub(crate) fn from_raw_response(raw: RawResponse) -> Self {
         NodeHttpIncomingResponse {
             body: RefCell::new(IncomingBody {
-                source: Some(ResponseBodyState::WasiNative {
-                    incoming_response: raw.incoming_response,
-                }),
+                source: Some(ResponseBody::new(raw.response)),
                 active_abort: None,
                 discarded: false,
             }),
@@ -609,11 +474,10 @@ impl NodeHttpIncomingResponse {
             state.active_abort = Some(abort);
             (source, registration)
         };
-        let read_ctx = ctx.clone();
-        // The future owns all WASI resources. Abort drops the pollable before the stream and its
-        // parents, without holding an exclusive class borrow that would prevent discardBody().
+        // Own the body in the cancellable future, not behind a class/RefCell borrow. Cancelling
+        // drops the pending stream read before the body resources, and JS joins this operation.
         let read = async move {
-            let outcome = source.read_chunk(&read_ctx).await;
+            let outcome = source.read_chunk().await;
             (source, outcome)
         };
         let outcome = Abortable::new(read, registration).await;
@@ -631,8 +495,8 @@ impl NodeHttpIncomingResponse {
             state.discarded = true;
         }
         drop(state);
-        match outcome? {
-            Some(bytes) => {
+        match outcome {
+            Ok(Some(bytes)) => {
                 let chunk = TypedArray::new_copy(ctx.clone(), bytes).map_err(|_| {
                     Exception::throw_message(
                         &ctx,
@@ -641,90 +505,38 @@ impl NodeHttpIncomingResponse {
                 })?;
                 Ok(List((Some(chunk), false)))
             }
-            None => Ok(List((None, true))),
+            Ok(None) => Ok(List((None, true))),
+            Err(error) => Err(Exception::throw_message(&ctx, &error)),
         }
     }
 }
 
-impl ResponseBodyState {
-    async fn read_chunk(&mut self, ctx: &Ctx<'_>) -> rquickjs::Result<Option<Vec<u8>>> {
-        if matches!(self, Self::WasiNative { .. }) {
-            let Self::WasiNative { incoming_response } = std::mem::replace(self, Self::Consumed)
-            else {
-                unreachable!();
-            };
-            let body = incoming_response
-                .consume()
-                .map_err(|_| Exception::throw_message(ctx, "failed to consume response body"))?;
-            let stream = body
-                .stream()
-                .map_err(|_| Exception::throw_message(ctx, "failed to get body stream"))?;
-            *self = Self::Stream {
-                stream,
-                _body: body,
-                _incoming_response: incoming_response,
-            };
-        }
-        if let Self::Stream { stream, .. } = self {
-            const CHUNK_SIZE: u64 = 4096;
-            loop {
-                match stream.read(CHUNK_SIZE) {
-                    Ok(chunk) if !chunk.is_empty() => return Ok(Some(chunk)),
-                    Ok(_) => {
-                        let pollable = stream.subscribe();
-                        AsyncPollable::new(pollable).wait_for().await;
-                    }
-                    Err(StreamError::Closed) => {
-                        *self = Self::Consumed;
-                        return Ok(None);
-                    }
-                    Err(StreamError::LastOperationFailed(err)) => {
-                        let debug_message = err.to_debug_string();
-                        if debug_message.to_ascii_lowercase().contains("would") {
-                            let pollable = stream.subscribe();
-                            AsyncPollable::new(pollable).wait_for().await;
-                            continue;
-                        }
-
-                        return Err(Exception::throw_message(
-                            ctx,
-                            &format!("Failed to read response body: {debug_message}"),
-                        ));
-                    }
-                }
-            }
-        } else {
-            Ok(None)
-        }
-    }
-}
-
-fn http_error_to_node_code(err: &wasi_http::ErrorCode) -> &'static str {
+fn http_error_to_node_code(err: &ErrorCode) -> &'static str {
     match err {
-        wasi_http::ErrorCode::ConnectionTerminated => "ECONNRESET",
-        wasi_http::ErrorCode::ConnectionReadTimeout => "ETIMEDOUT",
-        wasi_http::ErrorCode::ConnectionWriteTimeout => "ETIMEDOUT",
-        wasi_http::ErrorCode::ConnectionTimeout => "ETIMEDOUT",
-        wasi_http::ErrorCode::HttpResponseTimeout => "ETIMEDOUT",
-        wasi_http::ErrorCode::ConnectionRefused => "ECONNREFUSED",
-        wasi_http::ErrorCode::DnsTimeout => "ENOTFOUND",
-        wasi_http::ErrorCode::DnsError(e) => {
+        ErrorCode::ConnectionTerminated => "ECONNRESET",
+        ErrorCode::ConnectionReadTimeout => "ETIMEDOUT",
+        ErrorCode::ConnectionWriteTimeout => "ETIMEDOUT",
+        ErrorCode::ConnectionTimeout => "ETIMEDOUT",
+        ErrorCode::HttpResponseTimeout => "ETIMEDOUT",
+        ErrorCode::ConnectionRefused => "ECONNREFUSED",
+        ErrorCode::DnsTimeout => "ENOTFOUND",
+        ErrorCode::DnsError(e) => {
             if e.rcode.as_deref() == Some("NXDOMAIN") || e.info_code == Some(3) {
                 "ENOTFOUND"
             } else {
                 "EAI_FAIL"
             }
         }
-        wasi_http::ErrorCode::DestinationNotFound => "ENOTFOUND",
-        wasi_http::ErrorCode::DestinationUnavailable => "ECONNREFUSED",
-        wasi_http::ErrorCode::HttpResponseIncomplete => "ECONNRESET",
-        wasi_http::ErrorCode::HttpProtocolError => "ECONNRESET",
-        wasi_http::ErrorCode::InternalError(_) => "ECONNRESET",
+        ErrorCode::DestinationNotFound => "ENOTFOUND",
+        ErrorCode::DestinationUnavailable => "ECONNREFUSED",
+        ErrorCode::HttpResponseIncomplete => "ECONNRESET",
+        ErrorCode::HttpProtocolError => "ECONNRESET",
+        ErrorCode::InternalError(_) => "ECONNRESET",
         _ => "EIO",
     }
 }
 
-fn throw_http_error(ctx: &Ctx<'_>, err: &wasi_http::ErrorCode) -> rquickjs::Error {
+fn throw_http_error(ctx: &Ctx<'_>, err: &ErrorCode) -> rquickjs::Error {
     let code = http_error_to_node_code(err);
     let message = format!("{err:?}");
     let escaped = message.replace('\\', "\\\\").replace('"', "\\\"");
@@ -734,133 +546,124 @@ fn throw_http_error(ctx: &Ctx<'_>, err: &wasi_http::ErrorCode) -> rquickjs::Erro
     )
 }
 
-async fn get_incoming_response<'js>(
-    ctx: &Ctx<'js>,
-    future_response: &wasi_http::FutureIncomingResponse,
-) -> rquickjs::Result<wasi_http::IncomingResponse> {
-    match future_response.get() {
-        Some(Ok(Ok(incoming_response))) => Ok(incoming_response),
-        Some(Ok(Err(err))) => Err(throw_http_error(ctx, &err)),
-        Some(Err(())) => Err(Exception::throw_message(ctx, "HTTP request failed")),
-        None => {
-            let pollable = future_response.subscribe();
-            AsyncPollable::new(pollable).wait_for().await;
-            match future_response.get() {
-                Some(Ok(Ok(incoming_response))) => Ok(incoming_response),
-                Some(Ok(Err(err))) => Err(throw_http_error(ctx, &err)),
-                _ => Err(Exception::throw_message(ctx, "HTTP request failed")),
-            }
-        }
+// ---------------------------------------------------------------------------
+// wasip3 request helpers (mirrors the Preview 2 native contract).
+// ---------------------------------------------------------------------------
+
+fn parse_method(method: &str) -> Method {
+    // Match the standard methods by their canonical (upper-case) spelling only; any other token
+    // becomes an extension method with its original case preserved, exactly like the Preview 2 path.
+    match method {
+        "GET" => Method::Get,
+        "HEAD" => Method::Head,
+        "POST" => Method::Post,
+        "PUT" => Method::Put,
+        "DELETE" => Method::Delete,
+        "CONNECT" => Method::Connect,
+        "OPTIONS" => Method::Options,
+        "TRACE" => Method::Trace,
+        "PATCH" => Method::Patch,
+        other => Method::Other(other.to_string()),
     }
 }
 
-async fn write_all_to_stream<'js>(
-    ctx: &Ctx<'js>,
-    stream: &OutputStream,
-    data: &[u8],
+fn parse_scheme(scheme: &str) -> Option<Scheme> {
+    match scheme {
+        "http" => Some(Scheme::Http),
+        "https" => Some(Scheme::Https),
+        "" => None,
+        other => Some(Scheme::Other(other.to_string())),
+    }
+}
+
+fn url_authority(url: &Url) -> Option<String> {
+    let host = url.host_str()?;
+    Some(match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    })
+}
+
+fn url_path_with_query(url: &Url) -> String {
+    match url.query() {
+        Some(query) => format!("{}?{}", url.path(), query),
+        None => url.path().to_string(),
+    }
+}
+
+fn apply_request_targets(
+    ctx: &Ctx<'_>,
+    request: &Request,
+    method: &Method,
+    scheme: Option<&Scheme>,
+    authority: Option<&str>,
+    path_with_query: &str,
 ) -> rquickjs::Result<()> {
-    if data.is_empty() {
-        return Ok(());
-    }
-    #[cfg(feature = "net-write-profiling")]
-    let started_at = Instant::now();
-    #[cfg(feature = "net-write-profiling")]
-    let mut check_write_calls = 0_u64;
-    #[cfg(feature = "net-write-profiling")]
-    let mut capacity_waits = 0_u64;
-    #[cfg(feature = "net-write-profiling")]
-    let mut capacity_wait_ns = 0_u64;
-    #[cfg(feature = "net-write-profiling")]
-    let mut write_calls = 0_u64;
-    let mut offset = 0;
-    while offset < data.len() {
-        let remaining = &data[offset..];
-        #[cfg(feature = "net-write-profiling")]
-        {
-            check_write_calls += 1;
-        }
-        match stream.check_write() {
-            Ok(0) => {
-                #[cfg(feature = "net-write-profiling")]
-                let wait_started_at = Instant::now();
-                let pollable = stream.subscribe();
-                AsyncPollable::new(pollable).wait_for().await;
-                #[cfg(feature = "net-write-profiling")]
-                {
-                    capacity_waits += 1;
-                    capacity_wait_ns += wait_started_at.elapsed().as_nanos() as u64;
-                }
-            }
-            Ok(permit) => {
-                let to_write = std::cmp::min(permit as usize, remaining.len());
-                stream
-                    .write(&remaining[..to_write])
-                    .map_err(|_| Exception::throw_message(ctx, "failed to write request body"))?;
-                #[cfg(feature = "net-write-profiling")]
-                {
-                    write_calls += 1;
-                }
-                offset += to_write;
-            }
-            Err(_) => {
-                return Err(Exception::throw_message(
-                    ctx,
-                    "failed to write request body",
-                ));
-            }
-        }
-    }
-    // Match wasi:io's combined write-and-flush operation: closing after all
-    // input was accepted can complete the write, while a failed operation must
-    // still be reported. In particular, HTTP may consume the declared body
-    // length and close its receiver before this flush.
-    match stream.flush() {
-        Ok(()) | Err(StreamError::Closed) => {}
-        Err(_) => {
-            return Err(Exception::throw_message(
-                ctx,
-                "failed to flush request body",
-            ));
-        }
-    }
-    #[cfg(feature = "net-write-profiling")]
-    let flush_wait_started_at = Instant::now();
-    loop {
-        let pollable = stream.subscribe();
-        AsyncPollable::new(pollable).wait_for().await;
-        // Readiness alone does not prove the flush succeeded: delayed failures
-        // are returned by check-write. Closed is successful only in this final
-        // phase; the input loop above still rejects every premature closure.
-        #[cfg(feature = "net-write-profiling")]
-        {
-            check_write_calls += 1;
-        }
-        match stream.check_write() {
-            Ok(0) => continue,
-            Ok(_) | Err(StreamError::Closed) => break,
-            Err(_) => {
-                return Err(Exception::throw_message(
-                    ctx,
-                    "failed to flush request body",
-                ));
-            }
-        }
-    }
-    #[cfg(feature = "net-write-profiling")]
-    eprintln!(
-        "[node-http-write-profile]{}",
-        serde_json::json!({
-            "bytes": data.len(),
-            "checkWriteCalls": check_write_calls,
-            "capacityWaits": capacity_waits,
-            "capacityWaitNs": capacity_wait_ns,
-            "writeCalls": write_calls,
-            "flushWaitNs": flush_wait_started_at.elapsed().as_nanos() as u64,
-            "elapsedNs": started_at.elapsed().as_nanos() as u64,
-        })
-    );
+    request
+        .set_method(method)
+        .map_err(|_| Exception::throw_message(ctx, "failed to set method"))?;
+    request
+        .set_scheme(scheme)
+        .map_err(|_| Exception::throw_message(ctx, "failed to set scheme"))?;
+    request
+        .set_authority(authority)
+        .map_err(|_| Exception::throw_message(ctx, "failed to set authority"))?;
+    request
+        .set_path_with_query(Some(path_with_query))
+        .map_err(|_| Exception::throw_message(ctx, "failed to set path"))?;
     Ok(())
 }
+
+/// Builds a `wasi:http` `fields` resource from a header list, skipping the `host` header (which the
+/// transport derives from the request authority).
+fn build_fields(headers: &[(String, String)]) -> Fields {
+    let fields = Fields::new();
+    for (name, value) in headers {
+        if name.eq_ignore_ascii_case("host") {
+            continue;
+        }
+        // Best effort: ignore headers the host rejects rather than failing the whole request.
+        let _ = fields.append(name, value.as_bytes());
+    }
+    fields
+}
+
+/// Hop-by-hop / forbidden headers that the wasmtime Preview 2 host strips from
+/// incoming response fields (`remove_forbidden_headers`). The Preview 3 host
+/// passes response headers through unfiltered, so we apply the same filter here
+/// to keep the two generation targets behaviorally identical.
+fn is_forbidden_response_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "connection"
+            | "keep-alive"
+            | "proxy-connection"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "transfer-encoding"
+            | "upgrade"
+            | "host"
+            | "http2-settings"
+    )
+}
+
+fn fields_to_pairs(fields: &Fields) -> Vec<Vec<String>> {
+    fields
+        .copy_all()
+        .into_iter()
+        .filter(|(name, _)| !is_forbidden_response_header(name))
+        .map(|(name, value)| {
+            vec![
+                name,
+                String::from_utf8(value).unwrap_or_else(|_| "Invalid header value".to_string()),
+            ]
+        })
+        .collect()
+}
+
+// ---------------------------------------------------------------------------
+// JavaScript sources (shared with the Preview 2 path).
+// ---------------------------------------------------------------------------
 
 pub const NODE_HTTP_JS: &str = include_str!("node_http.js");
 pub const NODE_HTTP_SERVER_JS: &str = include_str!("node_http_server.js");

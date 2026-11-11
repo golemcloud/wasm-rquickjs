@@ -2,7 +2,8 @@
 
 This manual suite measures the public synchronous transform API plus four execution
 paths: inline source, entry modules, ESM imports, and CommonJS loads. It runs
-increasing source sizes in both strip-only and transform modes for P2 and P3.
+increasing source sizes in both strip-only and transform modes on P3. The checked-in
+2026-09-21 capture also covers the since-removed P2 target.
 The ESM matrix also imports output prepared by the direct API outside the timed
 region, separating native transformation from downstream module compilation.
 
