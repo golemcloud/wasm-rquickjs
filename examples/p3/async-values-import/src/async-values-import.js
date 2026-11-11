@@ -1,5 +1,22 @@
 import * as host from 'test:async-values-import/host';
 
+export async function runOptionalFutures() {
+  const values = [];
+  for (const consume of [
+    value => host.consumeOptionalFuture(value),
+    value => host.consumeNestedOptionalFuture({ value }),
+  ]) {
+    values.push(await consume(Promise.resolve(23)));
+    values.push(await consume(Promise.resolve(undefined)));
+    values.push(await consume(Promise.reject(new Error('missing optional value'))));
+  }
+  return JSON.stringify(values);
+}
+
+export async function runDroppedOptionalFuture() {
+  await host.storeOptionalFuture(new Promise(() => {}));
+}
+
 export async function runBufferTransfer() {
   const bytes = Uint8Array.from({ length: 16384 }, (_, i) => i & 255);
   const pending = host.echoBytes(bytes);
