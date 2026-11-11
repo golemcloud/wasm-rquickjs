@@ -558,6 +558,8 @@ fn generate_conversion_instances_for_type(
             let js_type = bridge.wrapped_ref;
             let wrap = bridge.wrap.run(quote! { value });
             let unwrap = bridge.unwrap.run(quote! { value });
+            let default =
+                crate::async_values::future_default(context, &async_value, &component_type)?;
 
             let nested = match payload {
                 Some(Type::Id(payload_id)) => {
@@ -588,7 +590,7 @@ fn generate_conversion_instances_for_type(
                             wit_bindgen_p3::rt::async_support::FutureReader<Self::Component>,
                         ) {
                             crate::bindings::wit_future::new(
-                                crate::internal::async_value_default::<Self::Component>,
+                                #default,
                             )
                         }
                     }

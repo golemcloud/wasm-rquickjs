@@ -7,6 +7,11 @@ package test:async-values;
 //   * `take-future` / `take-stream` receive a future/stream from the host: the component reader is
 //     lifted into a JS `Promise` / async-iterable that the JS function awaits / iterates.
 interface nested-types {
+  type optional-value = option<u32>;
+  record optional-future {
+    value: future<optional-value>,
+  }
+
   record nested-values {
     label: string,
     future-value: future<u32>,
@@ -35,12 +40,14 @@ interface constructor-api {
 }
 
 world async-values {
-  use nested-types.{nested-values};
+  use nested-types.{nested-values, optional-value, optional-future};
   use observer.{wrapped-stream};
   import observer;
   export constructor-api;
 
   export run-future: async func() -> future<u32>;
+  export run-optional-future: async func(mode: u8) -> future<optional-value>;
+  export run-nested-optional-future: async func(mode: u8) -> optional-future;
   export run-checkpoint-future: async func() -> future<u32>;
   export read-checkpoint-count: async func() -> u32;
   export run-stream: async func() -> stream<u8>;

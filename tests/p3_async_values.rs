@@ -77,6 +77,7 @@ struct Host {
     http: WasiHttpCtx,
     table: ResourceTable,
     stored_future: Option<oneshot::Receiver<u32>>,
+    stored_optional_future: Option<oneshot::Receiver<Option<u32>>>,
     export_gates: Vec<Option<ExportGate>>,
     cleanup_notification: Option<oneshot::Sender<()>>,
     nested_cleanup_calls: usize,
@@ -171,6 +172,34 @@ impl<T> export_bindings::test::async_values::observer::HostWrappedStreamWithStor
 }
 
 impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
+    async fn consume_optional_future(
+        accessor: &Accessor<T, Self>,
+        f: FutureReader<Option<u32>>,
+    ) -> Option<u32> {
+        let (tx, rx) = oneshot::channel();
+        accessor
+            .with(|access| f.pipe(access, OneshotConsumer::new(tx)))
+            .expect("failed to pipe optional host future");
+        rx.await.expect("optional host future did not resolve")
+    }
+
+    async fn consume_nested_optional_future(
+        accessor: &Accessor<T, Self>,
+        f: test::async_values_import::host::OptionalFuture,
+    ) -> Option<u32> {
+        Self::consume_optional_future(accessor, f.value).await
+    }
+
+    async fn store_optional_future(accessor: &Accessor<T, Self>, f: FutureReader<Option<u32>>) {
+        let (tx, rx) = oneshot::channel();
+        accessor
+            .with(|mut access| {
+                access.get().stored_optional_future = Some(rx);
+                f.pipe(access, OneshotConsumer::new(tx))
+            })
+            .expect("failed to store optional host future");
+    }
+
     async fn echo_bytes(accessor: &Accessor<T, Self>, bytes: Vec<u8>) -> Vec<u8> {
         accessor.with(|mut access| access.get().byte_echo_calls += 1);
         tokio::time::sleep(Duration::from_millis(10)).await;
@@ -277,6 +306,7 @@ fn new_store(engine: &Engine) -> Store<Host> {
             http: WasiHttpCtx::new(),
             table: ResourceTable::new(),
             stored_future: None,
+            stored_optional_future: None,
             export_gates: Vec::new(),
             cleanup_notification: None,
             nested_cleanup_calls: 0,
@@ -1199,6 +1229,84 @@ fn anyhow_msg(msg: &'static str) -> anyhow::Error {
 // ---------------------------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------------------------
+
+#[test]
+fn p3_optional_future_missing_values_resolve_none() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let linker = base_linker(&engine)?;
+        for nested in [false, true] {
+            for (mode, expected) in [Some(23), None].into_iter().enumerate() {
+                let mut store = new_store(&engine);
+                let bindings =
+                    AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+                let actual = store
+                    .run_concurrent(async move |accessor| -> Result<Option<u32>> {
+                        let reader = if nested {
+                            bindings
+                                .call_run_nested_optional_future(accessor, mode as u8)
+                                .await?
+                                .value
+                        } else {
+                            bindings
+                                .call_run_optional_future(accessor, mode as u8)
+                                .await?
+                        };
+                        let (tx, rx) = oneshot::channel();
+                        accessor.with(|access| reader.pipe(access, OneshotConsumer::new(tx)))?;
+                        Ok(rx.await?)
+                    })
+                    .await??;
+                assert_eq!(actual, expected, "export nested={nested}, mode={mode}");
+            }
+        }
+        Ok::<(), anyhow::Error>(())
+    });
+
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let mut linker = base_linker(&engine)?;
+        test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(
+            &mut linker,
+            |host| host,
+        )?;
+        let mut store = new_store(&engine);
+        let bindings =
+            AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+        let bindings = &bindings;
+        let actual = store
+            .run_concurrent(async move |accessor| {
+                bindings.call_run_optional_futures(accessor).await
+            })
+            .await??;
+        assert_eq!(actual, "[23,null,null,23,null,null]");
+        store
+            .run_concurrent(async move |accessor| {
+                bindings.call_run_dropped_optional_future(accessor).await
+            })
+            .await??;
+        let stored = store
+            .data_mut()
+            .stored_optional_future
+            .take()
+            .expect("stored future");
+        let actual = store
+            .run_concurrent(async move |_accessor| stored.await)
+            .await??;
+        assert_eq!(
+            actual, None,
+            "unresolved writer defaults after its export returns"
+        );
+        Ok::<(), anyhow::Error>(())
+    });
+}
 
 #[test]
 fn p3_stream_roots_survive_automatic_gc() {

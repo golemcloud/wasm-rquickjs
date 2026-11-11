@@ -302,9 +302,10 @@ pub fn js_to_reader_expr(
     let original = &bridge.original_ref;
     let wrapped = &bridge.wrapped_ref;
     let unwrap_body = bridge.unwrap.run(quote! { __wrapped });
+    let default = future_default(context, async_value, original)?;
     let (new_call, spawn_fn) = match async_value.kind {
         AsyncValueKind::Future => (
-            quote! { crate::bindings::wit_future::new(crate::internal::async_value_default::<#original>) },
+            quote! { crate::bindings::wit_future::new(#default) },
             quote! { crate::internal::spawn_future_writer },
         ),
         AsyncValueKind::Stream => (
@@ -348,9 +349,10 @@ pub fn js_to_reader_pure_expr(
     let original = &bridge.original_ref;
     let wrapped = &bridge.wrapped_ref;
     let unwrap_body = bridge.unwrap.run(quote! { __wrapped });
+    let default = future_default(context, async_value, original)?;
     let (new_call, from_js_fn) = match async_value.kind {
         AsyncValueKind::Future => (
-            quote! { crate::bindings::wit_future::new(crate::internal::async_value_default::<#original>) },
+            quote! { crate::bindings::wit_future::new(#default) },
             quote! { crate::internal::future_writer_from_js },
         ),
         AsyncValueKind::Stream => (
@@ -370,4 +372,20 @@ pub fn js_to_reader_pure_expr(
             __reader
         }
     })
+}
+
+pub(crate) fn future_default(
+    context: &GeneratorContext<'_>,
+    async_value: &AsyncValue,
+    original: &TokenStream,
+) -> anyhow::Result<TokenStream> {
+    let mut payload = async_value.payload;
+    while let Some(Type::Id(id)) = payload {
+        match &context.typ(id)?.kind {
+            TypeDefKind::Option(_) => return Ok(quote! { || None }),
+            TypeDefKind::Type(inner) => payload = Some(*inner),
+            _ => break,
+        }
+    }
+    Ok(quote! { crate::internal::async_value_default::<#original> })
 }

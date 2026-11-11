@@ -9,6 +9,15 @@ export async function runFuture() {
   return 42;
 }
 
+export async function runOptionalFuture(mode) {
+  await Promise.resolve();
+  return mode === 0 ? 23 : undefined;
+}
+
+export async function runNestedOptionalFuture(mode) {
+  return { value: runOptionalFuture(mode) };
+}
+
 const checkpointReason = new Error('raw future checkpoint');
 let checkpointCount = 0;
 process.on('unhandledRejection', (reason) => {
