@@ -1,10 +1,10 @@
 declare module 'error-consumer' {
-  export function observe(): Promise<string>;
+  export function observe(): string;
   export namespace output {
     /**
      * @throws Failure
      */
-    export function rethrow(kind: string): Promise<string>;
+    export function rethrow(kind: string): string;
     export type Detail =
     {
       tag: 'permission-denied'

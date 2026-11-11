@@ -59,7 +59,7 @@ struct Manifest {
     source_hint: String,
     build_hash: String,
     benchmark_hash: String,
-    reports: [String; 2],
+    reports: Vec<String>,
 }
 
 #[derive(Debug, Eq, PartialEq)]
@@ -167,43 +167,38 @@ fn load_manifest(root: &Path, suite: Suite) -> Result<Manifest> {
         }
         reports.push(fields[3].to_string());
     }
-    if reports.len() != 2 {
-        return Err(format!(
-            "current-report manifest must name exactly one P2/P3 pair: {}",
-            suite.manifest
-        ));
-    }
-    let p2 = reports
-        .iter()
-        .find(|report| report.contains("-p2-"))
-        .ok_or_else(|| format!("{} has no P2 report", suite.manifest))?;
-    let p3 = reports
-        .iter()
-        .find(|report| report.contains("-p3-"))
-        .ok_or_else(|| format!("{} has no P3 report", suite.manifest))?;
-    if reports
+    // P2 generation was removed: a current measurement is one P3 report. A manifest that
+    // still names a historical capture must name its companion P2/P3 pair.
+    let p2_count = reports
         .iter()
         .filter(|report| report.contains("-p2-"))
-        .count()
-        != 1
-        || reports
-            .iter()
-            .filter(|report| report.contains("-p3-"))
-            .count()
-            != 1
-        || p2.replacen("-p2-", "-p3-", 1) != *p3
-    {
+        .count();
+    let p3_count = reports
+        .iter()
+        .filter(|report| report.contains("-p3-"))
+        .count();
+    let valid = match reports.as_slice() {
+        [_] => p3_count == 1 && p2_count == 0,
+        [first, second] => {
+            p2_count == 1
+                && p3_count == 1
+                && (first.replacen("-p2-", "-p3-", 1) == *second
+                    || second.replacen("-p2-", "-p3-", 1) == *first)
+        }
+        _ => false,
+    };
+    if !valid {
         return Err(format!(
-            "current-report manifest does not name a companion P2/P3 pair: {}",
+            "current-report manifest must name one P3 report or a historical companion P2/P3 pair: {}",
             suite.manifest
         ));
     }
     reports.sort();
     Ok(Manifest {
-        source_hint: source_hint.expect("two manifest entries have a source hint"),
-        build_hash: build_hash.expect("two manifest entries have a build hash"),
-        benchmark_hash: benchmark_hash.expect("two manifest entries have a benchmark hash"),
-        reports: [reports[0].clone(), reports[1].clone()],
+        source_hint: source_hint.expect("manifest entries have a source hint"),
+        build_hash: build_hash.expect("manifest entries have a build hash"),
+        benchmark_hash: benchmark_hash.expect("manifest entries have a benchmark hash"),
+        reports,
     })
 }
 
@@ -730,6 +725,27 @@ fn self_test_manifest_contract() -> Result<()> {
     .map_err(|error| error.to_string())?;
     if load_manifest(&root, NPM_METADATA).is_ok() {
         return Err("mixed manifest benchmark hashes were accepted".to_string());
+    }
+    write_pair(&root, NPM_METADATA, source, "current")?;
+    let p3_only = format!("{}current-p3-report.json", NPM_METADATA.report_prefix);
+    fs::write(
+        &invalid_manifest,
+        format!("{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {p3_only}\n"),
+    )
+    .map_err(|error| error.to_string())?;
+    if load_manifest(&root, NPM_METADATA)?.reports != vec![p3_only] {
+        return Err("P3-only current manifest was not accepted".to_string());
+    }
+    fs::write(
+        &invalid_manifest,
+        format!(
+            "{source} {TEST_BUILD_HASH} {TEST_BENCHMARK_HASH} {}current-p2-report.json\n",
+            NPM_METADATA.report_prefix
+        ),
+    )
+    .map_err(|error| error.to_string())?;
+    if load_manifest(&root, NPM_METADATA).is_ok() {
+        return Err("P2-only current manifest was accepted".to_string());
     }
 
     Ok(())

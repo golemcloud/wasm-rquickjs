@@ -26,7 +26,7 @@ hand:
 tools/check-skeleton-clippy.sh
 ```
 
-It checks the supported P2/P3 default and maximal feature lanes with
+It checks the supported default and maximal feature lanes with
 `-Dwarnings`. The helper temporarily symlinks `Cargo.toml` to the checked-in
 `Cargo.toml_`, directs output to the workspace-root `target/` cache, preserves
 that cache, and removes the symlink on exit. Run `./cleanup-skeleton.sh`
@@ -37,20 +37,23 @@ embedding.
 
 ```bash
 # Minimize latency to the first result after an edit: no Wizer, one worker.
-tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
+tools/dev-test.sh stock fast-start runtime <exact_test_filter>
 
 # Precompile a changed component once before parallel workers start.
-tools/dev-test.sh p2 fast-run runtime <module_filter>
-tools/dev-test.sh p2 fast-run node_compat <test_filter>
-tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
+tools/dev-test.sh stock fast-run runtime <module_filter>
+tools/dev-test.sh stock fast-run node_compat <test_filter>
+tools/dev-test.sh stock fast-run node_compat <test_filter> --test-threads 4
 
 # Default semantics use the embedded skeleton.
-tools/dev-test.sh p3 standard runtime ':tag:group3'
+tools/dev-test.sh stock standard runtime ':tag:group3'
 ```
 
-The accelerated profiles enable the generated-artifact and Wasmtime caches, read the skeleton
-from the checkout without embedding it in the host test binary, and keep P2's Golem Wasmtime
-patch in an ignored shadow workspace. They use locked Cargo builds while allowing missing
+Every lane generates WASI Preview 3 components. `stock` hosts them on the crates.io Wasmtime,
+like the CI runtime and node-compat lanes; `fork` uses Golem's Wasmtime fork
+(`use-golem-wasmtime`) through an ignored shadow workspace.
+
+The accelerated profiles enable the generated-artifact and Wasmtime caches and read the skeleton
+from the checkout without embedding it in the host test binary. They use locked Cargo builds while allowing missing
 packages to be downloaded. `fast-run` also precompiles a changed component once before parallel
 workers start and reuses immutable prepared components within each runtime-test worker.
 `standard` uses the embedded skeleton and default test behavior. Every test creates fresh mutable
@@ -95,7 +98,7 @@ cargo test --test node_compat -- --nocapture                               # ❌
 
 Save unusually verbose or failing output when it will be useful for analysis:
 ```bash
-tools/dev-test.sh p2 fast-run runtime url 2>&1 | tee /tmp/test-output.txt
+tools/dev-test.sh stock fast-run runtime url 2>&1 | tee /tmp/test-output.txt
 ```
 
 ## Test concurrency
@@ -121,8 +124,8 @@ cargo test --test node_compat <filter> -- --test-threads 8
 
 ## Target Platform
 
-The skeleton is compiled as a component for the `wasm32-wasip2` Rust target. The generated
-component can expose either the Preview 2 or Preview 3 runtime path. Never write conditional
+The skeleton is compiled as a component for the `wasm32-wasip2` Rust target and exposes the
+WASI Preview 3 runtime path (plus the residual Preview 2 imports of Rust `std`). Never write conditional
 code that checks for unix/windows/macOS or any other host platform (e.g., `#[cfg(unix)]`,
 `#[cfg(windows)]`, `#[cfg(target_os = "...")]`, `process.platform === "win32"`,
 `path.sep === "\\"`, etc.). Such checks are meaningless in the WASM target and add dead code

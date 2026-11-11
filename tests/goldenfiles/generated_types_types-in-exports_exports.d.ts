@@ -1,33 +1,33 @@
 declare module 'types-in-exports' {
   import * as quickjsTypesInExportsOtherTypes from 'quickjs:types-in-exports/other-types';
   export namespace types {
-    export function f1(a: number[], b: ListOfStrings, c: string[]): Promise<string[]>;
-    export function f2(a: string | undefined): Promise<number | undefined>;
-    export function f3(a: boolean, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: bigint, j: number, k: number, l: string, m: string): Promise<[boolean, number, number, number, bigint, number, number, number, bigint, number, number, string, string]>;
+    export function f1(a: number[], b: ListOfStrings, c: string[]): string[];
+    export function f2(a: string | undefined): number | undefined;
+    export function f3(a: boolean, b: number, c: number, d: number, e: bigint, f: number, g: number, h: number, i: bigint, j: number, k: number, l: string, m: string): [boolean, number, number, number, bigint, number, number, number, bigint, number, number, string, string];
     /**
      * @throws string
      */
-    export function f4(a: Result<number, string>): Promise<number>;
+    export function f4(a: Result<number, string>): number;
     /**
      * @throws string
      */
-    export function f5(a: Result<void, string>): Promise<void>;
-    export function f6(a: Result<string, Error>): Promise<string>;
-    export function f7(a: Result<void, Error>): Promise<void>;
-    export function f8(a: [string, number, number]): Promise<void>;
-    export function f9(a: Rec1): Promise<Rec1 | undefined>;
-    export function f10(a: Var1): Promise<Var1>;
-    export function f11(a: Color): Promise<string>;
-    export function f12(a: string): Promise<Color | undefined>;
-    export function f13(a: Permissions): Promise<Permissions>;
-    export function f14(a: bigint): Promise<bigint>;
-    export function f15(bytes: Uint8Array): Promise<Uint8Array>;
-    export function f16(in_: Rec2[] | undefined): Promise<string[] | undefined>;
-    export function f17(in_: string[] | undefined): Promise<Rec2[] | undefined>;
+    export function f5(a: Result<void, string>): void;
+    export function f6(a: Result<string, Error>): string;
+    export function f7(a: Result<void, Error>): void;
+    export function f8(a: [string, number, number]): void;
+    export function f9(a: Rec1): Rec1 | undefined;
+    export function f10(a: Var1): Var1;
+    export function f11(a: Color): string;
+    export function f12(a: string): Color | undefined;
+    export function f13(a: Permissions): Permissions;
+    export function f14(a: bigint): bigint;
+    export function f15(bytes: Uint8Array): Uint8Array;
+    export function f16(in_: Rec2[] | undefined): string[] | undefined;
+    export function f17(in_: string[] | undefined): Rec2[] | undefined;
     /**
      * @throws Var1
      */
-    export function f18(error: Var1): Promise<void>;
+    export function f18(error: Var1): void;
     export type Color = quickjsTypesInExportsOtherTypes.Color;
     export type ListOfStrings = quickjsTypesInExportsOtherTypes.ListOfStrings;
     export type Rec2 = quickjsTypesInExportsOtherTypes.Rec2;

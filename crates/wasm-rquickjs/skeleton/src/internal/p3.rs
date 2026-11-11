@@ -1,7 +1,6 @@
 //! Minimal WASI Preview 3 runtime spine for the generated rquickjs component.
 //!
-//! Unlike the Preview 2 skeleton this module does NOT depend on `wstd`, `wasip2`,
-//! pollables, or `block_on`. Exported WIT functions are generated as `async fn`s
+//! This module does NOT depend on `wstd`, `wasip2` pollables, or `block_on`. Exported WIT functions are generated as `async fn`s
 //! that `.await` directly on the component-model async executor, and the single
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
@@ -31,13 +30,13 @@ use super::runtime_services::{
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
-/// so it must match the constant the Preview 2 path uses (`internal/p2.rs`).
+/// so it must match the constant the generated resource code uses.
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 /// Global object holding live *exported* resource instances, keyed by the stringified
 /// monotonic resource id. Generated exported-resource code stores each constructed JS instance
 /// here so the host-facing resource handle (which only carries the numeric id) can be mapped back
-/// to the JS object. Mirrors the Preview 2 path (`internal/p2.rs`).
+/// to the JS object.
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 /// WeakMap from exported JavaScript resource objects to their current native resource ids.
 /// Keeping identity outside the resource object allows frozen and sealed instances.
@@ -1591,6 +1590,35 @@ fn dump_cannot_find_export(
     }
     keys.sort();
     panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+
+    if let [name] = path {
+        panic_message.push_str(&format!(
+            "\nTry adding an export `export const {name} = ...`\n"
+        ));
+    } else {
+        let mut current_object = module.clone();
+        for (i, segment) in path.iter().enumerate() {
+            match current_object.get::<&str, Object>(*segment) {
+                Ok(child) => current_object = child,
+                Err(_) => {
+                    if i == 0 {
+                        panic_message.push_str(&format!(
+                            "\nTry adding an export `export const {segment} = {{ ... }}`\n"
+                        ));
+                    } else {
+                        let parent = path[..i].join(".");
+                        panic_message.push_str(&format!("\nKeys in {parent}:\n"));
+                        let mut keys: Vec<String> = current_object.keys().flatten().collect();
+                        keys.sort();
+                        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+                        panic_message
+                            .push_str(&format!("\nTry adding a field `{segment}` to {parent}\n"));
+                    }
+                    break;
+                }
+            }
+        }
+    }
     panic_message
 }
 

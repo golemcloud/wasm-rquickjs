@@ -1,0 +1,17 @@
+package quickjs:exported-resource-ownership;
+
+interface api {
+  resource counter {
+    constructor(value: u32);
+    get: func() -> u32;
+    identity: static async func(value: own<counter>) -> counter;
+    identity-unref: static async func(value: own<counter>) -> counter;
+    stash-and-fail: static async func(value: own<counter>) -> result<_, string>;
+    take: static func() -> counter;
+    resource-count: static func() -> u32;
+  }
+}
+
+world exported-resource-ownership {
+  export api;
+}

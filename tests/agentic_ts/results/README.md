@@ -1,6 +1,7 @@
 # Result reports
 
-`run.sh` writes one JSON file per target. Checked-in dated reports must include
+`run.sh` writes one P3 JSON report. The checked-in P2 reports predate the removal of
+P2 generation and remain historical; each must keep its P3 companion. Checked-in dated reports must include
 the commit, dirty state, host environment, pinned tool versions, iteration
 count, component size, workload results, median/p95 timing, throughput,
 fresh-runtime QuickJS heap samples, and Wasm linear-memory high-water

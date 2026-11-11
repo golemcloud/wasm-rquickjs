@@ -9,9 +9,7 @@ mod common;
 
 use anyhow::Context as _;
 use camino::Utf8Path;
-use common::{
-    CompiledTest, FeatureCombination, TestInstance, TestTarget, copy_dir_recursive, test_target,
-};
+use common::{CompiledTest, FeatureCombination, TestInstance, copy_dir_recursive};
 use serde_json::{Value, json};
 use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
@@ -91,7 +89,7 @@ async fn main() -> anyhow::Result<()> {
             )?;
         }
         let formatted = serde_json::to_string_pretty(&json!({
-            "target": format!("{:?}", test_target()).to_lowercase(),
+            "target": "p3",
             "node": summarize(&node),
             "wasm": summarize(&wasm),
             "concurrent": concurrent,
@@ -149,7 +147,7 @@ async fn main() -> anyhow::Result<()> {
         let input_hashes = input_hashes()?;
         let formatted = serde_json::to_string_pretty(&json!({
             "schema": "module-resolution-smoke-v1",
-            "target": format!("{:?}", test_target()).to_lowercase(),
+            "target": "p3",
             "iterations": iterations,
             "inputs": {
                 "algorithm": INPUT_HASH_ALGORITHM,
@@ -230,7 +228,7 @@ async fn main() -> anyhow::Result<()> {
             hash_file(compiled.wasm_path()).context("hash CommonJS graph component")?;
         let formatted = serde_json::to_string_pretty(&json!({
             "schema": "cjs-graph-smoke-v2",
-            "target": format!("{:?}", test_target()).to_lowercase(),
+            "target": "p3",
             "iterations": iterations,
             "environment": environment,
             "inputs": {
@@ -463,7 +461,7 @@ async fn main() -> anyhow::Result<()> {
             "buildHash": input_hashes.build,
             "benchmarkHash": input_hashes.benchmark,
         },
-        "target": format!("{:?}", test_target()).to_lowercase(),
+        "target": "p3",
         "component": {
             "path": compiled.wasm_path().as_str(),
             "bytes": component_size,
@@ -611,7 +609,7 @@ async fn run_release_baseline(
             "buildHash": input_hashes.build,
             "benchmarkHash": input_hashes.benchmark,
         },
-        "target": format!("{:?}", test_target()).to_lowercase(),
+        "target": "p3",
         "fixture": {
             "name": "small",
             "project": "projects/core/tsconfig.check.json",
@@ -1156,15 +1154,16 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
         "current-report manifest entries were not found: {current_manifest_reports:?}"
     );
 
-    let mut paired = 0;
+    // P2 generation was removed; retained P2 reports are historical and must keep their
+    // P3 companion. Current measurements are P3-only.
     for (filename, p2) in reports
         .iter()
         .filter(|(filename, _)| filename.contains("-p2-"))
     {
         let p3_filename = filename.replacen("-p2-", "-p3-", 1);
-        let p3 = reports
-            .get(&p3_filename)
-            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        let p3 = reports.get(&p3_filename).ok_or_else(|| {
+            anyhow::anyhow!("missing P3 companion for historical P2 report {filename}")
+        })?;
         validate_report_pair(filename, &p3_filename, p2, p3)?;
         let mut duplicate_component = p3.clone();
         duplicate_component["component"]["blake3"] = p2["component"]["blake3"].clone();
@@ -1172,43 +1171,31 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
             validate_report_pair(filename, &p3_filename, p2, &duplicate_component).is_err(),
             "paired-report guard accepted an identical P2/P3 component digest"
         );
-        paired += 2;
     }
-    anyhow::ensure!(
-        paired == reports.len(),
-        "every checked-in report must belong to a P2/P3 pair"
-    );
 
     anyhow::ensure!(
         !cjs_graph_reports.is_empty(),
         "checked reports must include the GOL-350 CommonJS graph P2/P3 evidence"
     );
-    let mut paired_cjs_graphs = 0;
     for (filename, p2) in cjs_graph_reports
         .iter()
         .filter(|(filename, _)| filename.contains("-p2-"))
     {
         let p3_filename = filename.replacen("-p2-", "-p3-", 1);
-        let p3 = cjs_graph_reports
-            .get(&p3_filename)
-            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        let p3 = cjs_graph_reports.get(&p3_filename).ok_or_else(|| {
+            anyhow::anyhow!("missing P3 companion for historical P2 report {filename}")
+        })?;
         validate_cjs_graph_report_pair(filename, &p3_filename, p2, p3)?;
-        paired_cjs_graphs += 2;
     }
-    anyhow::ensure!(
-        paired_cjs_graphs == cjs_graph_reports.len(),
-        "every checked-in CommonJS graph report must belong to a P2/P3 pair"
-    );
 
-    let mut paired_release_baselines = 0;
     for (filename, p2) in release_baseline_reports
         .iter()
         .filter(|(filename, _)| filename.contains("-p2-"))
     {
         let p3_filename = filename.replacen("-p2-", "-p3-", 1);
-        let p3 = release_baseline_reports
-            .get(&p3_filename)
-            .ok_or_else(|| anyhow::anyhow!("missing P3 companion for {filename}"))?;
+        let p3 = release_baseline_reports.get(&p3_filename).ok_or_else(|| {
+            anyhow::anyhow!("missing P3 companion for historical P2 report {filename}")
+        })?;
         validate_release_baseline_pair(filename, &p3_filename, p2, p3)?;
         let mut duplicate_component = p3.clone();
         duplicate_component["component"]["blake3"] = p2["component"]["blake3"].clone();
@@ -1217,12 +1204,7 @@ fn validate_checked_reports(directory: camino::Utf8PathBuf) -> anyhow::Result<()
                 .is_err(),
             "paired release-baseline guard accepted an identical P2/P3 component digest"
         );
-        paired_release_baselines += 2;
     }
-    anyhow::ensure!(
-        paired_release_baselines == release_baseline_reports.len(),
-        "every checked-in release baseline must belong to a P2/P3 pair"
-    );
     Ok(())
 }
 
@@ -2110,7 +2092,7 @@ fn environment(iterations: usize, component_features: &str) -> anyhow::Result<Va
         "harnessCargoProfile": if cfg!(debug_assertions) { "dev" } else { "release" },
         "lockedBuilds": std::env::var("WASM_RQUICKJS_TEST_LOCKED_BUILDS").ok(),
         "hostDependencyGraph": {
-            "kind": if test_target() == TestTarget::P2 { "p2-shadow" } else { "workspace" },
+            "kind": if cfg!(feature = "use-golem-wasmtime") { "fork-shadow" } else { "workspace" },
             "lockBlake3": host_lock_blake3,
         },
         "iterations": iterations,

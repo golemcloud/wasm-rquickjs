@@ -25,30 +25,16 @@ use std::time::{Duration, Instant, SystemTime};
 use tokio::time::timeout;
 use wac_graph::types::{Package, SubtypeChecker};
 use wac_graph::{CompositionGraph, EncodeOptions, PackageId, PlugError};
-use wasm_rquickjs::{
-    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
-};
+use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 use wasmtime::component::{
     Component, Func, HasSelf, Instance, Linker, Resource, ResourceAny, ResourceTable, ResourceType,
     Val,
 };
 use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
-use wasmtime_wasi::p2::bindings;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
 use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
-
-pub mod ws_mock_p2 {
-    wasmtime::component::bindgen!({
-        world: "golem-websocket",
-        path: "crates/golem-websocket/wit",
-        imports: { default: async | trappable },
-        with: {
-            "golem:websocket/client.websocket-connection": super::WsMockConnection,
-        },
-    });
-}
 
 pub mod ws_mock_p3 {
     wasmtime::component::bindgen!({
@@ -69,86 +55,6 @@ pub enum WsSentMessage {
 }
 
 pub struct WsMockConnection;
-
-impl ws_mock_p2::golem::websocket::client::Host for Host {}
-
-impl ws_mock_p2::golem::websocket::client::HostWebsocketConnection for Host {
-    async fn connect(
-        &mut self,
-        _url: String,
-        _headers: Option<Vec<(String, String)>>,
-        reconstruction_policy: Option<ws_mock_p2::golem::websocket::client::ReconstructionPolicy>,
-    ) -> wasmtime::Result<
-        Result<Resource<WsMockConnection>, ws_mock_p2::golem::websocket::client::Error>,
-    > {
-        assert!(reconstruction_policy.is_none());
-        Ok(Ok(self.table.lock().unwrap().push(WsMockConnection)?))
-    }
-
-    async fn send(
-        &mut self,
-        _self_: Resource<WsMockConnection>,
-        message: ws_mock_p2::golem::websocket::client::Message,
-    ) -> wasmtime::Result<Result<(), ws_mock_p2::golem::websocket::client::Error>> {
-        let message = match message {
-            ws_mock_p2::golem::websocket::client::Message::Text(value) => {
-                WsSentMessage::Text(value)
-            }
-            ws_mock_p2::golem::websocket::client::Message::Binary(value) => {
-                WsSentMessage::Binary(value)
-            }
-        };
-        self.ws_sent.lock().unwrap().push(message);
-        Ok(Ok(()))
-    }
-
-    async fn receive(
-        &mut self,
-        _self_: Resource<WsMockConnection>,
-    ) -> wasmtime::Result<
-        Result<
-            ws_mock_p2::golem::websocket::client::Message,
-            ws_mock_p2::golem::websocket::client::Error,
-        >,
-    > {
-        Ok(Err(ws_mock_p2::golem::websocket::client::Error::Closed(
-            None,
-        )))
-    }
-
-    async fn receive_with_timeout(
-        &mut self,
-        _self_: Resource<WsMockConnection>,
-        _timeout_ms: u64,
-    ) -> wasmtime::Result<
-        Result<
-            Option<ws_mock_p2::golem::websocket::client::Message>,
-            ws_mock_p2::golem::websocket::client::Error,
-        >,
-    > {
-        Ok(Err(ws_mock_p2::golem::websocket::client::Error::Closed(
-            None,
-        )))
-    }
-
-    async fn close(
-        &mut self,
-        _self_: Resource<WsMockConnection>,
-        code: Option<u16>,
-        reason: Option<String>,
-    ) -> wasmtime::Result<Result<(), ws_mock_p2::golem::websocket::client::Error>> {
-        self.ws_sent
-            .lock()
-            .unwrap()
-            .push(WsSentMessage::Close(code, reason));
-        Ok(Ok(()))
-    }
-
-    async fn drop(&mut self, rep: Resource<WsMockConnection>) -> wasmtime::Result<()> {
-        self.table.lock().unwrap().delete(rep)?;
-        Ok(())
-    }
-}
 
 impl ws_mock_p3::golem::websocket::client::Host for Host {}
 
@@ -1675,47 +1581,29 @@ fn test_cache_stamp(
     feature_combination: FeatureCombination,
     kind: &str,
 ) -> Utf8PathBuf {
-    test_cache_stamp_for_target(name, feature_combination, kind, test_target())
-}
-
-fn test_cache_stamp_for_target(
-    name: &str,
-    feature_combination: FeatureCombination,
-    kind: &str,
-    target: TestTarget,
-) -> Utf8PathBuf {
     test_cache_stamp_dir().join(format!(
-        "{}-{}{}-{kind}.stamp",
+        "{}-{}-{kind}.stamp",
         name.to_snake_case(),
         feature_combination.label(),
-        target.dir_suffix(),
     ))
 }
 
 fn test_cache_lock(name: &str, feature_combination: FeatureCombination, kind: &str) -> Utf8PathBuf {
     test_cache_stamp_dir().join(format!(
-        "{}-{}{}-{kind}.lock",
+        "{}-{}-{kind}.lock",
         name.to_snake_case(),
         feature_combination.label(),
-        test_target().dir_suffix(),
     ))
 }
 
-fn shared_runtime_target_name(
-    target: TestTarget,
-    feature_combination: FeatureCombination,
-) -> String {
+fn shared_runtime_target_name(feature_combination: FeatureCombination) -> String {
     if matches!(
         feature_combination,
         FeatureCombination::InternalTestExecution
     ) {
-        format!(
-            "rt-target{}-{}",
-            target.dir_suffix(),
-            feature_combination.label()
-        )
+        format!("rt-target-{}", feature_combination.label())
     } else {
-        format!("rt-target{}", target.dir_suffix())
+        "rt-target".to_string()
     }
 }
 
@@ -2939,36 +2827,14 @@ mod tests {
     }
 
     #[test]
-    fn artifact_cache_stamps_are_target_specific() {
-        let p2 = test_cache_stamp_for_target(
-            "module-resolution",
-            FeatureCombination::Normal,
-            "compile",
-            TestTarget::P2,
-        );
-        let p3 = test_cache_stamp_for_target(
-            "module-resolution",
-            FeatureCombination::Normal,
-            "compile",
-            TestTarget::P3,
-        );
-
-        assert_ne!(p2, p3);
-    }
-
-    #[test]
     fn internal_test_runtime_targets_are_isolated() {
         assert_eq!(
-            shared_runtime_target_name(TestTarget::P3, FeatureCombination::Normal),
-            "rt-target-p3"
+            shared_runtime_target_name(FeatureCombination::Normal),
+            "rt-target"
         );
         assert_ne!(
-            shared_runtime_target_name(TestTarget::P3, FeatureCombination::Normal),
-            shared_runtime_target_name(TestTarget::P3, FeatureCombination::InternalTestExecution)
-        );
-        assert_ne!(
-            shared_runtime_target_name(TestTarget::P2, FeatureCombination::InternalTestExecution),
-            shared_runtime_target_name(TestTarget::P3, FeatureCombination::InternalTestExecution)
+            shared_runtime_target_name(FeatureCombination::Normal),
+            shared_runtime_target_name(FeatureCombination::InternalTestExecution)
         );
     }
 }
@@ -2978,16 +2844,6 @@ fn configure_test_wasmtime_cache(config: &mut wasmtime::Config) -> anyhow::Resul
         config.cache(Some(wasmtime::Cache::new(wasmtime::CacheConfig::new())?));
     }
     Ok(())
-}
-
-fn test_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
-    let mut config = wasmtime::Config::default();
-    config.wasm_component_model(true);
-    config.epoch_interruption(true);
-    config.async_stack_size(32 * 1024 * 1024); // 32MB async stack (must be >= max_wasm_stack)
-    config.max_wasm_stack(16 * 1024 * 1024); // 16MB WASM stack (default is 512KB, QuickJS in WASM needs more for deep recursion)
-    configure_test_wasmtime_cache(&mut config)?;
-    Ok(config)
 }
 
 fn test_p3_wasmtime_config() -> anyhow::Result<wasmtime::Config> {
@@ -3011,10 +2867,7 @@ fn precompile_component(wasm_path: &Utf8Path) -> anyhow::Result<bool> {
         wasm_path.file_stem().unwrap_or("component"),
         FeatureCombination::Normal,
         "component-precompile",
-        &[
-            ("component", wasm_path.to_string()),
-            ("target", format!("{:?}", test_target())),
-        ],
+        &[("component", wasm_path.to_string())],
     );
     let inputs = [wasm_path.to_path_buf()];
     if output_fresh_for_inputs(&stamp, &stamp, &inputs, &signature) {
@@ -3026,10 +2879,7 @@ fn precompile_component(wasm_path: &Utf8Path) -> anyhow::Result<bool> {
         return Ok(false);
     }
 
-    let config = match test_target() {
-        TestTarget::P2 => test_wasmtime_config()?,
-        TestTarget::P3 => test_p3_wasmtime_config()?,
-    };
+    let config = test_p3_wasmtime_config()?;
     let engine = Engine::new(&config)?;
     drop(Component::from_file(&engine, wasm_path)?);
     refresh_cache_stamp(&stamp, &signature)?;
@@ -3044,40 +2894,6 @@ fn start_test_epoch_thread(engine: &Engine) {
             epoch_engine.increment_epoch();
         }
     });
-}
-
-fn test_linker_with_common_hosts(engine: &Engine) -> anyhow::Result<Linker<Host>> {
-    let mut linker: Linker<Host> = Linker::new(engine);
-
-    wasmtime_wasi::p2::add_to_linker_with_options_async(
-        &mut linker,
-        &bindings::LinkOptions::default(),
-    )?;
-    wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-
-    {
-        let mut logging = linker.instance("wasi:logging/logging")?;
-        logging.func_wrap(
-            "log",
-            |mut ctx: StoreContextMut<'_, Host>,
-             (level, context, message): (LogLevel, String, String)|
-             -> Result<(), wasmtime::Error> {
-                ctx.data_mut()
-                    .log_messages
-                    .lock()
-                    .unwrap()
-                    .push((level, context, message));
-                Ok(())
-            },
-        )?;
-    }
-
-    ws_mock_p2::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(
-        &mut linker,
-        |host| host,
-    )?;
-
-    Ok(linker)
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
@@ -3644,50 +3460,6 @@ pub fn collect_example_paths(dirs: &[&str]) -> anyhow::Result<Vec<Utf8PathBuf>> 
     Ok(result)
 }
 
-/// The WASI generation target a runtime/node_compat test is exercised against.
-///
-/// Selected once per process via the `WASM_RQUICKJS_TEST_TARGET` environment variable
-/// (`p2` — the default — or `p3`). Preview 2 reproduces the historical behavior; Preview 3
-/// generates async component exports and runs them on a Component Model async host.
-#[derive(Debug, Clone, Copy, Hash, PartialEq, Eq)]
-pub enum TestTarget {
-    P2,
-    P3,
-}
-
-impl TestTarget {
-    /// Suffix appended to generated crate / shared-target directories so that P2 and P3 builds of
-    /// the same example never share an output tree (the P3 generator writes a different Cargo.toml
-    /// and skeleton set).
-    pub fn dir_suffix(self) -> &'static str {
-        match self {
-            TestTarget::P2 => "",
-            TestTarget::P3 => "-p3",
-        }
-    }
-
-    pub fn generation_target(self) -> GenerationTarget {
-        match self {
-            TestTarget::P2 => GenerationTarget::WasiP2,
-            TestTarget::P3 => GenerationTarget::WasiP3,
-        }
-    }
-}
-
-/// Reads the active test target once from `WASM_RQUICKJS_TEST_TARGET` (default: `p2`).
-pub fn test_target() -> TestTarget {
-    static TARGET: OnceLock<TestTarget> = OnceLock::new();
-    *TARGET.get_or_init(
-        || match std::env::var("WASM_RQUICKJS_TEST_TARGET").ok().as_deref() {
-            Some("p3") | Some("P3") => TestTarget::P3,
-            Some("p2") | Some("P2") | None => TestTarget::P2,
-            Some(other) => {
-                panic!("Unknown WASM_RQUICKJS_TEST_TARGET '{other}'; expected 'p2' or 'p3'")
-            }
-        },
-    )
-}
-
 /// Copies a WIT directory to `dst`, turning every synchronous freestanding exported function into
 /// an `async func`.
 ///
@@ -3845,107 +3617,39 @@ impl FeatureCombination {
         }
     }
 
+    /// Cargo `--features` args for this combination.
+    ///
+    /// The runtime ships its `wasi:http@0.3` based fetch and node:http unconditionally, so
+    /// `None`/`Lite` collapse onto bare `p3`. The features are always spelled out explicitly so a
+    /// build never silently falls back to the default feature set.
     pub fn cargo_args(&self) -> Vec<&'static str> {
-        match self {
-            // The skeleton now requires exactly one WASI target feature (`p2` or `p3`), so the
-            // minimal Preview 2 build must still enable `p2` even with no other features.
-            FeatureCombination::None => vec!["--no-default-features", "--features", "p2"],
-            FeatureCombination::Lite => {
-                vec!["--no-default-features", "--features", "lite"]
+        let features = match self {
+            FeatureCombination::None | FeatureCombination::Lite => "p3",
+            FeatureCombination::Normal => "normal-p3",
+            FeatureCombination::InternalTestExecution => "normal-p3,internal-test-execution",
+            FeatureCombination::NetWriteProfiling => "normal-p3,net-write-profiling",
+            FeatureCombination::NodeCompatNetWriteProfiling => {
+                "full-no-logging-p3,golem,typescript-runtime,net-write-profiling"
             }
-            FeatureCombination::Normal => vec![],
-            FeatureCombination::InternalTestExecution => {
-                vec!["--features", "internal-test-execution"]
-            }
-            FeatureCombination::NetWriteProfiling => {
-                vec!["--features", "net-write-profiling"]
-            }
-            FeatureCombination::NodeCompatNetWriteProfiling => vec![
-                "--no-default-features",
-                "--features",
-                "full-no-logging,golem,typescript-runtime,net-write-profiling",
-            ],
             FeatureCombination::TypeScriptRuntime => {
-                vec!["--features", "typescript-runtime,test-observability"]
+                "normal-p3,typescript-runtime,test-observability"
             }
             FeatureCombination::TypeScriptTransformRuntime => {
-                vec!["--features", "typescript-transform-runtime"]
+                "normal-p3,typescript-transform-runtime"
             }
             FeatureCombination::TypeScriptCompilerProfiling => {
-                vec!["--features", "typescript-compiler-profiling"]
+                "normal-p3,typescript-compiler-profiling"
             }
-            FeatureCombination::Full => {
-                vec!["--no-default-features", "--features", "full"]
-            }
-            FeatureCombination::FullNoLogging => {
-                vec!["--no-default-features", "--features", "full-no-logging"]
-            }
-            FeatureCombination::Golem => vec!["--features", "golem"],
-            FeatureCombination::FullWithGolem => {
-                vec!["--no-default-features", "--features", "full,golem"]
-            }
-            FeatureCombination::FullNoLoggingWithGolem => {
-                vec![
-                    "--no-default-features",
-                    "--features",
-                    "full-no-logging,golem",
-                ]
-            }
+            FeatureCombination::Full => "full-p3",
+            FeatureCombination::FullNoLogging => "full-no-logging-p3",
+            FeatureCombination::Golem => "normal-p3,golem",
+            FeatureCombination::FullWithGolem => "full-p3,golem",
+            FeatureCombination::FullNoLoggingWithGolem => "full-no-logging-p3,golem",
             FeatureCombination::FullNoLoggingWithGolemAndTypeScript => {
-                vec![
-                    "--no-default-features",
-                    "--features",
-                    "full-no-logging,golem,typescript-runtime",
-                ]
+                "full-no-logging-p3,golem,typescript-runtime"
             }
-        }
-    }
-
-    /// Cargo `--features` args for a given [`TestTarget`].
-    ///
-    /// For Preview 2 this is the historical [`cargo_args`](Self::cargo_args). For Preview 3 each
-    /// combination enables exactly the same capabilities as its Preview 2 counterpart: the P3
-    /// tiers (`normal-p3`, `full-p3`, `full-no-logging-p3`) mirror the P2 tiers, and `golem` /
-    /// `websocket` / `logging` are target-agnostic. The only difference is `fetch`/`node-http`,
-    /// which are the Preview 2 HTTP implementations — the `p3` path ships its own `wasi:http@0.3`
-    /// based fetch and node:http unconditionally, so `None`/`Lite` collapse onto bare `p3`. The
-    /// features are always spelled out explicitly so the P3 build never silently falls back to
-    /// the P2 default feature set.
-    pub fn cargo_args_for_target(&self, target: TestTarget) -> Vec<&'static str> {
-        match target {
-            TestTarget::P2 => self.cargo_args(),
-            TestTarget::P3 => {
-                let features = match self {
-                    FeatureCombination::None | FeatureCombination::Lite => "p3",
-                    FeatureCombination::Normal => "normal-p3",
-                    FeatureCombination::InternalTestExecution => {
-                        "normal-p3,internal-test-execution"
-                    }
-                    FeatureCombination::NetWriteProfiling => "normal-p3,net-write-profiling",
-                    FeatureCombination::NodeCompatNetWriteProfiling => {
-                        "full-no-logging-p3,golem,typescript-runtime,net-write-profiling"
-                    }
-                    FeatureCombination::TypeScriptRuntime => {
-                        "normal-p3,typescript-runtime,test-observability"
-                    }
-                    FeatureCombination::TypeScriptTransformRuntime => {
-                        "normal-p3,typescript-transform-runtime"
-                    }
-                    FeatureCombination::TypeScriptCompilerProfiling => {
-                        "normal-p3,typescript-compiler-profiling"
-                    }
-                    FeatureCombination::Full => "full-p3",
-                    FeatureCombination::FullNoLogging => "full-no-logging-p3",
-                    FeatureCombination::Golem => "normal-p3,golem",
-                    FeatureCombination::FullWithGolem => "full-p3,golem",
-                    FeatureCombination::FullNoLoggingWithGolem => "full-no-logging-p3,golem",
-                    FeatureCombination::FullNoLoggingWithGolemAndTypeScript => {
-                        "full-no-logging-p3,golem,typescript-runtime"
-                    }
-                };
-                vec!["--no-default-features", "--features", features]
-            }
-        }
+        };
+        vec!["--no-default-features", "--features", features]
     }
 
     fn includes_crypto_full(self) -> bool {
@@ -3968,36 +3672,13 @@ pub struct PreparedComponent {
 }
 
 impl PreparedComponent {
+    /// A Component Model async engine, a P2+P3 WASI/HTTP linker, and the component. Works on both
+    /// stock wasmtime and the Golem fork — see [`p3_engine`].
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         init_tracing();
-        match test_target() {
-            TestTarget::P2 => Self::new_p2(wasm_path),
-            TestTarget::P3 => Self::new_p3(wasm_path),
-        }
-    }
-
-    /// Preview 3 host: a Component Model async engine, a P2+P3 WASI/HTTP linker, and the same
-    /// component. Works on both stock wasmtime and the Golem fork — see [`p3_engine`].
-    fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
         let linker = p3_linker(&engine)?;
         let component = Component::from_file(&engine, wasm_path)?;
-        Ok(Self {
-            engine,
-            linker,
-            component,
-        })
-    }
-
-    fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let config = test_wasmtime_config()?;
-        let engine = Engine::new(&config)?;
-
-        start_test_epoch_thread(&engine);
-        let linker = test_linker_with_common_hosts(&engine)?;
-
-        let component = Component::from_file(&engine, wasm_path)?;
-
         Ok(Self {
             engine,
             linker,
@@ -4050,42 +3731,15 @@ pub struct GolemPreparedComponent {
 }
 
 impl GolemPreparedComponent {
+    /// The P2+P3 WASI/HTTP surface plus the `wasi:logging` and `golem:websocket` mocks (see
+    /// [`p3_linker`]) and a `golem:api/context` span-recording mock. Works on both stock wasmtime
+    /// and the Golem fork.
     pub fn new(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         init_tracing();
-        match test_target() {
-            TestTarget::P2 => Self::new_p2(wasm_path),
-            TestTarget::P3 => Self::new_p3(wasm_path),
-        }
-    }
-
-    /// Preview 3 host: the P2+P3 WASI/HTTP surface plus the `wasi:logging` and `golem:websocket`
-    /// mocks (see [`p3_linker`]) and the same `golem:api/context` span-recording mock as the
-    /// Preview 2 host, so Golem-flavored feature combinations behave identically on both targets.
-    /// Works on both stock wasmtime and the Golem fork.
-    fn new_p3(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
         let engine = p3_engine()?;
         let mut linker = p3_linker(&engine)?;
         add_golem_context_mock(&mut linker)?;
         let component = Component::from_file(&engine, wasm_path)?;
-        Ok(Self {
-            engine,
-            linker,
-            component,
-        })
-    }
-
-    fn new_p2(wasm_path: &Utf8Path) -> anyhow::Result<Self> {
-        let config = test_wasmtime_config()?;
-        let engine = Engine::new(&config)?;
-
-        start_test_epoch_thread(&engine);
-        let mut linker = test_linker_with_common_hosts(&engine)?;
-
-        // Mock golem:api/context@1.5.0
-        add_golem_context_mock(&mut linker)?;
-
-        let component = Component::from_file(&engine, wasm_path)?;
-
         Ok(Self {
             engine,
             linker,
@@ -4437,7 +4091,6 @@ impl TestInstance {
 
 #[derive(Clone, Debug, Eq, Hash, PartialEq)]
 struct PreparedComponentCacheKey {
-    target: TestTarget,
     path: Utf8PathBuf,
     len: u64,
     modified: Duration,
@@ -4465,7 +4118,6 @@ fn prepared_component_cache_key(wasm_path: &Utf8Path) -> anyhow::Result<Prepared
         buffer[..read].hash(&mut hasher);
     }
     Ok(PreparedComponentCacheKey {
-        target: test_target(),
         path,
         len: metadata.len(),
         modified,
@@ -4599,12 +4251,11 @@ impl CompiledTest {
         additional_modules: &[JsModuleSpec],
     ) -> anyhow::Result<CompiledTest> {
         drop_test_artifact_cache_once();
-        let target = test_target();
         let component_profile = TestComponentProfile::from_env()?;
         let name = path.file_name().unwrap();
-        // P2 and P3 builds of the same example never share an output tree.
-        let feature_label = format!("{}{}", feature_combination.label(), target.dir_suffix());
-        let wrapper_crate_root = Utf8Path::new("tmp").join(name).join(&feature_label);
+        let wrapper_crate_root = Utf8Path::new("tmp")
+            .join(name)
+            .join(feature_combination.label());
         // Test workers are separate processes. Lock the shared output root even when artifact
         // caching is disabled, so generation and patching cannot overlap another worker's build.
         fs::create_dir_all(wrapper_crate_root.parent().unwrap())?;
@@ -4615,7 +4266,7 @@ impl CompiledTest {
         // normal builds because runtime group 2 compiles both variants of the same fetch example
         // in parallel; sharing the final Cargo output would let one overwrite the other. Other
         // feature combinations retain the common target to avoid multiplying large build trees.
-        let shared_target_name = shared_runtime_target_name(target, feature_combination);
+        let shared_target_name = shared_runtime_target_name(feature_combination);
         let shared_target = Utf8Path::new("..").join("..").join(&shared_target_name);
         let wasm_file_name = format!("{}.wasm", name.to_snake_case());
         let compiled_wasm_path = if use_shared_target {
@@ -4640,13 +4291,10 @@ impl CompiledTest {
             "compile",
             &[
                 ("target", "wasm32-wasip2".to_string()),
-                ("generation_target", format!("{target:?}")),
+                ("generation_target", "WasiP3".to_string()),
                 ("use_shared_target", use_shared_target.to_string()),
                 ("component_profile", component_profile.label().to_string()),
-                (
-                    "cargo_args",
-                    feature_combination.cargo_args_for_target(target).join("|"),
-                ),
+                ("cargo_args", feature_combination.cargo_args().join("|")),
                 (
                     "crypto_dev_opt_level",
                     if feature_combination.includes_crypto_full() {
@@ -4698,35 +4346,19 @@ impl CompiledTest {
             });
         }
 
-        // The Preview 3 generation path rejects synchronous freestanding exports, so for P3 we
-        // rewrite the example's WIT so its world-level exported functions become `async func`
-        // before generation. The rewritten WIT lives inside the wrapper crate dir so it never
-        // touches the committed example sources.
-        let wit_dir = match target {
-            TestTarget::P2 => path.join("wit"),
-            TestTarget::P3 => {
-                let rewritten = wrapper_crate_root.join("wit-async");
-                rewrite_wit_exports_async(&path.join("wit"), &rewritten)?;
-                rewritten
-            }
-        };
+        // The examples' world-level exported functions are rewritten to `async func` before
+        // generation. The rewritten WIT lives inside the wrapper crate dir so it never touches the
+        // committed example sources.
+        let wit_dir = wrapper_crate_root.join("wit-async");
+        rewrite_wit_exports_async(&path.join("wit"), &wit_dir)?;
 
-        println!(
-            "Generating wrapper create for example '{name}' ({:?}) to {wrapper_crate_root}",
-            target
-        );
+        println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
         let mut js_modules = vec![JsModuleSpec {
             name: name.to_string(),
             mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
         }];
         js_modules.extend_from_slice(additional_modules);
-        generate_wrapper_crate_with_target(
-            &wit_dir,
-            &js_modules,
-            &wrapper_crate_root,
-            None,
-            target.generation_target(),
-        )?;
+        generate_wrapper_crate(&wit_dir, &js_modules, &wrapper_crate_root, None)?;
         use_local_golem_websocket(&wrapper_crate_root)?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
@@ -4758,7 +4390,7 @@ impl CompiledTest {
                 command.arg(&shared_target);
             }
             command
-                .args(feature_combination.cargo_args_for_target(target))
+                .args(feature_combination.cargo_args())
                 .current_dir(&wrapper_crate_root)
                 .status()
         };
@@ -5056,7 +4688,7 @@ fn p3_linker(engine: &Engine) -> anyhow::Result<Linker<Host>> {
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
     add_wasi_logging_mock(&mut linker)?;
-    add_websocket_client_mock(&mut linker, TestTarget::P3)?;
+    add_websocket_client_mock(&mut linker)?;
     Ok(linker)
 }
 
@@ -5201,24 +4833,13 @@ fn add_golem_context_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Add the target-specific functional `golem:websocket/client@1.5.0` mock.
+/// Add the functional `golem:websocket/client@1.5.0` mock.
 ///
 /// Connections close cleanly on receive and sent frames remain instance-local for exact assertions.
-fn add_websocket_client_mock(linker: &mut Linker<Host>, target: TestTarget) -> anyhow::Result<()> {
-    match target {
-        TestTarget::P2 => {
-            ws_mock_p2::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(
-                linker,
-                |host| host,
-            )?;
-        }
-        TestTarget::P3 => {
-            ws_mock_p3::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(
-                linker,
-                |host| host,
-            )?;
-        }
-    }
+fn add_websocket_client_mock(linker: &mut Linker<Host>) -> anyhow::Result<()> {
+    ws_mock_p3::golem::websocket::client::add_to_linker::<Host, HasSelf<Host>>(linker, |host| {
+        host
+    })?;
     Ok(())
 }
 

@@ -274,7 +274,7 @@ pub mod native_module {
 
     /// Async native callbacks are owned and driven by rquickjs's promise
     /// machinery. Unlike a detached `Ctx::spawn` task, this remains live while
-    /// the parent export awaits JavaScript promises on the P2 executor.
+    /// the parent export awaits JavaScript promises.
     #[rquickjs::function]
     pub async fn start_job(ctx: Ctx<'_>, id: usize) -> rquickjs::Result<()> {
         let job = {
@@ -682,10 +682,6 @@ async fn sleep_until_execution_deadline(deadline: Instant) {
 }
 
 async fn sleep_for_execution_timeout(duration: Duration) {
-    #[cfg(feature = "p2")]
-    wstd::task::sleep(duration.into()).await;
-
-    #[cfg(feature = "p3")]
     wasip3::clocks::monotonic_clock::wait_for(duration.as_nanos().min(u64::MAX as u128) as u64)
         .await;
 }

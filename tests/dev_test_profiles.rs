@@ -48,7 +48,7 @@ fn remove_node_overrides(command: &mut Command) {
     }
 }
 
-fn plan(target: &str, profile: &str) -> Plan {
+fn plan(host: &str, profile: &str) -> Plan {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"));
     let fixture = Utf8TempDir::new().expect("temporary plan fixture should be created");
     let fixture_tools = fixture.path().join("tools");
@@ -59,7 +59,7 @@ fn plan(target: &str, profile: &str) -> Plan {
     let mut command = Command::new("bash");
     command
         .arg(fixture_script)
-        .args([target, profile, "runtime", "profile_probe"])
+        .args([host, profile, "runtime", "profile_probe"])
         .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
     if profile == "release" {
         remove_release_overrides(&mut command);
@@ -109,20 +109,19 @@ fn feature_list(plan: &Plan) -> Vec<&str> {
         .collect()
 }
 
-fn assert_common_fast_profile(plan: &Plan, expected_target: &str) {
+fn assert_common_fast_profile(plan: &Plan) {
     assert_eq!(value(plan, "artifact_cache"), "1");
     assert_eq!(value(plan, "locked_builds"), "1");
     assert_eq!(value(plan, "wasmtime_cache"), "1");
-    assert_eq!(value(plan, "test_target"), expected_target);
     assert!(plan.command_args.iter().any(|arg| arg == "--locked"));
     assert!(plan.command_args.iter().any(|arg| arg == "--report-time"));
 }
 
 #[test]
 fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
-    for target in ["p2", "p3"] {
-        let standard = plan(target, "standard");
-        let expected_standard_features = if target == "p2" {
+    for host in ["fork", "stock"] {
+        let standard = plan(host, "standard");
+        let expected_standard_features = if host == "fork" {
             vec!["use-golem-wasmtime"]
         } else {
             Vec::new()
@@ -144,7 +143,7 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
                 .any(|arg| arg == "--test-threads")
         );
 
-        let release = plan(target, "release");
+        let release = plan(host, "release");
         assert_eq!(feature_list(&release), expected_standard_features);
         assert_eq!(value(&release, "artifact_cache"), "0");
         assert_eq!(value(&release, "component_profile"), "release");
@@ -160,13 +159,13 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
                 .any(|arg| arg == "--test-threads")
         );
 
-        let fast_start = plan(target, "fast-start");
+        let fast_start = plan(host, "fast-start");
         let mut expected_fast_features = vec!["wasm-rquickjs/external-skeleton"];
-        if target == "p2" {
+        if host == "fork" {
             expected_fast_features.insert(0, "use-golem-wasmtime");
         }
         assert_eq!(feature_list(&fast_start), expected_fast_features);
-        assert_common_fast_profile(&fast_start, target);
+        assert_common_fast_profile(&fast_start);
         assert_eq!(value(&fast_start, "unoptimized"), "1");
         assert_eq!(value(&fast_start, "precompile_component"), "0");
         assert_eq!(value(&fast_start, "prepared_component_cache"), "0");
@@ -177,9 +176,9 @@ fn dev_test_profile_matrix_preserves_standard_and_fast_semantics() {
                 .any(|args| args == ["--test-threads", "1"])
         );
 
-        let fast_run = plan(target, "fast-run");
+        let fast_run = plan(host, "fast-run");
         assert_eq!(feature_list(&fast_run), expected_fast_features);
-        assert_common_fast_profile(&fast_run, target);
+        assert_common_fast_profile(&fast_run);
         assert_eq!(value(&fast_run, "unoptimized"), "0");
         assert_eq!(value(&fast_run, "precompile_component"), "1");
         assert_eq!(value(&fast_run, "prepared_component_cache"), "1");
@@ -202,7 +201,7 @@ fn release_profile_rejects_inherited_compiler_overrides() {
         let mut command = Command::new("bash");
         command
             .arg(repo_root.join("tools/dev-test.sh"))
-            .args(["p3", "release", "agentic_ts", ""])
+            .args(["stock", "release", "agentic_ts", ""])
             .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
         remove_release_overrides(&mut command);
         let output = command
@@ -230,7 +229,7 @@ fn release_profile_rejects_inherited_compiler_overrides() {
     let mut command = Command::new("bash");
     command
         .arg(repo_root.join("tools/dev-test.sh"))
-        .args(["p3", "release", "agentic_ts", ""])
+        .args(["stock", "release", "agentic_ts", ""])
         .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
     remove_release_overrides(&mut command);
     let output = command
@@ -249,7 +248,7 @@ fn release_profile_rejects_inherited_compiler_overrides() {
     let mut command = Command::new("bash");
     command
         .arg(repo_root.join("tools/dev-test.sh"))
-        .args(["p3", "release", "agentic_ts", ""])
+        .args(["stock", "release", "agentic_ts", ""])
         .env("WASM_RQUICKJS_DEV_TEST_PLAN_ONLY", "1");
     remove_release_overrides(&mut command);
     let output = command
@@ -426,8 +425,6 @@ fn skeleton_clippy_fixture() -> (Utf8TempDir, std::path::PathBuf, std::path::Pat
         .expect("fixture source directory should be created");
     fs::write(skeleton_dir.join("src/lib.rs"), "mod builtin;\n")
         .expect("fixture lib.rs should be written");
-    fs::write(skeleton_dir.join("src/builtin_p3.rs"), "")
-        .expect("fixture P3 registry should be written");
 
     let fake_cargo = temp.path().join("fake-cargo.sh");
     fs::write(
@@ -468,7 +465,7 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
 
     let invocations = fs::read_to_string(log).expect("fake Cargo log should exist");
     let invocations = invocations.lines().collect::<Vec<_>>();
-    assert_eq!(invocations.len(), 10);
+    assert_eq!(invocations.len(), 5);
     assert!(invocations.iter().all(|args| {
         args.contains("--locked")
             && args.contains("--target wasm32-wasip2")
@@ -476,22 +473,14 @@ fn skeleton_clippy_helper_covers_the_supported_feature_matrix_and_cleans_up() {
             && args.contains("-Dwarnings")
     }));
     assert!(invocations[0].contains("clippy --manifest-path"));
-    assert!(invocations[1].contains("--features full,golem,typescript-transform-runtime"));
-    assert!(invocations[2].contains("--features full,golem,typescript-compiler-profiling"));
+    assert!(!invocations[0].contains("--features"));
+    assert!(invocations[1].contains("--features full-p3,golem,typescript-transform-runtime"));
+    assert!(invocations[2].contains("--features full-p3,golem,typescript-compiler-profiling"));
     assert!(
-        invocations[3].contains("--features full-no-logging,golem,typescript-transform-runtime")
+        invocations[3].contains("--features full-no-logging-p3,golem,typescript-transform-runtime")
     );
     assert!(
-        invocations[4].contains("--features full-no-logging,golem,typescript-compiler-profiling")
-    );
-    assert!(invocations[5].contains("--features normal-p3"));
-    assert!(invocations[6].contains("--features full-p3,golem,typescript-transform-runtime"));
-    assert!(invocations[7].contains("--features full-p3,golem,typescript-compiler-profiling"));
-    assert!(
-        invocations[8].contains("--features full-no-logging-p3,golem,typescript-transform-runtime")
-    );
-    assert!(
-        invocations[9]
+        invocations[4]
             .contains("--features full-no-logging-p3,golem,typescript-compiler-profiling")
     );
 }
