@@ -762,7 +762,7 @@ fn generate_exported_resource_function_impl(
                 // Async method: await the async helper directly.
                 (true, true) => quote! { call_js_resource_method_returning_result },
                 (true, false) => quote! { call_js_resource_method },
-                // Sync method: driven by `block_on`, traps on a returned Promise.
+                // Sync method: driven by `block_on`, awaits a returned Promise inside it.
                 (false, true) => quote! { call_js_resource_method_sync_returning_result },
                 (false, false) => quote! { call_js_resource_method_sync },
             };
@@ -802,7 +802,7 @@ fn generate_exported_resource_function_impl(
                 // Async static: await the async helper directly.
                 (true, true) => quote! { call_js_export_returning_result },
                 (true, false) => quote! { call_js_export },
-                // Sync static: driven by `block_on`, traps on a returned Promise.
+                // Sync static: driven by `block_on`, awaits a returned Promise inside it.
                 (false, true) => quote! { call_js_export_sync_returning_result },
                 (false, false) => quote! { call_js_export_sync },
             };
@@ -907,6 +907,15 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
         };
 
         let export_module_def = match &export_module.mode {
+            EmbeddingMode::Composition => quote! {
+                static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+
+                fn js_export_module() -> &'static str {
+                    static SOURCE: std::sync::LazyLock<String> =
+                        std::sync::LazyLock::new(crate::bindings::get_script);
+                    SOURCE.as_str()
+                }
+            },
             EmbeddingMode::BinarySlot => {
                 let slot_file_name = LitStr::new(
                     &(export_module.name.replace('/', "_") + ".slot"),
@@ -949,7 +958,10 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
                     );
                 }
                 EmbeddingMode::Composition => {
-                    unreachable!("composition modules are rejected before code generation")
+                    let name = LitStr::new(&module.name, Span::call_site());
+                    additional_module_pairs.push(
+                        quote! { (#name, Box::new(|| { crate::bindings::get_script().to_string() })) },
+                    );
                 }
                 EmbeddingMode::BinarySlot => {
                     let name = LitStr::new(&module.name, Span::call_site());

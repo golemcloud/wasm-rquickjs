@@ -86,9 +86,9 @@ Usage: wasm-rquickjs generate-wrapper-crate --js <JS> --wit <WIT> --output <OUTP
 The output directory is going to contain a self-contained Rust crate that can be compiled into a WASM component using
 `cargo build --target wasm32-wasip2`.
 
-Every generated crate also contains a target-specific `THIRD_PARTY_COMPONENT_LICENSES.txt` for the
-locked Cargo dependency union of the standard `normal` / `normal-p3` TypeScript runtime and
-transform profiles. It is deliberately a superset for crates that enable fewer features.
+Every generated crate also contains a `THIRD_PARTY_COMPONENT_LICENSES.txt` for the locked Cargo
+dependency union of the standard `normal-p3` TypeScript runtime and transform profiles. It is
+deliberately a superset for crates that enable fewer features.
 Distributors must ship that notice with the compiled component and separately audit application
 code, custom feature combinations, bundled JavaScript in the skeleton (including third-party code
 adapted from Node.js, Deno, and web-streams-polyfill), toolchain and WASI sysroot components,
@@ -101,10 +101,15 @@ The generated crate has some **features** that control what imports the componen
 the user's WIT world:
 
 - `logging`: enables the `wasi:logging` import to be used for the JavaScript `console` API
-- `http`: enables the `wasi:http` import to be used for the JavaScript `fetch` API
 - `sqlite`: enables the `node:sqlite` module with an embedded SQLite database engine
+- `crypto`, `crypto-full`, `zlib`, `brotli`, `encoding`, `timezone`, `websocket` and `golem`
+  enable the corresponding builtin capabilities
 
-By default `logging` and `http` are enabled. The `sqlite` feature must be explicitly enabled.
+The default `normal-p3` tier enables `logging`, `crypto`, `zlib` and `encoding`; `full-p3` adds
+`crypto-full`, `brotli`, `sqlite` and `timezone`, and `full-no-logging-p3` is `full-p3` without
+`logging`. `fetch` and `node:http` always use `wasi:http`. Keep the `p3` feature in custom feature
+lists: it enables the `wit-bindgen-p3` dependency, which a `--dependency wit-bindgen-p3=...`
+replacement must therefore declare with `optional = true`.
 
 #### Choosing the WASI target
 
@@ -180,10 +185,16 @@ support the Component Model async ABI.
 **How it differs from the removed Preview 2 mode:**
 
 - WIT `async func` exports and imports use the Component Model async ABI (`task.return`); plain
-  functions remain synchronous.
+  functions remain synchronous. A plain export may still be implemented by an `async` JavaScript
+  function whose Promise settles through JavaScript jobs alone, such as `await Promise.resolve()`.
+  A synchronous Component Model task cannot block on the host, so a plain export whose Promise
+  waits on timers or host I/O traps; declare it as `async func` instead.
+- `--js-modules name=@composition` modules are loaded at runtime through a synchronous
+  `get-script: func() -> string` import that generation adds to the component's world. Compose
+  a provider of it into the component before running or pre-initializing it.
 - The JavaScript event loop is driven by the Component Model async executor instead of Preview 2
-  `wasi:io/poll` pollables — there are no `wstd`/`wasip2`/pollable dependencies in the Preview 3
-  code path.
+  `wasi:io/poll` pollables; there is no `wstd` dependency, and `wasip2` is used only for the
+  residual synchronous interfaces described above.
 - WIT `future<T>` and `stream<T>` are mapped to JavaScript `Promise<T>` and `AsyncIterable<T>`
   respectively, both directly and when nested in composite parameter/result types.
 - `fetch` / HTTP uses the `wasi:http` Preview 3 (`wasi:http/handler`) async client.
@@ -205,7 +216,6 @@ values, exported resources, and HTTP `fetch`.
 
 **Current limitations (Preview 3):**
 
-- **Composition** (`--js-modules name=@composition`) is not supported yet.
 - An exported result containing `future<T>` or `stream<T>` must come from an `async func`; a
   synchronous export cannot return its reader before a backpressured writer starts.
 - The error arm of an exported top-level `result<T, E>` cannot contain `future<T>` or `stream<T>`.
@@ -502,7 +512,9 @@ string coercion; it does not replace the runtime's uncaught-exception formatter.
 
 - Maximum number of function parameters is 26
 - Anonymous interface exports/imports are not supported
-- Imported individual functions into the world are not supported (only whole interfaces)
+- Functions imported directly into the world are importable from a JavaScript module named after
+  the world (unless a JavaScript or native module has that name), but get no TypeScript
+  declarations; resources declared directly in the world are not supported
 - Preview 3 synchronous exports cannot return `future<T>` or `stream<T>`, directly or nested; use
   `async func`
 - Preview 3 exported top-level `result<T, E>` error arms cannot contain `future<T>` or `stream<T>`
@@ -525,7 +537,7 @@ If the `logging` feature flag is enabled in the generated crate, it depends on `
 <details>
 <summary><strong>HTTP (fetch)</strong></summary>
 
-Only if the `http` feature flag is enabled in the generated crate. It depends on `wasi:http`.
+Always available. It depends on `wasi:http`.
 
 - `fetch`, `Headers`, `Request`, `Response`, `FormData`, `Blob`, `File`
 
@@ -842,7 +854,7 @@ Promise-based filesystem API.
 <details>
 <summary><strong><code>node:http</code> / <code>node:https</code></strong></summary>
 
-Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled transparently). Server support uses `wasi:sockets` for TCP-level HTTP/1.1 serving.
+Always available. Client requests use `wasi:http` (TLS handled transparently). Server support uses `wasi:sockets` for TCP-level HTTP/1.1 serving.
 
 - `http.request(url|options[, callback])`, `http.get(url|options[, callback])`
 - `http.METHODS`, `http.STATUS_CODES`, `http.maxHeaderSize`

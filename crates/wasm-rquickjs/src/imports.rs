@@ -18,11 +18,22 @@ use wit_parser::{Function, FunctionKind, TypeDefKind, WorldItem, WorldKey};
 /// Each Rust module contains a rquicks `NativeModule` exposing the WIT bindings for the
 /// imported WIT interfaces as JavaScript modules. `mod.rs` also registers the caller's
 /// `native_modules`, which are defined in the crate's dependencies.
+///
+/// Functions imported directly into the world are exposed as a JavaScript module named after the
+/// world, unless a JavaScript or native module already has that name.
 pub fn generate_import_modules(
     context: &GeneratorContext<'_>,
+    js_module_names: &[&str],
     native_modules: &[NativeModuleSpec],
 ) -> anyhow::Result<()> {
     let (global, interfaces) = collect_imported_interfaces(context)?;
+    let world_module_name = context.world_name.as_str();
+    let global_module_name = (!global.functions.is_empty()
+        && !js_module_names.contains(&world_module_name)
+        && !native_modules
+            .iter()
+            .any(|module| module.name == world_module_name))
+    .then_some(world_module_name);
 
     for module in native_modules {
         for interface in &interfaces {
@@ -40,7 +51,7 @@ pub fn generate_import_modules(
         let file_name = format!("{module_name}.rs");
 
         let module_path = context.output.join("src").join("modules").join(&file_name);
-        let module_tokens = generate_import_module(context, interface, &interfaces, &[])?;
+        let module_tokens = generate_import_module(context, interface, &interfaces, &[], None)?;
 
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
@@ -51,8 +62,13 @@ pub fn generate_import_modules(
     }
 
     let global_module_path = context.output.join("src").join("modules").join("mod.rs");
-    let global_module_tokens =
-        generate_import_module(context, &global, &interfaces, native_modules)?;
+    let global_module_tokens = generate_import_module(
+        context,
+        &global,
+        &interfaces,
+        native_modules,
+        global_module_name,
+    )?;
 
     let global_module_ast: syn::File =
         syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
@@ -486,6 +502,7 @@ fn generate_import_module(
     import: &ImportedInterface<'_>,
     all_imported_interfaces: &[ImportedInterface<'_>],
     native_modules: &[NativeModuleSpec],
+    global_module_name: Option<&str>,
 ) -> anyhow::Result<TokenStream> {
     let mut submodules = Vec::new();
     let mut loader_init = quote! {};
@@ -506,6 +523,13 @@ fn generate_import_module(
 
             resolver_chain.push(quote! { with_module(#fully_qualified_interface_lit)});
             loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
+        }
+
+        if let Some(name) = global_module_name {
+            let name_lit = LitStr::new(name, Span::call_site());
+            let module_struct = import.rust_interface_name();
+            resolver_chain.push(quote! { with_module(#name_lit) });
+            loader_chain.push(quote! { with_module(#name_lit, crate::modules::#module_struct) });
         }
 
         let native_names = native_modules
