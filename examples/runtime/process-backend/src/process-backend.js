@@ -611,6 +611,7 @@ export async function run() {
             const failures = [];
             const onUncaught = error => failures.push(error.message);
             process.on('uncaughtException', onUncaught);
+            let onOrder;
             try {
                 const healthy = spawn(process.execPath, ['-e', `
                     process.stdout.write('first');
@@ -621,7 +622,21 @@ export async function run() {
                 assert.deepEqual(await once(healthy, 'close'), [0, null]);
                 assert.equal(readFileSync('/healthy-child', 'utf8'), 'done');
                 assert.deepEqual(failures, ['parent listener']);
-            } finally { process.removeListener('uncaughtException', onUncaught); }
+                // A child that writes and exits at once delivers its output and completion
+                // together; as in Node, the listener exception is reported before 'close'.
+                process.removeListener('uncaughtException', onUncaught);
+                const order = [];
+                onOrder = error => order.push(error.message);
+                process.on('uncaughtException', onOrder);
+                const immediate = spawn(process.execPath, ['-e', `process.stdout.write('only');`]);
+                immediate.stdout.on('data', () => { throw new Error('immediate listener'); });
+                immediate.on('close', () => order.push('close'));
+                assert.deepEqual(await once(immediate, 'close'), [0, null]);
+                assert.deepEqual(order, ['immediate listener', 'close']);
+            } finally {
+                process.removeListener('uncaughtException', onUncaught);
+                if (onOrder) process.removeListener('uncaughtException', onOrder);
+            }
         } else if (config.mode === 'public-contract') {
             const run = (source, options = {}) => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', ...options });
             for (const source of [
