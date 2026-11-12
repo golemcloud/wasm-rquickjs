@@ -2608,10 +2608,19 @@ function spawnNode(command, args, options, maxBuffer) {
     // Listener exceptions belong to the parent, not to the native output pump, and do
     // not cancel the child. Report them as uncaught at once, as Node does for an
     // exception thrown from an I/O callback, so they precede later events such as
-    // 'close' that the pump may deliver in the same turn.
+    // 'close' that the pump may deliver in the same turn. A failing handler is fatal to
+    // the parent: the child gets no 'error' and delivers no further events.
+    let handlerFailed = false;
     const dispatch = callback => {
+        if (handlerFailed) return;
         try { callback(); }
-        catch (error) { globalThis.__wasm_rquickjs_handleUncaughtError(error, process.domain || null); }
+        catch (error) {
+            try { globalThis.__wasm_rquickjs_handleUncaughtError(error, process.domain || null); }
+            catch (handlerError) {
+                handlerFailed = completed = true;
+                globalThis.__wasm_rquickjs_raiseHandlerFailure(handlerError);
+            }
+        }
     };
     child.kill = signal => {
         const selected = nodeSignal(signal ?? 'SIGTERM');
