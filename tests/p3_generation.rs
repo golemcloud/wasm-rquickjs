@@ -1102,6 +1102,79 @@ fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> 
     Ok(())
 }
 
+/// Consumers such as Golem's SDK agent templates replace the whole `wit-bindgen-p3` entry with
+/// `--dependency` and keep `optional = true` in it. The `p3` feature must still activate the
+/// replacement, or the generated bindings cannot find `wit_bindgen_p3`.
+#[test]
+fn p3_feature_activates_an_optional_wit_bindgen_p3_override() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package test:p3-override;
+
+            world p3-override {
+              export run: func() -> string;
+            }
+        "#},
+        "export function run() { return \"ok\"; }\n",
+    )?;
+    generate_p3(temp.path())?;
+    let skeleton_manifest = std::fs::read_to_string(temp.path().join("out").join("Cargo.toml"))?;
+    let entry = skeleton_manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("wit-bindgen-p3 = "))
+        .expect("the skeleton declares wit-bindgen-p3");
+    let replacement = entry
+        .replace(", optional = true", "")
+        .trim_end()
+        .strip_suffix('}')
+        .expect("wit-bindgen-p3 is an inline table")
+        .trim_end()
+        .to_string()
+        + ", optional = true }";
+    std::fs::remove_dir_all(temp.path().join("out"))?;
+
+    generate_wrapper_crate_with_options(
+        &temp.path().join("wit"),
+        &[JsModuleSpec {
+            name: "module".to_string(),
+            mode: EmbeddingMode::EmbedFile(temp.path().join("src").join("module.js")),
+        }],
+        &temp.path().join("out"),
+        None,
+        GenerationTarget::WasiP3,
+        &WrapperCrateOptions {
+            native_modules: vec![],
+            dependencies: vec![DependencySpec {
+                key: "wit-bindgen-p3".to_string(),
+                value: replacement,
+            }],
+        },
+    )?;
+
+    let output = Command::new("cargo")
+        .arg("tree")
+        .arg("--manifest-path")
+        .arg(temp.path().join("out").join("Cargo.toml"))
+        .args(["--target", "wasm32-wasip2", "-e", "normal", "--depth", "1"])
+        .args(["--prefix", "none"])
+        .args(["--no-default-features", "--features", "p3"])
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "cargo tree failed; stdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.lines().any(|line| line.starts_with("wit-bindgen v")),
+        "the `p3` feature must activate the optional wit-bindgen-p3 override; direct \
+         dependencies:\n{stdout}"
+    );
+    Ok(())
+}
+
 #[test]
 fn p3_generated_crate_builds_with_async_result_export() -> anyhow::Result<()> {
     // An async export returning `result<T, E>`. Per the documented contract a result-returning

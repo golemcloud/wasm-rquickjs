@@ -24,13 +24,15 @@ crate-type = ["cdylib"]
 default = ["p3", "normal-p3"]
 
 # WASI Preview 3 is the only generation target. The `p3` feature is kept so existing feature
-# lists that name it keep resolving. `wasip2` is still required: the `utimes` family in
+# lists that name it keep resolving, and it activates `wit-bindgen-p3`, which stays optional so
+# callers can replace that whole entry with `--dependency` and `optional = true`, as before the
+# Preview 2 removal. `wasip2` is still required: the `utimes` family in
 # `builtin/fs.rs` uses the synchronous Preview 2 `set-times-at`, because P3's async
 # `set-times-at` would require a nested `block_on` inside JS execution, which deadlocks the
 # wit-bindgen executor (the nested `block_on` steals the enclosing export's spawned tasks, e.g.
 # the never-completing `rt.drive()` scheduler driver). P3 components import the residual P2 WASI
 # surface for `std` anyway, so this adds no new host requirements.
-p3 = []
+p3 = ["dep:wit-bindgen-p3"]
 internal-test-execution = ["test-observability"]
 
 # Capability tiers (cumulative). The runtime ships its own `wasi:http@0.3` based fetch and
@@ -153,7 +155,7 @@ wasip2 = "1.0"
 # bindings use `runtime_path: "wit_bindgen_p3::rt"` and the Wasmtime 50 async runtime contract.
 wasip3 = "=0.7.0"
 # Pin generator and runtime together for indirect async parameter cleanup (Golem fork PR #5).
-wit-bindgen-p3 = { package = "wit-bindgen", version = "=0.63.0", git = "https://github.com/golemcloud/wit-bindgen", rev = "6f161c1bce440d7b0506950ee38338ce36742957", default-features = false, features = ["async", "async-spawn", "macros", "inter-task-wakeup"] }
+wit-bindgen-p3 = { package = "wit-bindgen", version = "=0.63.0", git = "https://github.com/golemcloud/wit-bindgen", rev = "6f161c1bce440d7b0506950ee38338ce36742957", default-features = false, features = ["async", "async-spawn", "macros", "inter-task-wakeup"], optional = true }
 # Pure-Rust HTTP primitives used by the `fetch`/HTTP bridge (`builtin/http.rs`) to validate
 # header names/values, HTTP versions, and to resolve canonical status reason phrases.
 http = "1"
