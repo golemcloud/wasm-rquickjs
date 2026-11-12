@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, exec, execFile, execFileSync, execSync } from 'node:child_process';
+import domain from 'node:domain';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { setProcessBackend } from 'wasm-rquickjs:child-process';
 import { runJavaScript } from 'wasm-rquickjs:execution';
 import { callCount } from 'wasm-rquickjs-runtime-init';
@@ -694,6 +695,33 @@ export async function run() {
             assert.equal(status, null);
             assert.equal(signal, 'SIGTERM');
             assert.equal(run(`process.stdout.write('after cancel');`).stdout, 'after cancel');
+        } else if (config.mode === 'handler-throws') {
+            // In Node a throwing uncaughtException or domain error handler is fatal (exit 7):
+            // the child reports no 'error', 'exit' or 'close', and later timers never run.
+            const log = line => appendFileSync('/handler-log', line + '\n');
+            let enter = () => {};
+            if (config.source === 'domain') {
+                const d = domain.create();
+                d.on('error', error => {
+                    log('domain-handler ' + error.message);
+                    throw new Error('domain handler failure');
+                });
+                // The listener enters d itself: emitters created in d.run do not enter it on emit.
+                enter = () => d.enter();
+            } else {
+                process.on('uncaughtException', error => {
+                    log('handler ' + error.message);
+                    throw new Error('handler failure');
+                });
+            }
+            const child = spawn(process.execPath, ['-e', `process.stdout.write('only');`]);
+            child.on('error', error => log('child-error ' + error.message));
+            child.on('exit', code => log('child-exit ' + code));
+            child.on('close', (code, signal) => log('child-close ' + code + ' ' + signal));
+            child.stdout.on('data', () => { enter(); throw new Error('immediate listener'); });
+            setTimeout(() => log('later-timer'), 100);
+            await new Promise(resolve => setTimeout(resolve, 300));
+            log('run-continued');
         } else {
             await check(basic, expected);
         }

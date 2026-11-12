@@ -331,3 +331,41 @@ async fn local_node_child_stack_exhaustion_fails_spawn(
 ) -> anyhow::Result<()> {
     check_isolated_child(compiled, serde_json::json!({ "mode": "stack-exhaustion" })).await
 }
+
+#[test]
+async fn local_node_child_failing_uncaught_handler_is_fatal(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    for (source, handled) in [
+        ("process", "handler immediate listener\n"),
+        ("domain", "domain-handler immediate listener\n"),
+    ] {
+        let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+        instance.set_epoch_deadline(30);
+        std::fs::write(
+            instance.temp_dir_path().join("isolated-child-probe.json"),
+            serde_json::to_string(
+                &serde_json::json!({ "mode": "handler-throws", "source": source }),
+            )?,
+        )?;
+        let (result, _, stderr) = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            instance.invoke_and_capture_output_with_stderr(None, "run", &[]),
+        )
+        .await?;
+        let log = std::fs::read_to_string(instance.temp_dir_path().join("handler-log"))?;
+        // The handler's failure belongs to the parent: it must neither reach the child as
+        // 'error' nor let the child or the run continue.
+        assert_eq!(log, handled, "{source}: events after the failing handler");
+        assert!(
+            result.is_err(),
+            "{source}: run continued after the failing handler: {result:?}"
+        );
+        // The run fails through the fatal turn checkpoint, not a deadline or a hang.
+        assert!(
+            stderr.contains("failed to run process turn checkpoint"),
+            "{source}: unexpected failure: {stderr}"
+        );
+    }
+    Ok(())
+}
