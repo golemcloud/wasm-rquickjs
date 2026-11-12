@@ -5,7 +5,35 @@ use wit_parser::Resolve;
 
 pub(crate) const WIZER_RESTORE_CAPABILITY: &str = "wasm-rquickjs-wizer-restore-v1";
 
+/// The world-level import that supplies `@composition` JavaScript modules.
+pub(crate) const GET_SCRIPT_IMPORT: &str = "get-script";
+
+/// Adds the `get-script` import through which `@composition` JavaScript modules are loaded. It is
+/// synchronous, so module loading needs no JavaScript promise or nested `block_on`.
+pub fn add_get_script_import(wit_root: &Utf8Path, world: Option<&str>) -> anyhow::Result<()> {
+    modify_world(wit_root, world, |world| {
+        let mut get_script = StandaloneFunc::new(GET_SCRIPT_IMPORT, false);
+        get_script.set_result(Some(wit_encoder::Type::String));
+        world.function_import(get_script);
+    })
+}
+
 pub fn add_wizer_init_export(wit_root: &Utf8Path, world: Option<&str>) -> anyhow::Result<()> {
+    modify_world(wit_root, world, |world| {
+        let wizer_init_func = StandaloneFunc::new("wizer-initialize", true);
+        world.function_export(wizer_init_func);
+        // Only templates with the matching runtime restore implementation opt in
+        // to deterministic optimizer entropy and clocks.
+        world.function_export(StandaloneFunc::new(WIZER_RESTORE_CAPABILITY, false));
+    })
+}
+
+/// Rewrites the selected world of the root WIT package in `wit_root` in place.
+fn modify_world(
+    wit_root: &Utf8Path,
+    world: Option<&str>,
+    modify: impl FnOnce(&mut wit_encoder::World),
+) -> anyhow::Result<()> {
     let mut resolve = Resolve::new();
     let (root_package_id, source_map) = resolve
         .push_path(wit_root)
@@ -54,11 +82,7 @@ pub fn add_wizer_init_export(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
             )
         })?;
 
-    let wizer_init_func = StandaloneFunc::new("wizer-initialize", true);
-    world.function_export(wizer_init_func);
-    // Only templates with the matching runtime restore implementation opt in
-    // to deterministic optimizer entropy and clocks.
-    world.function_export(StandaloneFunc::new(WIZER_RESTORE_CAPABILITY, false));
+    modify(world);
 
     crate::write_if_changed(root_package_path[0], root_package.to_string()).context(format!(
         "Overwriting root WIT package at {:?}",

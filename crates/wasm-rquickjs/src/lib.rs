@@ -5,7 +5,7 @@ use crate::javascript::escape_js_ident;
 use crate::skeleton::{
     copy_component_licenses, copy_skeleton_lock, copy_skeleton_sources, generate_cargo_toml,
 };
-use crate::wit::add_wizer_init_export;
+use crate::wit::{GET_SCRIPT_IMPORT, add_get_script_import, add_wizer_init_export};
 use anyhow::{Context, anyhow};
 use camino::{Utf8Path, Utf8PathBuf};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
@@ -36,6 +36,13 @@ pub enum GenerationTarget {
     /// WASI Preview 3 (default and only target).
     #[default]
     WasiP3,
+}
+
+impl GenerationTarget {
+    /// Always `true`: Preview 3 is the only target. Kept for existing callers.
+    pub fn is_p3(&self) -> bool {
+        matches!(self, GenerationTarget::WasiP3)
+    }
 }
 
 mod async_values;
@@ -93,9 +100,9 @@ pub(crate) fn copy_if_changed(
 pub enum EmbeddingMode {
     /// Points to a JS module file that is going to be embedded into the generated Rust crate
     EmbedFile(Utf8PathBuf),
-    /// The JS module is fetched at runtime through an imported `get-script` WIT function.
-    ///
-    /// Not supported by the WASI Preview 3 generation path; generation fails with an error.
+    /// The JS module is fetched at runtime through the synchronous `get-script: func() -> string`
+    /// import that generation adds to the component's world. Compose the component with a
+    /// provider of that import before running or pre-initializing it.
     Composition,
     /// Embeds a small marker in the compiled WASM component.
     /// After compilation, JS source can be injected into the marker via `inject_js_into_component`
@@ -211,12 +218,6 @@ pub fn generate_wrapper_crate_with_options(
     validate_js_module_names(js_modules)?;
     validate_native_modules(js_modules, &options.native_modules)?;
 
-    if uses_composition(js_modules) {
-        anyhow::bail!(
-            "Composition (@composition) JS modules are not supported by the WASI Preview 3 generation path yet"
-        );
-    }
-
     // Making sure the target directories exists
     std::fs::create_dir_all(output).context("Failed to create output directory")?;
     std::fs::create_dir_all(output.join("src")).context("Failed to create output/src directory")?;
@@ -225,6 +226,17 @@ pub fn generate_wrapper_crate_with_options(
 
     // Resolving the WIT package (initial parse for Cargo.toml generation)
     let context = GeneratorContext::new(output, wit, world)?;
+    let uses_composition = uses_composition(js_modules);
+    if uses_composition
+        && context.resolve.worlds[context.world]
+            .imports
+            .contains_key(&WorldKey::Name(GET_SCRIPT_IMPORT.to_string()))
+    {
+        anyhow::bail!(
+            "the WIT world already declares `{GET_SCRIPT_IMPORT}`, which generation adds for \
+             @composition JavaScript modules"
+        );
+    }
 
     // Generating the Cargo.toml file
     generate_cargo_toml(&context, &options.dependencies)?;
@@ -250,6 +262,11 @@ pub fn generate_wrapper_crate_with_options(
     copy_wit_directory(wit, &context.output.join("wit"))
         .context("Failed to copy WIT package to output directory")?;
 
+    if uses_composition {
+        add_get_script_import(&context.output.join("wit"), world)
+            .context("Failed to add get-script import to the WIT world")?;
+    }
+
     // Add wizer-initialize export for pre-initialization support.
     add_wizer_init_export(&context.output.join("wit"), world)
         .context("Failed to add wizer-initialize export to the WIT world")?;
@@ -267,7 +284,11 @@ pub fn generate_wrapper_crate_with_options(
         .context("Failed to generate the component export implementations")?;
 
     // Generating the native modules implementing the component imports
-    generate_import_modules(&context, &options.native_modules)
+    let js_module_names = js_modules
+        .iter()
+        .map(|module| module.name.as_str())
+        .collect::<Vec<_>>();
+    generate_import_modules(&context, &js_module_names, &options.native_modules)
         .context("Failed to generate the component import modules")?;
 
     // Generating the conversions.rs file implementing the IntoJs and FromJs typeclass instances
@@ -345,12 +366,9 @@ impl<'a> GeneratorContext<'a> {
 
         let mut unsupported = Vec::new();
         for (key, item) in &resolve.worlds[world].imports {
-            let is_unsupported = match item {
-                WorldItem::Function(_) => true,
-                WorldItem::Type { id, .. } => resolve.types[*id].kind == TypeDefKind::Resource,
-                WorldItem::Interface { .. } => false,
-            };
-            if is_unsupported {
+            if let WorldItem::Type { id, .. } = item
+                && resolve.types[*id].kind == TypeDefKind::Resource
+            {
                 unsupported.push(match key {
                     WorldKey::Name(name) => name.clone(),
                     WorldKey::Interface(_) => "<resource>".to_string(),
@@ -359,9 +377,8 @@ impl<'a> GeneratorContext<'a> {
         }
         if !unsupported.is_empty() {
             return Err(anyhow!(
-                "Functions or resources declared directly in the world are not supported by \
-                 the WASI Preview 3 generation path ({}); declare them inside an imported \
-                 interface instead",
+                "Resources declared directly in the world are not supported ({}); declare them \
+                 inside an imported interface instead",
                 unsupported.join(", ")
             ));
         }
@@ -854,24 +871,6 @@ mod tests {
     }
 
     #[test]
-    fn default_generation_rejects_composition_modules() {
-        let output = Utf8TempDir::new().unwrap();
-        let error = generate_wrapper_crate(
-            Utf8Path::new("unused-wit"),
-            &[module("module")],
-            &output.path().join("out"),
-            None,
-        )
-        .unwrap_err();
-
-        assert_eq!(
-            error.to_string(),
-            "Composition (@composition) JS modules are not supported by the WASI Preview 3 generation path yet"
-        );
-        assert!(!output.path().join("out").exists());
-    }
-
-    #[test]
     fn rejects_reserved_primary_javascript_module_name() {
         let output = Utf8TempDir::new().unwrap();
         let error = generate_wrapper_crate(
@@ -970,7 +969,7 @@ mod tests {
     fn registers_native_modules_and_replaces_dependencies() -> anyhow::Result<()> {
         let temp = Utf8TempDir::new()?;
         std::fs::create_dir_all(temp.path().join("native"))?;
-        let replacement = r#"{ package = "wit-bindgen", version = "=0.59.0" }"#;
+        let replacement = r#"{ package = "wit-bindgen", version = "=0.59.0", optional = true }"#;
         generate_with_native_modules(
             temp.path(),
             GenerationTarget::WasiP3,

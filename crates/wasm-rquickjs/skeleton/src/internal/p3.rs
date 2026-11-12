@@ -115,7 +115,7 @@ impl JsState {
             .unwrap_or_else(|error| panic!("{error}"));
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        // `idle()` from ever returning.
         drain_and_idle(self).await;
     }
 
@@ -311,7 +311,7 @@ impl JsState {
         .await;
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        // `idle()` from ever returning.
         drain_and_idle(self).await;
     }
 
@@ -684,8 +684,7 @@ async fn spawn_drive_guard(rt: &AsyncRuntime, ctx: &AsyncContext) -> DriveGuard 
 /// After the export produces its result (a direct value or an awaited Promise) the P3 wrapper would
 /// otherwise return immediately and drop its [`DriveGuard`], so any work the export merely
 /// *scheduled* — `setTimeout`/`setInterval`/`setImmediate` callbacks, `queueMicrotask`/Promise jobs,
-/// `future<T>`/`stream<T>` writer tasks — would never run. This mirrors the Preview 2 `drain_and_idle`:
-/// it waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
+/// `future<T>`/`stream<T>` writer tasks — would never run. It waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
 /// event loop exits once only unref'd timers are left) so [`AsyncRuntime::idle`] can complete.
 ///
 /// `idle()` drives the runtime on its own (exactly as the plain `idle()` calls during
@@ -840,11 +839,13 @@ where
     .await
 }
 
-/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported resource static
-/// method. It is driven to completion by [`run_sync`] (`block_on`) from a synchronous Guest trait
-/// method, so it must never suspend: if the JavaScript static returns a `Promise`, it traps with
-/// an actionable message instead of awaiting it (which could deadlock the whole instance). Declare
-/// the static as `async func` in WIT to get the awaiting behavior.
+/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported function or
+/// resource static method. It is driven to completion by [`run_sync`] (`block_on`) from a
+/// synchronous Guest trait method. If the JavaScript function returns a `Promise`, it is awaited
+/// inside that `block_on`, which runs QuickJS jobs and scheduler tasks. A synchronous
+/// component-model task cannot block on the host, so a promise that waits on timers or host I/O
+/// traps ("cannot block a synchronous task before returning"); declare such functions as
+/// `async func` in WIT.
 pub async fn call_js_export_sync<A, R>(
     wit_package: &'static str,
     function_path: &'static [&'static str],
@@ -903,10 +904,11 @@ where
     // (which live as scheduler tasks) make progress even while this call is parked awaiting the JS
     // result promise. Dropped (aborted) when this call returns.
     //
-    // The synchronous path (`allow_async == false`, used for synchronous exported resource statics
-    // driven by `block_on`) never awaits a JS promise and never spawns scheduler tasks, so it must
-    // NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned inside a `block_on`
-    // would prevent it from returning.
+    // The synchronous path (`allow_async == false`, used for synchronous exports driven by
+    // `block_on`) must NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned
+    // inside a `block_on` would prevent it from returning. A returned promise is awaited inside
+    // `with_component_context`, whose `async_with!` future drives the scheduler and pending jobs
+    // itself.
     let drive_guard = if allow_async {
         Some(spawn_drive_guard(&js_state.rt, &js_state.ctx).await)
     } else {
@@ -936,14 +938,6 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
-                    if !allow_async {
-                        panic!(
-                            "The synchronous exported function {fun} returned a Promise. Synchronous \
-                             exported functions must return a value directly on the WASI Preview 3 \
-                             path; declare it as `async func` in WIT to return a Promise.",
-                            fun = function_path.join(".")
-                        );
-                    }
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<Value>();
 
@@ -998,10 +992,10 @@ where
 // trait methods for them are ordinary `fn`s. They still need to enter the shared async QuickJS
 // runtime, which is only reachable through `async_with!` (an `async` operation). The generated sync
 // methods therefore drive the corresponding `async fn` helper below to completion with
-// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). To keep `block_on` from ever blocking
-// the whole component instance, the synchronous helpers never spawn a scheduler driver and never
-// await a JS promise — a sync-declared op whose JavaScript returns a `Promise` traps with an
-// actionable message telling the author to declare it `async func`.
+// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). The synchronous helpers never spawn a
+// persistent scheduler driver, which would keep `block_on` from returning. A sync-declared op
+// whose JavaScript returns a `Promise` awaits it within that `block_on` (see
+// [`call_js_export_sync`]).
 //
 // `async` WIT resource methods/statics are generated as `async fn`s that `.await` the async
 // helpers directly (with a `DriveGuard`), exactly like freestanding async exports.
@@ -1012,7 +1006,69 @@ where
 /// synchronous exported-resource Guest methods (constructor, sync method, sync static), which
 /// cannot be `async fn` but must call into the async QuickJS runtime.
 pub fn run_sync<T: 'static>(future: impl Future<Output = T>) -> T {
-    wit_bindgen_p3::rt::async_support::block_on(future)
+    wit_bindgen_p3::rt::async_support::block_on(RepollSelfWakes::new(future))
+}
+
+/// wit-bindgen 0.58's `block_on` treats a future that wakes itself during its own poll as a yield
+/// and then unwraps a waitable set that does not exist when nothing else is pending. An awaited
+/// QuickJS promise does exactly that while it still has jobs to run, so such wakes re-poll here
+/// instead of reaching `block_on`. Wakes after a `Pending` result go to `block_on`'s waker.
+struct RepollSelfWakes<F> {
+    future: Pin<Box<F>>,
+    waker: std::sync::Arc<SelfWakeTracker>,
+}
+
+#[derive(Default)]
+struct SelfWakeTracker {
+    polling: std::sync::atomic::AtomicBool,
+    woken: std::sync::atomic::AtomicBool,
+    outer: std::sync::Mutex<Option<std::task::Waker>>,
+}
+
+impl std::task::Wake for SelfWakeTracker {
+    fn wake(self: std::sync::Arc<Self>) {
+        self.wake_by_ref();
+    }
+
+    fn wake_by_ref(self: &std::sync::Arc<Self>) {
+        use std::sync::atomic::Ordering::Relaxed;
+        if self.polling.load(Relaxed) {
+            self.woken.store(true, Relaxed);
+        } else if let Some(outer) = self.outer.lock().unwrap().as_ref() {
+            outer.wake_by_ref();
+        }
+    }
+}
+
+impl<F: Future> RepollSelfWakes<F> {
+    fn new(future: F) -> Self {
+        Self {
+            future: Box::pin(future),
+            waker: Default::default(),
+        }
+    }
+}
+
+impl<F: Future> Future for RepollSelfWakes<F> {
+    type Output = F::Output;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut TaskContext<'_>) -> Poll<F::Output> {
+        use std::sync::atomic::Ordering::Relaxed;
+        let this = &mut *self;
+        *this.waker.outer.lock().unwrap() = Some(cx.waker().clone());
+        let waker = std::task::Waker::from(this.waker.clone());
+        let mut inner = TaskContext::from_waker(&waker);
+        loop {
+            this.waker.woken.store(false, Relaxed);
+            this.waker.polling.store(true, Relaxed);
+            let poll = this.future.as_mut().poll(&mut inner);
+            this.waker.polling.store(false, Relaxed);
+            match poll {
+                Poll::Pending if this.waker.woken.load(Relaxed) => continue,
+                poll => return poll,
+            }
+        }
+    }
 }
 
 /// Fully initializes the P3 QuickJS runtime and leaves it quiescent for Wizer to snapshot.
@@ -1242,8 +1298,8 @@ where
 }
 
 /// Synchronous variant of [`call_js_resource_method`], used for a *synchronous* exported resource
-/// method and driven by [`run_sync`]. It never awaits a JS promise: if the method returns one it
-/// traps with an actionable message (declare the method `async func` in WIT).
+/// method and driven by [`run_sync`]. A returned promise is awaited as described on
+/// [`call_js_export_sync`].
 pub async fn call_js_resource_method_sync<A, R>(
     wit_package: &'static str,
     resource_path: &'static [&'static str],
@@ -1369,14 +1425,6 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
-                    if !allow_async {
-                        panic!(
-                            "The synchronous exported method {name} of {path} returned a Promise. \
-                             Synchronous exported resource methods must return a value directly on the \
-                             WASI Preview 3 path; declare it as `async func` in WIT to return a Promise.",
-                            path = resource_path.join(".")
-                        );
-                    }
                     let promise: Promise = value.into_promise().unwrap();
                     match promise.into_future::<Value>().await {
                         Ok(value) => {

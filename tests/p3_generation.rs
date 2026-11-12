@@ -533,6 +533,152 @@ fn p3_sync_freestanding_export_runs() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A plain (synchronous) WIT export implemented by an `async` JavaScript function: a returned
+/// Promise that settles without waiting on the host is awaited. (A synchronous task cannot block
+/// on host waits such as timers, so those still trap.)
+#[test]
+fn p3_sync_export_awaits_a_returned_promise() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-sync-promise;
+
+            world p3-sync-promise {
+              export run: func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            async function label() {
+              await null;
+              return 'awaited';
+            }
+
+            export async function run() {
+              await Promise.resolve();
+              return await label();
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_sync_promise")?;
+    assert_eq!(run_p3_string_export(&wasm_path, "run")?, "awaited");
+    Ok(())
+}
+
+/// Plugs the exports of `provider` into the matching imports of `socket`.
+fn compose_provider(
+    socket: &Utf8Path,
+    provider: &Utf8Path,
+    output: &Utf8Path,
+) -> anyhow::Result<()> {
+    use wac_graph::types::Package;
+    use wac_graph::{CompositionGraph, EncodeOptions, plug};
+
+    let mut graph = CompositionGraph::new();
+    let socket = Package::from_file("socket", None, socket, graph.types_mut())?;
+    let socket = graph.register_package(socket)?;
+    let provider = Package::from_file("provider", None, provider, graph.types_mut())?;
+    let provider = graph.register_package(provider)?;
+    plug(&mut graph, vec![provider], socket)?;
+    std::fs::write(output, graph.encode(EncodeOptions::default())?)?;
+    Ok(())
+}
+
+/// `@composition` modules are loaded at runtime through the generated synchronous `get-script`
+/// import, both as an additional module and as the primary (exporting) module.
+#[test]
+fn p3_composition_modules_load_through_get_script() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let wit = indoc! {r#"
+        package bug:p3-composition;
+
+        world p3-composition {
+          export run: func() -> string;
+        }
+    "#};
+
+    let additional = temp.path().join("additional");
+    write_fixture(
+        &additional,
+        wit,
+        indoc! {r#"
+            import { label } from 'user-lib';
+            export function run() { return `embedded:${label()}`; }
+        "#},
+    )?;
+    generate_wrapper_crate_with_target(
+        &additional.join("wit"),
+        &[
+            JsModuleSpec {
+                name: "module".to_string(),
+                mode: EmbeddingMode::EmbedFile(additional.join("src").join("module.js")),
+            },
+            JsModuleSpec {
+                name: "user-lib".to_string(),
+                mode: EmbeddingMode::Composition,
+            },
+        ],
+        &additional.join("out"),
+        None,
+        GenerationTarget::WasiP3,
+    )?;
+    let generated_wit =
+        std::fs::read_to_string(additional.join("out").join("wit").join("world.wit"))?;
+    assert!(
+        generated_wit.contains("import get-script: func() -> string;"),
+        "{generated_wit}"
+    );
+
+    let primary = temp.path().join("primary");
+    write_fixture(&primary, wit, "")?;
+    generate_wrapper_crate_with_target(
+        &primary.join("wit"),
+        &[JsModuleSpec {
+            name: "module".to_string(),
+            mode: EmbeddingMode::Composition,
+        }],
+        &primary.join("out"),
+        None,
+        GenerationTarget::WasiP3,
+    )?;
+
+    let mut providers = Vec::new();
+    for (name, script) in [
+        (
+            "additional-provider",
+            "export function label() { return 'composed'; }",
+        ),
+        (
+            "primary-provider",
+            "export function run() { return 'composed-primary'; }",
+        ),
+    ] {
+        let root = temp.path().join(name);
+        write_fixture(
+            &root,
+            &format!(
+                "package bug:{name};\n\nworld {name} {{\n  export get-script: func() -> string;\n}}\n"
+            ),
+            &format!("export function getScript() {{ return {script:?}; }}\n"),
+        )?;
+        generate_p3(&root)?;
+        providers.push(build_p3(&root, &name.replace('-', "_"))?);
+    }
+
+    for (root, provider, expected) in [
+        (&additional, &providers[0], "embedded:composed"),
+        (&primary, &providers[1], "composed-primary"),
+    ] {
+        let socket = build_p3(root, "p3_composition")?;
+        let composed = root.join("composed.wasm");
+        compose_provider(&socket, provider, &composed)?;
+        assert_eq!(run_p3_string_export(&composed, "run")?, expected);
+    }
+    Ok(())
+}
+
 #[test]
 fn p3_wizer_preinitializes_component_with_async_export() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
@@ -1903,11 +2049,9 @@ fn p3_rejects_methodless_world_level_resource() -> anyhow::Result<()> {
 
 #[test]
 fn p3_rejects_world_level_imported_resource() -> anyhow::Result<()> {
-    // A resource declared directly in the world (rather than inside an interface) is only usable
-    // through functions imported directly into the world. Those are a documented limitation
-    // ("only whole interfaces" are supported for imports): they would land in the synthetic
-    // global import module, which is never registered with QuickJS's module resolver/loader.
-    // The Preview 3 path must reject this instead of emitting a crate that fails to compile.
+    // A resource declared directly in the world (rather than inside an interface) is a documented
+    // limitation. The Preview 3 path must reject it instead of emitting a crate that fails to
+    // compile.
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -1932,36 +2076,56 @@ fn p3_rejects_world_level_imported_resource() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Functions imported directly into the world are importable from a JavaScript module named after
+/// the world, both synchronous and `async` ones.
 #[test]
-fn p3_rejects_world_level_freestanding_import() -> anyhow::Result<()> {
-    // Functions imported directly into the world (not through an interface) are a documented
-    // limitation ("only whole interfaces" are supported for imports). On the Preview 3 path such
-    // an import would build but trap at runtime ("Error resolving module ...") because the global
-    // import module is never registered with QuickJS, so generation must reject it up front.
+fn p3_world_level_function_imports_are_importable() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
+    let consumer = temp.path().join("consumer");
     write_fixture(
-        temp.path(),
+        &consumer,
         indoc! {r#"
-            package bug:async-import-runtime;
+            package bug:world-imports;
 
-            world async-import-runtime {
-              import get-number: async func() -> u32;
-              export run: async func() -> u32;
+            world world-imports {
+              import get-number: func() -> u32;
+              import get-label: async func() -> string;
+              export run: async func() -> string;
             }
         "#},
         indoc! {r#"
-            import { getNumber } from 'async-import-runtime';
+            import { getNumber, getLabel } from 'world-imports';
 
             export async function run() {
-              return await getNumber();
+              return `${getNumber() + 1}:${await getLabel()}`;
             }
         "#},
     )?;
+    generate_p3(&consumer)?;
 
-    assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject functions imported directly into the world"
-    );
+    let provider = temp.path().join("provider");
+    write_fixture(
+        &provider,
+        indoc! {r#"
+            package bug:world-imports-provider;
+
+            world world-imports-provider {
+              export get-number: func() -> u32;
+              export get-label: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            export function getNumber() { return 41; }
+            export async function getLabel() { return 'label'; }
+        "#},
+    )?;
+    generate_p3(&provider)?;
+    let provider = build_p3(&provider, "world_imports_provider")?;
+
+    let socket = build_p3(&consumer, "world_imports")?;
+    let composed = consumer.join("composed.wasm");
+    compose_provider(&socket, &provider, &composed)?;
+    assert_eq!(run_p3_string_export(&composed, "run")?, "42:label");
     Ok(())
 }
 
