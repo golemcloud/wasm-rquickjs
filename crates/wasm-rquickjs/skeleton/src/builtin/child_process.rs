@@ -4,11 +4,6 @@ pub(crate) mod p3;
 #[rquickjs::module]
 pub mod native_module {
     #[rquickjs::function]
-    pub fn supports_isolation() -> bool {
-        true
-    }
-
-    #[rquickjs::function]
     pub fn write_output(ctx: rquickjs::Ctx<'_>, stdout: bool, bytes: Vec<u8>) {
         if let Some(child) = ctx
             .userdata::<crate::internal::runtime_services::RuntimeServices>()

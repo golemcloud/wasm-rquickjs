@@ -2777,10 +2777,12 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
             && filename.ends_with(&format!("-{target}-{os}-{arch}.json")),
         "{path} filename does not identify a release target and host"
     );
-    let expected_lock_kind = if target == "p2" {
-        "p2-shadow"
+    // Historical P2 reports used the shadow lock; P3 reports use the workspace lock, or the
+    // fork shadow lock when measured with `tools/dev-test.sh fork`.
+    let expected_lock_kinds: &[&str] = if target == "p2" {
+        &["p2-shadow"]
     } else {
-        "workspace"
+        &["workspace", "fork-shadow"]
     };
     ensure!(
         report["environment"]["node"] == "22.14.0"
@@ -2791,7 +2793,9 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
             && report["environment"]["wasmtimeCache"].is_null()
             && report["environment"]["preparedComponentCache"].is_null()
             && report["environment"]["unoptimized"].is_null()
-            && report["environment"]["hostDependencyGraph"]["kind"] == expected_lock_kind
+            && report["environment"]["hostDependencyGraph"]["kind"]
+                .as_str()
+                .is_some_and(|kind| expected_lock_kinds.contains(&kind))
             && report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
             && is_blake3_value(&report["environment"]["hostDependencyGraph"]["lockBlake3"])
             && is_blake3_value(&report["inputs"]["buildHash"])

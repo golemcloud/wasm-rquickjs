@@ -321,16 +321,16 @@ impl HttpRequest {
         redirect_policy: RedirectPolicy,
     ) -> rquickjs::Result<Self> {
         let url = url.0;
-        // Validate the URL eagerly so bad inputs fail like the Preview 2 path.
+        // Validate the URL eagerly so bad inputs fail before the request starts.
         Url::parse(&url).map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
-        // Validate the method token like the Preview 2 native constructor, rejecting invalid
+        // Validate the method token, rejecting invalid
         // syntax (e.g. a method containing a space) with `failed to parse method`.
         validate_method(&ctx, &method)?;
         // Validate the requested HTTP version. `wasi:http` does not let us pin the wire version,
         // but the shared native contract still rejects unsupported versions like the Preview 2
         // path does, so invalid input fails identically on both targets.
         validate_http_version(&ctx, &version)?;
-        // Validate header names/values up front (matching the Preview 2 native contract) so that
+        // Validate header names/values up front so that
         // malformed headers are rejected instead of being silently dropped when building the
         // `wasi:http` fields later.
         for (name, value) in &headers {
@@ -339,8 +339,7 @@ impl HttpRequest {
 
         Ok(HttpRequest {
             url,
-            // Preserve the method spelling as given (matching the Preview 2 native contract, which
-            // keeps extension-method case). The public `fetch`/`Request`/`XMLHttpRequest` APIs in
+            // Preserve the method spelling as given (extension methods keep their case). The public `fetch`/`Request`/`XMLHttpRequest` APIs in
             // `http.js` already upper-case standard methods before reaching native code.
             method,
             headers: headers.into_iter().collect(),
@@ -376,9 +375,7 @@ impl HttpRequest {
         value: String,
     ) -> rquickjs::Result<()> {
         validate_header(&ctx, &name, &value)?;
-        // The Preview 2 path stores request headers in a `HashMap<HeaderName, HeaderValue>`, so
-        // adding a header replaces any existing entry with the same (case-insensitive) name. Mirror
-        // that here: `http.js` relies on it when it sets `Content-Type` for `URLSearchParams`
+        // Adding a header replaces any existing entry with the same (case-insensitive) name: `http.js` relies on it when it sets `Content-Type` for `URLSearchParams`
         // bodies after the constructor headers have already been applied.
         set_header(&mut self.headers, &name, &value);
         Ok(())
@@ -595,7 +592,7 @@ impl HttpRequest {
 
     async fn simple_send_inner<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
         crate::internal::preinit::check("HTTP request", "remote endpoint");
-        // Validate mode constraints (mirrors the Preview 2 path). The streaming request-body path
+        // Validate mode constraints. The streaming request-body path
         // performs the same validation in `init_send`.
         self.validate_request_mode(&ctx)?;
 
@@ -718,7 +715,7 @@ impl HttpRequest {
 }
 
 impl HttpRequest {
-    /// Validates the request mode before sending, mirroring the Preview 2 path. Shared by the
+    /// Validates the request mode before sending. Shared by the
     /// buffered [`Self::simple_send`] path and the streaming [`Self::init_send`] path so the public
     /// `fetch` contract is identical regardless of whether the request body is buffered or streamed.
     fn validate_request_mode(&self, ctx: &Ctx<'_>) -> rquickjs::Result<()> {
@@ -1123,7 +1120,7 @@ impl HttpResponse {
 
     #[qjs(static)]
     pub fn redirect(url: Coerced<String>, status: Option<u16>) -> Self {
-        // Match the Preview 2 native contract: an out-of-range status falls back to 302 Found.
+        // An out-of-range status falls back to 302 Found.
         let status_code = status
             .and_then(|code| StatusCode::from_u16(code).ok())
             .map(|code| code.as_u16())
@@ -1140,7 +1137,7 @@ impl HttpResponse {
 
     #[qjs(static)]
     pub fn json<'js>(data: ArrayBuffer<'js>, status: u16) -> Self {
-        // Match the Preview 2 native contract: an out-of-range status falls back to 200 OK.
+        // An out-of-range status falls back to 200 OK.
         let status = StatusCode::from_u16(status)
             .map(|code| code.as_u16())
             .unwrap_or(200);
@@ -1410,7 +1407,7 @@ impl ResponseBodyStream {
 // wasip3 helpers
 // ---------------------------------------------------------------------------
 
-/// Validates a requested HTTP version string, mirroring the Preview 2 native contract. `wasi:http`
+/// Validates a requested HTTP version string. `wasi:http`
 /// cannot pin the wire version, so the parsed value is discarded; only the validation (rejecting
 /// unsupported versions) is observable.
 fn validate_http_version(ctx: &Ctx<'_>, version: &str) -> rquickjs::Result<()> {
@@ -1428,8 +1425,7 @@ fn validate_http_version(ctx: &Ctx<'_>, version: &str) -> rquickjs::Result<()> {
     Ok(())
 }
 
-/// Validates a header name/value pair using the same `http` crate primitives the Preview 2 path
-/// relies on (via `golem-wasi-http`), throwing the identical error messages.
+/// Validates a header name/value pair with the `http` crate primitives.
 fn validate_header(ctx: &Ctx<'_>, name: &str, value: &str) -> rquickjs::Result<()> {
     HeaderName::from_bytes(name.as_bytes())
         .map_err(|_| Exception::throw_message(ctx, "failed to parse header name"))?;
@@ -1438,8 +1434,8 @@ fn validate_header(ctx: &Ctx<'_>, name: &str, value: &str) -> rquickjs::Result<(
     Ok(())
 }
 
-/// Validates an HTTP method token, mirroring the Preview 2 native constructor which parses the
-/// method via the `http` crate and rejects invalid syntax with `failed to parse method`.
+/// Validates an HTTP method token with the `http` crate, rejecting invalid syntax with
+/// `failed to parse method`.
 fn validate_method(ctx: &Ctx<'_>, method: &str) -> rquickjs::Result<()> {
     http::Method::from_bytes(method.as_bytes())
         .map_err(|_| Exception::throw_message(ctx, "failed to parse method"))?;
@@ -1449,7 +1445,7 @@ fn validate_method(ctx: &Ctx<'_>, method: &str) -> rquickjs::Result<()> {
 fn parse_method(method: &str) -> Method {
     // Match the standard methods by their canonical (upper-case) spelling only, mirroring
     // `http::Method::from_bytes`; any other token becomes an extension method with its original
-    // case preserved, exactly like the Preview 2 path.
+    // case preserved.
     match method {
         "GET" => Method::Get,
         "HEAD" => Method::Head,
@@ -1577,7 +1573,7 @@ fn remove_header(headers: &mut Vec<(String, String)>, name: &str) {
     headers.retain(|(existing, _)| !existing.eq_ignore_ascii_case(name));
 }
 
-/// Applies credentials filtering based on the credentials mode (mirrors the Preview 2 path).
+/// Applies credentials filtering based on the credentials mode.
 fn apply_credentials_filtering(headers: &mut Vec<(String, String)>, credentials: CredentialsMode) {
     if credentials == CredentialsMode::Omit {
         remove_header(headers, "authorization");
@@ -1672,7 +1668,7 @@ fn is_https_to_http(from_url: &Url, to_url: &Url) -> bool {
 }
 
 // ---------------------------------------------------------------------------
-// JavaScript sources (shared with the Preview 2 path).
+// JavaScript sources.
 // ---------------------------------------------------------------------------
 
 #[cfg(not(feature = "internal-test-execution"))]

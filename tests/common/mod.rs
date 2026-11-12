@@ -34,7 +34,6 @@ use wasmtime::{Engine, Store, StoreContextMut, UpdateDeadline};
 use wasmtime_wasi::cli::OutputFile;
 use wasmtime_wasi::{DirPerms, FilePerms, WasiCtx, WasiCtxView, WasiView};
 use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p2::{WasiHttpCtxView, WasiHttpView};
 
 pub mod ws_mock_p3 {
     wasmtime::component::bindgen!({
@@ -1161,135 +1160,6 @@ impl<B: HttpBody> Drop for TracedHttpBody<B> {
 }
 
 #[derive(Clone)]
-struct P2HttpTraceHooks(HttpLifecycleTrace);
-
-fn trace_p2_result(
-    trace: &HttpLifecycleTrace,
-    request_id: usize,
-    result: Result<
-        wasmtime_wasi_http::p2::types::IncomingResponse,
-        wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
-    >,
-) -> Result<
-    wasmtime_wasi_http::p2::types::IncomingResponse,
-    wasmtime_wasi_http::p2::bindings::http::types::ErrorCode,
-> {
-    match result {
-        Ok(mut incoming) => {
-            trace.record(
-                request_id,
-                HttpLifecyclePhase::ResponseHead,
-                incoming.resp.status().as_u16(),
-            );
-            let (parts, body) = incoming.resp.into_parts();
-            incoming.resp = http::Response::from_parts(
-                parts,
-                TracedHttpBody::new(body, trace.clone(), request_id, "response", None)
-                    .boxed_unsync(),
-            );
-            Ok(incoming)
-        }
-        Err(error) => {
-            trace.record(request_id, HttpLifecyclePhase::SendError, 0);
-            Err(error)
-        }
-    }
-}
-
-#[cfg(feature = "use-golem-wasmtime")]
-fn p2_method_expects_body(method: &http::Method) -> bool {
-    method == http::Method::POST || method == http::Method::PUT || method == http::Method::PATCH
-}
-
-#[cfg(feature = "use-golem-wasmtime")]
-fn p2_body_completion_for_dispatch(
-    method: &http::Method,
-    body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
-) -> Option<wasmtime_wasi_http::p2::BodyCompletionReceiver> {
-    if p2_method_expects_body(method) {
-        drop(body_completion);
-        None
-    } else {
-        body_completion
-    }
-}
-
-impl wasmtime_wasi_http::p2::WasiHttpHooks for P2HttpTraceHooks {
-    #[cfg(not(feature = "use-golem-wasmtime"))]
-    fn send_request(
-        &mut self,
-        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
-    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
-    {
-        let trace = self.0.clone();
-        let request_id = record_http_submit(&trace, &request);
-
-        let (parts, body) = request.into_parts();
-        let request = http::Request::from_parts(
-            parts,
-            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
-        );
-        let handle = wasmtime_wasi::runtime::spawn(async move {
-            let result =
-                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
-            Ok(trace_p2_result(&trace, request_id, result))
-        });
-        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
-    }
-
-    #[cfg(feature = "use-golem-wasmtime")]
-    fn send_request(
-        &mut self,
-        request: http::Request<wasmtime_wasi_http::p2::body::HyperOutgoingBody>,
-        config: wasmtime_wasi_http::p2::types::OutgoingRequestConfig,
-        body_completion: Option<wasmtime_wasi_http::p2::BodyCompletionReceiver>,
-    ) -> wasmtime_wasi_http::p2::HttpResult<wasmtime_wasi_http::p2::types::HostFutureIncomingResponse>
-    {
-        let trace = self.0.clone();
-        let request_id = record_http_submit(&trace, &request);
-        let body_completion = p2_body_completion_for_dispatch(request.method(), body_completion);
-        let collect_before_send = body_completion.is_some();
-        let (parts, body) = request.into_parts();
-        let request = http::Request::from_parts(
-            parts,
-            TracedHttpBody::new(body, trace.clone(), request_id, "request", None).boxed_unsync(),
-        );
-        let handle = wasmtime_wasi::runtime::spawn(async move {
-            let request = if collect_before_send {
-                let body_completion = body_completion.expect("checked above");
-                let (parts, body) = request.into_parts();
-                let completion = async {
-                    match body_completion.await {
-                        Ok(Ok(())) => Ok(()),
-                        Ok(Err(error)) => Err(error),
-                        Err(_) => Err(
-                            wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError,
-                        ),
-                    }
-                };
-                let collect = async {
-                    BodyExt::collect(body).await.map(|collected| {
-                        collected
-                            .map_err(|_: std::convert::Infallible| unreachable!())
-                            .boxed_unsync()
-                    })
-                };
-                let (completion, collected) = futures::future::join(completion, collect).await;
-                completion?;
-                http::Request::from_parts(parts, collected?)
-            } else {
-                request
-            };
-            let result =
-                wasmtime_wasi_http::p2::default_send_request_handler(request, config).await;
-            Ok(trace_p2_result(&trace, request_id, result))
-        });
-        Ok(wasmtime_wasi_http::p2::types::HostFutureIncomingResponse::pending(handle))
-    }
-}
-
-#[derive(Clone)]
 struct P3HttpTraceHooks(HttpLifecycleTrace);
 
 impl wasmtime_wasi_http::p3::WasiHttpHooks for P3HttpTraceHooks {
@@ -2088,20 +1958,6 @@ mod tests {
     }
 
     #[test]
-    fn http_lifecycle_p2_send_error_is_terminal_boundary() {
-        let trace = HttpLifecycleTrace::new();
-        let result = trace_p2_result(
-            &trace,
-            7,
-            Err(wasmtime_wasi_http::p2::bindings::http::types::ErrorCode::HttpProtocolError),
-        );
-
-        assert!(result.is_err());
-        let snapshot = trace.snapshot();
-        assert!(snapshot.contains("request=7 phase=send-error"));
-    }
-
-    #[test]
     fn http_lifecycle_submit_does_not_mutate_guest_headers() {
         let trace = HttpLifecycleTrace::new();
         let request = http::Request::get("http://127.0.0.1:1234/same")
@@ -2689,18 +2545,6 @@ mod tests {
         }
         assert!(!snapshot.contains("server-response-correlation-overlap"));
         assert!(!snapshot.contains("server-response-correlation-boundary"));
-    }
-
-    #[cfg(feature = "use-golem-wasmtime")]
-    #[test]
-    fn p2_body_method_drops_unused_completion_before_dispatch() {
-        let (sender, receiver) = tokio::sync::oneshot::channel::<
-            Result<(), wasmtime_wasi_http::p2::bindings::http::types::ErrorCode>,
-        >();
-        let retained = p2_body_completion_for_dispatch(&http::Method::POST, Some(receiver));
-
-        assert!(retained.is_none());
-        assert!(sender.is_closed());
     }
 
     #[test]
@@ -3877,7 +3721,6 @@ impl TestInstance {
             table: Arc::new(Mutex::new(ResourceTable::new())),
             wasi: Arc::new(Mutex::new(ctx)),
             wasi_http: Arc::new(Mutex::new(http_ctx)),
-            p2_http_hooks: P2HttpTraceHooks(http_trace.clone()),
             p3_http_hooks: P3HttpTraceHooks(http_trace),
             started_at: Instant::now(),
             timeout: Duration::from_secs(120),
@@ -3988,7 +3831,7 @@ impl TestInstance {
 
     /// Read existing journals even after a timeout cancelled the invocation future.
     pub fn failure_diagnostics(&self) -> String {
-        let http_lifecycle = self.store.data().p2_http_hooks.0.snapshot();
+        let http_lifecycle = self.store.data().p3_http_hooks.0.snapshot();
         let server_http_lifecycle = test_server_http_trace().snapshot();
         let host_trace = host_trace();
         format!(
@@ -4577,7 +4420,6 @@ pub struct Host {
     pub table: Arc<Mutex<ResourceTable>>,
     pub wasi: Arc<Mutex<WasiCtx>>,
     pub wasi_http: Arc<Mutex<WasiHttpCtx>>,
-    p2_http_hooks: P2HttpTraceHooks,
     p3_http_hooks: P3HttpTraceHooks,
     pub started_at: Instant,
     pub timeout: Duration,
@@ -4638,22 +4480,6 @@ impl WasiView for Host {
                 .expect("IoCtx is shared and cannot be borrowed mutably")
                 .get_mut()
                 .expect("IoCtx mutex must never fail"),
-        }
-    }
-}
-
-impl WasiHttpView for Host {
-    fn http(&mut self) -> WasiHttpCtxView<'_> {
-        WasiHttpCtxView {
-            ctx: Arc::get_mut(&mut self.wasi_http)
-                .expect("WasiHttpCtx is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("WasiHttpCtx mutex must never fail"),
-            table: Arc::get_mut(&mut self.table)
-                .expect("ResourceTable is shared and cannot be borrowed mutably")
-                .get_mut()
-                .expect("ResourceTable mutex must never fail"),
-            hooks: &mut self.p2_http_hooks,
         }
     }
 }

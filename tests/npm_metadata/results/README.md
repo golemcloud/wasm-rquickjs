@@ -119,10 +119,8 @@ The dated JSON files are raw observations, not CI pass/fail thresholds. Run one
 target at a time with the pinned Node 22.14.0/npm 10.9.2 installation:
 
 ```sh
-NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=3 NPM_METADATA_REPORT=tests/npm_metadata/results/YYYY-MM-DD-p2.json \
-  tools/dev-test.sh p2 standard npm_metadata ''
 NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=3 NPM_METADATA_REPORT=tests/npm_metadata/results/YYYY-MM-DD-p3.json \
-  tools/dev-test.sh p3 standard npm_metadata ''
+  tools/dev-test.sh stock standard npm_metadata ''
 ```
 
 Use the explicit `release` profile for a local production-build diagnostic. It
@@ -131,10 +129,8 @@ Cargo's release profile while retaining the same fresh-state measurement
 semantics:
 
 ```sh
-NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=5 NPM_METADATA_REPORT=/tmp/npm-release-p2.json \
-  tools/dev-test.sh p2 release npm_metadata ''
 NPM_METADATA_RUN=1 NPM_METADATA_ITERATIONS=5 NPM_METADATA_REPORT=/tmp/npm-release-p3.json \
-  tools/dev-test.sh p3 release npm_metadata ''
+  tools/dev-test.sh stock release npm_metadata ''
 ```
 
 The historical `npm-metadata-v1` schema does not record enough build provenance to

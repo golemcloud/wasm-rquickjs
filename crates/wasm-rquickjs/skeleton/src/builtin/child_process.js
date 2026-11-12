@@ -632,10 +632,6 @@ function completedInlineSession(result) {
     return { beforeExit() {}, finish() { return result; } };
 }
 
-function runInline(command, args, options) {
-    return beginInline(command, args, options, false).finish();
-}
-
 // Native children reuse the CLI loader but retain its process view and output
 // interception until their own event loop has reached natural completion.
 function beginInline(command, args, options, isolated) {
@@ -2231,30 +2227,10 @@ export function exec(command, options, callback) {
 
 export function execFile(file, args, options, callback) {
     const normalized = normalizeExecFileParams(args, options, callback);
-    const backend = getProcessBackend();
-    if ((backend && backend.spawn) || childNative.supports_isolation()) {
-        const resolvedOptions = normalizeBackendExecOptions(normalized.options);
-        return collectExecChild(spawnCommand(String(file), normalized.args, resolvedOptions, resolvedOptions.maxBuffer),
-            resolvedOptions, normalized.callback,
-            result => createExecFileError(file, normalized.args, result));
-    }
-    const child = createExecChildProcess();
-    const resolvedOptions = cloneObject(normalized.options);
-
-    if (resolvedOptions.encoding === undefined) {
-        resolvedOptions.encoding = 'utf8';
-    }
-
-    const result = convertSpawnResultEncoding(
-        spawnSync(String(file), normalized.args, resolvedOptions),
-        resolvedOptions,
-    );
-    const error = createExecFileError(file, normalized.args, result);
-    child.spawnfile = String(file);
-    child.spawnargs = [String(file)].concat(normalized.args);
-    finishExecChild(child, normalized.callback, error, result);
-
-    return child;
+    const resolvedOptions = normalizeBackendExecOptions(normalized.options);
+    return collectExecChild(spawnCommand(String(file), normalized.args, resolvedOptions, resolvedOptions.maxBuffer),
+        resolvedOptions, normalized.callback,
+        result => createExecFileError(file, normalized.args, result));
 }
 
 function promisifyExec(fn) {
@@ -2369,7 +2345,7 @@ export function spawn(command, args, options) {
 
 function spawnCommand(command, args, options, maxBuffer) {
     ({ args, options } = normalizeSpawnParams(args, options));
-    if (childNative.supports_isolation() && !options.shell) {
+    if (!options.shell) {
         const local = resolveBackendInlineCommand(String(command), args, options);
         if (local) return spawnNode(local.command, local.args, options, maxBuffer);
     }
@@ -2516,15 +2492,12 @@ export function spawnSync(command, args, options) {
             unsupportedSpawnSyncResult(cmd);
     }
 
-    if (childNative.supports_isolation()) {
-        const request = nodeRequest(cmd, resolvedArgs, normalizedOptions, true);
-        const native = new childNative.Child(JSON.stringify(request));
-        const state = JSON.parse(native.runSync());
-        const output = [[], []];
-        deliverNodeOutput(state.events, request.options.stdio, (stdout, bytes) => output[stdout ? 0 : 1].push(bytes));
-        return nodeResult(state.result, request, output.map(chunks => Buffer.concat(chunks)), true);
-    }
-    return runInline(cmd, resolvedArgs, normalizedOptions);
+    const request = nodeRequest(cmd, resolvedArgs, normalizedOptions, true);
+    const native = new childNative.Child(JSON.stringify(request));
+    const state = JSON.parse(native.runSync());
+    const output = [[], []];
+    deliverNodeOutput(state.events, request.options.stdio, (stdout, bytes) => output[stdout ? 0 : 1].push(bytes));
+    return nodeResult(state.result, request, output.map(chunks => Buffer.concat(chunks)), true);
 }
 
 function nodeSignal(signal) {
