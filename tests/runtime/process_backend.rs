@@ -336,26 +336,36 @@ async fn local_node_child_stack_exhaustion_fails_spawn(
 async fn local_node_child_failing_uncaught_handler_is_fatal(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    for (source, after_return, handled) in [
-        ("process", false, "listener\nhandler immediate listener\n"),
-        (
-            "domain",
-            false,
-            "listener\ndomain-handler immediate listener\n",
-        ),
-        (
-            "process",
-            true,
-            "body-returned\nlistener\nhandler immediate listener\n",
-        ),
-    ] {
-        let case = format!("{source}, after return: {after_return}");
+    let mut cases = vec![
+        ("domain", "error", false),
+        ("process", "error", false),
+        ("process", "error", true),
+    ];
+    // Reading or formatting these values throws; the failure must still be fatal.
+    for thrown in ["nullproto", "stackgetter", "proxy"] {
+        cases.push(("process", thrown, false));
+        cases.push(("process", thrown, true));
+    }
+    for (source, thrown, after_return) in cases {
+        let case = format!("{source}, {thrown}, after return: {after_return}");
+        let handler = if source == "domain" {
+            "domain-handler"
+        } else {
+            "handler"
+        };
+        let before = if after_return { "body-returned\n" } else { "" };
+        let handled = format!("{before}listener\n{handler} immediate listener\n");
+        let reported = match thrown {
+            "nullproto" | "proxy" => "could not be formatted",
+            _ => "handler failure",
+        };
         let mut instance = TestInstance::new(compiled.wasm_path()).await?;
         instance.set_epoch_deadline(30);
         std::fs::write(
             instance.temp_dir_path().join("isolated-child-probe.json"),
             serde_json::to_string(&serde_json::json!({
-                "mode": "handler-throws", "source": source, "afterReturn": after_return,
+                "mode": "handler-throws", "source": source, "thrown": thrown,
+                "afterReturn": after_return,
             }))?,
         )?;
         let (result, _, stderr) = tokio::time::timeout(
@@ -372,8 +382,7 @@ async fn local_node_child_failing_uncaught_handler_is_fatal(
             "{case}: run continued after the failing handler: {result:?}"
         );
         assert!(
-            stderr.contains("uncaught exception handler failed")
-                && stderr.contains("handler failure"),
+            stderr.contains("uncaught exception handler failed") && stderr.contains(reported),
             "{case}: unexpected failure: {stderr}"
         );
     }

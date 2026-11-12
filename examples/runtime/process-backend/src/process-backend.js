@@ -51,6 +51,15 @@ async function checkLocalChildLifetime(api) {
     return true;
 }
 
+// Values an uncaughtException handler throws in the handler-throws modes. Reading or
+// formatting all but the first throws.
+const HANDLER_THROWS = {
+    error: `new Error('handler failure')`,
+    nullproto: `Object.create(null)`,
+    stackgetter: `Object.defineProperty(new Error('handler failure'), 'stack', { get() { throw new Error('stack getter'); } })`,
+    proxy: `new Proxy({}, { get() { throw new Error('proxy get'); } })`,
+};
+
 export async function run() {
     if (existsSync('/isolated-child-probe.json')) {
         function runChild(source) {
@@ -710,9 +719,10 @@ export async function run() {
                 // The listener enters d itself: emitters created in d.run do not enter it on emit.
                 enter = () => d.enter();
             } else {
+                const thrown = new Function('return ' + HANDLER_THROWS[config.thrown ?? 'error']);
                 process.on('uncaughtException', error => {
                     log('handler ' + error.message);
-                    throw new Error('handler failure');
+                    throw thrown();
                 });
             }
             const child = spawn(process.execPath, ['-e', `process.stdout.write('only');`]);
@@ -739,20 +749,50 @@ export async function run() {
             }
         } else if (config.mode === 'handler-throws-child') {
             // A child runtime owns its handler failure: the child exits 7 and its parent goes on.
-            const result = spawnSync(process.execPath, ['-e', `
-                process.on('uncaughtException', () => { throw new Error('child handler failure'); });
-                const grandchild = require('node:child_process').spawn(process.execPath,
-                    ['-e', "process.stdout.write('only')"]);
-                grandchild.on('error', error => process.stdout.write('error ' + error.message));
-                grandchild.on('close', () => process.stdout.write('close'));
-                grandchild.stdout.on('data', () => {
-                    setTimeout(() => process.stdout.write('after-failure'), 0);
-                    throw new Error('grandchild listener');
-                });
+            // This holds when reading or formatting the thrown value throws, through both the
+            // child_process listener and queueMicrotask routes; an explicit exit keeps its code.
+            const triggers = {
+                listener: `const grandchild = require('node:child_process').spawn(process.execPath,
+                        ['-e', "process.stdout.write('only')"]);
+                    grandchild.on('error', error => process.stdout.write('error ' + error.message));
+                    grandchild.on('close', () => process.stdout.write('close'));
+                    grandchild.stdout.on('data', () => {
+                        setTimeout(() => process.stdout.write('after-failure'), 0);
+                        throw new Error('grandchild listener');
+                    });`,
+                microtask: `queueMicrotask(() => {
+                        setTimeout(() => process.stdout.write('after-failure'), 0);
+                        throw new Error('queued failure');
+                    });`,
+            };
+            const reported = {
+                error: /child handler failure/, nullproto: /could not be formatted/,
+                stackgetter: /child handler failure/, proxy: /could not be formatted/,
+            };
+            for (const [route, trigger] of Object.entries(triggers)) {
+                for (const [kind, source] of Object.entries(HANDLER_THROWS)) {
+                    const result = spawnSync(process.execPath, ['-e', `
+                        process.on('uncaughtException', () => { throw ${source.replace('handler failure', 'child handler failure')}; });
+                        ${trigger}
+                    `], { encoding: 'utf8' });
+                    const name = route + '/' + kind;
+                    assert.equal(result.status, 7, name + ': ' + result.stderr);
+                    assert.equal(result.stdout, '', name);
+                    assert.match(result.stderr, reported[kind], name);
+                }
+                const exited = spawnSync(process.execPath, ['-e', `
+                    process.on('uncaughtException', () => process.exit(5));
+                    ${trigger}
+                `], { encoding: 'utf8' });
+                assert.equal(exited.status, 5, route + '/exit: ' + exited.stderr);
+                assert.equal(exited.stdout, '', route + '/exit');
+            }
+            const handled = spawnSync(process.execPath, ['-e', `
+                process.on('uncaughtException', () => process.stdout.write('handled'));
+                queueMicrotask(() => { throw ${HANDLER_THROWS.proxy}; });
             `], { encoding: 'utf8' });
-            assert.equal(result.status, 7, result.stderr);
-            assert.equal(result.stdout, '');
-            assert.match(result.stderr, /child handler failure/);
+            assert.equal(handled.status, 0, handled.stderr);
+            assert.equal(handled.stdout, 'handled');
         } else {
             await check(basic, expected);
         }

@@ -23,7 +23,18 @@ function createNotSupportedError(method) {
     return err;
 }
 
+const UNFORMATTABLE_ERROR = 'Uncaught exception: the thrown value could not be formatted\n';
+
+// Reporting must not fail: a thrown value's getters, proxy traps or coercions can throw.
 function formatErrorForStderr(err) {
+    try { return formatErrorText(err); }
+    catch (_) {
+        try { return String(err) + '\n'; }
+        catch (_) { return UNFORMATTABLE_ERROR; }
+    }
+}
+
+function formatErrorText(err) {
     let text;
     if (err && err.stack) {
         text = String(err.stack);
@@ -776,20 +787,27 @@ function beginInline(command, args, options, isolated) {
 
     function handleError(err, handlerFailed = false) {
         failed = true;
-        if (firstExitCode !== null) {
-            status = firstExitCode;
-            reportFirstExitError();
-        } else if (err && err.__isProcessExit) {
-            status = toNumber(err.code || 0);
-        } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
-            status = 9;
-            capture(false, String(command) + ': ' + err.message + '\n');
-        } else {
-            status = handlerFailed ? 7 : 1;
-            if (checkSyntaxMode && currentScriptPath) capture(false, currentScriptPath + '\n');
-            capture(false, formatErrorForStderr(err));
+        // Reading a thrown value can throw. The failure keeps its default status, and the
+        // child stops either way.
+        status = handlerFailed ? 7 : 1;
+        try {
+            if (firstExitCode !== null) {
+                status = firstExitCode;
+                reportFirstExitError();
+            } else if (err && err.__isProcessExit) {
+                status = toNumber(err.code || 0);
+            } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
+                status = 9;
+                capture(false, String(command) + ': ' + err.message + '\n');
+            } else {
+                if (checkSyntaxMode && currentScriptPath) capture(false, currentScriptPath + '\n');
+                capture(false, formatErrorForStderr(err));
+            }
+        } catch (_) {
+            capture(false, UNFORMATTABLE_ERROR);
+        } finally {
+            if (isolated) childNative.stop_child();
         }
-        if (isolated) childNative.stop_child();
     }
 
     function execute() {
@@ -827,7 +845,9 @@ function beginInline(command, args, options, isolated) {
                 return oldQueueMicrotask(() => {
                     try { callback(); }
                     catch (error) {
-                        if (error && error.__isProcessExit) {
+                        let isProcessExit = false;
+                        try { isProcessExit = !!(error && error.__isProcessExit); } catch (_) {}
+                        if (isProcessExit) {
                             handleError(error);
                         } else {
                             try { handleUncaught(error); }
