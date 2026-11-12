@@ -306,9 +306,9 @@ If a vendored node_compat test fails because it relies on HTTP features that `wa
 
 The generated crates support feature flags:
 - `logging` - Enable `wasi:logging` for JavaScript console API
-- `http` - Enable `wasi:http` for JavaScript fetch API
+- `p3` - Required; enables the `wit-bindgen-p3` bindings dependency
 
-Both features are enabled by default in generated crates.
+The default `normal-p3` tier includes `p3` and `logging`; `fetch` always uses `wasi:http`.
 
 ## Dependencies
 

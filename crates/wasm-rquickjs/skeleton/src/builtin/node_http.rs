@@ -106,7 +106,7 @@ impl NodeHttpClientRequest {
             return Err(Exception::throw_message(&ctx, "Request has been aborted"));
         }
         // The request body is buffered until `finish`, so `start` only validates the URL eagerly
-        // (matching the Preview 2 path, which fails a malformed URL when the request starts).
+        // so a malformed URL fails when the request starts.
         if matches!(self.state, RequestState::Building { .. }) {
             Url::parse(&self.url)
                 .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
@@ -547,12 +547,12 @@ fn throw_http_error(ctx: &Ctx<'_>, err: &ErrorCode) -> rquickjs::Error {
 }
 
 // ---------------------------------------------------------------------------
-// wasip3 request helpers (mirrors the Preview 2 native contract).
+// wasip3 request helpers.
 // ---------------------------------------------------------------------------
 
 fn parse_method(method: &str) -> Method {
     // Match the standard methods by their canonical (upper-case) spelling only; any other token
-    // becomes an extension method with its original case preserved, exactly like the Preview 2 path.
+    // becomes an extension method with its original case preserved.
     match method {
         "GET" => Method::Get,
         "HEAD" => Method::Head,
@@ -662,7 +662,7 @@ fn fields_to_pairs(fields: &Fields) -> Vec<Vec<String>> {
 }
 
 // ---------------------------------------------------------------------------
-// JavaScript sources (shared with the Preview 2 path).
+// JavaScript sources.
 // ---------------------------------------------------------------------------
 
 pub const NODE_HTTP_JS: &str = include_str!("node_http.js");

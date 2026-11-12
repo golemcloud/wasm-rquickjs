@@ -131,8 +131,8 @@ runs, 12 test threads, and stock Wasmtime 50.0.1:
 | 24.22.3 with shim helpers | 3016 passed, 467 failed, 4468 ignored | 3014 passed, 467 failed, 4468 ignored |
 | 26.13.1 with shim helpers | 2961 passed, 503 failed, 4812 ignored | 2959 passed, 503 failed, 4812 ignored |
 
-Each pass total includes the harness unit tests; the 2 fewer passes on P3 are the 2 P2-only
-harness unit tests. Only two generated cases changed status, the same two on both targets:
+The 22.14.0 row counts generated cases only. The 24.22.3 and 26.13.1 pass totals include the
+harness unit tests; the 2 fewer passes on P3 there are the 2 P2-only harness unit tests. Only two generated cases changed status, the same two on both targets:
 
 - `parallel/test-cli-eval.js` block_02 (a 22.14.0 baseline case) fails on P2 and passes on P3.
   This moves it from exact-fail to exact-pass on both targets and out of the mapping file.
@@ -294,8 +294,8 @@ the 24.22.3 comparator was not needed for that.
 
 All of this is required for either target unless marked "26 only".
 
-1. **Pins.** 62 lines across 26 files reference 22.14.0, npm 10.9.2, `v22.0.0` or ABI 127.
-   - `.nvmrc`, `.github/workflows/ci.yaml` (2), `vendor.sh`, `config.jsonc` and `report.md`.
+1. **Pins.** 61 lines across 26 files reference 22.14.0, npm 10.9.2, `v22.0.0` or ABI 127.
+   - `.nvmrc`, `.github/workflows/ci.yaml` (1), `vendor.sh`, `config.jsonc` and `report.md`.
    - `node_compat_config_report.rs` fixtures.
    - `NODE_MODULES_APP_BASELINE_*` in `tests/runtime/node_modules_apps.rs`.
    - `NODE_BASELINE` in `tests/runtime/npm_compat.rs`.

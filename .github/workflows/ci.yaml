@@ -133,6 +133,10 @@ jobs:
             cargo test --test npm_metadata $CI_WASMTIME_FORK_FEATURES
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
+      - name: Fork-only runtime tests (Golem fork)
+        # Streaming-redirect fetch depends on a wasmtime-wasi-http fix that only the Golem
+        # fork carries; stock `test-runtime` skips these cases.
+        run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- fetch_redirect_with_ --report-time
       - name: Optimizer copy budget contracts (Golem fork)
         # Full guest templates spawn Cargo/Wasmtime compiler pools. Reuse only
         # build artifacts and bound competing cases; runtime state stays fresh.
@@ -169,10 +173,9 @@ jobs:
         with:
           cache-key: stock
           component-cache-key: stock-${{ matrix.suite }}-shared
-      # The WASI Preview 3 path does not use the Preview 2 `wasi:io/poll` pollable
-      # behavior that the Golem wasmtime fork patches, so these tests run against
-      # the stock crates.io wasmtime (no `enable-wasmtime-fork.sh`, no
-      # `use-golem-wasmtime`). This also proves P3 works on unforked wasmtime.
+      # These tests run against the stock crates.io wasmtime (no
+      # `enable-wasmtime-fork.sh`, no `use-golem-wasmtime`), which proves P3 works on
+      # unforked wasmtime. Cases that need a fork-only fix run in `test-other`.
       - name: Install wasmtime CLI
         if: matrix.suite == 'generation'
         # `p3_generation` shells out to the `wasmtime` CLI to run generated P3

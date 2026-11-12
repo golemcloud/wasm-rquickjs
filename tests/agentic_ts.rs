@@ -1312,10 +1312,12 @@ fn validate_release_baseline_metadata(path: &Utf8Path, report: &Value) -> anyhow
             && report["environment"]["unoptimized"].is_null(),
         "{path} does not use the pinned clean-state release settings"
     );
-    let expected_lock_kind = if target == "p2" {
-        "p2-shadow"
+    // Historical P2 reports used the shadow lock; P3 reports use the workspace lock, or the
+    // fork shadow lock when measured with `tools/dev-test.sh fork`.
+    let expected_lock_kinds: &[&str] = if target == "p2" {
+        &["p2-shadow"]
     } else {
-        "workspace"
+        &["workspace", "fork-shadow"]
     };
     anyhow::ensure!(
         report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
@@ -1325,7 +1327,9 @@ fn validate_release_baseline_metadata(path: &Utf8Path, report: &Value) -> anyhow
             && report["component"]["bytes"]
                 .as_u64()
                 .is_some_and(|bytes| bytes > 0)
-            && report["environment"]["hostDependencyGraph"]["kind"] == expected_lock_kind
+            && report["environment"]["hostDependencyGraph"]["kind"]
+                .as_str()
+                .is_some_and(|kind| expected_lock_kinds.contains(&kind))
             && is_blake3_hash(&report["environment"]["hostDependencyGraph"]["lockBlake3"])
             && report["environment"]["commitHint"]
                 .as_str()
