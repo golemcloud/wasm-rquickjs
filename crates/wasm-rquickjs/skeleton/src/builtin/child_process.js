@@ -2618,7 +2618,11 @@ function spawnNode(command, args, options, maxBuffer) {
             try { globalThis.__wasm_rquickjs_handleUncaughtError(error, process.domain || null); }
             catch (handlerError) {
                 handlerFailed = completed = true;
-                globalThis.__wasm_rquickjs_raiseHandlerFailure(handlerError);
+                // End the context that owns the handler at once, whichever driver runs this
+                // job: a child runtime exits 7, and the component itself traps.
+                const childUncaught = globalThis.__wasm_rquickjs_child_uncaught;
+                if (typeof childUncaught === 'function') childUncaught(handlerError, true);
+                else childNative.fail_uncaught_handler(formatErrorForStderr(handlerError));
             }
         }
     };

@@ -635,9 +635,6 @@ function __drainNextTickQueue() {
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         drained += 1;
-        if (entry.handlerFailure) {
-            throw entry.error;
-        }
         try {
             if (entry.domain) {
                 entry.domain.enter();
@@ -674,14 +671,6 @@ function __requestNextTickWakeup() {
 // draining nextTick before QuickJS jobs and host callbacks.
 globalThis.__wasm_rquickjs_drainNextTick = __drainNextTickQueue;
 globalThis.__wasm_rquickjs_requestNextTickWakeup = __requestNextTickWakeup;
-// A throwing uncaught-exception or domain error handler is fatal, as in Node.
-// Callers that ran the handler outside this queue rethrow its failure here, ahead
-// of pending ticks and without running the handler again, so it reaches the host
-// checkpoint just as a handler failure for a nextTick callback does.
-globalThis.__wasm_rquickjs_raiseHandlerFailure = function raiseHandlerFailure(error) {
-    __nextTickQueue.unshift({ handlerFailure: true, error });
-    __requestNextTickWakeup();
-};
 
 process.nextTick = function processNextTick(callback, ...args) {
     if (typeof callback !== 'function') {

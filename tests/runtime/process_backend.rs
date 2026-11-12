@@ -336,17 +336,27 @@ async fn local_node_child_stack_exhaustion_fails_spawn(
 async fn local_node_child_failing_uncaught_handler_is_fatal(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
-    for (source, handled) in [
-        ("process", "handler immediate listener\n"),
-        ("domain", "domain-handler immediate listener\n"),
+    for (source, after_return, handled) in [
+        ("process", false, "listener\nhandler immediate listener\n"),
+        (
+            "domain",
+            false,
+            "listener\ndomain-handler immediate listener\n",
+        ),
+        (
+            "process",
+            true,
+            "body-returned\nlistener\nhandler immediate listener\n",
+        ),
     ] {
+        let case = format!("{source}, after return: {after_return}");
         let mut instance = TestInstance::new(compiled.wasm_path()).await?;
         instance.set_epoch_deadline(30);
         std::fs::write(
             instance.temp_dir_path().join("isolated-child-probe.json"),
-            serde_json::to_string(
-                &serde_json::json!({ "mode": "handler-throws", "source": source }),
-            )?,
+            serde_json::to_string(&serde_json::json!({
+                "mode": "handler-throws", "source": source, "afterReturn": after_return,
+            }))?,
         )?;
         let (result, _, stderr) = tokio::time::timeout(
             std::time::Duration::from_secs(30),
@@ -355,17 +365,28 @@ async fn local_node_child_failing_uncaught_handler_is_fatal(
         .await?;
         let log = std::fs::read_to_string(instance.temp_dir_path().join("handler-log"))?;
         // The handler's failure belongs to the parent: it must neither reach the child as
-        // 'error' nor let the child or the run continue.
-        assert_eq!(log, handled, "{source}: events after the failing handler");
+        // 'error' nor let the child, later ticks, jobs and timers, or the run continue.
+        assert_eq!(log, handled, "{case}: progress after the failing handler");
         assert!(
             result.is_err(),
-            "{source}: run continued after the failing handler: {result:?}"
+            "{case}: run continued after the failing handler: {result:?}"
         );
-        // The run fails through the fatal turn checkpoint, not a deadline or a hang.
         assert!(
-            stderr.contains("failed to run process turn checkpoint"),
-            "{source}: unexpected failure: {stderr}"
+            stderr.contains("uncaught exception handler failed")
+                && stderr.contains("handler failure"),
+            "{case}: unexpected failure: {stderr}"
         );
     }
     Ok(())
+}
+
+#[test]
+async fn local_node_child_failing_uncaught_handler_ends_only_its_child(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "handler-throws-child" }),
+    )
+    .await
 }

@@ -29,6 +29,13 @@ pub mod native_module {
         }
     }
 
+    /// A throwing uncaught-exception or domain error handler is fatal, as in Node. The
+    /// component has no process to exit, so it traps before any further JS runs.
+    #[rquickjs::function]
+    pub fn fail_uncaught_handler(message: String) {
+        panic!("uncaught exception handler failed: {message}");
+    }
+
     // The module macro does not preserve cfg on a class re-export.
     #[qjs(declare)]
     pub fn declare(exports: &rquickjs::module::Declarations) -> rquickjs::Result<()> {

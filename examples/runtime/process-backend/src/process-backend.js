@@ -697,7 +697,8 @@ export async function run() {
             assert.equal(run(`process.stdout.write('after cancel');`).stdout, 'after cancel');
         } else if (config.mode === 'handler-throws') {
             // In Node a throwing uncaughtException or domain error handler is fatal (exit 7):
-            // the child reports no 'error', 'exit' or 'close', and later timers never run.
+            // nothing runs after it. The probes for later progress are armed only when the
+            // listener throws, so the child's start-up time cannot interleave them.
             const log = line => appendFileSync('/handler-log', line + '\n');
             let enter = () => {};
             if (config.source === 'domain') {
@@ -717,11 +718,41 @@ export async function run() {
             const child = spawn(process.execPath, ['-e', `process.stdout.write('only');`]);
             child.on('error', error => log('child-error ' + error.message));
             child.on('exit', code => log('child-exit ' + code));
-            child.on('close', (code, signal) => log('child-close ' + code + ' ' + signal));
-            child.stdout.on('data', () => { enter(); throw new Error('immediate listener'); });
-            setTimeout(() => log('later-timer'), 100);
-            await new Promise(resolve => setTimeout(resolve, 300));
-            log('run-continued');
+            const closed = new Promise(resolve => child.on('close', (code, signal) => {
+                log('child-close ' + code + ' ' + signal);
+                resolve();
+            }));
+            child.stdout.on('data', () => {
+                log('listener');
+                process.nextTick(() => log('after-failure tick'));
+                queueMicrotask(() => log('after-failure microtask'));
+                setTimeout(() => log('after-failure timer'), 0);
+                enter();
+                throw new Error('immediate listener');
+            });
+            // Either the export body waits for the child, or it returns first and the
+            // failure happens while the runtime drains after the body.
+            if (config.afterReturn) log('body-returned');
+            else {
+                await closed;
+                log('run-continued');
+            }
+        } else if (config.mode === 'handler-throws-child') {
+            // A child runtime owns its handler failure: the child exits 7 and its parent goes on.
+            const result = spawnSync(process.execPath, ['-e', `
+                process.on('uncaughtException', () => { throw new Error('child handler failure'); });
+                const grandchild = require('node:child_process').spawn(process.execPath,
+                    ['-e', "process.stdout.write('only')"]);
+                grandchild.on('error', error => process.stdout.write('error ' + error.message));
+                grandchild.on('close', () => process.stdout.write('close'));
+                grandchild.stdout.on('data', () => {
+                    setTimeout(() => process.stdout.write('after-failure'), 0);
+                    throw new Error('grandchild listener');
+                });
+            `], { encoding: 'utf8' });
+            assert.equal(result.status, 7, result.stderr);
+            assert.equal(result.stdout, '');
+            assert.match(result.stderr, /child handler failure/);
         } else {
             await check(basic, expected);
         }
