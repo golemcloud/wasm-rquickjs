@@ -2605,11 +2605,13 @@ function spawnNode(command, args, options, maxBuffer) {
     child.stdio = [child.stdin, child.stdout, child.stderr];
     let completed = false;
     let abortError;
-    // Listener exceptions belong to the parent, not to the native output pump.
-    // Use the ordinary nextTick uncaught-error path without cancelling a child.
+    // Listener exceptions belong to the parent, not to the native output pump, and do
+    // not cancel the child. Report them as uncaught at once, as Node does for an
+    // exception thrown from an I/O callback, so they precede later events such as
+    // 'close' that the pump may deliver in the same turn.
     const dispatch = callback => {
         try { callback(); }
-        catch (error) { process.nextTick(() => { throw error; }); }
+        catch (error) { globalThis.__wasm_rquickjs_handleUncaughtError(error, process.domain || null); }
     };
     child.kill = signal => {
         const selected = nodeSignal(signal ?? 'SIGTERM');
