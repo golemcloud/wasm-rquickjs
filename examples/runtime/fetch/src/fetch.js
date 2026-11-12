@@ -29,6 +29,19 @@ export async function postJsonAndGet(port) {
 
     await dumpResponse(response1);
     await dumpResponse(response2);
+
+    const request3 = new Request(`http://localhost:${port}/echo`, {
+        method: "POST",
+        body: "original"
+    });
+    const response3 = await fetch(request3, { body: "overridden" });
+    console.log(`Override bodyUsed: ${request3.bodyUsed}`);
+    console.log(`Override body: ${await response3.text()}`);
+
+    const request4 = new Request(request3, { body: "overridden-in-request" });
+    const response4 = await fetch(request4);
+    console.log(`Request override method: ${request4.method}`);
+    console.log(`Request override body: ${await response4.text()}`);
 }
 
 export async function postAndGetAsArrayBuffer(port) {
