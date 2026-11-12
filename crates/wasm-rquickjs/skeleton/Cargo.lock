@@ -2003,7 +2003,7 @@ dependencies = [
 [[package]]
 name = "rquickjs"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#7d11b5df65b1d956de89f8bf4757c766176beb29"
+source = "git+https://github.com/golemcloud/rquickjs?branch=promise-hooks-for-await#707cb285fd1becb4e4552e9ff8bc4835ab8fbba5"
 dependencies = [
  "rquickjs-core",
  "rquickjs-macro",
@@ -2088,7 +2088,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-core"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#7d11b5df65b1d956de89f8bf4757c766176beb29"
+source = "git+https://github.com/golemcloud/rquickjs?branch=promise-hooks-for-await#707cb285fd1becb4e4552e9ff8bc4835ab8fbba5"
 dependencies = [
  "async-lock",
  "hashbrown 0.17.1",
@@ -2099,7 +2099,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-macro"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#7d11b5df65b1d956de89f8bf4757c766176beb29"
+source = "git+https://github.com/golemcloud/rquickjs?branch=promise-hooks-for-await#707cb285fd1becb4e4552e9ff8bc4835ab8fbba5"
 dependencies = [
  "convert_case",
  "indexmap",
@@ -2113,7 +2113,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-sys"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#7d11b5df65b1d956de89f8bf4757c766176beb29"
+source = "git+https://github.com/golemcloud/rquickjs?branch=promise-hooks-for-await#707cb285fd1becb4e4552e9ff8bc4835ab8fbba5"
 dependencies = [
  "bindgen",
  "cc",

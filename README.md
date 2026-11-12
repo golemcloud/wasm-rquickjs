@@ -956,6 +956,36 @@ and filesystem access.
 </details>
 
 <details>
+<summary><strong><code>wasm-rquickjs:custom-invocation-context</code></strong></summary>
+
+Opening a scope needs a world that imports `golem:durability/durability@1.6.0` with
+`exchange-custom-invocation-context`; elsewhere `enterLive` throws and every token is the root.
+For such worlds `generate-dts` also writes `wasm-rquickjs-custom-invocation-context.d.ts`. Keep
+the module external when bundling.
+
+The runtime keeps one current token, which names the custom durable invocation that running code
+belongs to. Promise reactions (including native `await` and async generators), timers,
+`setImmediate`, `process.nextTick`, `queueMicrotask`, async imports and `fetch`/`node:http`
+requests run in the token that was current when they were registered or called. The runtime calls
+`exchange-custom-invocation-context` only when the effective token changes, and it reinstalls the
+root before an export returns. Use this module instead of calling the exchange directly.
+
+- `capture()` returns the current token. Tokens are stable objects compared by identity.
+- `swap(next)` makes `next` current and returns the previous token.
+- `run(token, fn)` calls `fn` with `token` current and restores the previous token.
+- `enterLive(live)` is called in the parent's scope after asynchronous begin. It calls
+  `live.enter()`, makes the child current and returns the child token.
+- `close(token)` closes a scope after its invocation finished or was dropped. It works while
+  another token is current and throws while the scope has open children.
+
+A token of a closed scope runs in its nearest open ancestor, and a token of an earlier export call
+runs in the current root. Both cases are reported once on stderr. No stale snapshot is installed.
+The promise hook is installed when the first scope opens, so components that never open one pay
+nothing for it.
+
+</details>
+
+<details>
 <summary><strong><code>node:inspector</code></strong> (stub)</summary>
 
 Compatibility stubs — no V8 inspector in WASM.

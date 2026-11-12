@@ -1,0 +1,18 @@
+package test:custom-invocation-context;
+
+// Host effects that record the custom invocation context installed when they start.
+interface effects {
+  effect: async func(label: string, delay-ms: u32);
+  sync-effect: func(label: string);
+  exchange-count: func() -> u32;
+}
+
+world custom-invocation-context {
+  import golem:durability/durability@1.6.0;
+  import effects;
+
+  export run: async func() -> string;
+  export run-after: async func() -> string;
+  export run-plain: async func() -> string;
+  export run-edge-cases: async func() -> string;
+}

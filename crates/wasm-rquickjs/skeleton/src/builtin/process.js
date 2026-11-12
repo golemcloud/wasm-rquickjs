@@ -11,6 +11,7 @@ import {
     typescript_runtime_mode,
     await_runtime_idle
 } from '__wasm_rquickjs_builtin/process_native';
+import { capture_for_callback as __captureScope, swap as __swapScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
 
 import EventEmitter from 'node:events';
 import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
@@ -635,6 +636,7 @@ function __drainNextTickQueue() {
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         drained += 1;
+        const previousScope = entry.scope === undefined ? undefined : __swapScope(entry.scope);
         try {
             if (entry.domain) {
                 entry.domain.enter();
@@ -648,6 +650,10 @@ function __drainNextTickQueue() {
                 entry.domain.exit();
             }
             __wasm_rquickjs_handleUncaughtError(e, entry.domain);
+        } finally {
+            if (previousScope !== undefined) {
+                __swapScope(previousScope);
+            }
         }
     }
     return drained;
@@ -678,7 +684,7 @@ process.nextTick = function processNextTick(callback, ...args) {
             'The "callback" argument must be of type function.' + _invalidArgTypeHelper(callback));
     }
     const domain = process.domain || null;
-    __nextTickQueue.push({ callback, args, domain });
+    __nextTickQueue.push({ callback, args, domain, scope: __captureScope() });
     __requestNextTickWakeup();
 };
 

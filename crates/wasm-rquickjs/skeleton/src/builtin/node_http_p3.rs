@@ -28,8 +28,10 @@
 //! chunk-by-chunk (not read to completion eagerly).
 
 use super::http_body::ResponseBody;
+use crate::internal::custom_invocation_context::{ScopedImport, scoped_import};
 use futures::future::{AbortHandle, Abortable};
-use rquickjs::class::Trace;
+use rquickjs::class::{OwnedBorrowMut, Trace};
+use rquickjs::function::This;
 use rquickjs::prelude::List;
 use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 use std::cell::RefCell;
@@ -221,7 +223,18 @@ impl NodeHttpClientRequest {
         Ok(())
     }
 
-    pub async fn finish<'js>(
+    /// Sends the request. The send is built during the JavaScript call, so the request belongs
+    /// to the caller's custom invocation context.
+    pub fn finish<'js>(
+        this: This<OwnedBorrowMut<'js, Self>>,
+        ctx: Ctx<'js>,
+        chunk: Option<TypedArray<'js, u8>>,
+    ) -> ScopedImport<'js, rquickjs::Result<()>> {
+        let mut this = this.0;
+        scoped_import(async move { this.finish_inner(ctx, chunk).await })
+    }
+
+    async fn finish_inner<'js>(
         &mut self,
         ctx: Ctx<'js>,
         chunk: Option<TypedArray<'js, u8>>,
@@ -282,33 +295,35 @@ impl NodeHttpClientRequest {
             &path_with_query,
         )?;
 
-        let send_future: SendFuture = Box::pin(async move {
-            let write_fut = async move {
-                // `write_all` returns any bytes it could not deliver; dropping the writer closes
-                // the request body stream and dropping the trailers writer resolves it to the
-                // default `Ok(None)` (no trailers).
-                #[cfg(feature = "net-write-profiling")]
-                let body_len = body.len();
-                #[cfg(feature = "net-write-profiling")]
-                let write_started_at = Instant::now();
-                let _remaining = body_tx.write_all(body).await;
-                #[cfg(feature = "net-write-profiling")]
-                eprintln!(
-                    "[node-http-write-profile]{}",
-                    serde_json::json!({
-                        "bytes": body_len,
-                        "completedBytes": body_len - _remaining.len(),
-                        "writeAllCalls": 1,
-                        "elapsedNs": write_started_at.elapsed().as_nanos() as u64,
-                    })
-                );
-                drop(body_tx);
-                drop(trailers_tx);
-            };
-            let (send_result, ()) =
-                futures::future::join(wasip3::http::client::send(request), write_fut).await;
-            send_result
-        });
+        let send_future: SendFuture = Box::pin(crate::internal::custom_invocation_context::scoped(
+            async move {
+                let write_fut = async move {
+                    // `write_all` returns any bytes it could not deliver; dropping the writer closes
+                    // the request body stream and dropping the trailers writer resolves it to the
+                    // default `Ok(None)` (no trailers).
+                    #[cfg(feature = "net-write-profiling")]
+                    let body_len = body.len();
+                    #[cfg(feature = "net-write-profiling")]
+                    let write_started_at = Instant::now();
+                    let _remaining = body_tx.write_all(body).await;
+                    #[cfg(feature = "net-write-profiling")]
+                    eprintln!(
+                        "[node-http-write-profile]{}",
+                        serde_json::json!({
+                            "bytes": body_len,
+                            "completedBytes": body_len - _remaining.len(),
+                            "writeAllCalls": 1,
+                            "elapsedNs": write_started_at.elapsed().as_nanos() as u64,
+                        })
+                    );
+                    drop(body_tx);
+                    drop(trailers_tx);
+                };
+                let (send_result, ()) =
+                    futures::future::join(wasip3::http::client::send(request), write_fut).await;
+                send_result
+            },
+        ));
 
         self.state = RequestState::Sending { send_future };
         Ok(())
@@ -343,18 +358,23 @@ impl NodeHttpClientRequest {
         }
     }
 
-    pub async fn end<'js>(
-        &mut self,
+    /// Sends the request and waits for the response head, in the caller's custom invocation
+    /// context (see [`Self::finish`]).
+    pub fn end<'js>(
+        this: This<OwnedBorrowMut<'js, Self>>,
         ctx: Ctx<'js>,
         chunk: Option<TypedArray<'js, u8>>,
-    ) -> rquickjs::Result<()> {
-        if self.aborted {
-            return Err(Exception::throw_message(&ctx, "Request has been aborted"));
-        }
+    ) -> ScopedImport<'js, rquickjs::Result<()>> {
+        let mut this = this.0;
+        scoped_import(async move {
+            if this.aborted {
+                return Err(Exception::throw_message(&ctx, "Request has been aborted"));
+            }
 
-        self.finish(ctx.clone(), chunk).await?;
-        self.wait_for_response(ctx).await?;
-        Ok(())
+            this.finish_inner(ctx.clone(), chunk).await?;
+            this.wait_for_response(ctx).await?;
+            Ok(())
+        })
     }
 
     pub fn get_response<'js>(&mut self, _ctx: Ctx<'js>) -> Option<NodeHttpIncomingResponse> {
