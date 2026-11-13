@@ -47,15 +47,13 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
         }
     }
 
-    // Preview 2 permits every exported JavaScript function to return a Promise. Preview 3 mirrors
-    // the WIT function kind, so plain functions stay synchronous and `async func`s return Promises.
-    let async_by_default = !context.target.is_p3();
+    // Declarations mirror the WIT function kind: plain functions stay synchronous and
+    // `async func`s return Promises.
     declare_functions_and_resources(
         &mut result,
         context,
         &global_exports,
         &global_types,
-        async_by_default,
         true,
         &VecDeque::new(),
     )?;
@@ -82,7 +80,6 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
             context,
             &interface_exports,
             &interface_types,
-            async_by_default,
             true,
             &interface_stack,
         )?;
@@ -162,7 +159,6 @@ pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<Vec
                 &interface_imports,
                 &interface_types,
                 false,
-                false,
                 &interface_stack,
             )?;
 
@@ -192,7 +188,6 @@ fn declare_functions_and_resources(
     context: &GeneratorContext,
     functions: &[(String, &Function)],
     types: &[TypeId],
-    async_: bool,
     is_export: bool,
     interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<()> {
@@ -213,13 +208,11 @@ fn declare_functions_and_resources(
     for (name, function) in functions {
         match &function.kind {
             FunctionKind::Freestanding | FunctionKind::AsyncFreestanding => {
-                // A WIT `async func` (`AsyncFreestanding`) always presents to JS as a
-                // Promise-returning function, regardless of the module-level `async_` flag: an
-                // async export returns a `Promise`, and an imported `async func` is bridged to a
-                // JS function that returns a `Promise`. A plain `func` follows the module-level
-                // convention (`async_` is `true` for the Preview 3 export module, `false` for
-                // imported interfaces).
-                let is_async = async_ || matches!(function.kind, FunctionKind::AsyncFreestanding);
+                // A WIT `async func` (`AsyncFreestanding`) presents to JS as a Promise-returning
+                // function: an async export returns a `Promise`, and an imported `async func` is
+                // bridged to a JS function that returns a `Promise`. A plain `func` is
+                // synchronous.
+                let is_async = matches!(function.kind, FunctionKind::AsyncFreestanding);
                 let docs =
                     add_throws_to_doc(context, interface_stack, &function.result, &function.docs)?;
                 result.write_docs(&docs);
@@ -279,10 +272,8 @@ fn declare_functions_and_resources(
             result.write_docs(&docs);
             let js_name = escape_js_ident(get_function_name(name, function)?.to_lower_camel_case());
             let mut fun = match &function.kind {
-                FunctionKind::Method(_) if async_ => result.begin_async_method(&js_name),
                 FunctionKind::AsyncMethod(_) => result.begin_async_method(&js_name),
                 FunctionKind::Method(_) => result.begin_method(&js_name),
-                FunctionKind::Static(_) if async_ => result.begin_static_async_method(&js_name),
                 FunctionKind::AsyncStatic(_) => result.begin_static_async_method(&js_name),
                 FunctionKind::Static(_) => result.begin_static_method(&js_name),
                 FunctionKind::Constructor(_) => result.begin_constructor(),
@@ -386,7 +377,6 @@ fn define_return_type(
 ) -> anyhow::Result<()> {
     if let Some(result_type) = &function.result {
         if is_export
-            && context.target.is_p3()
             && !matches!(
                 function.kind,
                 FunctionKind::AsyncFreestanding
@@ -611,12 +601,6 @@ fn ts_async_value_reference(
     async_value: &crate::async_values::AsyncValue,
     interface_stack: &VecDeque<InterfaceId>,
 ) -> anyhow::Result<String> {
-    if !context.target.is_p3() {
-        return Err(anyhow!(
-            "future<T> and stream<T> types are only supported by the WASI Preview 3 generation path"
-        ));
-    }
-
     let inner_ts_type = match async_value.payload {
         Some(inner) => ts_type_reference(context, &inner, false, interface_stack)?,
         None => "void".to_string(),

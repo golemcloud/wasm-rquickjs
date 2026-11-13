@@ -231,16 +231,6 @@ pub(crate) fn begin_root() {
     drop(released);
 }
 
-/// Runs one exported call of a synchronous target in a new root scope, and reinstalls that root
-/// before control returns to the host.
-#[cfg(feature = "p2")]
-pub(crate) async fn in_root<T>(call: impl Future<Output = T>) -> T {
-    begin_root();
-    let result = call.await;
-    restore_root();
-    result
-}
-
 /// Reinstalls the running root before control returns to the host.
 pub(crate) fn restore_root() {
     let root = STATE.with_borrow(|state| state.root.clone());

@@ -9,11 +9,11 @@ use std::task::{Poll, Waker};
 pub(crate) trait NativeBody {
     async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String>;
     fn discard(self);
-    #[cfg(all(feature = "p3", feature = "internal-test-execution"))]
+    #[cfg(feature = "internal-test-execution")]
     fn take_recovered_read_bytes_for_test(&self) -> usize {
         0
     }
-    #[cfg(all(feature = "p3", feature = "internal-test-execution"))]
+    #[cfg(feature = "internal-test-execution")]
     fn pause_next_ready_read_for_test(&self) -> bool {
         false
     }
@@ -110,7 +110,7 @@ impl<S: NativeBody> SharedBodyReader<S> {
         drop(self);
     }
 
-    #[cfg(all(feature = "p3", feature = "internal-test-execution"))]
+    #[cfg(feature = "internal-test-execution")]
     pub(crate) fn take_recovered_read_bytes_for_test(&self) -> usize {
         self.shared
             .borrow()
@@ -119,7 +119,7 @@ impl<S: NativeBody> SharedBodyReader<S> {
             .map_or(0, NativeBody::take_recovered_read_bytes_for_test)
     }
 
-    #[cfg(all(feature = "p3", feature = "internal-test-execution"))]
+    #[cfg(feature = "internal-test-execution")]
     pub(crate) fn pause_next_ready_read_for_test(&self) -> bool {
         self.shared
             .borrow()

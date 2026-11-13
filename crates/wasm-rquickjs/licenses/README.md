@@ -2,10 +2,10 @@
 
 `tools/check-component-licenses.sh` audits the locked Cargo dependency graph used by generated
 components. It checks both `typescript-runtime` and `typescript-transform-runtime` for the
-standard P2 `normal` and P3 `normal-p3` profiles, all targeting `wasm32-wasip2`.
+standard `normal-p3` profile, targeting `wasm32-wasip2`.
 
-The repository retains one notice per WASI generation covering the union of both public
-TypeScript feature closures rather than four near-duplicates. Build dependencies are included;
+The repository retains one notice covering the union of both public TypeScript feature
+closures rather than two near-duplicates. Build dependencies are included;
 development dependencies are not. The policy is feature-driven and intentionally does not name
 the current TypeScript backend, so replacing it changes the audited graph without bypassing the
 gate.
@@ -36,10 +36,10 @@ The rquickjs text matches the packaged root crate's license at version 0.14.0, w
 published VCS revision is `d7ef5eeae702fea24c03643064de454f1c1dd4b0`.
 
 The generator copies the matching retained notice to
-`THIRD_PARTY_COMPONENT_LICENSES.txt` in every generated crate. It is deliberately a target-specific
-superset when a user enables fewer features than the standard TypeScript profile. Distributors
+`THIRD_PARTY_COMPONENT_LICENSES.txt` in every generated crate. It is deliberately a superset when
+a user enables fewer features than the standard TypeScript profile. Distributors
 must ship that file with the compiled component and add notices for their application dependencies.
-Profiles using capabilities outside `normal` / `normal-p3` must be audited separately.
+Profiles using capabilities outside `normal-p3` must be audited separately.
 
 This Cargo audit is only one release-compliance input. It does not inventory the Rust standard
 library, `core`, `alloc`, `compiler_builtins`, a WASI SDK/sysroot, separately licensed native files

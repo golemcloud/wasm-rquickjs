@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3257/4451 (73.2%)
+**Primary compatibility (CI-enforced):** 3260/4451 (73.2%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3257 | 73.2% | 56.1% | 47.1% |
-| 🧩 known gap | 1194 | 26.8% | 20.6% | 17.3% |
+| ✅ passing (runnable) | 3260 | 73.2% | 56.1% | 47.2% |
+| 🧩 known gap | 1191 | 26.8% | 20.5% | 17.2% |
 | 🚫 WASI-impossible (excluded) | 1192 | — | 20.5% | 17.2% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1101 | — | — | 15.9% |
 | **Total** | **6911** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3257/5810 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3260/5810 (56.1%)**.
 
 ## Inventory by Module
 
@@ -33,7 +33,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks | 38 | 4 | 28 | 4 | 0 | 0 | 2 | 12.5% | 11.1% |
 | blob | 43 | 38 | 2 | 0 | 0 | 0 | 3 | 95.0% | 95.0% |
 | buffer | 180 | 172 | 0 | 1 | 1 | 0 | 6 | 100.0% | 98.9% |
-| child_process | 208 | 37 | 67 | 89 | 0 | 0 | 15 | 35.6% | 19.2% |
+| child_process | 208 | 40 | 64 | 89 | 0 | 0 | 15 | 38.5% | 20.7% |
 | cli | 32 | 9 | 21 | 0 | 0 | 0 | 2 | 30.0% | 30.0% |
 | cluster | 87 | 0 | 0 | 85 | 0 | 0 | 2 | 0.0% | 0.0% |
 | common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
@@ -147,7 +147,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-child-process-exec-abortcontroller-promisified.js` | 8 | 0 | 0 | 8 | 0 | 0 | 0 |
 | `test-child-process-exec-maxbuf.js` | 11 | 9 | 0 | 2 | 0 | 0 | 0 |
 | `test-child-process-execFile-promisified-abortController.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
-| `test-child-process-execfile-maxbuf.js` | 8 | 6 | 2 | 0 | 0 | 0 | 0 |
+| `test-child-process-execfile-maxbuf.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-child-process-execfile.js` | 8 | 4 | 3 | 1 | 0 | 0 | 0 |
 | `test-child-process-execfilesync-maxbuf.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
 | `test-child-process-execsync-maxbuf.js` | 4 | 0 | 3 | 1 | 0 | 0 | 0 |
@@ -688,7 +688,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1194)
+### known gap (1191)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -730,7 +730,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | node_compat common shim is missing ../common/wpt harness | 5 | `parallel/test-whatwg-events-event-constructors.js`, `parallel/test-whatwg-events-eventtarget-this-of-listener.js`, `parallel/test-whatwg-url-custom-searchparams-sort.js`, ... (+2) |
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
 | util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
-| Preview 2 does not enforce inline maxBuffer; util.getSystemErrorName is also unavailable | 4 | `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`, `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, ... (+1) |
+| util.getSystemErrorName is unavailable | 5 | `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`, `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, ... (+2) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |
@@ -774,7 +774,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
 | HTTP keep-alive socket identity reuse across sequential requests is not implemented | 2 | `parallel/test-http-keepalive-client.js`, `parallel/test-http-keepalive-request.js` |
 | IncomingMessage 'aborted' event is not emitted when the server destroys a keep-alive response | 2 | `parallel/test-http-client-aborted-event.js#block_00_block_00`, `parallel/test-http-client-aborted-event.js#block_01_block_01` |
-| Preview 2 inline execFile does not expose streams for caller-set encoding; Preview 3 passes | 2 | `parallel/test-child-process-execfile-maxbuf.js#block_06_block_06`, `parallel/test-child-process-execfile-maxbuf.js#block_07_block_07` |
 | TextDecoderStream invalid-encoding errors are not Node-compatible yet | 2 | `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`, `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01` |
 | WASM child emulation does not support Node.js --test CLI reporter execution | 2 | `parallel/test-runner-error-reporter.js#test_00_all_tests_failures_reported_without_fail_fast_flag`, `parallel/test-runner-error-reporter.js#test_01_fail_fast_stops_test_execution_after_first_failure` |
 | async_hooks createHook callback validation is incomplete | 2 | `parallel/test-async-hooks-constructor.js`, `parallel/test-async-wrap-constructor.js` |
@@ -916,8 +915,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | OutgoingMessage implicit Content-Length/Transfer-Encoding and Connection header behavior is not Node-compatible | 1 | `parallel/test-http-content-length.js` |
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
 | Overridden globalAgent socket bookkeeping (agent.sockets/close lifecycle) is not Node-compatible | 1 | `parallel/test-http-client-override-global-agent.js` |
-| Preview 2 does not time out inline children; util.getSystemErrorName is also unavailable | 1 | `parallel/test-child-process-spawnsync-timeout.js` |
-| Preview 2 inline children lose caller-mutated environment entries; Preview 3 passes | 1 | `parallel/test-child-process-spawnsync-env.js` |
 | QuickJS property redefinition errors use engine-specific wording; Node-compatible normalization without replacing public intrinsics is tracked by GOL-361 | 1 | `es-module/test-esm-live-binding.mjs` |
 | RSA imported-key algorithm metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-encrypt-decrypt-rsa.js` |
 | RSA key import/export metadata compatibility is incomplete | 1 | `parallel/test-webcrypto-export-import-rsa.js` |

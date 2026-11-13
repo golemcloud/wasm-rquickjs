@@ -1,15 +1,15 @@
 declare module 'cjs-require' {
-  export function testRequireBuiltin(): Promise<boolean>;
-  export function testRequireRelative(): Promise<boolean>;
-  export function testRequireDirectory(): Promise<boolean>;
-  export function testRequireCircular(): Promise<boolean>;
-  export function testRequireCache(): Promise<boolean>;
-  export function testCreateRequire(): Promise<boolean>;
-  export function testRequireJson(): Promise<boolean>;
-  export function testRequireExtensionsOrder(): Promise<boolean>;
-  export function testRequireModuleExportsFunction(): Promise<boolean>;
-  export function testRequireModuleNotFound(): Promise<boolean>;
-  export function testRequirePackageExports(): Promise<boolean>;
-  export function testRequirePackageImports(): Promise<boolean>;
-  export function testRequirePackageMapEdgeCases(): Promise<boolean>;
+  export function testRequireBuiltin(): boolean;
+  export function testRequireRelative(): boolean;
+  export function testRequireDirectory(): boolean;
+  export function testRequireCircular(): boolean;
+  export function testRequireCache(): boolean;
+  export function testCreateRequire(): boolean;
+  export function testRequireJson(): boolean;
+  export function testRequireExtensionsOrder(): boolean;
+  export function testRequireModuleExportsFunction(): boolean;
+  export function testRequireModuleNotFound(): boolean;
+  export function testRequirePackageExports(): boolean;
+  export function testRequirePackageImports(): boolean;
+  export function testRequirePackageMapEdgeCases(): boolean;
 }

@@ -3,13 +3,16 @@ set -euo pipefail
 
 usage() {
     cat <<'EOF'
-Usage: tools/dev-test.sh <p2|p3> <fast-start|fast-run|standard|release> <test-target> <filter> [test-r args...]
+Usage: tools/dev-test.sh <fork|stock> <fast-start|fast-run|standard|release> <test-target> <filter> [test-r args...]
+
+`fork` tests against Golem's Wasmtime fork (use-golem-wasmtime) in an ignored shadow workspace;
+`stock` uses the crates.io Wasmtime from the real manifest. Both run the WASI Preview 3 runtime.
 
 Examples:
-  tools/dev-test.sh p2 fast-start runtime module_resolution::esm_package_map_edge_cases
-  tools/dev-test.sh p2 fast-run runtime module_resolution::esm_
-  tools/dev-test.sh p3 standard node_compat es_module__test_esm_pkgname_mjs
-  tools/dev-test.sh p2 release agentic_ts ""
+  tools/dev-test.sh fork fast-start runtime module_resolution::esm_package_map_edge_cases
+  tools/dev-test.sh fork fast-run runtime module_resolution::esm_
+  tools/dev-test.sh stock standard node_compat es_module__test_esm_pkgname_mjs
+  tools/dev-test.sh fork release agentic_ts ""
 EOF
 }
 
@@ -18,7 +21,7 @@ if [[ $# -lt 4 ]]; then
     exit 2
 fi
 
-target=$1
+host=$1
 profile=$2
 test_target=$3
 filter=$4
@@ -33,10 +36,10 @@ for arg in "$@"; do
     esac
 done
 
-case "$target" in
-    p2 | p3) ;;
+case "$host" in
+    fork | stock) ;;
     *)
-        echo "Unknown target '$target'; expected p2 or p3." >&2
+        echo "Unknown host '$host'; expected fork or stock." >&2
         exit 2
         ;;
 esac
@@ -58,7 +61,6 @@ unset WASM_RQUICKJS_TEST_DROP_CACHE
 unset WASM_RQUICKJS_TEST_LOCKED_BUILDS
 unset WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT
 unset WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE
-unset WASM_RQUICKJS_TEST_TARGET
 unset WASM_RQUICKJS_TEST_UNOPTIMIZED
 unset WASM_RQUICKJS_TEST_WASMTIME_CACHE
 unset CARGO_NET_OFFLINE
@@ -131,8 +133,8 @@ if [[ "$profile" == release ]]; then
     fi
 fi
 
-prepare_p2_workspace() {
-    local shadow="$repo_root/tmp/p2-dev-workspace"
+prepare_fork_workspace() {
+    local shadow="$repo_root/tmp/fork-dev-workspace"
     if [[ "$plan_only" == 1 ]]; then
         return
     fi
@@ -155,15 +157,15 @@ prepare_p2_workspace() {
     for path in src tests examples crates README.md LICENSE; do
         ln -sfn "../../$path" "$shadow/$path"
     done
-    mkdir -p "$repo_root/tmp/p2-dev-artifacts"
-    ln -sfn ../p2-dev-artifacts "$shadow/tmp"
+    mkdir -p "$repo_root/tmp/fork-dev-artifacts"
+    ln -sfn ../fork-dev-artifacts "$shadow/tmp"
 
     if [[ ! -f "$shadow/.source-hash" ]] || [[ "$(<"$shadow/.source-hash")" != "$source_hash" ]]; then
         bash .github/scripts/enable-wasmtime-fork.sh Cargo.toml "$shadow/Cargo.toml"
         cp Cargo.lock "$shadow/Cargo.lock"
 
         if ! grep -q '^\[patch\.crates-io\]$' "$shadow/Cargo.toml"; then
-            echo "Could not activate the Golem Wasmtime patch in the P2 shadow manifest." >&2
+            echo "Could not activate the Golem Wasmtime patch in the fork shadow manifest." >&2
             exit 1
         fi
         for package in wasmtime wasmtime-wasi wasmtime-wasi-http wasmtime-wizer; do
@@ -179,30 +181,29 @@ prepare_p2_workspace() {
             --format-version 1 \
             >/dev/null
         then
-            echo "Failed to resolve the P2 shadow workspace." >&2
+            echo "Failed to resolve the fork shadow workspace." >&2
             exit 1
         fi
         printf '%s\n' "$source_hash" > "$shadow/.source-hash"
     fi
 }
 
-if [[ "$target" == p2 ]]; then
-    prepare_p2_workspace
-    export WASM_RQUICKJS_TEST_HOST_LOCKFILE="$repo_root/tmp/p2-dev-workspace/Cargo.lock"
+if [[ "$host" == fork ]]; then
+    prepare_fork_workspace
+    export WASM_RQUICKJS_TEST_HOST_LOCKFILE="$repo_root/tmp/fork-dev-workspace/Cargo.lock"
     if [[ -n "$features" ]]; then
         features="use-golem-wasmtime,$features"
     else
         features="use-golem-wasmtime"
     fi
 else
-    export WASM_RQUICKJS_TEST_TARGET=p3
     export WASM_RQUICKJS_TEST_HOST_LOCKFILE="$repo_root/Cargo.lock"
 fi
 
-if [[ "$target" == p2 ]]; then
+if [[ "$host" == fork ]]; then
     cargo_command=(
         cargo test
-        --manifest-path "$repo_root/tmp/p2-dev-workspace/Cargo.toml"
+        --manifest-path "$repo_root/tmp/fork-dev-workspace/Cargo.toml"
         --target-dir "$repo_root/target"
     )
 else
@@ -236,7 +237,6 @@ if [[ "$plan_only" == 1 ]]; then
     printf 'prepared_component_cache=%s\n' "${WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE:-0}"
     printf 'unoptimized=%s\n' "${WASM_RQUICKJS_TEST_UNOPTIMIZED:-0}"
     printf 'wasmtime_cache=%s\n' "${WASM_RQUICKJS_TEST_WASMTIME_CACHE:-0}"
-    printf 'test_target=%s\n' "${WASM_RQUICKJS_TEST_TARGET:-p2}"
     printf 'command_arg=%s\n' "${cargo_command[@]}"
     exit 0
 fi

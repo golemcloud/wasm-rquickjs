@@ -26,12 +26,12 @@ env:
   WASM_RQUICKJS_TEST_WASMTIME_CACHE: "1"
   WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE: "1"
   WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT: "1"
-  # CI always builds and tests against Golem's wasmtime fork — see
-  # .github/scripts/enable-wasmtime-fork.sh for the rationale. Build/test
-  # jobs run that script (which uncomments the [patch.crates-io] block in
+  # The `build` and `test-other` jobs build and test against Golem's wasmtime
+  # fork — see .github/scripts/enable-wasmtime-fork.sh for the rationale. They
+  # run that script (which uncomments the [patch.crates-io] block in
   # Cargo.toml) and pass --features use-golem-wasmtime via this variable.
-  # The `release-binaries` and `publish` jobs deliberately skip both so
-  # they keep using the unpatched, crates.io-publishable wasmtime.
+  # The P3 runtime, node-compat and `test-p3` lanes, and the `release-binaries`
+  # and `publish` jobs, use the unpatched, crates.io-publishable wasmtime.
   CI_WASMTIME_FORK_FEATURES: --features use-golem-wasmtime
 
 jobs:
@@ -71,7 +71,7 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup
         with:
-          cache-key: p2
+          cache-key: fork
           wasmtime-fork: "true"
       - name: Install component license audit tool
         # rust-cache can restore install metadata without the executable.
@@ -102,7 +102,7 @@ jobs:
           fetch-depth: 0
       - uses: ./.github/actions/setup
         with:
-          cache-key: p2
+          cache-key: fork
           wasmtime-fork: "true"
       - name: Test performance-report currentness selection
         run: tools/performance-report-currentness.sh self-test
@@ -133,6 +133,10 @@ jobs:
             cargo test --test npm_metadata $CI_WASMTIME_FORK_FEATURES
       - name: Compilation, DTS and error tests
         run: cargo test --test compilation --test dts --test errors $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json
+      - name: Fork-only runtime tests (Golem fork)
+        # Streaming-redirect fetch depends on a wasmtime-wasi-http fix that only the Golem
+        # fork carries; stock `test-runtime` skips these cases.
+        run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- fetch_redirect_with_ --report-time
       - name: Optimizer copy budget contracts (Golem fork)
         # Full guest templates spawn Cargo/Wasmtime compiler pools. Reuse only
         # build artifacts and bound competing cases; runtime state stays fresh.
@@ -144,69 +148,6 @@ jobs:
         if: always()
         with:
           name: test-other
-
-  test-runtime:
-    needs: [quick-checks]
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    strategy:
-      fail-fast: false
-      matrix:
-        group: [1, 2, 3, 4, 5, 6, 7, 8, 9]
-        include:
-          - group: 9
-            node_version: "22.14.0"
-            test_args: "--test-threads 4"
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup
-        with:
-          cache-key: p2
-          wasmtime-fork: "true"
-          component-cache-key: p2-runtime-${{ matrix.group }}
-      - uses: actions/setup-node@v4
-        if: matrix.node_version
-        with:
-          node-version: ${{ matrix.node_version }}
-      - name: Runtime tests (group ${{ matrix.group }}/9)
-        run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- ${{ matrix.test_args }} --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
-        env:
-          NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
-      - name: Collect Test Report
-        uses: ./.github/actions/collect-test-report
-        if: always()
-        with:
-          name: test-runtime-group-${{ matrix.group }}
-
-  test-node-compat:
-    needs: [quick-checks]
-    runs-on: blacksmith-16vcpu-ubuntu-2404
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [0, 1, 2, 3, 4, 5, 6, 7]
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: true
-      - uses: ./.github/actions/setup
-        with:
-          cache-key: p2
-          wasmtime-fork: "true"
-          component-cache-key: p2-node-${{ matrix.shard }}
-      - name: Vendor Node.js test suite
-        run: bash tests/node_compat/vendor.sh
-      - name: Module inventory contracts
-        if: matrix.shard == 0
-        run: cargo test --test node_compat_report $CI_WASMTIME_FORK_FEATURES -- ':tag:report_contract' --report-time
-      - name: Node compat tests (shard ${{ matrix.shard }}/8)
-        run: cargo test --test node_compat $CI_WASMTIME_FORK_FEATURES -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
-      - name: Collect Test Report
-        uses: ./.github/actions/collect-test-report
-        if: always()
-        with:
-          name: test-node-compat-shard-${{ matrix.shard }}
 
   test-p3:
     needs: [quick-checks]
@@ -230,12 +171,11 @@ jobs:
           submodules: true
       - uses: ./.github/actions/setup
         with:
-          cache-key: p3
-          component-cache-key: p3-${{ matrix.suite }}-shared
-      # The WASI Preview 3 path does not use the Preview 2 `wasi:io/poll` pollable
-      # behavior that the Golem wasmtime fork patches, so these tests run against
-      # the stock crates.io wasmtime (no `enable-wasmtime-fork.sh`, no
-      # `use-golem-wasmtime`). This also proves P3 works on unforked wasmtime.
+          cache-key: stock
+          component-cache-key: stock-${{ matrix.suite }}-shared
+      # These tests run against the stock crates.io wasmtime (no
+      # `enable-wasmtime-fork.sh`, no `use-golem-wasmtime`), which proves P3 works on
+      # unforked wasmtime. Cases that need a fork-only fix run in `test-other`.
       - name: Install wasmtime CLI
         if: matrix.suite == 'generation'
         # `p3_generation` shells out to the `wasmtime` CLI to run generated P3
@@ -249,11 +189,10 @@ jobs:
         # the test-r `--format ctrf` reporter flags used by the other jobs.
         run: /usr/bin/time -v cargo test ${{ matrix.test_args }}
 
-  # The full runtime suite, run against the WASI Preview 3 generation path (async component
-  # exports, Component Model async host) instead of Preview 2. Runs *every* runtime test — there is
-  # no P3 allow-/deny-list — so P3 gaps and regressions show up directly in CI. Expected to have
-  # failures until the remaining P3 gaps are closed; it therefore does not gate releases.
-  test-runtime-p3:
+  # The full runtime suite on the WASI Preview 3 generation path. Like `test-p3`, it runs on the
+  # stock crates.io wasmtime (no `enable-wasmtime-fork.sh`, no `use-golem-wasmtime`); the fork is
+  # still built and linted by `build` and exercised by `test-other`.
+  test-runtime:
     needs: [quick-checks]
     runs-on: blacksmith-16vcpu-ubuntu-2404
     strategy:
@@ -264,25 +203,19 @@ jobs:
           - group: 9
             node_version: "22.14.0"
             test_args: "--test-threads 4"
-    env:
-      # Selects the Preview 3 generation target in the test harness (tests/common/mod.rs).
-      WASM_RQUICKJS_TEST_TARGET: p3
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup
         with:
-          cache-key: p3
-          component-cache-key: p3-runtime-${{ matrix.group }}
+          cache-key: stock
+          component-cache-key: stock-runtime-${{ matrix.group }}
       - uses: actions/setup-node@v4
         if: matrix.node_version
         with:
           node-version: ${{ matrix.node_version }}
-      # Preview 3 runs on the stock crates.io wasmtime: the Golem wasmtime fork is Preview 2 only,
-      # and the P3 host support in tests/common/mod.rs is gated to non-fork builds. So this lane
-      # deliberately does NOT run enable-wasmtime-fork.sh or pass --features use-golem-wasmtime.
-      - name: Runtime tests on WASI Preview 3 (group ${{ matrix.group }}/9)
+      - name: Runtime tests (group ${{ matrix.group }}/9)
         run: cargo test --test runtime -- ${{ matrix.test_args }} --report-time --format ctrf --logfile target/ctrf.json ':tag:group${{ matrix.group }}'
         env:
           NODE_MODULES_APP_STRICT_NODE_BASELINE: "1"
@@ -290,43 +223,41 @@ jobs:
         uses: ./.github/actions/collect-test-report
         if: always()
         with:
-          name: test-runtime-p3-group-${{ matrix.group }}
+          name: test-runtime-group-${{ matrix.group }}
 
-  # The full node_compat suite, run against the WASI Preview 3 generation path. Runs *every*
-  # node_compat test the Preview 2 lane runs (same shard tags, same config.jsonc allow-list of
-  # runnable Node.js tests) — there is no additional P3 filter. Expected to have failures until the
-  # remaining P3 gaps are closed; it therefore does not gate releases.
-  test-node-compat-p3:
+  # The full node_compat suite (same shard tags and config.jsonc allow-list) on the WASI Preview 3
+  # generation path and stock crates.io wasmtime — see the note on `test-runtime`.
+  test-node-compat:
     needs: [quick-checks]
     runs-on: blacksmith-16vcpu-ubuntu-2404
     strategy:
       fail-fast: false
       matrix:
         shard: [0, 1, 2, 3, 4, 5, 6, 7]
-    env:
-      WASM_RQUICKJS_TEST_TARGET: p3
     steps:
       - uses: actions/checkout@v4
         with:
           submodules: true
       - uses: ./.github/actions/setup
         with:
-          cache-key: p3
-          component-cache-key: p3-node-${{ matrix.shard }}
-      # Stock crates.io wasmtime — see the note in `test-runtime-p3`.
+          cache-key: stock
+          component-cache-key: stock-node-${{ matrix.shard }}
       - name: Vendor Node.js test suite
         run: bash tests/node_compat/vendor.sh
-      - name: Node compat tests on WASI Preview 3 (shard ${{ matrix.shard }}/8)
+      - name: Module inventory contracts
+        if: matrix.shard == 0
+        run: cargo test --test node_compat_report -- ':tag:report_contract' --report-time
+      - name: Node compat tests (shard ${{ matrix.shard }}/8)
         run: cargo test --test node_compat -- --report-time --format ctrf --logfile target/ctrf.json ':tag:shard${{ matrix.shard }}'
       - name: Collect Test Report
         uses: ./.github/actions/collect-test-report
         if: always()
         with:
-          name: test-node-compat-p3-shard-${{ matrix.shard }}
+          name: test-node-compat-shard-${{ matrix.shard }}
 
   test-reports:
     if: ${{ always() && !cancelled() }}
-    needs: [test-other, test-runtime, test-node-compat, test-runtime-p3, test-node-compat-p3]
+    needs: [test-other, test-runtime, test-node-compat]
     runs-on: ubuntu-latest
     permissions:
       actions: read

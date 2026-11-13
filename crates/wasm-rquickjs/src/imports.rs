@@ -18,11 +18,22 @@ use wit_parser::{Function, FunctionKind, TypeDefKind, WorldItem, WorldKey};
 /// Each Rust module contains a rquicks `NativeModule` exposing the WIT bindings for the
 /// imported WIT interfaces as JavaScript modules. `mod.rs` also registers the caller's
 /// `native_modules`, which are defined in the crate's dependencies.
+///
+/// Functions imported directly into the world are exposed as a JavaScript module named after the
+/// world, unless a JavaScript or native module already has that name.
 pub fn generate_import_modules(
     context: &GeneratorContext<'_>,
+    js_module_names: &[&str],
     native_modules: &[NativeModuleSpec],
 ) -> anyhow::Result<()> {
     let (global, interfaces) = collect_imported_interfaces(context)?;
+    let world_module_name = context.world_name.as_str();
+    let global_module_name = (!global.functions.is_empty()
+        && !js_module_names.contains(&world_module_name)
+        && !native_modules
+            .iter()
+            .any(|module| module.name == world_module_name))
+    .then_some(world_module_name);
 
     for module in native_modules {
         for interface in &interfaces {
@@ -40,7 +51,7 @@ pub fn generate_import_modules(
         let file_name = format!("{module_name}.rs");
 
         let module_path = context.output.join("src").join("modules").join(&file_name);
-        let module_tokens = generate_import_module(context, interface, &interfaces, &[])?;
+        let module_tokens = generate_import_module(context, interface, &interfaces, &[], None)?;
 
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
@@ -51,8 +62,13 @@ pub fn generate_import_modules(
     }
 
     let global_module_path = context.output.join("src").join("modules").join("mod.rs");
-    let global_module_tokens =
-        generate_import_module(context, &global, &interfaces, native_modules)?;
+    let global_module_tokens = generate_import_module(
+        context,
+        &global,
+        &interfaces,
+        native_modules,
+        global_module_name,
+    )?;
 
     let global_module_ast: syn::File =
         syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
@@ -115,12 +131,12 @@ struct FreestandingImportBridge {
 
 /// Builds the rquickjs bridge for a freestanding imported WIT function.
 ///
-/// `is_async` selects between a synchronous bridge (used by the Preview 2 target and for
-/// synchronous Preview 3 imports) and an async bridge (used for async Preview 3 imports). The
-/// async variant is a synchronous function that builds the import future during the JavaScript
-/// call and returns it as a `Promised` value, so the JavaScript side receives a promise, the host
-/// async import is awaited on the component-model async executor, and the import runs in the
-/// caller's custom invocation context. For the `result<_, _>` case the bridge throws on the error
+/// `is_async` selects between a synchronous bridge (used for synchronous imports) and an async
+/// bridge (used for async imports). The async variant is a synchronous function that builds the
+/// import future during the JavaScript call and returns it as a `Promised` value, so the
+/// JavaScript side receives a promise, the host async import is awaited on the component-model
+/// async executor, and the import runs in the caller's custom invocation context. For the
+/// `result<_, _>` case the bridge throws on the error
 /// arm, which `Promised` turns into a rejected promise.
 fn build_freestanding_import_bridge(
     context: &GeneratorContext<'_>,
@@ -582,6 +598,7 @@ fn generate_import_module(
     import: &ImportedInterface<'_>,
     all_imported_interfaces: &[ImportedInterface<'_>],
     native_modules: &[NativeModuleSpec],
+    global_module_name: Option<&str>,
 ) -> anyhow::Result<TokenStream> {
     let mut submodules = Vec::new();
     let mut loader_init = quote! {};
@@ -602,6 +619,13 @@ fn generate_import_module(
 
             resolver_chain.push(quote! { with_module(#fully_qualified_interface_lit)});
             loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
+        }
+
+        if let Some(name) = global_module_name {
+            let name_lit = LitStr::new(name, Span::call_site());
+            let module_struct = import.rust_interface_name();
+            resolver_chain.push(quote! { with_module(#name_lit) });
+            loader_chain.push(quote! { with_module(#name_lit, crate::modules::#module_struct) });
         }
 
         let native_names = native_modules
@@ -680,8 +704,7 @@ fn generate_import_module(
         match &function.kind {
             FunctionKind::Freestanding => {
                 // A synchronous imported function. Generates a synchronous rquickjs bridge that
-                // calls the wit-bindgen import directly. Valid for both the Preview 2 and
-                // Preview 3 targets.
+                // calls the wit-bindgen import directly.
                 let bridge = build_freestanding_import_bridge(
                     context, import, name, function, /* is_async */ false,
                 )?;
@@ -690,12 +713,9 @@ fn generate_import_module(
                 bridge_functions.push(bridge.bridge_fn);
             }
             FunctionKind::AsyncFreestanding => {
-                // An async imported function. Only the Preview 3 target supports these: the bridge
-                // is an `async fn` that `.await`s the component-model async import; the rquickjs
-                // `#[function]` macro turns it into a JS function returning a promise.
-                if !context.target.is_p3() {
-                    return Err(anyhow!("Async imported functions are not supported yet"));
-                }
+                // An async imported function: the bridge is an `async fn` that `.await`s the
+                // component-model async import; the rquickjs `#[function]` macro turns it into a
+                // JS function returning a promise.
                 let bridge = build_freestanding_import_bridge(
                     context, import, name, function, /* is_async */ true,
                 )?;
@@ -704,13 +724,8 @@ fn generate_import_module(
                 bridge_functions.push(bridge.bridge_fn);
             }
             FunctionKind::AsyncMethod(type_id) | FunctionKind::AsyncStatic(type_id) => {
-                // Async imported resource methods/statics are only supported on the Preview 3
-                // target: the bridge is an `async fn` awaiting the component-model async import.
-                if !context.target.is_p3() {
-                    return Err(anyhow!(
-                        "Async imported resource methods are not supported by the WASI Preview 2 generation path"
-                    ));
-                }
+                // Async imported resource methods/statics: the bridge is an `async fn` awaiting
+                // the component-model async import.
                 resource_functions
                     .entry(*type_id)
                     .or_insert_with(Vec::new)
@@ -835,8 +850,7 @@ fn generate_import_module(
             let wrap = &return_types.func_ret.wrap;
             let wrap_result = wrap.run(quote! { result });
 
-            // Async imported resource methods/statics (Preview 3 only; the dispatch loop above
-            // rejects them for Preview 2) generate `async fn` bridges awaiting the
+            // Async imported resource methods/statics generate `async fn` bridges awaiting the
             // component-model async import; rquickjs turns them into promise-returning JS
             // methods.
             //
@@ -994,12 +1008,9 @@ fn generate_import_module(
         let mut special_methods = Vec::new();
         // The `wasi:io/poll.pollable` async helpers (`promise` / `abortable_promise`).
         //
-        // On the Preview 2 path they are driven by P2 pollables (`wasip2::io::poll` +
-        // `wstd::runtime::AsyncPollable`). On the Preview 3 path those deps are not compiled
-        // (P2 pollables are not waitables in the component-model async ABI), so the helpers
-        // instead poll `ready()` in a loop interleaved with short `wasip3` monotonic-clock
-        // async sleeps — this keeps the P3 executor running (JS timers, abort callbacks)
-        // while waiting.
+        // P2 pollables are not waitables in the component-model async ABI, so the helpers poll
+        // `ready()` in a loop interleaved with short `wasip3` monotonic-clock async sleeps —
+        // this keeps the executor running (JS timers, abort callbacks) while waiting.
         if resource_name == "pollable"
             && &import.name == "poll"
             && import
@@ -1008,31 +1019,16 @@ fn generate_import_module(
                 .map(|p| format!("{}:{}", p.namespace, p.name))
                 == Some("wasi:io".to_string())
         {
-            // The future the helpers await on: how a single pollable is asynchronously waited
-            // for differs between the two targets, everything else is shared.
-            let (wait_future, take_pollable) = if context.target.is_p3() {
-                (
-                    quote! {
-                        async move {
-                            while !pollable.ready() {
-                                wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
-                            }
-                        }
-                    },
-                    quote! {
-                        let pollable = self.inner.take().expect("Resource has already been disposed");
-                    },
-                )
-            } else {
-                (
-                    quote! {
-                        wstd::runtime::AsyncPollable::new(pollable).wait_for()
-                    },
-                    quote! {
-                        let pollable = self.inner.take().expect("Resource has already been disposed");
-                        let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
-                    },
-                )
+            // The future the helpers await on.
+            let wait_future = quote! {
+                async move {
+                    while !pollable.ready() {
+                        wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
+                    }
+                }
+            };
+            let take_pollable = quote! {
+                let pollable = self.inner.take().expect("Resource has already been disposed");
             };
 
             special_methods.push(quote! {
@@ -1119,7 +1115,7 @@ fn generate_import_module(
             generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
 
         // For WASI-remapped resources, skip the IntoJs/FromJs impls on the foreign
-        // bindgen type (they're from wasip2:: and would violate the orphan rule).
+        // bindgen type (they're from wasip3:: and would violate the orphan rule).
         // The BorrowWrapper is always generated since it's a local type.
         let foreign_type_impls = if context.is_wasi_remapped_type(resource_type_id) {
             quote! {

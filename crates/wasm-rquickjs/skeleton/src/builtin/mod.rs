@@ -1,13 +1,19 @@
+//! Builtin-module registry: the Node.js-compatible builtin modules and their resolver and
+//! loader entries.
+
 use std::fmt::Write;
 
+mod sync_exports;
+use sync_exports::SyncableBuiltinLoaderExt;
+
 mod abort_controller;
-#[cfg(feature = "fetch")]
 mod abort_signal;
 mod assert;
 mod async_hooks;
 mod base64;
 mod buffer;
-mod child_process;
+pub(crate) mod child_process;
+pub(crate) mod child_timers;
 mod cluster;
 mod console;
 mod custom_invocation_context;
@@ -17,26 +23,16 @@ mod diagnostics_channel;
 mod dns;
 mod domain;
 mod encoding;
+mod events;
 pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
 #[cfg(feature = "test-observability")]
 pub(crate) use gc::install_observability as install_gc_observability;
-mod shared_response_body;
-
-#[cfg(feature = "fetch")]
 mod http;
-
-#[cfg(not(feature = "fetch"))]
-mod http_disabled;
-#[cfg(not(feature = "fetch"))]
-mod http {
-    pub use super::http_disabled::*;
-}
-
-mod events;
 mod http2;
+mod http_body;
 mod https;
 mod ieee754;
 mod inspector;
@@ -45,18 +41,7 @@ mod internal_binding_util;
 mod intl;
 mod module;
 mod net;
-mod socket_helpers;
-
-#[cfg(feature = "node-http")]
 mod node_http;
-
-#[cfg(not(feature = "node-http"))]
-mod node_http_disabled;
-#[cfg(not(feature = "node-http"))]
-mod node_http {
-    pub use super::node_http_disabled::*;
-}
-
 mod node_test;
 mod os;
 mod path;
@@ -66,10 +51,19 @@ mod punycode;
 mod querystring;
 mod readline;
 mod repl;
+mod shared_response_body;
+mod socket_helpers;
+#[cfg(feature = "sqlite")]
+mod sqlite;
+#[cfg(not(feature = "sqlite"))]
+mod sqlite_disabled;
+#[cfg(not(feature = "sqlite"))]
+mod sqlite {
+    pub use super::sqlite_disabled::*;
+}
 mod stream;
 mod string_decoder;
 mod structured_clone;
-mod sync_exports;
 mod timeout;
 mod timers;
 mod tls;
@@ -82,30 +76,26 @@ mod v8;
 mod vm;
 #[cfg(feature = "crypto")]
 mod web_crypto;
-
 #[cfg(not(feature = "crypto"))]
 mod web_crypto_lite;
 #[cfg(not(feature = "crypto"))]
 mod web_crypto {
     pub use super::web_crypto_lite::*;
 }
-
-#[cfg(feature = "websocket")]
-mod websocket;
 mod webstreams;
 mod worker_threads;
-
 #[cfg(feature = "zlib")]
 mod zlib;
-
 #[cfg(not(feature = "zlib"))]
 mod zlib_disabled;
 #[cfg(not(feature = "zlib"))]
 mod zlib {
     pub use super::zlib_disabled::*;
 }
-
-use sync_exports::SyncableBuiltinLoaderExt;
+// WebSocket support via the asynchronous Preview 3 `golem:websocket@1.5.0` bindings. Opt-in
+// because it adds a required `golem:websocket` host import that not every host provides.
+#[cfg(feature = "websocket")]
+mod websocket;
 
 pub(crate) fn canonical_public_builtin_alias(name: &str) -> Option<&'static str> {
     sync_exports::canonical_public_builtin_alias(name)
@@ -117,16 +107,6 @@ pub(crate) fn canonical_public_builtin_name(name: &str) -> Option<&'static str> 
 
 pub(crate) fn syncable_builtin_implementation_import(base: &str, name: &str) -> Option<String> {
     sync_exports::implementation_import(base, name)
-}
-
-#[cfg(feature = "sqlite")]
-mod sqlite;
-
-#[cfg(not(feature = "sqlite"))]
-mod sqlite_disabled;
-#[cfg(not(feature = "sqlite"))]
-mod sqlite {
-    pub use super::sqlite_disabled::*;
 }
 
 pub(crate) fn realpath_for_cjs_module_resolution(
@@ -143,6 +123,7 @@ pub(crate) fn realpath_for_esm_module_resolution(
     fs::realpath_for_module_resolution(ctx, path, fs::ModuleLoaderRealpathDomain::Esm)
 }
 
+/// Registers builtin native and JavaScript module names with the resolver.
 pub fn add_module_resolvers(
     resolver: rquickjs::loader::BuiltinResolver,
 ) -> rquickjs::loader::BuiltinResolver {
@@ -175,12 +156,6 @@ pub fn add_module_resolvers(
         .with_module("node:util/types")
         .with_module("util")
         .with_module("util/types")
-        .with_module("__wasm_rquickjs_builtin/fs_native")
-        .with_module("node:fs")
-        .with_module("fs")
-        .with_module("node:fs/promises")
-        .with_module("fs/promises")
-        .with_module("internal/fs/promises")
         .with_module("node:buffer")
         .with_module("buffer")
         .with_module("base64-js")
@@ -198,6 +173,7 @@ pub fn add_module_resolvers(
         .with_module("node:child_process")
         .with_module("child_process")
         .with_module("__wasm_rquickjs_builtin/child_process_backend")
+        .with_module("__wasm_rquickjs_builtin/child_process_native")
         .with_module("wasm-rquickjs:child-process")
         .with_module("node:test")
         .with_module("node:module")
@@ -279,6 +255,12 @@ pub fn add_module_resolvers(
         .with_module("_http_agent")
         .with_module("node:http")
         .with_module("http")
+        .with_module("__wasm_rquickjs_builtin/fs_native")
+        .with_module("node:fs")
+        .with_module("fs")
+        .with_module("node:fs/promises")
+        .with_module("fs/promises")
+        .with_module("internal/fs/promises")
         .with_module("__wasm_rquickjs_builtin/net_native")
         .with_module("node:net")
         .with_module("net")
@@ -314,7 +296,6 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/execution_native")
         .with_module("__wasm_rquickjs_builtin/custom_invocation_context_native")
         .with_module("wasm-rquickjs:custom-invocation-context")
-        .with_module("__wasm_rquickjs_builtin/child_process_native")
         .with_module("wasm-rquickjs:execution")
         .with_module("__wasm_rquickjs_builtin/typescript_native");
 
@@ -331,6 +312,8 @@ pub fn add_module_resolvers(
     internal::add_to_resolver(sync_exports::add_implementation_resolvers(resolver))
 }
 
+/// Returns loaders for builtin native modules, builtin JavaScript modules and
+/// internal helper modules.
 pub fn module_loader() -> (
     rquickjs::loader::ModuleLoader,
     rquickjs::loader::BuiltinLoader,
@@ -362,7 +345,6 @@ pub fn module_loader() -> (
             "__wasm_rquickjs_builtin/intl_native",
             intl::js_native_module,
         )
-        .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
         .with_module("__wasm_rquickjs_builtin/os_native", os::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/perf_hooks_native",
@@ -388,26 +370,27 @@ pub fn module_loader() -> (
         )
         .with_module("__wasm_rquickjs_builtin/v8_native", v8::js_native_module)
         .with_module(
-            "__wasm_rquickjs_builtin/zlib_native",
-            zlib::js_native_module,
+            "__wasm_rquickjs_builtin/string_decoder_native",
+            string_decoder::js_native_module,
         )
+        .with_module("__wasm_rquickjs_builtin/dns_native", dns::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/dgram_native",
             dgram::js_native_module,
         )
-        .with_module("__wasm_rquickjs_builtin/dns_native", dns::js_native_module)
+        .with_module("__wasm_rquickjs_builtin/fs_native", fs::js_native_module)
+        .with_module("__wasm_rquickjs_builtin/net_native", net::js_native_module)
         .with_module(
             "__wasm_rquickjs_builtin/node_http_native",
             node_http::js_native_module,
         )
-        .with_module("__wasm_rquickjs_builtin/net_native", net::js_native_module)
+        .with_module(
+            "__wasm_rquickjs_builtin/zlib_native",
+            zlib::js_native_module,
+        )
         .with_module(
             "__wasm_rquickjs_builtin/sqlite_native",
             sqlite::js_native_module,
-        )
-        .with_module(
-            "__wasm_rquickjs_builtin/string_decoder_native",
-            string_decoder::js_native_module,
         );
 
     let native_loader = native_loader.with_module(
@@ -446,9 +429,9 @@ pub fn module_loader() -> (
         )
         .with_module("__wasm_rquickjs_builtin/console", console::CONSOLE_JS)
         .with_module("__wasm_rquickjs_builtin/timeout", timeout::TIMEOUT_JS)
+        .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
         .with_module("__wasm_rquickjs_builtin/http_blob", http::FETCH_BLOB_JS)
         .with_module("__wasm_rquickjs_builtin/http_form_data", http::FORMDATA_JS)
-        .with_module("__wasm_rquickjs_builtin/http", http::HTTP_JS)
         .with_module("__wasm_rquickjs_builtin/streams", webstreams::WEBSTREAMS_JS)
         .with_module(
             "__wasm_rquickjs_builtin/webstreams_wrapper",

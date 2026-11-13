@@ -7,10 +7,7 @@ fn host_diagnostics_do_not_execute_thrown_values() -> anyhow::Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    for (target, tier) in [
-        (GenerationTarget::WasiP2, "p2,full,test-observability"),
-        (GenerationTarget::WasiP3, "full-p3,test-observability"),
-    ] {
+    for (target, tier) in [(GenerationTarget::WasiP3, "full-p3,test-observability")] {
         let root = temp.path().join(tier.replace(',', "-"));
         let template = build_preinit_template(&root, target, tier)?;
         let input = root.join("input.wasm");
@@ -257,10 +254,7 @@ fn optimizer_reports_native_exception_origins() -> anyhow::Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    for (target, tier) in [
-        (GenerationTarget::WasiP2, "p2,full"),
-        (GenerationTarget::WasiP3, "full-p3"),
-    ] {
+    for (target, tier) in [(GenerationTarget::WasiP3, "full-p3")] {
         let root = temp.path().join(tier.replace(',', "-"));
         let template = build_preinit_template(&root, target, tier)?;
         let input = root.join("input.wasm");
