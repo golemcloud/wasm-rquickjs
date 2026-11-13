@@ -137,6 +137,13 @@ export async function runEdgeCases() {
                 }
             }, 1);
         });
+        // An interval that outlives its scope sleeps and runs in the nearest open ancestor.
+        let late;
+        await durableAsync('late', async () => {
+            late = setInterval(() => syncEffect('late-tick'), 1);
+        });
+        await sleep(5);
+        clearInterval(late);
         await new Promise((resolve) => setImmediate(() => {
             syncEffect('immediate');
             resolve();

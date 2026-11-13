@@ -1,3 +1,4 @@
+use crate::internal::custom_invocation_context::{FutureScope, scoped_in};
 use crate::internal::{
     format_caught_error,
     runtime_services::{RuntimeServices, TimerServices, run_process_turn_checkpoint},
@@ -12,9 +13,10 @@ use std::task::{Context, Poll};
 // Native functions for the timeout implementation
 #[rquickjs::module]
 pub mod native_module {
+    use crate::internal::custom_invocation_context::{Token, future_scope_of};
     use crate::internal::runtime_services::RuntimeServices;
     use futures::future::abortable;
-    use rquickjs::{Ctx, Persistent, Value};
+    use rquickjs::{Class, Ctx, Persistent, Value};
     use std::sync::atomic::Ordering;
 
     #[rquickjs::function]
@@ -24,6 +26,7 @@ pub mod native_module {
         delay: u32,
         periodic: bool,
         args: Persistent<Vec<Value<'static>>>,
+        scope: Option<Class<'_, Token>>,
     ) -> usize {
         let services = ctx
             .userdata::<RuntimeServices>()
@@ -35,6 +38,9 @@ pub mod native_module {
 
         let timers = services.timers.clone();
         drop(services);
+        // `scope` is the token the timer captured at registration. Its sleeps run in it, so the
+        // host attributes their clock calls to that scope, like the callback.
+        let scope = future_scope_of(scope);
         if let Some(owner) = timers
             .child_owner
             .borrow()
@@ -50,6 +56,7 @@ pub mod native_module {
                     periodic,
                     callback: code_or_fn,
                     args,
+                    scope,
                 },
                 registration,
             );
@@ -58,7 +65,7 @@ pub mod native_module {
         }
         if timers.component_owned.get() {
             let (task, handle) = abortable(super::scheduled_component_task(
-                code_or_fn, delay, periodic, args, key,
+                code_or_fn, delay, periodic, args, key, scope,
             ));
             timers.abort_handles.borrow_mut().insert(key, handle);
             timers.active_tasks.borrow_mut().insert(key);
@@ -84,6 +91,7 @@ pub mod native_module {
                 periodic,
                 args,
                 key,
+                scope,
             ));
             timers.abort_handles.borrow_mut().insert(key, handle);
             let task_timers = timers.clone();
@@ -208,10 +216,15 @@ impl<F> Drop for ComponentTimerTask<F> {
 async fn scheduled_loop<F: Future<Output = bool>>(
     delay: u32,
     periodic: bool,
+    scope: FutureScope,
     mut callback: impl FnMut() -> F,
 ) {
     loop {
-        wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)).await;
+        scoped_in(
+            scope.clone(),
+            wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)),
+        )
+        .await;
         let active = callback().await;
         if !periodic || !active {
             break;
@@ -226,8 +239,9 @@ async fn scheduled_task(
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
     timer_key: usize,
+    scope: FutureScope,
 ) {
-    scheduled_loop(delay, periodic, || {
+    scheduled_loop(delay, periodic, scope, || {
         let ctx = ctx.clone();
         let code_or_fn = code_or_fn.clone();
         let args = args.clone();
@@ -242,8 +256,9 @@ async fn scheduled_component_task(
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
     timer_key: usize,
+    scope: FutureScope,
 ) {
-    scheduled_loop(delay, periodic, || {
+    scheduled_loop(delay, periodic, scope, || {
         let code_or_fn = code_or_fn.clone();
         let args = args.clone();
         async move {

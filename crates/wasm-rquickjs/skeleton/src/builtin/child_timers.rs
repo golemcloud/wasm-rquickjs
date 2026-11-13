@@ -17,6 +17,8 @@ pub(crate) struct ChildTimer {
     pub(crate) periodic: bool,
     pub(crate) callback: Persistent<Value<'static>>,
     pub(crate) args: Persistent<Vec<Value<'static>>>,
+    /// The scope that registered the timer; every sleep runs in it.
+    pub(crate) scope: crate::internal::custom_invocation_context::FutureScope,
 }
 
 type TimerWait = LocalBoxFuture<'static, (ChildTimer, bool)>;
@@ -143,8 +145,11 @@ impl ChildTimers {
                 for (timer, registration) in pending {
                     self.waits.borrow_mut().push(Box::pin(async move {
                         let cancelled = Abortable::new(
-                            wasip3::clocks::monotonic_clock::wait_for(
-                                u64::from(timer.delay).saturating_mul(1_000_000),
+                            crate::internal::custom_invocation_context::scoped_in(
+                                timer.scope.clone(),
+                                wasip3::clocks::monotonic_clock::wait_for(
+                                    u64::from(timer.delay).saturating_mul(1_000_000),
+                                ),
                             ),
                             registration,
                         )
