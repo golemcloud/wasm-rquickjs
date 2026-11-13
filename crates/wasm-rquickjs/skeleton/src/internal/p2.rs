@@ -404,7 +404,7 @@ where
 {
     let js_state = get_js_state();
 
-    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+    super::custom_invocation_context::in_root(super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
@@ -455,7 +455,7 @@ where
                 }
             }
         }
-    }).await
+    })).await
 }
 
 fn get_cached_js_export<'js>(
@@ -562,7 +562,7 @@ where
 {
     let js_state = get_js_state();
 
-    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+    super::custom_invocation_context::in_root(super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
         let (constructor_obj, _parent): (Constructor, Object) = get_path(&module, resource_path).unwrap_or_else(|| panic!("{}", dump_cannot_find_export("exported JS resource class", resource_path, &module, wit_package)));
         let constructor = constructor_obj.as_constructor().unwrap_or_else(|| panic!("Expected export {path} to be a class with a constructor", path = resource_path.join("."))).clone();
@@ -593,7 +593,7 @@ where
                     .expect("Failed to register resource instance")
             }
         }
-    }).await
+    })).await
 }
 
 pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {
@@ -673,7 +673,7 @@ where
 {
     let js_state = get_js_state();
 
-    super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+    super::custom_invocation_context::in_root(super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
             .expect("Failed to get the resource table");
         let resource_instance: Object = resource_table.get(resource_id.to_string())
@@ -746,7 +746,7 @@ where
                 }
             }
         }
-    }).await
+    })).await
 }
 
 pub fn enqueue_drop_js_resource(resource_id: usize) {

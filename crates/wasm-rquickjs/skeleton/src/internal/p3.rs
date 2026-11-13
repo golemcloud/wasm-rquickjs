@@ -915,6 +915,7 @@ where
     };
 
     let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -973,6 +974,7 @@ where
         };
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"));
+        super::custom_invocation_context::restore_root();
         let created_writer =
             !allow_async && js_state.writer_lease.writer_generation() != writer_generation;
         (result, created_writer)
@@ -1114,6 +1116,7 @@ where
     let js_state = ensure_initialized().await;
 
     let (resource_id, created_writer) = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
@@ -1161,6 +1164,7 @@ where
         };
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"));
+        super::custom_invocation_context::restore_root();
         let created_writer =
             created_writer || js_state.writer_lease.writer_generation() != writer_generation;
         if created_writer && resource_id != 0 {
@@ -1327,6 +1331,7 @@ where
     };
 
     let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
@@ -1404,6 +1409,7 @@ where
         };
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"));
+        super::custom_invocation_context::restore_root();
         let created_writer =
             !allow_async && js_state.writer_lease.writer_generation() != writer_generation;
         (result, created_writer)
@@ -1668,12 +1674,14 @@ where
     let _drive_guard = spawn_drive_guard(&js_state.rt, &js_state.ctx).await;
 
     let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
+        super::custom_invocation_context::restore_root();
 
         match result {
             Ok(value) => Persistent::save(&ctx, value),
@@ -1736,7 +1744,9 @@ pub fn spawn_future_writer<T, R, F>(
     R: for<'js> FromJs<'js> + 'static,
     F: FnOnce(R) -> T + 'static,
 {
-    spawn_local(future_writer_task(js_value, writer, convert));
+    spawn_local(super::custom_invocation_context::scoped(
+        future_writer_task(js_value, writer, convert),
+    ));
 }
 
 async fn try_close_js_stream_iterator(iterator: Persistent<Object<'static>>) -> Result<(), String> {
@@ -1882,7 +1892,9 @@ pub fn spawn_stream_writer<T, R, F>(
     R: for<'js> FromJs<'js> + 'static,
     F: Fn(R) -> T + 'static,
 {
-    spawn_local(stream_writer_task(js_value, writer, convert));
+    spawn_local(super::custom_invocation_context::scoped(
+        stream_writer_task(js_value, writer, convert),
+    ));
 }
 
 /// Whether a settled deferred promise should be fulfilled or rejected, and with what JS value.

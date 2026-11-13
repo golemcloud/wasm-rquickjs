@@ -1,0 +1,18 @@
+package golem:durability@1.6.0;
+
+// The subset of Golem's `golem:durability/durability@1.6.0` that the custom invocation context
+// runtime uses, implemented by the test host.
+interface durability {
+  resource custom-invocation-context;
+
+  exchange-custom-invocation-context: func(
+    next: option<custom-invocation-context>,
+  ) -> custom-invocation-context;
+
+  resource live-custom-durable-invocation {
+    enter: func();
+    finish-async: static async func(this: borrow<live-custom-durable-invocation>);
+  }
+
+  begin-custom-durable-invocation-async: async func(name: string) -> live-custom-durable-invocation;
+}

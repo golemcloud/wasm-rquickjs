@@ -118,9 +118,20 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
     Ok(vec![target])
 }
 
+const CUSTOM_INVOCATION_CONTEXT_DTS: &str = include_str!("custom_invocation_context.d.ts");
+
 pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<Vec<Utf8PathBuf>> {
     let mut results = Vec::new();
     let (_global, interfaces) = crate::imports::collect_imported_interfaces(context)?;
+
+    if crate::imports::custom_invocation_context_interface(&interfaces).is_some() {
+        let target = context
+            .output
+            .join("wasm-rquickjs-custom-invocation-context.d.ts");
+        std::fs::write(&target, CUSTOM_INVOCATION_CONTEXT_DTS)
+            .map_err(|e| anyhow!("Failed to write TypeScript definitions: {e}"))?;
+        results.push(target);
+    }
 
     for interface in &interfaces {
         let module_name = interface.module_name()?;

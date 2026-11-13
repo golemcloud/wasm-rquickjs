@@ -24,6 +24,7 @@ compile_error!(
     "enable exactly one of the `p2` or `p3` features to select the WASI generation target"
 );
 
+pub mod custom_invocation_context;
 pub(crate) mod error_formatting;
 pub(crate) mod module_loading;
 pub(crate) mod preinit;
