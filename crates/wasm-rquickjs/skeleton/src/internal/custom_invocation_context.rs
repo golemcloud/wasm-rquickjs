@@ -260,15 +260,16 @@ fn capture_for_future() -> Option<Rc<ScopeInfo>> {
 struct EnterGuard(Option<Rc<ScopeInfo>>);
 
 impl EnterGuard {
+    /// `None` stands for a future created before the first scope opened, so at the root.
     fn enter(scope: &Option<Rc<ScopeInfo>>) -> Self {
-        match scope {
-            Some(scope) => {
-                let previous = current_scope();
-                switch_to(scope);
-                Self(Some(previous))
-            }
-            None => Self(None),
-        }
+        let target = match scope {
+            Some(scope) => scope.clone(),
+            None if HOOK_INSTALLED.get() => STATE.with_borrow(|state| state.root.clone()),
+            None => return Self(None),
+        };
+        let previous = current_scope();
+        switch_to(&target);
+        Self(Some(previous))
     }
 }
 
@@ -408,6 +409,39 @@ pub(crate) fn capture_for_callback<'js>(
     } else {
         Ok(None)
     }
+}
+
+/// Enters the scope of a callback that the runtime schedules itself, before the callback runs.
+/// `token` is the result of [`capture_for_callback`] at registration; `None` means the callback
+/// was registered before the first scope opened, so at the root. Returns the token to pass to
+/// [`leave_callback`], or `None` while no scope was ever opened.
+pub(crate) fn enter_callback<'js>(
+    ctx: &Ctx<'js>,
+    token: Option<Class<'js, Token>>,
+) -> rquickjs::Result<Option<Class<'js, Token>>> {
+    if !HOOK_INSTALLED.get() {
+        return Ok(None);
+    }
+    let previous = current_scope();
+    let target = match token {
+        Some(token) => scope_of(&token),
+        None => STATE.with_borrow(|state| state.root.clone()),
+    };
+    if !Rc::ptr_eq(&previous, &target) {
+        switch_to(&target);
+    }
+    token_for(ctx, &previous).map(Some)
+}
+
+/// Restores the scope after a callback entered with [`enter_callback`]. `None` means no scope was
+/// open when the callback started, so the root is restored if the callback opened one.
+pub(crate) fn leave_callback(previous: Option<Class<'_, Token>>) {
+    let previous = match previous {
+        Some(previous) => scope_of(&previous),
+        None if HOOK_INSTALLED.get() => STATE.with_borrow(|state| state.root.clone()),
+        None => return,
+    };
+    switch_to(&previous);
 }
 
 /// Makes `next` current and returns the token that was current.
@@ -601,10 +635,12 @@ unsafe extern "C" fn promise_hook(
             }
         }
         qjs::JSPromiseHookType_JS_PROMISE_HOOK_AFTER => {
-            // A hook installed while a job runs sees that job's AFTER without its BEFORE.
-            if let Some(previous) = STATE.with_borrow_mut(|state| state.hook_stack.pop()) {
-                switch_to(&previous);
-            }
+            // A hook installed while a job runs sees that job's AFTER without its BEFORE. That job
+            // started before any scope was open, so at the root.
+            let previous = STATE.with_borrow_mut(|state| {
+                state.hook_stack.pop().unwrap_or_else(|| state.root.clone())
+            });
+            switch_to(&previous);
         }
         _ => {}
     }

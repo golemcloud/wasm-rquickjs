@@ -15,4 +15,5 @@ world custom-invocation-context {
   export run-after: async func() -> string;
   export run-plain: async func() -> string;
   export run-edge-cases: async func() -> string;
+  export run-first-scope: async func() -> string;
 }

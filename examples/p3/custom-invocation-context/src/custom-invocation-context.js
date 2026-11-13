@@ -196,3 +196,23 @@ export async function runEdgeCases() {
     });
     return JSON.stringify(report);
 }
+
+// The first scope of a fresh runtime opens while root work is already queued. The scope is
+// entered directly, without `run`, so it stays current until this job ends.
+export async function runFirstScope() {
+    const live = await beginCustomDurableInvocationAsync('first');
+    queueMicrotask(() => syncEffect('first-microtask'));
+    process.nextTick(() => syncEffect('first-tick'));
+    const timer = new Promise((resolve) => setTimeout(() => {
+        syncEffect('first-timer');
+        resolve();
+    }, 0));
+    const child = scopes.enterLive(live);
+    await effect('first-child', 5);
+    await LiveCustomDurableInvocation.finishAsync(live);
+    live[Symbol.dispose]();
+    scopes.close(child);
+    await timer;
+    syncEffect('first-after');
+    return 'ok';
+}

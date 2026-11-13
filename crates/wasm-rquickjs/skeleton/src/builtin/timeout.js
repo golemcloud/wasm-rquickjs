@@ -1,6 +1,6 @@
 import * as timeoutNative from '__wasm_rquickjs_builtin/timeout_native'
 import { _captureContext, _restoreContext } from 'node:async_hooks'
-import { capture_for_callback as captureScope, swap as swapScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native'
+import { capture_for_callback as captureScope, enter_callback as enterScope, leave_callback as leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native'
 
 class Timeout {
     constructor(id, callback, delay, args, isInterval) {
@@ -110,7 +110,7 @@ function scheduleTimeout(callback, time, args, isInterval) {
     const scope = captureScope();
     const wrapped = function(...a) {
         const currentId = this._id;
-        const previousScope = scope === undefined ? undefined : swapScope(scope);
+        const previousScope = enterScope(scope);
         try {
             return _restoreContext(snapshot, callback, this, a);
         } catch (e) {
@@ -120,9 +120,7 @@ function scheduleTimeout(callback, time, args, isInterval) {
                 console.error(e);
             }
         } finally {
-            if (previousScope !== undefined) {
-                swapScope(previousScope);
-            }
+            leaveScope(previousScope);
             // Support converting setTimeout to interval via _repeat
             if (!this._destroyed && this._id === currentId && !isInterval && this._repeat > 0) {
                 const nextId = timeoutNative.schedule(this._bound, this._repeat, false, args);

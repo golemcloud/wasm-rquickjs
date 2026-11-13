@@ -11,7 +11,7 @@ import {
     typescript_runtime_mode,
     await_runtime_idle
 } from '__wasm_rquickjs_builtin/process_native';
-import { capture_for_callback as __captureScope, swap as __swapScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
+import { capture_for_callback as __captureScope, enter_callback as __enterScope, leave_callback as __leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
 
 import EventEmitter from 'node:events';
 import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
@@ -636,7 +636,7 @@ function __drainNextTickQueue() {
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         drained += 1;
-        const previousScope = entry.scope === undefined ? undefined : __swapScope(entry.scope);
+        const previousScope = __enterScope(entry.scope);
         try {
             if (entry.domain) {
                 entry.domain.enter();
@@ -651,9 +651,7 @@ function __drainNextTickQueue() {
             }
             __wasm_rquickjs_handleUncaughtError(e, entry.domain);
         } finally {
-            if (previousScope !== undefined) {
-                __swapScope(previousScope);
-            }
+            __leaveScope(previousScope);
         }
     }
     return drained;

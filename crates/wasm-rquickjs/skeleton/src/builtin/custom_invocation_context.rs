@@ -2,19 +2,19 @@ pub const CUSTOM_INVOCATION_CONTEXT_JS: &str = include_str!("custom_invocation_c
 
 /// `queueMicrotask` jobs get no promise hook events, so the callback carries its scope itself.
 pub const WIRE_JS: &str = r#"
-        import { capture_for_callback as __wasm_rquickjs_captureScope, swap as __wasm_rquickjs_swapScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
+        import { capture_for_callback as __wasm_rquickjs_captureScope, enter_callback as __wasm_rquickjs_enterScope, leave_callback as __wasm_rquickjs_leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
         const __wasm_rquickjs_queueMicrotask = globalThis.queueMicrotask;
         globalThis.queueMicrotask = function queueMicrotask(callback) {
-            const scope = __wasm_rquickjs_captureScope();
-            if (scope === undefined || typeof callback !== 'function') {
+            if (typeof callback !== 'function') {
                 return __wasm_rquickjs_queueMicrotask(callback);
             }
+            const scope = __wasm_rquickjs_captureScope();
             return __wasm_rquickjs_queueMicrotask(function () {
-                const previous = __wasm_rquickjs_swapScope(scope);
+                const previous = __wasm_rquickjs_enterScope(scope);
                 try {
                     return callback();
                 } finally {
-                    __wasm_rquickjs_swapScope(previous);
+                    __wasm_rquickjs_leaveScope(previous);
                 }
             });
         };
@@ -33,6 +33,19 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn capture_for_callback<'js>(ctx: Ctx<'js>) -> rquickjs::Result<Option<Class<'js, Token>>> {
         custom_invocation_context::capture_for_callback(&ctx)
+    }
+
+    #[rquickjs::function]
+    pub fn enter_callback<'js>(
+        ctx: Ctx<'js>,
+        token: Option<Class<'js, Token>>,
+    ) -> rquickjs::Result<Option<Class<'js, Token>>> {
+        custom_invocation_context::enter_callback(&ctx, token)
+    }
+
+    #[rquickjs::function]
+    pub fn leave_callback(previous: Option<Class<'_, Token>>) {
+        custom_invocation_context::leave_callback(previous)
     }
 
     #[rquickjs::function]

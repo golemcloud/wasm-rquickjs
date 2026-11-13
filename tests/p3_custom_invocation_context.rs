@@ -258,6 +258,7 @@ async fn run_exports(component_path: &Utf8Path, exports: &[&str]) -> Result<Outc
                 "run-after" => bindings.call_run_after(accessor).await,
                 "run-plain" => bindings.call_run_plain(accessor).await,
                 "run-edge-cases" => bindings.call_run_edge_cases(accessor).await,
+                "run-first-scope" => bindings.call_run_first_scope(accessor).await,
                 other => panic!("unknown export {other}"),
             })
             .await??;
@@ -506,4 +507,28 @@ fn p3_custom_invocation_context_covers_edge_cases() {
     }
     assert_eq!(outcome.parents["c2"], "p2");
     assert_eq!(outcome.parents["mw"], "main");
+}
+
+#[test]
+fn p3_custom_invocation_context_keeps_root_work_queued_before_the_first_scope() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = build_component(&temp).expect("generate + build");
+    let outcome = block_on_with_timeout(run_exports(&wasm, &["run-first-scope"]));
+
+    assert_eq!(
+        outcome.violations,
+        Vec::<String>::new(),
+        "{:#?}",
+        outcome.records
+    );
+    for expected in [
+        "first-microtask@root",
+        "first-tick@root",
+        "first-timer@root",
+        "first-child@first",
+        "finish:first@first",
+        "first-after@root",
+    ] {
+        position(&outcome.records, expected);
+    }
 }
