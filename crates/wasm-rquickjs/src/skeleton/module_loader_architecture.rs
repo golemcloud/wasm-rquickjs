@@ -7,12 +7,10 @@ const MODULE_JS: &str = include_str!("../../skeleton/src/builtin/module.js");
 const EVENTS_JS: &str = include_str!("../../skeleton/src/builtin/events.js");
 const FS_JS: &str = include_str!("../../skeleton/src/builtin/fs.js");
 const BUILTIN_MOD_RS: &str = include_str!("../../skeleton/src/builtin/mod.rs");
-const BUILTIN_P3_RS: &str = include_str!("../../skeleton/src/builtin_p3.rs");
 const SYNC_EXPORTS_RS: &str = include_str!("../../skeleton/src/builtin/sync_exports.rs");
 const MODULE_LOADING_RS: &str = include_str!("../../skeleton/src/internal/module_loading.rs");
 const RUNTIME_SERVICES_RS: &str = include_str!("../../skeleton/src/internal/runtime_services.rs");
 const FS_RS: &str = include_str!("../../skeleton/src/builtin/fs.rs");
-const P2_RS: &str = include_str!("../../skeleton/src/internal/p2.rs");
 const P3_RS: &str = include_str!("../../skeleton/src/internal/p3.rs");
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -721,12 +719,10 @@ fn module_loader_architecture() {
             "module.js must not depend on test-observability bridge {test_bridge}"
         );
     }
-    for (target, source) in [("p2", P2_RS), ("p3", P3_RS)] {
-        assert!(
-            rust_identifiers(source).contains("OwnedJsRuntime"),
-            "{target} must construct the shared owned runtime"
-        );
-    }
+    assert!(
+        rust_identifiers(P3_RS).contains("OwnedJsRuntime"),
+        "p3 must construct the shared owned runtime"
+    );
     assert!(
         rust_identifiers(RUNTIME_SERVICES_RS).contains("initialize_module_loading"),
         "OwnedJsRuntime must use the shared module loader initialization"
@@ -793,17 +789,15 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
 
     let inventory = syncable_inventory();
     assert_eq!(inventory.len(), 61, "syncable builtin inventory changed");
-    for (target, registry) in [("p2", BUILTIN_MOD_RS), ("p3", BUILTIN_P3_RS)] {
-        assert_eq!(
-            registered_syncable_builtins(registry),
-            inventory,
-            "{target} syncable registrations must exactly match the canonical inventory"
-        );
-        assert!(
-            registry.contains("sync_exports::add_implementation_resolvers(resolver)"),
-            "{target} must resolve the generated builtin implementations"
-        );
-    }
+    assert_eq!(
+        registered_syncable_builtins(BUILTIN_MOD_RS),
+        inventory,
+        "syncable registrations must exactly match the canonical inventory"
+    );
+    assert!(
+        BUILTIN_MOD_RS.contains("sync_exports::add_implementation_resolvers(resolver)"),
+        "the builtin registry must resolve the generated builtin implementations"
+    );
     assert!(SYNC_EXPORTS_RS.contains("collect_static_esm_export_names"));
     assert!(SYNC_EXPORTS_RS.contains("canonical_public_builtin_alias"));
     assert!(SYNC_EXPORTS_RS.contains("static FACADES: OnceLock"));
@@ -832,7 +826,6 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
     assert!(!MODULE_JS.contains("registry.fs"));
     assert!(!MODULE_JS.contains("registry.events"));
     assert!(BUILTIN_MOD_RS.contains("console::PUBLIC_IMPLEMENTATION_JS"));
-    assert!(BUILTIN_P3_RS.contains("console::PUBLIC_IMPLEMENTATION_JS"));
     for (name, source) in [("fs", FS_JS), ("events", EVENTS_JS)] {
         assert!(
             !source.contains("__wasm_rquickjs_sync_builtin_esm_exports"),

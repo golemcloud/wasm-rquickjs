@@ -1,6 +1,7 @@
 # Result reports
 
-`run.sh` writes one JSON report for each P2/P3 and strip/transform combination.
+`run.sh` writes one JSON report for each strip/transform mode on P3. The 2026-09-21
+capture predates the P2 removal and covers each P2/P3 and strip/transform combination.
 Reports contain the complete path/size matrix, raw samples, control latency,
 sibling responsiveness, and the guest linear-memory high-water observation.
 
@@ -14,8 +15,8 @@ The reports' `environment.commitHint` records the exact ESM whitespace-scan
 candidate used for the workload capture (`012a07cc`), while the runtime and
 benchmark input hashes are the currentness keys.
 
-`run.sh --check` validates the checked-in report schema and complete P2/P3 by
-strip/transform matrix without claiming that historical timings describe the
+`run.sh --check` validates the checked-in report schema and a complete P3
+strip/transform pair (plus its P2 companions for the historical capture) without claiming that historical timings describe the
 current runtime. `run.sh --check-current` additionally compares the stored input
 hashes with the checkout. A failure there requires a deliberate new measurement
 capture, not validation-only replacement of the runtime hash.

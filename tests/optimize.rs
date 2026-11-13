@@ -444,8 +444,6 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
         .enable_all()
         .build()?;
     for (target, tier) in [
-        (GenerationTarget::WasiP2, "p2,encoding"),
-        (GenerationTarget::WasiP2, "p2,crypto,encoding"),
         (GenerationTarget::WasiP3, "p3,encoding"),
         (GenerationTarget::WasiP3, "p3,crypto,encoding"),
     ] {

@@ -35,7 +35,6 @@ pub mod native_module {
 
         let timers = services.timers.clone();
         drop(services);
-        #[cfg(feature = "p3")]
         if let Some(owner) = timers
             .child_owner
             .borrow()
@@ -212,9 +211,6 @@ async fn scheduled_loop<F: Future<Output = bool>>(
     mut callback: impl FnMut() -> F,
 ) {
     loop {
-        #[cfg(feature = "p2")]
-        wstd::task::sleep(wstd::time::Duration::from_millis(delay as u64)).await;
-        #[cfg(feature = "p3")]
         wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)).await;
         let active = callback().await;
         if !periodic || !active {

@@ -12,7 +12,7 @@ use wit_parser::{Type, TypeDefKind, TypeId, TypeOwner};
 
 /// Returns the wrapper type name for a WASI-remapped type.
 ///
-/// For WASI types (from wasip2::), we cannot implement IntoJs/FromJs directly
+/// For WASI types (from wasip3::), we cannot implement IntoJs/FromJs directly
 /// due to the orphan rule, so we generate newtype wrappers in conversions.rs.
 /// This function generates the fully qualified path to the wrapper type.
 pub fn wasi_wrapper_name(context: &GeneratorContext<'_>, type_id: TypeId) -> anyhow::Result<Ident> {
@@ -105,7 +105,7 @@ fn generate_conversion_instances_for_type(
     let typ = context.typ(type_id)?;
 
     // For WASI-remapped resource types, generate a newtype wrapper with IntoJs/FromJs
-    // since we can't implement those traits directly on the foreign wasip2 type.
+    // since we can't implement those traits directly on the foreign wasip3 type.
     if is_wasi_remapped && matches!(typ.kind, TypeDefKind::Resource) {
         let type_path = type_id_to_type_ref(context, type_id)?;
         let wrapper_name = wasi_wrapper_name(context, type_id)?;

@@ -1,4 +1,4 @@
 declare module 'os' {
-  export function test(): Promise<string>;
-  export function testPerformanceClock(): Promise<string>;
+  export function test(): string;
+  export function testPerformanceClock(): string;
 }

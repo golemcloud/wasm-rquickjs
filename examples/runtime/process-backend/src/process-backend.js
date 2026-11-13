@@ -1,7 +1,8 @@
 import assert from 'node:assert/strict';
 import { spawn, spawnSync, exec, execFile, execFileSync, execSync } from 'node:child_process';
+import domain from 'node:domain';
 import { once } from 'node:events';
-import { existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
+import { appendFileSync, existsSync, mkdirSync, readFileSync, symlinkSync, writeFileSync } from 'node:fs';
 import { setProcessBackend } from 'wasm-rquickjs:child-process';
 import { runJavaScript } from 'wasm-rquickjs:execution';
 import { callCount } from 'wasm-rquickjs-runtime-init';
@@ -49,6 +50,15 @@ async function checkLocalChildLifetime(api) {
     }
     return true;
 }
+
+// Values an uncaughtException handler throws in the handler-throws modes. Reading or
+// formatting all but the first throws.
+const HANDLER_THROWS = {
+    error: `new Error('handler failure')`,
+    nullproto: `Object.create(null)`,
+    stackgetter: `Object.defineProperty(new Error('handler failure'), 'stack', { get() { throw new Error('stack getter'); } })`,
+    proxy: `new Proxy({}, { get() { throw new Error('proxy get'); } })`,
+};
 
 export async function run() {
     if (existsSync('/isolated-child-probe.json')) {
@@ -611,6 +621,7 @@ export async function run() {
             const failures = [];
             const onUncaught = error => failures.push(error.message);
             process.on('uncaughtException', onUncaught);
+            let onOrder;
             try {
                 const healthy = spawn(process.execPath, ['-e', `
                     process.stdout.write('first');
@@ -621,7 +632,21 @@ export async function run() {
                 assert.deepEqual(await once(healthy, 'close'), [0, null]);
                 assert.equal(readFileSync('/healthy-child', 'utf8'), 'done');
                 assert.deepEqual(failures, ['parent listener']);
-            } finally { process.removeListener('uncaughtException', onUncaught); }
+                // A child that writes and exits at once delivers its output and completion
+                // together; as in Node, the listener exception is reported before 'close'.
+                process.removeListener('uncaughtException', onUncaught);
+                const order = [];
+                onOrder = error => order.push(error.message);
+                process.on('uncaughtException', onOrder);
+                const immediate = spawn(process.execPath, ['-e', `process.stdout.write('only');`]);
+                immediate.stdout.on('data', () => { throw new Error('immediate listener'); });
+                immediate.on('close', () => order.push('close'));
+                assert.deepEqual(await once(immediate, 'close'), [0, null]);
+                assert.deepEqual(order, ['immediate listener', 'close']);
+            } finally {
+                process.removeListener('uncaughtException', onUncaught);
+                if (onOrder) process.removeListener('uncaughtException', onOrder);
+            }
         } else if (config.mode === 'public-contract') {
             const run = (source, options = {}) => spawnSync(process.execPath, ['-e', source], { encoding: 'utf8', ...options });
             for (const source of [
@@ -679,6 +704,95 @@ export async function run() {
             assert.equal(status, null);
             assert.equal(signal, 'SIGTERM');
             assert.equal(run(`process.stdout.write('after cancel');`).stdout, 'after cancel');
+        } else if (config.mode === 'handler-throws') {
+            // In Node a throwing uncaughtException or domain error handler is fatal (exit 7):
+            // nothing runs after it. The probes for later progress are armed only when the
+            // listener throws, so the child's start-up time cannot interleave them.
+            const log = line => appendFileSync('/handler-log', line + '\n');
+            let enter = () => {};
+            if (config.source === 'domain') {
+                const d = domain.create();
+                d.on('error', error => {
+                    log('domain-handler ' + error.message);
+                    throw new Error('domain handler failure');
+                });
+                // The listener enters d itself: emitters created in d.run do not enter it on emit.
+                enter = () => d.enter();
+            } else {
+                const thrown = new Function('return ' + HANDLER_THROWS[config.thrown ?? 'error']);
+                process.on('uncaughtException', error => {
+                    log('handler ' + error.message);
+                    throw thrown();
+                });
+            }
+            const child = spawn(process.execPath, ['-e', `process.stdout.write('only');`]);
+            child.on('error', error => log('child-error ' + error.message));
+            child.on('exit', code => log('child-exit ' + code));
+            const closed = new Promise(resolve => child.on('close', (code, signal) => {
+                log('child-close ' + code + ' ' + signal);
+                resolve();
+            }));
+            child.stdout.on('data', () => {
+                log('listener');
+                process.nextTick(() => log('after-failure tick'));
+                queueMicrotask(() => log('after-failure microtask'));
+                setTimeout(() => log('after-failure timer'), 0);
+                enter();
+                throw new Error('immediate listener');
+            });
+            // Either the export body waits for the child, or it returns first and the
+            // failure happens while the runtime drains after the body.
+            if (config.afterReturn) log('body-returned');
+            else {
+                await closed;
+                log('run-continued');
+            }
+        } else if (config.mode === 'handler-throws-child') {
+            // A child runtime owns its handler failure: the child exits 7 and its parent goes on.
+            // This holds when reading or formatting the thrown value throws, through both the
+            // child_process listener and queueMicrotask routes; an explicit exit keeps its code.
+            const triggers = {
+                listener: `const grandchild = require('node:child_process').spawn(process.execPath,
+                        ['-e', "process.stdout.write('only')"]);
+                    grandchild.on('error', error => process.stdout.write('error ' + error.message));
+                    grandchild.on('close', () => process.stdout.write('close'));
+                    grandchild.stdout.on('data', () => {
+                        setTimeout(() => process.stdout.write('after-failure'), 0);
+                        throw new Error('grandchild listener');
+                    });`,
+                microtask: `queueMicrotask(() => {
+                        setTimeout(() => process.stdout.write('after-failure'), 0);
+                        throw new Error('queued failure');
+                    });`,
+            };
+            const reported = {
+                error: /child handler failure/, nullproto: /could not be formatted/,
+                stackgetter: /child handler failure/, proxy: /could not be formatted/,
+            };
+            for (const [route, trigger] of Object.entries(triggers)) {
+                for (const [kind, source] of Object.entries(HANDLER_THROWS)) {
+                    const result = spawnSync(process.execPath, ['-e', `
+                        process.on('uncaughtException', () => { throw ${source.replace('handler failure', 'child handler failure')}; });
+                        ${trigger}
+                    `], { encoding: 'utf8' });
+                    const name = route + '/' + kind;
+                    assert.equal(result.status, 7, name + ': ' + result.stderr);
+                    assert.equal(result.stdout, '', name);
+                    assert.match(result.stderr, reported[kind], name);
+                }
+                const exited = spawnSync(process.execPath, ['-e', `
+                    process.on('uncaughtException', () => process.exit(5));
+                    ${trigger}
+                `], { encoding: 'utf8' });
+                assert.equal(exited.status, 5, route + '/exit: ' + exited.stderr);
+                assert.equal(exited.stdout, '', route + '/exit');
+            }
+            const handled = spawnSync(process.execPath, ['-e', `
+                process.on('uncaughtException', () => process.stdout.write('handled'));
+                queueMicrotask(() => { throw ${HANDLER_THROWS.proxy}; });
+            `], { encoding: 'utf8' });
+            assert.equal(handled.status, 0, handled.stderr);
+            assert.equal(handled.stdout, 'handled');
         } else {
             await check(basic, expected);
         }

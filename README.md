@@ -74,9 +74,9 @@ Usage: wasm-rquickjs generate-wrapper-crate --js <JS> --wit <WIT> --output <OUTP
 The output directory is going to contain a self-contained Rust crate that can be compiled into a WASM component using
 `cargo build --target wasm32-wasip2`.
 
-Every generated crate also contains a target-specific `THIRD_PARTY_COMPONENT_LICENSES.txt` for the
-locked Cargo dependency union of the standard `normal` / `normal-p3` TypeScript runtime and
-transform profiles. It is deliberately a superset for crates that enable fewer features.
+Every generated crate also contains a `THIRD_PARTY_COMPONENT_LICENSES.txt` for the locked Cargo
+dependency union of the standard `normal-p3` TypeScript runtime and transform profiles. It is
+deliberately a superset for crates that enable fewer features.
 Distributors must ship that notice with the compiled component and separately audit application
 code, custom feature combinations, bundled JavaScript in the skeleton (including third-party code
 adapted from Node.js, Deno, and web-streams-polyfill), toolchain and WASI sysroot components,
@@ -89,26 +89,34 @@ The generated crate has some **features** that control what imports the componen
 the user's WIT world:
 
 - `logging`: enables the `wasi:logging` import to be used for the JavaScript `console` API
-- `http`: enables the `wasi:http` import to be used for the JavaScript `fetch` API
 - `sqlite`: enables the `node:sqlite` module with an embedded SQLite database engine
+- `crypto`, `crypto-full`, `zlib`, `brotli`, `encoding`, `timezone`, `websocket` and `golem`
+  enable the corresponding builtin capabilities
 
-By default `logging` and `http` are enabled. The `sqlite` feature must be explicitly enabled.
+The default `normal-p3` tier enables `logging`, `crypto`, `zlib` and `encoding`; `full-p3` adds
+`crypto-full`, `brotli`, `sqlite` and `timezone`, and `full-no-logging-p3` is `full-p3` without
+`logging`. `fetch` and `node:http` always use `wasi:http`. Keep the `p3` feature in custom feature
+lists: it enables the `wit-bindgen-p3` dependency, which a `--dependency wit-bindgen-p3=...`
+replacement must therefore declare with `optional = true`.
 
 #### Choosing the WASI target
 
-The `--target` option selects which WASI generation mode is used:
+The generator emits WASI Preview 3 components. `--target wasi-p3` is the default and only
+accepted value; the option remains so that invocations passing it explicitly keep working. WIT
+`async func` exports and imports use the Component Model async ABI, while plain functions remain
+synchronous. WIT `future<T>` / `stream<T>` values are supported at function boundaries, including
+inside composite types. See [WASI Preview 3 target](#wasi-preview-3-target) below for the current
+status and limitations.
 
-- `--target wasi-p2` (**default**): the historical WASI Preview 2 mode. Component exports are
-  synchronous WIT functions and the full Node.js-compatible builtin set is available. This is the
-  stable, production path.
-- `--target wasi-p3`: the opt-in WASI Preview 3 mode. WIT `async func` exports and imports use the
-  Component Model async ABI, while plain functions remain synchronous. WIT `future<T>` /
-  `stream<T>` values are supported at function boundaries, including inside composite types. See
-  [WASI Preview 3 target](#wasi-preview-3-target) below for the current status and limitations.
+The WASI Preview 2 generation mode (`--target wasi-p2`) has been removed from this release line;
+use a wasm-rquickjs release from before the removal to generate Preview 2 components.
 
-Both targets generate a crate that is still compiled with `cargo build --target wasm32-wasip2`
-(a dedicated `wasm32-wasip3` rustc target does not exist yet; the Preview 3 crate uses the
-[`wasip3`](https://crates.io/crates/wasip3) bindings on top of the Preview 2 target).
+The generated crate is still compiled with `cargo build --target wasm32-wasip2` (a dedicated
+`wasm32-wasip3` rustc target does not exist yet; the crate uses the
+[`wasip3`](https://crates.io/crates/wasip3) bindings on top of the Preview 2 target). The
+component also imports the residual Preview 2 WASI interfaces that Rust's `std` and the synchronous
+filesystem timestamp operations use, so hosts must provide both the Preview 2 and Preview 3 WASI
+surfaces.
 
 #### Native modules and dependencies
 
@@ -133,7 +141,7 @@ wasm-rquickjs generate-wrapper-crate ... \
   unmodified dependencies. A fresh output directory then has no lock and Cargo resolves one on the
   first build; a `Cargo.lock` already in the output directory is kept.
 
-Both options can be repeated and work with both targets. The native module's crate must use the
+Both options can be repeated. The native module's crate must use the
 same `rquickjs` version as the generated crate; the crate's `[patch.crates-io]` applies to it.
 
 ### Generating TypeScript module definitions
@@ -154,22 +162,27 @@ Usage: wasm-rquickjs generate-dts --wit <WIT> --output <OUTPUT>
 `wasm-rquickjs` is integrated into [Golem](https://golem.cloud)'s command line interface, so it can be directly used
 using Golem app templates.
 
-> **Note:** Golem's Preview 3 SDK/template builds pin the `wasi-p3` generator branch and pass
-> `--target wasi-p3` when building their JavaScript guest images. Preview 2 remains the default for
-> callers that do not select a target explicitly.
+> **Note:** Golem's Preview 3 SDK/template builds pass `--target wasi-p3` when building their
+> JavaScript guest images; callers that do not select a target get the same Preview 3 output.
 
 ### WASI Preview 3 target
 
-Passing `--target wasi-p3` to `generate-wrapper-crate` selects the **opt-in, asynchronous** WASI
-Preview 3 generation mode. It is intended for hosts that support the Component Model async ABI.
+`generate-wrapper-crate` generates **asynchronous** WASI Preview 3 components for hosts that
+support the Component Model async ABI.
 
-**How it differs from Preview 2:**
+**How it differs from the removed Preview 2 mode:**
 
 - WIT `async func` exports and imports use the Component Model async ABI (`task.return`); plain
-  functions remain synchronous.
+  functions remain synchronous. A plain export may still be implemented by an `async` JavaScript
+  function whose Promise settles through JavaScript jobs alone, such as `await Promise.resolve()`.
+  A synchronous Component Model task cannot block on the host, so a plain export whose Promise
+  waits on timers or host I/O traps; declare it as `async func` instead.
+- `--js-modules name=@composition` modules are loaded at runtime through a synchronous
+  `get-script: func() -> string` import that generation adds to the component's world. Compose
+  a provider of it into the component before running or pre-initializing it.
 - The JavaScript event loop is driven by the Component Model async executor instead of Preview 2
-  `wasi:io/poll` pollables — there are no `wstd`/`wasip2`/pollable dependencies in the Preview 3
-  code path.
+  `wasi:io/poll` pollables; there is no `wstd` dependency, and `wasip2` is used only for the
+  residual synchronous interfaces described above.
 - WIT `future<T>` and `stream<T>` are mapped to JavaScript `Promise<T>` and `AsyncIterable<T>`
   respectively, both directly and when nested in composite parameter/result types.
 - `fetch` / HTTP uses the `wasi:http` Preview 3 (`wasi:http/handler`) async client.
@@ -185,18 +198,17 @@ wasmtime run -S p3=y -S http=y --wasm component-model=y --wasm component-model-a
   --invoke 'my-export()' path/to/component.wasm
 ```
 
-The Node.js-compatible builtin set is available on Preview 3 as well. Working end-to-end examples
+The Node.js-compatible builtin set is available. Working end-to-end examples
 live under [`examples/p3`](examples/p3), covering async exports/imports, `future<T>`/`stream<T>`
 values, exported resources, and HTTP `fetch`.
 
 **Current limitations (Preview 3):**
 
-- **Composition** (`--js-modules name=@composition`) is not supported yet.
 - An exported result containing `future<T>` or `stream<T>` must come from an `async func`; a
   synchronous export cannot return its reader before a backpressured writer starts.
 - The error arm of an exported top-level `result<T, E>` cannot contain `future<T>` or `stream<T>`.
 
-Wizer pre-initialization (`optimize`) supports Preview 3 components. As with Preview 2, module
+Wizer pre-initialization (`optimize`) supports Preview 3 components. Module
 initialization must become quiescent before the snapshot and cannot leave timers or tasks pending.
 Runtime arguments and environment variables are restored before the first export runs; modules
 must not capture their values or immutable aliases during top-level initialization.
@@ -251,7 +263,7 @@ its hook again. Readable bundles and source map configuration remain the
 responsibility of the build tooling. Public
 JavaScript `.stack` and `prepareStackTrace` behavior is unchanged.
 
-**Deterministic pre-initialization:** newly generated P2 and P3 templates export
+**Deterministic pre-initialization:** newly generated templates export
 `wasm-rquickjs-wizer-restore-v1`. When optimizing their `wizer-initialize` export,
 the optimizer supplies fixed-seed entropy, Unix-epoch wall time, and a zero
 monotonic clock, with empty arguments/environment. These services exist only in
@@ -307,9 +319,6 @@ leave the engine default unchanged (128 MiB in Golem's fork). This limits bytes 
 hostcall, not Wasm instruction fuel or the total snapshot size. Raising it allows larger
 copies and increases potential host memory use; insufficient fuel can still trigger Wizer's
 existing snapshot-extraction panic.
-
-Preview 3 is opt-in and evolving; Preview 2 (`--target wasi-p2`) remains the default and stable
-path.
 
 ## Mappings
 
@@ -467,8 +476,8 @@ sync or async.
 | Flags                   | `flags { a, b, c }` | `{ a: boolean, b: boolean, c: boolean }`          | The object keys are camelCase                                                 |
 | Record                  | `record { .. }`     | Object                                            | Field names are camelCase                                                     |
 | Variant                 | `variant { .. }`    | `{ tag: "x", val: X }`                            | Tag names match the WIT variant case names; `val` is undefined for unit cases |
-| Future                  | `future<T>`         | `Promise<T>`                                      | WASI Preview 3 (`--target wasi-p3`) only                                   |
-| Stream                  | `stream<T>`         | `AsyncIterable<T>`                                | WASI Preview 3 (`--target wasi-p3`) only                                   |
+| Future                  | `future<T>`         | `Promise<T>`                                      | -                                                                             |
+| Stream                  | `stream<T>`         | `AsyncIterable<T>`                                | -                                                                             |
 
 ### Imported result errors
 
@@ -491,7 +500,9 @@ string coercion; it does not replace the runtime's uncaught-exception formatter.
 
 - Maximum number of function parameters is 26
 - Anonymous interface exports/imports are not supported
-- Imported individual functions into the world are not supported (only whole interfaces)
+- Functions imported directly into the world are importable from a JavaScript module named after
+  the world (unless a JavaScript or native module has that name), but get no TypeScript
+  declarations; resources declared directly in the world are not supported
 - Preview 3 synchronous exports cannot return `future<T>` or `stream<T>`, directly or nested; use
   `async func`
 - Preview 3 exported top-level `result<T, E>` error arms cannot contain `future<T>` or `stream<T>`
@@ -514,7 +525,7 @@ If the `logging` feature flag is enabled in the generated crate, it depends on `
 <details>
 <summary><strong>HTTP (fetch)</strong></summary>
 
-Only if the `http` feature flag is enabled in the generated crate. It depends on `wasi:http`.
+Always available. It depends on `wasi:http`.
 
 - `fetch`, `Headers`, `Request`, `Response`, `FormData`, `Blob`, `File`
 
@@ -664,14 +675,13 @@ Context propagation works through `Promise.prototype.then/catch/finally` and `se
 <summary><strong><code>node:child_process</code></strong></summary>
 
 WASI cannot create host processes. JavaScript commands targeting `process.execPath` and executable
-Node shebang files run in the component. On Preview 3, each local child has a fresh runtime,
+Node shebang files run in the component. Each local child has a fresh runtime,
 argv, environment, cwd and module cache. Synchronous calls pause parent JavaScript while the child
 drains its referenced work. Local `spawn` and `execFile` expose live output and let the parent run
 while the child waits for timers or I/O. JavaScript execution is cooperative on the shared WASM
 thread: a CPU-bound child needs its own timeout; parent timers cannot preempt it to call `kill()`.
 Nested children inherit the outer child's deadline. The constrained local `exec` and `fork`
 adapters still execute synchronously before delivering their events.
-Preview 2 retains inline execution and does not join asynchronous local-child work.
 The constrained compatibility adapter also recognizes npm's literal `sh -c` form for plain Node
 commands. Unsupported shells, shell syntax, external executables and unsupported shebangs fail
 explicitly with `ENOSYS`, unless an embedding handles them through a registered backend.
@@ -832,7 +842,7 @@ Promise-based filesystem API.
 <details>
 <summary><strong><code>node:http</code> / <code>node:https</code></strong></summary>
 
-Requires the `http` feature flag. Client requests use `wasi:http` (TLS handled transparently). Server support uses `wasi:sockets` for TCP-level HTTP/1.1 serving.
+Always available. Client requests use `wasi:http` (TLS handled transparently). Server support uses `wasi:sockets` for TCP-level HTTP/1.1 serving.
 
 - `http.request(url|options[, callback])`, `http.get(url|options[, callback])`
 - `http.METHODS`, `http.STATUS_CODES`, `http.maxHeaderSize`
@@ -1862,7 +1872,7 @@ There are a few important things to keep in mind when working on the project:
   times and huge resulting binaries. Use the `cleanup-skeleton.sh` script to quickly remove the `target` directory from
   the `skeleton` crate.
 
-- Run `tools/check-skeleton-clippy.sh` to lint the supported Preview 2 and Preview 3 skeleton feature matrix. The helper
+- Run `tools/check-skeleton-clippy.sh` to lint the supported skeleton feature matrix. The helper
   temporarily symlinks `Cargo.toml` to the checked-in `Cargo.toml_`, directs output to the workspace-root `target/` cache,
   preserves that cache, and removes the symlink on exit. If a skeleton-local `target/` already exists, continue to use
   `cleanup-skeleton.sh` before embedding the skeleton.
@@ -1873,7 +1883,7 @@ There are a few important things to keep in mind when working on the project:
   ```sh
   WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1 \
   WASM_RQUICKJS_TEST_WASMTIME_CACHE=1 \
-  cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time
+  cargo test --test runtime -- module_resolution --report-time
   ```
 
   These caches may reuse generated wrapper, optimized component, and compiled Wasmtime artifacts. Every test still
@@ -1888,11 +1898,15 @@ There are a few important things to keep in mind when working on the project:
   For skeleton development, select a local performance profile:
 
   ```sh
-  tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
-  tools/dev-test.sh p2 fast-run node_compat <test_filter>
-  tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
-  tools/dev-test.sh p3 standard runtime ':tag:group3'
+  tools/dev-test.sh fork fast-start runtime <exact_test_filter>
+  tools/dev-test.sh fork fast-run node_compat <test_filter>
+  tools/dev-test.sh fork fast-run node_compat <test_filter> --test-threads 4
+  tools/dev-test.sh stock standard runtime ':tag:group3'
   ```
+
+  `fork` runs against Golem's Wasmtime fork (`use-golem-wasmtime`) through an ignored shadow workspace, so the real
+  manifests stay clean; `stock` uses the crates.io Wasmtime from the real manifest, like the CI runtime and
+  node-compat lanes.
 
   `fast-start` skips Wizer and uses one worker to minimize latency to the first result. `fast-run` runs Wizer,
   precompiles a changed component once before parallel workers start, reuses prepared components, and uses eight

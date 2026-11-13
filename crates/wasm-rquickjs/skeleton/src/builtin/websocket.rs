@@ -4,17 +4,6 @@ use rquickjs::{Ctx, Exception, JsLifetime, TypedArray};
 use std::cell::RefCell;
 use std::rc::Rc;
 
-/// Upper bound (in milliseconds) that a Preview 2 `receive_with_timeout` host call may block the
-/// single-threaded runtime before the receive loop yields.
-#[cfg(feature = "p2")]
-const RECEIVE_POLL_TIMEOUT_MS: u64 = 50;
-
-/// Cooperative yield between Preview 2 receive polls.
-#[cfg(feature = "p2")]
-async fn receive_poll_yield() {
-    wstd::task::sleep(wstd::time::Duration::from_millis(0)).await;
-}
-
 fn receive_result_to_js<'js>(
     ctx: &Ctx<'js>,
     result: Result<Message, WsError>,
@@ -126,8 +115,7 @@ impl WsConnection {
             .map_err(|e| Exception::throw_message(&ctx, &format!("WebSocket send failed: {e:?}")))
     }
 
-    /// Async receive. Preview 3 directly awaits the asynchronous host import; Preview 2 drives a
-    /// bounded cooperative loop over `receive_with_timeout`.
+    /// Async receive. Directly awaits the asynchronous host import.
     ///
     /// Returns: [type, data]
     ///   "text"    → data is the string
@@ -135,7 +123,6 @@ impl WsConnection {
     ///   "closed"  → data is { code, reason }
     ///   "error"   → data is an error description string
     pub async fn receive<'js>(&self, ctx: Ctx<'js>) -> rquickjs::Result<rquickjs::Value<'js>> {
-        #[cfg(feature = "p3")]
         {
             let conn = self
                 .inner
@@ -145,28 +132,6 @@ impl WsConnection {
                 .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
             let result = conn.receive().await;
             receive_result_to_js(&ctx, result)
-        }
-
-        #[cfg(feature = "p2")]
-        loop {
-            let result = {
-                let inner = self.inner.borrow();
-                let conn = inner
-                    .as_ref()
-                    .ok_or_else(|| Exception::throw_message(&ctx, "WebSocket is closed"))?;
-                conn.receive_with_timeout(RECEIVE_POLL_TIMEOUT_MS)
-            };
-
-            match result {
-                Ok(Some(message)) => return receive_result_to_js(&ctx, Ok(message)),
-                Ok(None) => {
-                    // No message arrived within the poll window. Yield so timers and other
-                    // async tasks run, then poll again.
-                    receive_poll_yield().await;
-                    continue;
-                }
-                Err(error) => return receive_result_to_js(&ctx, Err(error)),
-            }
         }
     }
 

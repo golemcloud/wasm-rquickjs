@@ -1,7 +1,4 @@
-use crate::common::{
-    CompiledTest, FeatureCombination, TestInstance, TestTarget, invoke_and_capture_output,
-    test_target,
-};
+use crate::common::{CompiledTest, FeatureCombination, TestInstance, invoke_and_capture_output};
 use camino::Utf8Path;
 use test_r::{test, test_dep};
 use wasm_rquickjs::{EmbeddingMode, JsModuleSpec};
@@ -37,9 +34,6 @@ async fn process_backend_is_runtime_local_and_preserves_inline_execution(
 }
 
 async fn check_local_node_child_lifetime(compiled: &CompiledTest, api: &str) -> anyhow::Result<()> {
-    if test_target() == TestTarget::P2 {
-        return check_isolated_child(compiled, serde_json::json!({ "mode": "unsupported" })).await;
-    }
     let mut instance = TestInstance::new(compiled.wasm_path()).await?;
     instance.set_epoch_deadline(30);
     std::fs::write(
@@ -73,13 +67,9 @@ async fn check_isolated_child(
 
 async fn check_isolated_child_with_memory_limit(
     compiled: &CompiledTest,
-    mut config: serde_json::Value,
+    config: serde_json::Value,
     memory_limit: Option<usize>,
 ) -> anyhow::Result<()> {
-    // P2 checks its public inline behavior rather than the P3-only lifecycle.
-    if test_target() == TestTarget::P2 {
-        config["mode"] = serde_json::json!("unsupported");
-    }
     let mut instance = TestInstance::new(compiled.wasm_path()).await?;
     instance.set_epoch_deadline(30);
     if let Some(limit) = memory_limit {
@@ -340,4 +330,72 @@ async fn local_node_child_stack_exhaustion_fails_spawn(
     #[tagged_as("process_backend")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {
     check_isolated_child(compiled, serde_json::json!({ "mode": "stack-exhaustion" })).await
+}
+
+#[test]
+async fn local_node_child_failing_uncaught_handler_is_fatal(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let mut cases = vec![
+        ("domain", "error", false),
+        ("process", "error", false),
+        ("process", "error", true),
+    ];
+    // Reading or formatting these values throws; the failure must still be fatal.
+    for thrown in ["nullproto", "stackgetter", "proxy"] {
+        cases.push(("process", thrown, false));
+        cases.push(("process", thrown, true));
+    }
+    for (source, thrown, after_return) in cases {
+        let case = format!("{source}, {thrown}, after return: {after_return}");
+        let handler = if source == "domain" {
+            "domain-handler"
+        } else {
+            "handler"
+        };
+        let before = if after_return { "body-returned\n" } else { "" };
+        let handled = format!("{before}listener\n{handler} immediate listener\n");
+        let reported = match thrown {
+            "nullproto" | "proxy" => "could not be formatted",
+            _ => "handler failure",
+        };
+        let mut instance = TestInstance::new(compiled.wasm_path()).await?;
+        instance.set_epoch_deadline(30);
+        std::fs::write(
+            instance.temp_dir_path().join("isolated-child-probe.json"),
+            serde_json::to_string(&serde_json::json!({
+                "mode": "handler-throws", "source": source, "thrown": thrown,
+                "afterReturn": after_return,
+            }))?,
+        )?;
+        let (result, _, stderr) = tokio::time::timeout(
+            std::time::Duration::from_secs(30),
+            instance.invoke_and_capture_output_with_stderr(None, "run", &[]),
+        )
+        .await?;
+        let log = std::fs::read_to_string(instance.temp_dir_path().join("handler-log"))?;
+        // The handler's failure belongs to the parent: it must neither reach the child as
+        // 'error' nor let the child, later ticks, jobs and timers, or the run continue.
+        assert_eq!(log, handled, "{case}: progress after the failing handler");
+        assert!(
+            result.is_err(),
+            "{case}: run continued after the failing handler: {result:?}"
+        );
+        assert!(
+            stderr.contains("uncaught exception handler failed") && stderr.contains(reported),
+            "{case}: unexpected failure: {stderr}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
+async fn local_node_child_failing_uncaught_handler_ends_only_its_child(
+    #[tagged_as("process_backend")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    check_isolated_child(
+        compiled,
+        serde_json::json!({ "mode": "handler-throws-child" }),
+    )
+    .await
 }

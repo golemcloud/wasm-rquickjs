@@ -1,41 +1,101 @@
-// Native functions for the timeout implementation
+//! WASI Preview 3 `fetch`/HTTP native bridge.
+//!
+//! It exposes the native class contract (`HttpRequest`, its body writer, and `HttpResponse`) that
+//! the JavaScript implementation in `builtin/http.js` uses, and keeps the contract of the removed
+//! Preview 2 bridge. Requests use the `wasip3` crate's `wasi:http/client` binding
+//! (`wasip3::http::client::send`) and Component Model async `stream<u8>`/`future` bodies. No
+//! `wstd`, `wasip2`, or Preview 2 pollables are used.
+//!
+//! ## Scope (Phase 3)
+//!
+//! Buffered requests and responses are fully supported: `GET`/`HEAD` plus buffered request
+//! bodies (string / `ArrayBuffer` / `Uint8Array` / `URLSearchParams` / `Blob` / `FormData`,
+//! the latter two are converted to `ArrayBuffer` by `http.js` before reaching native code),
+//! redirect following/error/manual policies, credentials filtering, referrer policy, and
+//! response consumption via `text()`, `arrayBuffer()`, and `body`/`stream()`. Response heads are
+//! returned immediately and native response bodies are consumed lazily, with buffering only when
+//! clones need independent views of the same underlying stream.
+//!
+//! Streaming *request* bodies (a `ReadableStream` passed as the fetch body) are also supported.
+//! `http.js` drives them through the split native contract (`initSend` / `initRequestBody` /
+//! `sendRequest` / `receiveResponse` plus the body writer's `writeRequestBodyChunk` /
+//! `finishBody`). On Preview 3 this maps onto a Component Model `stream<u8>` request body: the
+//! outgoing `wasi:http/client.send` future and the JS-driven chunk writes make progress
+//! concurrently on the shared async executor, so the request body is uploaded incrementally
+//! instead of being buffered. Redirects for streaming bodies are resolved by the shared JS loop,
+//! one native request/response attempt at a time.
+
+use http::{HeaderName, HeaderValue, StatusCode, Version};
+use rquickjs::convert::Coerced;
+use rquickjs::prelude::List;
+use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
+
+use super::abort_signal::with_abort_signal;
+use super::http_body::ResponseBody as NativeResponseBody;
+use super::shared_response_body::{self, NativeBody, SharedBodyCompletion, SharedBodyReader};
+use futures::future::{AbortHandle, Abortable};
+use std::cell::RefCell;
+use std::collections::HashMap;
+use std::future::Future;
+use std::pin::Pin;
+use std::rc::Rc;
+use url::Url;
+use wasip3::http::types::{ErrorCode, Fields, Method, Request, Response, Scheme, Trailers};
+use wasip3::wit_bindgen::{FutureWriter, StreamWriter};
+
+/// Boxed, pinned `wasi:http/client.send` future. It owns the outgoing [`Request`] (including the
+/// request body stream reader) and resolves once the response head is available.
+type SendFuture = Pin<Box<dyn Future<Output = Result<Response, ErrorCode>>>>;
+
+/// Writer half of the request body trailers future. Dropping it resolves the trailers to the
+/// default `Ok(None)` (no trailers).
+type TrailersWriter = FutureWriter<Result<Option<Trailers>, ErrorCode>>;
+
+/// Native module exposed to JavaScript as `__wasm_rquickjs_builtin/http_native`.
+#[cfg(not(feature = "internal-test-execution"))]
 #[rquickjs::module]
 pub mod native_module {
     pub use super::HttpRequest;
     pub use super::HttpResponse;
 }
 
-use futures::SinkExt;
-use futures::channel::mpsc::{UnboundedReceiver, UnboundedSender};
-use futures::future::{AbortHandle, Abortable};
-use futures_concurrency::stream::IntoStream;
-use golem_wasi_http::header::{HeaderName, HeaderValue};
-use golem_wasi_http::{
-    Body, CustomRequestBodyWriter, CustomRequestExecution, Method, Request, StreamError, Url,
-    Version,
-};
-use rquickjs::class::Trace;
-use rquickjs::convert::Coerced;
-use rquickjs::prelude::List;
-use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
-use std::cell::RefCell;
-use std::collections::HashMap;
-use std::rc::Rc;
-use wstd::runtime::AsyncPollable;
+/// Test-instrumented variant of the native HTTP module. Keeping the hooks as module functions
+/// avoids adding test-only methods to the production `HttpResponse` JavaScript prototype.
+#[cfg(feature = "internal-test-execution")]
+#[rquickjs::module]
+pub mod native_module {
+    pub use super::HttpRequest;
+    pub use super::HttpResponse;
 
-use super::abort_signal::with_abort_signal;
-use super::shared_response_body::{self, NativeBody, SharedBodyCompletion, SharedBodyReader};
+    #[qjs(rename = "takeRecoveredBodyReadBytesForTest")]
+    #[rquickjs::function]
+    pub fn take_recovered_body_read_bytes_for_test<'js>(
+        response: rquickjs::Class<'js, super::HttpResponse>,
+    ) -> usize {
+        response.borrow().take_recovered_body_read_bytes_for_test()
+    }
+
+    #[qjs(rename = "pauseNextBodyReadAfterReadyForTest")]
+    #[rquickjs::function]
+    pub fn pause_next_body_read_after_ready_for_test<'js>(
+        response: rquickjs::Class<'js, super::HttpResponse>,
+    ) -> bool {
+        response
+            .borrow()
+            .pause_next_body_read_after_ready_for_test()
+    }
+}
+
+// ---------------------------------------------------------------------------
+// Transport-agnostic fetch enums (mirrors the Preview 2 `builtin/http.rs`).
+// ---------------------------------------------------------------------------
 
 /// Request mode - defines the cross-origin behavior
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
 pub enum RequestMode {
-    /// Standard CORS mode
     Cors,
-    /// No CORS restrictions, limited to GET/HEAD/POST
     NoCors,
-    /// Same-origin only
     SameOrigin,
-    /// Navigation mode (not supported in WASM context)
     Navigate,
 }
 
@@ -55,7 +115,7 @@ impl RequestMode {
             "no-cors" => Ok(RequestMode::NoCors),
             "same-origin" => Ok(RequestMode::SameOrigin),
             "navigate" => Ok(RequestMode::Navigate),
-            _ => Err(format!("Unknown request mode: {}", s)),
+            _ => Err(format!("Unknown request mode: {s}")),
         }
     }
 }
@@ -73,7 +133,7 @@ impl<'js> IntoJs<'js> for RequestMode {
     }
 }
 
-/// Referrer policy - controls how referer header is sent
+/// Referrer policy - controls how the referer header is sent
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
 pub enum ReferrerPolicy {
     NoReferrer,
@@ -110,7 +170,7 @@ impl ReferrerPolicy {
             "strict-origin" => ReferrerPolicy::StrictOrigin,
             "strict-origin-when-cross-origin" | "" => ReferrerPolicy::StrictOriginWhenCrossOrigin,
             "unsafe-url" => ReferrerPolicy::UnsafeUrl,
-            _ => ReferrerPolicy::StrictOriginWhenCrossOrigin, // Default
+            _ => ReferrerPolicy::StrictOriginWhenCrossOrigin,
         }
     }
 }
@@ -131,11 +191,8 @@ impl<'js> IntoJs<'js> for ReferrerPolicy {
 /// Credentials mode - controls how cookies and auth headers are handled
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
 pub enum CredentialsMode {
-    /// Never send credentials
     Omit,
-    /// Send credentials only for same-origin requests
     SameOrigin,
-    /// Always send credentials
     Include,
 }
 
@@ -153,7 +210,7 @@ impl CredentialsMode {
             "omit" => CredentialsMode::Omit,
             "same-origin" => CredentialsMode::SameOrigin,
             "include" => CredentialsMode::Include,
-            _ => CredentialsMode::Omit, // Default for safety
+            _ => CredentialsMode::Omit,
         }
     }
 }
@@ -174,11 +231,8 @@ impl<'js> IntoJs<'js> for CredentialsMode {
 /// Redirect policy - controls how redirects are handled
 #[derive(Debug, Clone, Copy, PartialEq, Eq, rquickjs::class::Trace, rquickjs::JsLifetime)]
 pub enum RedirectPolicy {
-    /// Follow redirects automatically
     Follow,
-    /// Throw an error on redirect
     Error,
-    /// Return the redirect response manually
     Manual,
 }
 
@@ -196,7 +250,7 @@ impl RedirectPolicy {
             "follow" => Ok(RedirectPolicy::Follow),
             "error" => Ok(RedirectPolicy::Error),
             "manual" => Ok(RedirectPolicy::Manual),
-            _ => Err(format!("Unknown redirect policy: {}", s)),
+            _ => Err(format!("Unknown redirect policy: {s}")),
         }
     }
 }
@@ -214,50 +268,40 @@ impl<'js> IntoJs<'js> for RedirectPolicy {
     }
 }
 
-#[derive(Trace, JsLifetime)]
+// ---------------------------------------------------------------------------
+// HttpRequest
+// ---------------------------------------------------------------------------
+
+#[derive(rquickjs::class::Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct HttpRequest {
+    method: String,
+    url: String,
     #[qjs(skip_trace)]
-    method: Method,
-    #[qjs(skip_trace)]
-    url: Url,
-    #[qjs(skip_trace)]
-    headers: HashMap<HeaderName, HeaderValue>,
-    #[qjs(skip_trace)]
-    version: Version,
+    headers: Vec<(String, String)>,
     mode: RequestMode,
     referer: String,
     referrer_policy: ReferrerPolicy,
     credentials: CredentialsMode,
     redirect_policy: RedirectPolicy,
     #[qjs(skip_trace)]
-    body: Option<Body>,
-    #[qjs(skip_trace)]
     body_bytes: Option<Vec<u8>>,
+    /// The outgoing request built by `initSend`, held until `sendRequest` moves it into the
+    /// `wasi:http/client.send` future. Only used by the streaming request body path.
     #[qjs(skip_trace)]
-    execution: Option<CustomRequestExecution>,
+    pending_request: Option<Request>,
+    /// The request body stream writer created by `initSend`, handed to the body writer returned
+    /// by `initRequestBody`. Only used by the streaming request body path.
     #[qjs(skip_trace)]
-    redirect_count: usize,
-}
-
-impl Default for HttpRequest {
-    fn default() -> Self {
-        HttpRequest {
-            method: Method::GET,
-            url: Url::parse("http://localhost").expect("failed to parse default URL"),
-            headers: HashMap::new(),
-            version: Version::HTTP_11,
-            mode: RequestMode::Cors,
-            referer: "about:client".to_string(),
-            referrer_policy: ReferrerPolicy::StrictOriginWhenCrossOrigin,
-            credentials: CredentialsMode::SameOrigin,
-            redirect_policy: RedirectPolicy::Follow,
-            body: None,
-            body_bytes: None,
-            execution: None,
-            redirect_count: 0,
-        }
-    }
+    body_tx: Option<StreamWriter<u8>>,
+    /// The request trailers future writer created by `initSend`, handed to the body writer
+    /// returned by `initRequestBody`. Only used by the streaming request body path.
+    #[qjs(skip_trace)]
+    trailers_tx: Option<TrailersWriter>,
+    /// The in-flight `wasi:http/client.send` future created by `sendRequest` and awaited by
+    /// `receiveResponse`. Only used by the streaming request body path.
+    #[qjs(skip_trace)]
+    send_future: Option<SendFuture>,
 }
 
 #[rquickjs::methods(rename_all = "camelCase")]
@@ -277,49 +321,38 @@ impl HttpRequest {
         redirect_policy: RedirectPolicy,
     ) -> rquickjs::Result<Self> {
         let url = url.0;
-        let url: Url = url
-            .parse()
-            .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
-        let method: Method = method
-            .parse()
-            .map_err(|_| Exception::throw_message(&ctx, "failed to parse method"))?;
-        let version = match version.as_str() {
-            "HTTP/0.9" => Version::HTTP_09,
-            "HTTP/1.0" => Version::HTTP_10,
-            "HTTP/1.1" => Version::HTTP_11,
-            "HTTP/2.0" => Version::HTTP_2,
-            "HTTP/3.0" => Version::HTTP_3,
-            _ => {
-                return Err(Exception::throw_message(
-                    &ctx,
-                    &format!("Unsupported HTTP version: {version}"),
-                ));
-            }
-        };
-
-        let mut hdrs = HashMap::new();
-        for (key, value) in headers {
-            let header_name = HeaderName::from_bytes(key.as_bytes())
-                .map_err(|_| Exception::throw_message(&ctx, "failed to parse header name"))?;
-            let header_value = HeaderValue::from_str(&value)
-                .map_err(|_| Exception::throw_message(&ctx, "failed to parse header value"))?;
-            hdrs.insert(header_name, header_value);
+        // Validate the URL eagerly so bad inputs fail before the request starts.
+        Url::parse(&url).map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
+        // Validate the method token, rejecting invalid
+        // syntax (e.g. a method containing a space) with `failed to parse method`.
+        validate_method(&ctx, &method)?;
+        // Validate the requested HTTP version. `wasi:http` does not let us pin the wire version,
+        // but the shared native contract still rejects unsupported versions like the Preview 2
+        // path does, so invalid input fails identically on both targets.
+        validate_http_version(&ctx, &version)?;
+        // Validate header names/values up front so that
+        // malformed headers are rejected instead of being silently dropped when building the
+        // `wasi:http` fields later.
+        for (name, value) in &headers {
+            validate_header(&ctx, name, value)?;
         }
 
         Ok(HttpRequest {
             url,
+            // Preserve the method spelling as given (extension methods keep their case). The public `fetch`/`Request`/`XMLHttpRequest` APIs in
+            // `http.js` already upper-case standard methods before reaching native code.
             method,
-            headers: hdrs,
-            version,
+            headers: headers.into_iter().collect(),
             mode,
             referer,
             referrer_policy,
             credentials,
             redirect_policy,
-            body: None,
             body_bytes: None,
-            execution: None,
-            redirect_count: 0,
+            pending_request: None,
+            body_tx: None,
+            trailers_tx: None,
+            send_future: None,
         })
     }
 
@@ -327,23 +360,11 @@ impl HttpRequest {
         self.body_bytes = Some(crate::wrappers::copy_array_buffer_bytes(&body).unwrap_or_default());
     }
 
-    pub fn readable_stream_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<BodySink> {
-        use futures::StreamExt;
-
-        let mut body_sink = BodySink::new();
-        let receiver = body_sink.take_receiver(ctx)?;
-
-        let stream = receiver.into_stream().map(Ok);
-        let body = Body::from_stream(stream);
-        self.body = Some(body);
-        Ok(body_sink)
-    }
-
     pub fn string_body(&mut self, body: String) {
         self.body_bytes = Some(body.into_bytes());
     }
 
-    pub fn uint8_array_body(&mut self, body: rquickjs::TypedArray<'_, u8>) {
+    pub fn uint8_array_body(&mut self, body: TypedArray<'_, u8>) {
         self.body_bytes = Some(crate::wrappers::copy_typed_array_bytes(&body).unwrap_or_default());
     }
 
@@ -353,11 +374,10 @@ impl HttpRequest {
         name: String,
         value: String,
     ) -> rquickjs::Result<()> {
-        let header_name = HeaderName::from_bytes(name.as_bytes())
-            .map_err(|_| Exception::throw_message(&ctx, "failed to parse header name"))?;
-        let header_value = HeaderValue::from_str(&value)
-            .map_err(|_| Exception::throw_message(&ctx, "failed to parse header value"))?;
-        self.headers.insert(header_name, header_value);
+        validate_header(&ctx, &name, &value)?;
+        // Adding a header replaces any existing entry with the same (case-insensitive) name: `http.js` relies on it when it sets `Content-Type` for `URLSearchParams`
+        // bodies after the constructor headers have already been applied.
+        set_header(&mut self.headers, &name, &value);
         Ok(())
     }
 
@@ -383,7 +403,7 @@ impl HttpRequest {
 
     #[qjs(get)]
     pub fn url(&self) -> String {
-        self.url.to_string()
+        self.url.clone()
     }
 
     #[qjs(get)]
@@ -391,99 +411,176 @@ impl HttpRequest {
         self.redirect_policy
     }
 
+    /// Streaming request bodies, step 1: build the outgoing request with a Component Model
+    /// `stream<u8>` body and stage the stream/trailers writers for `initRequestBody`.
+    ///
+    /// This mirrors the header handling of a single `send_once` attempt (credentials filtering and
+    /// referrer policy applied to a per-attempt header list). Redirects are resolved by the shared
+    /// JS loop, which creates a fresh `HttpRequest` per attempt, so this method only sets up one
+    /// request.
     pub fn init_send<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
         crate::internal::preinit::check("HTTP request", "remote endpoint");
-        let client = golem_wasi_http::ClientBuilder::new()
-            .build()
-            .map_err(|_| Exception::throw_message(&ctx, "Failed to create HTTP client"))?;
+        // Validate mode constraints before sending, mirroring the buffered `simple_send` path so
+        // that the public `fetch` contract (e.g. rejecting `no-cors` with an unsafe method) does
+        // not depend on whether the request body is buffered or a `ReadableStream`.
+        self.validate_request_mode(&ctx)?;
 
-        let mut request = Request::new(self.method.clone(), self.url.clone());
+        let url = Url::parse(&self.url)
+            .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
 
-        *request.version_mut() = self.version;
-        for (name, value) in &self.headers {
-            request.headers_mut().insert(name.clone(), value.clone());
-        }
-
-        // Apply credentials filtering based on credentials mode
-        apply_credentials_filtering(request.headers_mut(), self.credentials, &self.url);
-
-        // Apply referrer policy and set Referer header if appropriate
-        if let Some(referer_header_value) =
-            apply_referrer_policy(self.referrer_policy, &self.referer, &self.url)
+        let mut headers = self.headers.clone();
+        apply_credentials_filtering(&mut headers, self.credentials);
+        if let Some(referer_value) =
+            apply_referrer_policy(self.referrer_policy, &self.referer, &url)
         {
-            let referer_header = HeaderValue::from_str(&referer_header_value)
-                .map_err(|_| Exception::throw_message(&ctx, "failed to parse referer value"))?;
-            request.headers_mut().insert(
-                HeaderName::from_bytes(b"referer").map_err(|_| {
-                    Exception::throw_message(&ctx, "failed to create referer header name")
-                })?,
-                referer_header,
-            );
+            set_header(&mut headers, "referer", &referer_value);
         }
 
-        self.execution = Some(
-            client
-                .execute_custom(request)
-                .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?,
-        );
+        let fields = build_fields(&headers);
+        let (body_tx, body_rx) = wasip3::wit_stream::new();
+        let (trailers_tx, trailers_rx) =
+            wasip3::wit_future::new(|| Ok::<Option<Trailers>, ErrorCode>(None));
+        // `_transmit` resolves to the request body transmission result; the shared JS contract
+        // surfaces upload failures through the body writer (`writeRequestBodyChunk`), so it is
+        // dropped here exactly like the buffered `send_once` path.
+        let (request, _transmit) = Request::new(fields, Some(body_rx), trailers_rx, None);
+
+        let method = parse_method(&self.method);
+        let scheme = parse_scheme(url.scheme());
+        let authority = url_authority(&url);
+        let path_with_query = url_path_with_query(&url);
+        apply_request_targets(
+            &ctx,
+            &request,
+            &method,
+            scheme.as_ref(),
+            authority.as_deref(),
+            &path_with_query,
+        )?;
+
+        self.pending_request = Some(request);
+        self.body_tx = Some(body_tx);
+        self.trailers_tx = Some(trailers_tx);
         Ok(())
     }
 
-    pub fn send_request<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
-        if let Some(execution) = self.execution.as_mut() {
-            execution
-                .send_request()
-                .map_err(|_| Exception::throw_message(&ctx, "Failed to send HTTP request"))?;
-            Ok(())
-        } else {
-            Err(Exception::throw_message(
-                &ctx,
-                "HTTP request has not been initialized for sending",
-            ))
-        }
-    }
-
+    /// Streaming request bodies, step 2: hand the staged stream/trailers writers to a body writer
+    /// object that JS pushes chunks into.
     pub fn init_request_body<'js>(
         &mut self,
         ctx: Ctx<'js>,
     ) -> rquickjs::Result<WrappedRequestBodyWriter> {
-        if let Some(execution) = self.execution.as_mut() {
-            let writer = execution
-                .init_request_body()
-                .map_err(|_| Exception::throw_message(&ctx, "Failed to init HTTP request body"))?;
-
-            Ok(WrappedRequestBodyWriter {
-                writer: Some(writer),
-            })
-        } else {
-            Err(Exception::throw_message(
+        match (self.body_tx.take(), self.trailers_tx.take()) {
+            (Some(body_tx), Some(trailers_tx)) => Ok(WrappedRequestBodyWriter {
+                body_tx: Some(body_tx),
+                trailers_tx: Some(trailers_tx),
+            }),
+            _ => Err(Exception::throw_message(
                 &ctx,
                 "HTTP request has not been initialized for sending",
-            ))
+            )),
         }
     }
 
-    pub async fn receive_response<'js>(
-        &mut self,
-        ctx: Ctx<'js>,
-        signal: Option<Value<'js>>,
-    ) -> rquickjs::Result<HttpResponse> {
-        let Some(execution) = self.execution.take() else {
+    /// Streaming request bodies, step 3: start the outgoing request. The returned future owns the
+    /// request (with its body stream reader) and is awaited later by `receiveResponse`; the body
+    /// chunk writes and this future make progress concurrently on the shared async executor.
+    pub fn send_request<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
+        let Some(request) = self.pending_request.take() else {
             return Err(Exception::throw_message(
                 &ctx,
                 "HTTP request has not been initialized for sending",
             ));
         };
-        let inner_ctx = ctx.clone();
-        with_abort_signal(&ctx, signal, async move {
-            let response = execution.receive_response().await.map_err(|_| {
-                Exception::throw_message(&inner_ctx, "Failed to receive HTTP response")
-            })?;
-            Ok(HttpResponse::from_response(response))
-        })
-        .await
+        self.send_future = Some(Box::pin(wasip3::http::client::send(request)));
+        Ok(())
     }
 
+    /// Streaming request bodies, step 4: await the response head, then read the response body only
+    /// when it is actually visible to JS.
+    ///
+    /// The shared JS streaming loop (`streamingRequest` in `http.js`) resolves redirects one native
+    /// attempt at a time and never consumes the body of a followed redirect, a rejected redirect, or
+    /// a manual-redirect (opaque) response. Mirror the buffered [`Self::simple_send`] path: inspect
+    /// the response head first and, for a response whose body JS will discard, drop it without
+    /// reading so a large / slow / never-ending discarded body cannot stall the redirect loop. Only
+    /// the final visible response body is read; a body that failed mid-transfer is recorded and
+    /// surfaced when JS actually consumes it.
+    pub async fn receive_response<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<HttpResponse> {
+        let receive = self.receive_response_inner(ctx.clone());
+        with_abort_signal(&ctx, signal, receive).await
+    }
+
+    async fn receive_response_inner<'js>(
+        &mut self,
+        ctx: Ctx<'js>,
+    ) -> rquickjs::Result<HttpResponse> {
+        let Some(send_future) = self.send_future.take() else {
+            return Err(Exception::throw_message(
+                &ctx,
+                "HTTP request has not been initialized for sending",
+            ));
+        };
+
+        let response = send_future
+            .await
+            .map_err(|e| Exception::throw_message(&ctx, &format!("HTTP request failed: {e:?}")))?;
+
+        let status = response.get_status_code();
+        let resp_headers = fields_to_pairs(&response.get_headers());
+
+        // Decide whether the shared JS loop will discard this response's body before it is ever
+        // exposed to user code. This matches the branches in `streamingRequest`:
+        //   * `redirect: "follow"` with a *followable* `Location` header -> the loop follows the
+        //     redirect and starts a fresh attempt (body discarded). Without a `Location` header, or
+        //     with a `Location` that does not resolve to a valid URL, the loop instead returns this
+        //     response as final (mirroring the buffered `simple_send` fallback), so its body must be
+        //     kept.
+        //   * `redirect: "error"` -> the loop throws unconditionally (body discarded).
+        //   * `redirect: "manual"` -> the loop returns an opaque response whose body is never
+        //     surfaced (body discarded).
+        let is_redirection = (300..400).contains(&status);
+        let is_supported_redirection =
+            is_redirection && status != 304 && status != 305 && status != 306;
+        if is_supported_redirection {
+            let will_discard_body = match self.redirect_policy {
+                RedirectPolicy::Error | RedirectPolicy::Manual => true,
+                RedirectPolicy::Follow => resp_headers
+                    .iter()
+                    .find(|h| h[0].eq_ignore_ascii_case("location"))
+                    .is_some_and(|h| location_is_followable(&self.url, &h[1])),
+            };
+            if will_discard_body {
+                // The redirect body is discarded by fetch semantics; drop the response without
+                // reading its body so a large / slow / never-ending redirect body cannot delay or
+                // hang the followed request.
+                drop(response);
+                return Ok(HttpResponse::from_parts(status, resp_headers, Vec::new()));
+            }
+        }
+
+        // `no-cors` responses never surface their body/status/headers to JS. Mirror the buffered
+        // `simple_send` path: drop the body without reading and return an opaque response, so the
+        // public `fetch` contract does not depend on whether the request body is a `ReadableStream`.
+        if self.mode == RequestMode::NoCors {
+            drop(response);
+            let mut opaque = HttpResponse::from_parts(status, resp_headers, Vec::new());
+            opaque.make_opaque();
+            return Ok(opaque);
+        }
+
+        // Preserve the native body owner so fetch resolves after the response head. Transfer
+        // errors are surfaced when JS consumes the body, matching the Preview 2 lifecycle.
+        Ok(HttpResponse::from_response(status, resp_headers, response))
+    }
+
+    /// Buffered send with redirect handling. Only the final visible response body is read; the
+    /// bodies of followed redirects, rejected redirects, and opaque responses are discarded without
+    /// reading, so a large or never-ending discarded body cannot stall the fetch.
     pub async fn simple_send<'js>(
         &mut self,
         ctx: Ctx<'js>,
@@ -495,146 +592,238 @@ impl HttpRequest {
 
     async fn simple_send_inner<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
         crate::internal::preinit::check("HTTP request", "remote endpoint");
-        // Validate mode constraints
-        if self.mode == RequestMode::NoCors {
-            let method_str = self.method.to_string().to_uppercase();
-            if !matches!(method_str.as_str(), "GET" | "HEAD" | "POST") {
-                return Err(Exception::throw_message(
-                    &ctx,
-                    "no-cors mode only allows GET, HEAD, or POST methods",
-                ));
-            }
-        } else if self.mode == RequestMode::Navigate {
-            return Err(Exception::throw_message(
-                &ctx,
-                "navigate mode is not supported in WASM context",
-            ));
-        } else if !matches!(self.mode, RequestMode::Cors | RequestMode::SameOrigin) {
-            return Err(Exception::throw_message(
-                &ctx,
-                &format!("Unsupported request mode: {}", self.mode.as_str()),
-            ));
-        }
+        // Validate mode constraints. The streaming request-body path
+        // performs the same validation in `init_send`.
+        self.validate_request_mode(&ctx)?;
 
         let max_redirects = 20;
         let mut current_redirects = 0;
 
+        // Mutable per-attempt state.
+        let mut current_url = Url::parse(&self.url)
+            .map_err(|_| Exception::throw_message(&ctx, "failed to parse url"))?;
+        let mut current_method = self.method.clone();
+        let mut current_headers = self.headers.clone();
+        let mut current_body = self.body_bytes.clone();
+
         loop {
-            let client = golem_wasi_http::ClientBuilder::new()
-                .build()
-                .map_err(|_| Exception::throw_message(&ctx, "Failed to create HTTP client"))?;
-
-            let mut request = Request::new(self.method.clone(), self.url.clone());
-
-            *request.version_mut() = self.version;
-            for (name, value) in &self.headers {
-                request.headers_mut().insert(name.clone(), value.clone());
-            }
-
-            // Apply credentials filtering based on credentials mode
-            apply_credentials_filtering(request.headers_mut(), self.credentials, &self.url);
-
-            // Apply referrer policy and set Referer header if appropriate
-            if let Some(referer_header_value) =
-                apply_referrer_policy(self.referrer_policy, &self.referer, &self.url)
+            // Build the per-request header list: user headers + credentials filtering + referer.
+            let mut headers = current_headers.clone();
+            apply_credentials_filtering(&mut headers, self.credentials);
+            if let Some(referer_value) =
+                apply_referrer_policy(self.referrer_policy, &self.referer, &current_url)
             {
-                let referer_header = HeaderValue::from_str(&referer_header_value)
-                    .map_err(|_| Exception::throw_message(&ctx, "failed to parse referer value"))?;
-                request.headers_mut().insert(
-                    HeaderName::from_bytes(b"referer").map_err(|_| {
-                        Exception::throw_message(&ctx, "failed to create referer header name")
-                    })?,
-                    referer_header,
-                );
+                set_header(&mut headers, "referer", &referer_value);
             }
 
-            if let Some(body_bytes) = &self.body_bytes {
-                *request.body_mut() = Some(Body::from(body_bytes.clone()));
-            } else if self.body.is_some() {
-                // NOTE: if the request body was not buffered, we were only able to use it once
-                // not for followed redirects.
-                *request.body_mut() = self.body.take();
-            }
+            let response = send_once(
+                &ctx,
+                &current_url,
+                &current_method,
+                &headers,
+                current_body.clone(),
+            )
+            .await?;
 
-            let response = client
-                .execute(request)
-                .await
-                .map_err(|_| Exception::throw_message(&ctx, "HTTP request failed"))?;
+            // Inspect the response head before deciding whether the body is visible to JS.
+            let status = response.get_status_code();
+            let resp_headers = fields_to_pairs(&response.get_headers());
 
-            let is_redirection = response.status().is_redirection();
-            let status_code = response.status().as_u16();
+            let is_redirection = (300..400).contains(&status);
             let is_supported_redirection =
-                is_redirection && status_code != 304 && status_code != 305 && status_code != 306;
+                is_redirection && status != 304 && status != 305 && status != 306;
 
-            // Check for redirect
             if self.redirect_policy == RedirectPolicy::Follow && is_supported_redirection {
                 if current_redirects >= max_redirects {
+                    // Drop without reading the body: the redirect body is never surfaced.
+                    drop(response);
                     return Err(Exception::throw_message(
                         &ctx,
                         "Maximum number of redirects exceeded",
                     ));
                 }
 
-                let location = response
-                    .headers()
-                    .get(HeaderName::from_bytes(b"location").unwrap());
-                if let Some(location) = location {
-                    let location_str = location.to_str().unwrap_or("");
-                    match Url::parse(location_str).or_else(|_| self.url.join(location_str)) {
+                if let Some(location) = resp_headers
+                    .iter()
+                    .find(|h| h[0].eq_ignore_ascii_case("location"))
+                    .map(|h| h[1].clone())
+                {
+                    match Url::parse(&location).or_else(|_| current_url.join(&location)) {
                         Ok(new_url) => {
-                            let mut new_method = self.method.clone();
+                            // The redirect response body is discarded by fetch semantics; drop the
+                            // response without reading its body so a large / slow / never-ending
+                            // redirect body cannot delay or hang the followed request.
+                            drop(response);
                             let mut drop_body = false;
-
-                            if status_code == 303
-                                || ((status_code == 301 || status_code == 302)
-                                    && self.method == Method::POST)
+                            if status == 303
+                                || ((status == 301 || status == 302)
+                                    && current_method.eq_ignore_ascii_case("POST"))
                             {
-                                new_method = Method::GET;
+                                current_method = "GET".to_string();
                                 drop_body = true;
                             }
-
-                            self.redirect_count += 1;
-                            current_redirects += 1;
-                            self.url = new_url;
-                            self.method = new_method;
                             if drop_body {
-                                self.body = None;
+                                current_body = None;
+                                remove_header(&mut current_headers, "content-type");
+                                remove_header(&mut current_headers, "content-length");
+                                remove_header(&mut current_headers, "transfer-encoding");
                             }
-                            // loop again
+                            current_url = new_url;
+                            current_redirects += 1;
                             continue;
                         }
                         Err(_) => {
-                            // Failed to parse location, just return the redirect response
+                            // Failed to parse the location; fall through and return the redirect.
                         }
                     }
                 }
             } else if self.redirect_policy == RedirectPolicy::Error && is_supported_redirection {
+                // The rejected redirect's body is never surfaced; drop it without reading.
+                drop(response);
                 return Err(Exception::throw_message(&ctx, "Unexpected redirect"));
             }
 
-            let mut http_response = HttpResponse::from_response(response);
-            http_response.set_redirected(current_redirects > 0);
+            // Reflect the final URL back to JS (`http.js` reads `request.url`).
+            self.url = current_url.to_string();
 
-            if self.redirect_policy == RedirectPolicy::Manual && is_supported_redirection {
-                http_response.make_opaque();
-                return Ok(http_response);
+            // Opaque responses never surface their body to JS, so drop it without reading: a
+            // body-transfer error is not observable and reading a large body would be wasteful.
+            // A `redirect: "manual"` redirect becomes an *opaque-redirect* response (`type` =
+            // `opaqueredirect`), whereas a `no-cors` response becomes a plain `opaque` response.
+            let is_manual_redirect =
+                self.redirect_policy == RedirectPolicy::Manual && is_supported_redirection;
+            let is_no_cors = self.mode == RequestMode::NoCors;
+            if is_manual_redirect || is_no_cors {
+                drop(response);
+                let mut opaque = HttpResponse::from_parts(status, resp_headers, Vec::new());
+                opaque.redirected = current_redirects > 0;
+                if is_manual_redirect {
+                    opaque.make_opaque_redirect();
+                } else {
+                    opaque.make_opaque();
+                }
+                return Ok(opaque);
             }
 
-            // For no-cors mode, make the response opaque
-            if self.mode == RequestMode::NoCors {
-                http_response.make_opaque();
-            }
-
-            return Ok(http_response);
+            // Keep the final response body native and lazy so fetch resolves as soon as the head
+            // arrives. Body transfer failures remain observable at consumption time.
+            let mut response = HttpResponse::from_response(status, resp_headers, response);
+            response.redirected = current_redirects > 0;
+            return Ok(response);
         }
     }
 }
 
-#[derive(Trace, JsLifetime)]
+impl HttpRequest {
+    /// Validates the request mode before sending. Shared by the
+    /// buffered [`Self::simple_send`] path and the streaming [`Self::init_send`] path so the public
+    /// `fetch` contract is identical regardless of whether the request body is buffered or streamed.
+    fn validate_request_mode(&self, ctx: &Ctx<'_>) -> rquickjs::Result<()> {
+        if self.mode == RequestMode::NoCors {
+            let method_str = self.method.to_uppercase();
+            if !matches!(method_str.as_str(), "GET" | "HEAD" | "POST") {
+                return Err(Exception::throw_message(
+                    ctx,
+                    "no-cors mode only allows GET, HEAD, or POST methods",
+                ));
+            }
+        } else if self.mode == RequestMode::Navigate {
+            return Err(Exception::throw_message(
+                ctx,
+                "navigate mode is not supported in WASM context",
+            ));
+        } else if !matches!(self.mode, RequestMode::Cors | RequestMode::SameOrigin) {
+            return Err(Exception::throw_message(
+                ctx,
+                &format!("Unsupported request mode: {}", self.mode.as_str()),
+            ));
+        }
+        Ok(())
+    }
+}
+
+/// Performs a single (non-redirecting) request through `wasi:http/client` and returns the response
+/// head. The response body is **not** consumed here: the caller retains it for a final visible
+/// response, or drops it to discard a followed redirect / opaque response without paying for a
+/// large or never-ending body.
+async fn send_once(
+    ctx: &Ctx<'_>,
+    url: &Url,
+    method: &str,
+    headers: &[(String, String)],
+    body: Option<Vec<u8>>,
+) -> rquickjs::Result<Response> {
+    let method = parse_method(method);
+    let scheme = parse_scheme(url.scheme());
+    let authority = url_authority(url);
+    let path_with_query = url_path_with_query(url);
+
+    let response = match body {
+        Some(bytes) => {
+            let fields = build_fields(headers);
+            let (mut body_tx, body_rx) = wasip3::wit_stream::new();
+            let (trailers_tx, trailers_rx) =
+                wasip3::wit_future::new(|| Ok::<Option<Trailers>, ErrorCode>(None));
+            let (request, _transmit) = Request::new(fields, Some(body_rx), trailers_rx, None);
+            apply_request_targets(
+                ctx,
+                &request,
+                &method,
+                scheme.as_ref(),
+                authority.as_deref(),
+                &path_with_query,
+            )?;
+
+            let write_fut = async move {
+                // `write_all` returns the bytes it could not deliver; dropping the writer closes
+                // the request body stream, and dropping the trailers writer resolves it to the
+                // default `Ok(None)`.
+                let _remaining = body_tx.write_all(bytes).await;
+                drop(body_tx);
+                drop(trailers_tx);
+            };
+            let send_fut = wasip3::http::client::send(request);
+            let (send_result, ()) = futures::future::join(send_fut, write_fut).await;
+            send_result
+        }
+        None => {
+            let fields = build_fields(headers);
+            let (trailers_tx, trailers_rx) =
+                wasip3::wit_future::new(|| Ok::<Option<Trailers>, ErrorCode>(None));
+            drop(trailers_tx);
+            let (request, _transmit) = Request::new(fields, None, trailers_rx, None);
+            apply_request_targets(
+                ctx,
+                &request,
+                &method,
+                scheme.as_ref(),
+                authority.as_deref(),
+                &path_with_query,
+            )?;
+            wasip3::http::client::send(request).await
+        }
+    };
+
+    let response = response
+        .map_err(|e| Exception::throw_message(ctx, &format!("HTTP request failed: {e:?}")))?;
+
+    Ok(response)
+}
+
+// ---------------------------------------------------------------------------
+// WrappedRequestBodyWriter (streaming request bodies)
+// ---------------------------------------------------------------------------
+
+/// Writer end of a streaming request body. `http.js` obtains one from `HttpRequest.initRequestBody`
+/// and pushes chunks into the Component Model `stream<u8>` request body while the outgoing request
+/// is in flight.
+#[derive(rquickjs::class::Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct WrappedRequestBodyWriter {
     #[qjs(skip_trace)]
-    writer: Option<CustomRequestBodyWriter>,
+    body_tx: Option<StreamWriter<u8>>,
+    #[qjs(skip_trace)]
+    trailers_tx: Option<TrailersWriter>,
 }
 
 impl Default for WrappedRequestBodyWriter {
@@ -647,61 +836,104 @@ impl Default for WrappedRequestBodyWriter {
 impl WrappedRequestBodyWriter {
     #[qjs(constructor)]
     pub fn new() -> Self {
-        WrappedRequestBodyWriter { writer: None }
+        Self {
+            body_tx: None,
+            trailers_tx: None,
+        }
     }
 
+    /// Writes one chunk into the request body stream. Resolves once the chunk has been accepted by
+    /// the transport, providing backpressure to the JS `ReadableStream` reader. If the peer has
+    /// hung up (e.g. the server closed the upload early), the write reports the undelivered bytes
+    /// and this rejects.
     pub async fn write_request_body_chunk<'js>(
         &mut self,
         ctx: Ctx<'js>,
         chunk: TypedArray<'_, u8>,
     ) -> rquickjs::Result<()> {
-        if let Some(writer) = self.writer.as_mut() {
-            let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
-                Exception::throw_message(
-                    &ctx,
-                    "the UInt8Array passed to the HTTP request is detached",
-                )
-            })?;
-            writer.write_body_chunk(&bytes).await.map_err(|_| {
-                Exception::throw_message(&ctx, "Failed to write HTTP request body chunk")
-            })?;
-            Ok(())
-        } else {
-            Err(Exception::throw_message(
+        let Some(body_tx) = self.body_tx.as_mut() else {
+            return Err(Exception::throw_message(
                 &ctx,
-                "HTTP request has not been initialized for sending",
-            ))
+                "HTTP request body has already been finished",
+            ));
+        };
+        let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
+            Exception::throw_message(
+                &ctx,
+                "the UInt8Array passed to the HTTP request is detached",
+            )
+        })?;
+        let remaining = body_tx.write_all(bytes).await;
+        if !remaining.is_empty() {
+            return Err(Exception::throw_message(
+                &ctx,
+                "Failed to write HTTP request body chunk",
+            ));
         }
+        Ok(())
     }
 
-    pub fn finish_body<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<()> {
-        if let Some(writer) = self.writer.take() {
-            writer
-                .finish_body()
-                .map_err(|_| Exception::throw_message(&ctx, "Failed to init HTTP request body"))?;
-            Ok(())
-        } else {
-            Err(Exception::throw_message(
-                &ctx,
-                "HTTP request has not been initialized for sending",
-            ))
-        }
+    /// Finishes the request body. Dropping the stream writer closes the request body stream and
+    /// dropping the trailers writer resolves it to the default `Ok(None)` (no trailers), together
+    /// signaling the end of the request body to the transport.
+    pub fn finish_body<'js>(&mut self, _ctx: Ctx<'js>) -> rquickjs::Result<()> {
+        self.body_tx = None;
+        self.trailers_tx = None;
+        Ok(())
     }
 
     pub fn abort_body(&mut self) {
-        self.writer = None;
+        self.body_tx = None;
+        self.trailers_tx = None;
     }
 }
 
-#[derive(Trace, JsLifetime)]
+// ---------------------------------------------------------------------------
+// HttpResponse (buffered)
+// ---------------------------------------------------------------------------
+
+enum ResponseBody {
+    Bytes(Vec<u8>),
+    Native(NativeResponseBody),
+    Shared(SharedResponseBody),
+    Consumed,
+}
+
+type SharedResponseBody = SharedBodyReader<NativeResponseBody>;
+
+impl NativeBody for NativeResponseBody {
+    async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
+        NativeResponseBody::read_chunk(self).await
+    }
+
+    fn discard(mut self) {
+        NativeResponseBody::discard(&mut self);
+    }
+
+    #[cfg(feature = "internal-test-execution")]
+    fn take_recovered_read_bytes_for_test(&self) -> usize {
+        NativeResponseBody::take_recovered_read_bytes_for_test(self)
+    }
+
+    #[cfg(feature = "internal-test-execution")]
+    fn pause_next_ready_read_for_test(&self) -> bool {
+        NativeResponseBody::pause_next_ready_read_for_test(self)
+    }
+}
+
+#[derive(rquickjs::class::Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct HttpResponse {
     #[qjs(skip_trace)]
-    body_source: ResponseBodySource,
+    body: ResponseBody,
     headers: Vec<Vec<String>>,
-    #[qjs(skip_trace)]
-    status: golem_wasi_http::StatusCode,
+    status: u16,
     is_opaque: bool,
+    /// An opaque response produced by `redirect: "manual"` on a redirect status. Such responses
+    /// are opaque *and* must report a `type` of `opaqueredirect` (distinct from a `no-cors`
+    /// `opaque` response). Tracked with a dedicated flag rather than reusing `redirected`, so the
+    /// public `Response.type` and `Response.redirected` getters stay independently correct.
+    is_opaque_redirect: bool,
     redirected: bool,
 }
 
@@ -716,34 +948,35 @@ impl HttpResponse {
     #[qjs(constructor)]
     pub fn new() -> Self {
         Self {
-            body_source: ResponseBodySource::Consumed,
+            body: ResponseBody::Consumed,
             headers: Vec::new(),
-            status: golem_wasi_http::StatusCode::OK,
+            status: 200,
             is_opaque: false,
+            is_opaque_redirect: false,
             redirected: false,
         }
     }
 
     #[qjs(skip)]
-    pub fn from_response(response: golem_wasi_http::Response) -> Self {
-        let headers = response
-            .headers()
-            .iter()
-            .map(|(name, value)| {
-                vec![
-                    name.to_string(),
-                    value.to_str().unwrap_or("Invalid header value").to_string(),
-                ]
-            })
-            .collect();
-
-        let status = response.status();
-
-        HttpResponse {
-            body_source: ResponseBodySource::Native(Box::new(response)),
+    pub fn from_parts(status: u16, headers: Vec<Vec<String>>, body: Vec<u8>) -> Self {
+        Self {
+            body: ResponseBody::Bytes(body),
             headers,
             status,
             is_opaque: false,
+            is_opaque_redirect: false,
+            redirected: false,
+        }
+    }
+
+    #[qjs(skip)]
+    fn from_response(status: u16, headers: Vec<Vec<String>>, response: Response) -> Self {
+        Self {
+            body: ResponseBody::Native(NativeResponseBody::new(response)),
+            headers,
+            status,
+            is_opaque: false,
+            is_opaque_redirect: false,
             redirected: false,
         }
     }
@@ -751,27 +984,41 @@ impl HttpResponse {
     #[qjs(rename = "makeOpaque")]
     pub fn make_opaque(&mut self) {
         self.is_opaque = true;
-        // For opaque responses, clear headers and set status to 0
         self.headers.clear();
-        self.status = golem_wasi_http::StatusCode::OK; // Will report as 0 when is_opaque is true
+        self.status = 200; // reported as 0 while opaque
+        // Opaque responses never surface their body to JS, so a deferred body-transfer error is
+        // not observable and must not fail the fetch.
     }
 
     pub fn discard_body(&mut self) {
-        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
-        match source {
-            ResponseBodySource::Native(response) => discard_native_response(*response),
-            ResponseBodySource::Shared(shared) => shared.discard(),
-            ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
+        match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Native(native) => native.discard(),
+            ResponseBody::Shared(shared) => shared.discard(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
         }
     }
 
     pub async fn discard_body_and_wait(&mut self) {
-        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
-        match source {
-            ResponseBodySource::Native(response) => discard_native_response(*response),
-            ResponseBodySource::Shared(shared) => shared.discard_and_wait().await,
-            ResponseBodySource::Bytes(_) | ResponseBodySource::Consumed => {}
+        match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Native(native) => native.discard(),
+            ResponseBody::Shared(shared) => shared.discard_and_wait().await,
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => {}
         }
+    }
+
+    /// Turns this response into a `redirect: "manual"` opaque-redirect filtered response. Like
+    /// [`make_opaque`], it hides status/headers/body, but it additionally reports a `type` of
+    /// `opaqueredirect` (via [`is_opaque_redirect`]) so the public `Response.type` getter can tell
+    /// it apart from a `no-cors` `opaque` response.
+    #[qjs(rename = "makeOpaqueRedirect")]
+    pub fn make_opaque_redirect(&mut self) {
+        self.make_opaque();
+        self.is_opaque_redirect = true;
+    }
+
+    #[qjs(get, rename = "isOpaqueRedirect")]
+    pub fn is_opaque_redirect(&self) -> bool {
+        self.is_opaque_redirect
     }
 
     #[qjs(get)]
@@ -795,11 +1042,7 @@ impl HttpResponse {
 
     #[qjs(get)]
     pub fn status(&self) -> u16 {
-        if self.is_opaque {
-            0
-        } else {
-            self.status.as_u16()
-        }
+        if self.is_opaque { 0 } else { self.status }
     }
 
     #[qjs(get)]
@@ -809,8 +1052,14 @@ impl HttpResponse {
 
     #[qjs(get, rename = "statusText")]
     pub fn status_text(&self) -> String {
-        self.status
-            .canonical_reason()
+        // Opaque / opaque-redirect filtered responses expose an empty status message (their status
+        // is also reported as 0), matching the Fetch standard.
+        if self.is_opaque {
+            return String::new();
+        }
+        StatusCode::from_u16(self.status)
+            .ok()
+            .and_then(|status| status.canonical_reason())
             .unwrap_or("Unknown status")
             .to_string()
     }
@@ -820,33 +1069,7 @@ impl HttpResponse {
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<ArrayBuffer<'js>> {
-        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
-        let bytes = match source {
-            ResponseBodySource::Bytes(body_bytes) => body_bytes,
-            ResponseBodySource::Native(response) => {
-                let error_ctx = ctx.clone();
-                with_abort_signal(&ctx, signal, async move {
-                    response
-                        .bytes()
-                        .await
-                        .map(|bytes| bytes.to_vec())
-                        .map_err(|_| {
-                            Exception::throw_message(&error_ctx, "failed to read response body")
-                        })
-                })
-                .await?
-            }
-            ResponseBodySource::Shared(shared) => {
-                collect_shared_response_body(&ctx, signal, shared).await?
-            }
-            ResponseBodySource::Consumed => {
-                return Err(Exception::throw_message(
-                    &ctx,
-                    "The response has already been consumed",
-                ));
-            }
-        };
-
+        let bytes = self.take_body(&ctx, signal).await?;
         let ctx_clone = ctx.clone();
         ArrayBuffer::new(ctx, bytes).map_err(move |_| {
             Exception::throw_message(
@@ -856,165 +1079,164 @@ impl HttpResponse {
         })
     }
 
-    pub fn stream<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ResponseBodyStream> {
-        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
-        match source {
-            ResponseBodySource::Bytes(body_bytes) => Ok(ResponseBodyStream::from_source(
-                BodySource::Bytes(std::io::Cursor::new(body_bytes)),
-            )),
-            ResponseBodySource::Native(mut response) => {
-                let (stream, body) = response.get_raw_input_stream();
-
-                Ok(ResponseBodyStream::from_source(BodySource::Native {
-                    stream,
-                    body,
-                    response,
-                }))
-            }
-            ResponseBodySource::Shared(shared) => {
-                Ok(ResponseBodyStream::from_source(BodySource::Shared {
-                    shared,
-                }))
-            }
-            ResponseBodySource::Consumed => Err(Exception::throw_message(
-                &ctx,
-                "The response has already been consumed",
-            )),
-        }
-    }
-
     pub async fn text<'js>(
         &mut self,
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
     ) -> rquickjs::Result<String> {
-        let source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
-        match source {
-            ResponseBodySource::Bytes(body_bytes) => {
-                Ok(String::from_utf8_lossy(&body_bytes).to_string())
-            }
-            ResponseBodySource::Native(response) => {
-                let error_ctx = ctx.clone();
-                with_abort_signal(&ctx, signal, async move {
-                    response.text().await.map_err(|_| {
-                        Exception::throw_message(&error_ctx, "failed to read response body")
-                    })
-                })
-                .await
-            }
-            ResponseBodySource::Shared(shared) => {
-                let bytes = collect_shared_response_body(&ctx, signal, shared).await?;
-                Ok(String::from_utf8_lossy(&bytes).to_string())
-            }
-            ResponseBodySource::Consumed => Err(Exception::throw_message(
+        let bytes = self.take_body(&ctx, signal).await?;
+        Ok(String::from_utf8_lossy(&bytes).to_string())
+    }
+
+    pub fn stream<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<ResponseBodyStream> {
+        match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Bytes(bytes) => Ok(ResponseBodyStream::from_source(
+                ResponseBodyStreamSource::Bytes(bytes),
+            )),
+            ResponseBody::Native(native) => Ok(ResponseBodyStream::from_source(
+                ResponseBodyStreamSource::Native(native),
+            )),
+            ResponseBody::Shared(shared) => Ok(ResponseBodyStream::from_source(
+                ResponseBodyStreamSource::Shared(shared),
+            )),
+            ResponseBody::Consumed => Err(Exception::throw_message(
                 &ctx,
                 "The response has already been consumed",
             )),
         }
     }
 
-    /// Create an error response
     #[qjs(static)]
     pub fn error() -> Self {
         Self {
-            body_source: ResponseBodySource::Consumed,
+            body: ResponseBody::Consumed,
             headers: Vec::new(),
-            status: golem_wasi_http::StatusCode::INTERNAL_SERVER_ERROR,
+            status: 500,
             is_opaque: false,
+            is_opaque_redirect: false,
             redirected: false,
         }
     }
 
-    /// Create a redirect response
     #[qjs(static)]
     pub fn redirect(url: Coerced<String>, status: Option<u16>) -> Self {
-        let url = url.0;
+        // An out-of-range status falls back to 302 Found.
         let status_code = status
-            .and_then(|code| golem_wasi_http::StatusCode::from_u16(code).ok())
-            .unwrap_or(golem_wasi_http::StatusCode::FOUND);
-
-        let headers = vec![vec!["location".to_string(), url]];
-
+            .and_then(|code| StatusCode::from_u16(code).ok())
+            .map(|code| code.as_u16())
+            .unwrap_or(302);
         Self {
-            body_source: ResponseBodySource::Consumed,
-            headers,
+            body: ResponseBody::Consumed,
+            headers: vec![vec!["location".to_string(), url.0]],
             status: status_code,
             is_opaque: false,
+            is_opaque_redirect: false,
             redirected: false,
         }
     }
 
-    /// Create a JSON response
     #[qjs(static)]
     pub fn json<'js>(data: ArrayBuffer<'js>, status: u16) -> Self {
-        let status_code = golem_wasi_http::StatusCode::from_u16(status)
-            .unwrap_or(golem_wasi_http::StatusCode::OK);
-
-        let headers = vec![vec![
-            "content-type".to_string(),
-            "application/json".to_string(),
-        ]];
-
+        // An out-of-range status falls back to 200 OK.
+        let status = StatusCode::from_u16(status)
+            .map(|code| code.as_u16())
+            .unwrap_or(200);
         Self {
-            body_source: ResponseBodySource::Bytes(
+            body: ResponseBody::Bytes(
                 crate::wrappers::copy_array_buffer_bytes(&data).unwrap_or_default(),
             ),
-            headers,
-            status: status_code,
+            headers: vec![vec![
+                "content-type".to_string(),
+                "application/json".to_string(),
+            ]],
+            status,
             is_opaque: false,
+            is_opaque_redirect: false,
             redirected: false,
         }
     }
 
     pub fn clone(&mut self) -> Self {
-        let body_source = std::mem::replace(&mut self.body_source, ResponseBodySource::Consumed);
-        let (cloned_body_source, updated_body_source) = match body_source {
-            ResponseBodySource::Bytes(bytes) => (
-                ResponseBodySource::Bytes(bytes.clone()),
-                ResponseBodySource::Bytes(bytes),
+        let (kept, cloned) = match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Bytes(bytes) => (
+                ResponseBody::Bytes(bytes.clone()),
+                ResponseBody::Bytes(bytes),
             ),
-            ResponseBodySource::Native(mut response) => {
-                let (stream, body) = response.get_raw_input_stream();
-                let (kept, cloned) = SharedResponse::pair(SharedNativeResponse {
-                    stream: Some(stream),
-                    body: Some(body),
-                    response: Some(*response),
-                });
-                (
-                    ResponseBodySource::Shared(cloned),
-                    ResponseBodySource::Shared(kept),
-                )
+            ResponseBody::Native(native) => {
+                let (kept, cloned) = SharedResponseBody::pair(native);
+                (ResponseBody::Shared(kept), ResponseBody::Shared(cloned))
             }
-            ResponseBodySource::Shared(shared) => (
-                ResponseBodySource::Shared(shared.branch()),
-                ResponseBodySource::Shared(shared),
+            ResponseBody::Shared(shared) => (
+                ResponseBody::Shared(shared.branch()),
+                ResponseBody::Shared(shared),
             ),
-            ResponseBodySource::Consumed => {
-                (ResponseBodySource::Consumed, ResponseBodySource::Consumed)
-            }
+            ResponseBody::Consumed => (ResponseBody::Consumed, ResponseBody::Consumed),
         };
-        self.body_source = updated_body_source;
+        self.body = kept;
         Self {
-            body_source: cloned_body_source,
+            body: cloned,
             headers: self.headers.clone(),
             status: self.status,
             is_opaque: self.is_opaque,
+            is_opaque_redirect: self.is_opaque_redirect,
             redirected: self.redirected,
         }
     }
 }
 
-fn discard_native_response(mut response: golem_wasi_http::Response) {
-    let (stream, body) = response.get_raw_input_stream();
-    drop(stream);
-    drop(wasip2::http::types::IncomingBody::finish(body));
-    drop(response);
+impl HttpResponse {
+    #[cfg(feature = "internal-test-execution")]
+    fn take_recovered_body_read_bytes_for_test(&self) -> usize {
+        match &self.body {
+            ResponseBody::Native(native) => native.take_recovered_read_bytes_for_test(),
+            ResponseBody::Shared(shared) => shared.take_recovered_read_bytes_for_test(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => 0,
+        }
+    }
+
+    #[cfg(feature = "internal-test-execution")]
+    fn pause_next_body_read_after_ready_for_test(&self) -> bool {
+        match &self.body {
+            ResponseBody::Native(native) => native.pause_next_ready_read_for_test(),
+            ResponseBody::Shared(shared) => shared.pause_next_ready_read_for_test(),
+            ResponseBody::Bytes(_) | ResponseBody::Consumed => false,
+        }
+    }
+
+    async fn take_body<'js>(
+        &mut self,
+        ctx: &Ctx<'js>,
+        signal: Option<Value<'js>>,
+    ) -> rquickjs::Result<Vec<u8>> {
+        match std::mem::replace(&mut self.body, ResponseBody::Consumed) {
+            ResponseBody::Bytes(bytes) => Ok(bytes),
+            ResponseBody::Native(mut native) => {
+                let read = async move {
+                    let mut bytes = Vec::new();
+                    while let Some(chunk) = native
+                        .read_chunk()
+                        .await
+                        .map_err(|error| Exception::throw_message(ctx, &error))?
+                    {
+                        bytes.extend_from_slice(&chunk);
+                    }
+                    Ok(bytes)
+                };
+                with_abort_signal(ctx, signal, read).await
+            }
+            ResponseBody::Shared(shared) => collect_shared_body(ctx, signal, shared).await,
+            ResponseBody::Consumed => Err(Exception::throw_message(
+                ctx,
+                "The response has already been consumed",
+            )),
+        }
+    }
 }
 
-async fn collect_shared_response_body<'js>(
+async fn collect_shared_body<'js>(
     ctx: &Ctx<'js>,
     signal: Option<Value<'js>>,
-    shared: SharedResponse,
+    shared: SharedResponseBody,
 ) -> rquickjs::Result<Vec<u8>> {
     with_abort_signal(ctx, signal, async {
         shared_response_body::collect(ctx, shared).await
@@ -1022,80 +1244,14 @@ async fn collect_shared_response_body<'js>(
     .await
 }
 
-pub type SharedResponse = SharedBodyReader<SharedNativeResponse>;
-
-pub struct SharedNativeResponse {
-    stream: Option<golem_wasi_http::InputStream>,
-    body: Option<golem_wasi_http::IncomingBody>,
-    response: Option<golem_wasi_http::Response>,
-}
-
-impl NativeBody for SharedNativeResponse {
-    async fn read_chunk(&mut self) -> Result<Option<Vec<u8>>, String> {
-        let stream = self
-            .stream
-            .as_ref()
-            .expect("shared response stream is present");
-        loop {
-            let pollable = stream.subscribe();
-            AsyncPollable::new(pollable).wait_for().await;
-            match stream.read(16 * 1024) {
-                Ok(chunk) if chunk.is_empty() => continue,
-                Ok(chunk) => return Ok(Some(chunk.to_vec())),
-                Err(StreamError::Closed) => return Ok(None),
-                Err(StreamError::LastOperationFailed(error)) => {
-                    return Err(format!(
-                        "Failed to read response body: {}",
-                        error.to_debug_string()
-                    ));
-                }
-            }
-        }
-    }
-
-    fn discard(self) {
-        drop(self);
-    }
-}
-
-impl Drop for SharedNativeResponse {
-    fn drop(&mut self) {
-        drop(self.stream.take());
-        if let Some(body) = self.body.take() {
-            drop(wasip2::http::types::IncomingBody::finish(body));
-        }
-        drop(self.response.take());
-    }
-}
-
-/// Represents the source of response body data
-pub enum ResponseBodySource {
-    /// Response from native HTTP call
-    Native(Box<golem_wasi_http::Response>),
-    /// Buffered response body as bytes
+enum ResponseBodyStreamSource {
     Bytes(Vec<u8>),
-    /// Response has been consumed
-    Consumed,
-    /// Shared response body with buffering
-    Shared(SharedResponse),
+    Native(NativeResponseBody),
+    Shared(SharedResponseBody),
 }
 
-pub enum BodySource {
-    Native {
-        stream: golem_wasi_http::InputStream,
-        body: golem_wasi_http::IncomingBody,
-        response: Box<golem_wasi_http::Response>,
-    },
-    Shared {
-        shared: SharedResponse,
-    },
-    Bytes(std::io::Cursor<Vec<u8>>),
-}
-
-/// Implements a source for ReadableStream reading the response body
-///
-/// See https://developer.mozilla.org/en-US/docs/Web/API/ReadableStream/ReadableStream
-#[derive(Trace, JsLifetime)]
+/// Response body reader backing `response.body` / `ReadableStream`.
+#[derive(rquickjs::class::Trace, JsLifetime)]
 #[rquickjs::class(rename_all = "camelCase")]
 pub struct ResponseBodyStream {
     #[qjs(skip_trace)]
@@ -1103,8 +1259,9 @@ pub struct ResponseBodyStream {
 }
 
 struct ResponseBodyStreamState {
-    stream: Option<BodySource>,
-    shared_completion: Option<SharedBodyCompletion<SharedNativeResponse>>,
+    source: Option<ResponseBodyStreamSource>,
+    shared_completion: Option<SharedBodyCompletion<NativeResponseBody>>,
+    position: usize,
     active_abort: Option<AbortHandle>,
     discarded: bool,
 }
@@ -1121,8 +1278,9 @@ impl ResponseBodyStream {
     pub fn new() -> Self {
         Self {
             state: Rc::new(RefCell::new(ResponseBodyStreamState {
-                stream: None,
+                source: None,
                 shared_completion: None,
+                position: 0,
                 active_abort: None,
                 discarded: false,
             })),
@@ -1138,164 +1296,85 @@ impl ResponseBodyStream {
         &self,
         ctx: Ctx<'js>,
     ) -> rquickjs::Result<List<(Option<TypedArray<'js, u8>>, Option<String>)>> {
-        let source = {
+        let (source, position) = {
             let mut state = self.state.borrow_mut();
             if state.discarded {
                 return Ok(List((None, None)));
             }
-            state.stream.take()
+            (state.source.take(), state.position)
+        };
+        let Some(source) = source else {
+            return Ok(List((None, None)));
         };
         let (abort_handle, abort_registration) = AbortHandle::new_pair();
         self.state.borrow_mut().active_abort = Some(abort_handle);
         let pull_ctx = ctx.clone();
         let pull = async move {
-            let ctx = pull_ctx;
-            let (result, stream) = match source {
-                Some(BodySource::Native {
-                    stream,
-                    body,
-                    response,
-                }) => {
-                    const CHUNK_SIZE: u64 = 4096;
-                    let pollable = stream.subscribe();
-                    AsyncPollable::new(pollable).wait_for().await;
-
-                    match stream.read(CHUNK_SIZE) {
-                        Ok(chunk) => match TypedArray::new_copy(ctx.clone(), chunk) {
-                            Ok(js_array) => (
-                                List((Some(js_array), None)),
-                                Some(BodySource::Native {
-                                    stream,
-                                    body,
-                                    response,
-                                }),
-                            ),
-                            Err(_) => (
-                                List((
-                                    None,
-                                    Some(
-                                        "Failed to create TypedArray from response body chunk"
-                                            .to_string(),
-                                    ),
-                                )),
-                                Some(BodySource::Native {
-                                    stream,
-                                    body,
-                                    response,
-                                }),
-                            ),
-                        },
-                        Err(StreamError::Closed) => {
-                            // No more data to read, close the stream
-                            drop(stream);
-                            drop(body);
-                            drop(response);
-                            (List((None, None)), None)
-                        }
-                        Err(StreamError::LastOperationFailed(err)) => (
-                            List((
-                                None,
-                                Some(format!(
-                                    "Failed to read response body: {}",
-                                    err.to_debug_string()
-                                )),
-                            )),
-                            Some(BodySource::Native {
-                                stream,
-                                body,
-                                response,
-                            }),
-                        ),
+            let result = match source {
+                ResponseBodyStreamSource::Bytes(bytes) => {
+                    if position >= bytes.len() {
+                        (None, None)
+                    } else {
+                        let end = (position + 16 * 1024).min(bytes.len());
+                        let chunk = bytes[position..end].to_vec();
+                        (Some(chunk), Some(ResponseBodyStreamSource::Bytes(bytes)))
                     }
                 }
-                Some(BodySource::Shared { shared }) => {
-                    match shared_response_body::read_chunk(&ctx, &shared).await? {
-                        Some(chunk) => match TypedArray::new_copy(ctx.clone(), &chunk) {
-                            Ok(js_array) => (
-                                List((Some(js_array), None)),
-                                Some(BodySource::Shared { shared }),
-                            ),
-                            Err(_) => (
-                                List((
-                                    None,
-                                    Some(
-                                        "Failed to create TypedArray from response body chunk"
-                                            .to_string(),
-                                    ),
-                                )),
-                                Some(BodySource::Shared { shared }),
-                            ),
-                        },
-                        None => (List((None, None)), None),
-                    }
+                ResponseBodyStreamSource::Native(mut native) => {
+                    let chunk = native
+                        .read_chunk()
+                        .await
+                        .map_err(|error| Exception::throw_message(&pull_ctx, &error))?;
+                    let source = chunk
+                        .as_ref()
+                        .map(|_| ResponseBodyStreamSource::Native(native));
+                    (chunk, source)
                 }
-                Some(BodySource::Bytes(mut cursor)) => {
-                    let mut buf = [0u8; 4096];
-                    match std::io::Read::read(&mut cursor, &mut buf) {
-                        Ok(0) => {
-                            // EOF
-                            (List((None, None)), None)
-                        }
-                        Ok(n) => match TypedArray::new_copy(ctx.clone(), &buf[..n]) {
-                            Ok(js_array) => (
-                                List((Some(js_array), None)),
-                                Some(BodySource::Bytes(cursor)),
-                            ),
-                            Err(_) => (
-                                List((
-                                    None,
-                                    Some(
-                                        "Failed to create TypedArray from response body chunk"
-                                            .to_string(),
-                                    ),
-                                )),
-                                Some(BodySource::Bytes(cursor)),
-                            ),
-                        },
-                        Err(err) => (
-                            List((None, Some(format!("Failed to read response body: {}", err)))),
-                            Some(BodySource::Bytes(cursor)),
-                        ),
-                    }
+                ResponseBodyStreamSource::Shared(shared) => {
+                    let chunk = shared_response_body::read_chunk(&pull_ctx, &shared).await?;
+                    let source = chunk
+                        .as_ref()
+                        .map(|_| ResponseBodyStreamSource::Shared(shared));
+                    (chunk, source)
                 }
-                None => (
-                    List((
-                        None,
-                        Some("Response body stream has already been consumed".to_string()),
-                    )),
-                    None,
-                ),
             };
-            Ok((result, stream))
+            Ok::<_, rquickjs::Error>(result)
         };
         let outcome = Abortable::new(pull, abort_registration).await;
-        let mut state = self.state.borrow_mut();
-        state.active_abort = None;
-        match outcome {
-            Ok(Ok((result, stream))) => {
-                if !state.discarded {
-                    state.stream = stream;
-                }
-                Ok(result)
-            }
-            Ok(Err(error)) => Err(error),
+        let (chunk, source) = match outcome {
+            Ok(result) => result?,
             Err(_) => {
+                let mut state = self.state.borrow_mut();
+                state.active_abort = None;
                 state.discarded = true;
-                Err(Exception::throw_message(
+                return Err(Exception::throw_message(
                     &ctx,
                     "Response body stream was discarded",
-                ))
+                ));
             }
+        };
+        let mut state = self.state.borrow_mut();
+        state.active_abort = None;
+        if !state.discarded {
+            state.source = source;
         }
+        let Some(chunk) = chunk else {
+            return Ok(List((None, None)));
+        };
+        let array = TypedArray::new_copy(ctx.clone(), &chunk).map_err(|_| {
+            Exception::throw_message(&ctx, "Failed to create TypedArray from response body chunk")
+        })?;
+        state.position += chunk.len();
+        Ok(List((Some(array), None)))
     }
 
     pub fn discard(&self) {
-        let (stream, abort) = {
+        let (source, abort) = {
             let mut state = self.state.borrow_mut();
             state.discarded = true;
-            (state.stream.take(), state.active_abort.take())
+            (state.source.take(), state.active_abort.take())
         };
-        drop(stream);
+        drop(source);
         if let Some(abort) = abort {
             abort.abort();
         }
@@ -1310,115 +1389,215 @@ impl ResponseBodyStream {
 }
 
 impl ResponseBodyStream {
-    fn from_source(stream: BodySource) -> Self {
+    fn from_source(source: ResponseBodyStreamSource) -> Self {
         let response = Self::new();
-        let completion = match &stream {
-            BodySource::Shared { shared } => Some(shared.completion()),
-            BodySource::Native { .. } | BodySource::Bytes(_) => None,
+        let completion = match &source {
+            ResponseBodyStreamSource::Shared(shared) => Some(shared.completion()),
+            ResponseBodyStreamSource::Bytes(_) | ResponseBodyStreamSource::Native(_) => None,
         };
         let mut state = response.state.borrow_mut();
-        state.stream = Some(stream);
+        state.source = Some(source);
         state.shared_completion = completion;
         drop(state);
         response
     }
 }
 
-#[derive(Trace, JsLifetime)]
-#[rquickjs::class(rename_all = "camelCase")]
-pub struct BodySink {
-    #[qjs(skip_trace)]
-    sender: RefCell<UnboundedSender<Vec<u8>>>,
-    #[qjs(skip_trace)]
-    receiver: Option<UnboundedReceiver<Vec<u8>>>,
+// ---------------------------------------------------------------------------
+// wasip3 helpers
+// ---------------------------------------------------------------------------
+
+/// Validates a requested HTTP version string. `wasi:http`
+/// cannot pin the wire version, so the parsed value is discarded; only the validation (rejecting
+/// unsupported versions) is observable.
+fn validate_http_version(ctx: &Ctx<'_>, version: &str) -> rquickjs::Result<()> {
+    match version {
+        "HTTP/0.9" => Ok(Version::HTTP_09),
+        "HTTP/1.0" => Ok(Version::HTTP_10),
+        "HTTP/1.1" => Ok(Version::HTTP_11),
+        "HTTP/2.0" => Ok(Version::HTTP_2),
+        "HTTP/3.0" => Ok(Version::HTTP_3),
+        other => Err(Exception::throw_message(
+            ctx,
+            &format!("Unsupported HTTP version: {other}"),
+        )),
+    }?;
+    Ok(())
 }
 
-impl Default for BodySink {
-    fn default() -> Self {
-        Self::new()
+/// Validates a header name/value pair with the `http` crate primitives.
+fn validate_header(ctx: &Ctx<'_>, name: &str, value: &str) -> rquickjs::Result<()> {
+    HeaderName::from_bytes(name.as_bytes())
+        .map_err(|_| Exception::throw_message(ctx, "failed to parse header name"))?;
+    HeaderValue::from_str(value)
+        .map_err(|_| Exception::throw_message(ctx, "failed to parse header value"))?;
+    Ok(())
+}
+
+/// Validates an HTTP method token with the `http` crate, rejecting invalid syntax with
+/// `failed to parse method`.
+fn validate_method(ctx: &Ctx<'_>, method: &str) -> rquickjs::Result<()> {
+    http::Method::from_bytes(method.as_bytes())
+        .map_err(|_| Exception::throw_message(ctx, "failed to parse method"))?;
+    Ok(())
+}
+
+fn parse_method(method: &str) -> Method {
+    // Match the standard methods by their canonical (upper-case) spelling only, mirroring
+    // `http::Method::from_bytes`; any other token becomes an extension method with its original
+    // case preserved.
+    match method {
+        "GET" => Method::Get,
+        "HEAD" => Method::Head,
+        "POST" => Method::Post,
+        "PUT" => Method::Put,
+        "DELETE" => Method::Delete,
+        "CONNECT" => Method::Connect,
+        "OPTIONS" => Method::Options,
+        "TRACE" => Method::Trace,
+        "PATCH" => Method::Patch,
+        other => Method::Other(other.to_string()),
     }
 }
 
-#[rquickjs::methods(rename_all = "camelCase")]
-impl BodySink {
-    #[qjs(constructor)]
-    pub fn new() -> Self {
-        let (sender, receiver) = futures::channel::mpsc::unbounded();
-        BodySink {
-            sender: RefCell::new(sender),
-            receiver: Some(receiver),
+fn parse_scheme(scheme: &str) -> Option<Scheme> {
+    match scheme {
+        "http" => Some(Scheme::Http),
+        "https" => Some(Scheme::Https),
+        "" => None,
+        other => Some(Scheme::Other(other.to_string())),
+    }
+}
+
+/// Mirrors the JS streaming redirect loop's `new URL(location, base)` decision (and the buffered
+/// `simple_send` redirect resolution): a `Location` is followable when it parses as an absolute URL
+/// or resolves against the current request URL. Only a followable redirect's body is discarded by
+/// the streaming path; an unfollowable `Location` falls through and returns the redirect response as
+/// the final visible response, so its body must be kept.
+fn location_is_followable(base: &str, location: &str) -> bool {
+    if Url::parse(location).is_ok() {
+        return true;
+    }
+    Url::parse(base)
+        .ok()
+        .and_then(|base_url| base_url.join(location).ok())
+        .is_some()
+}
+
+fn url_authority(url: &Url) -> Option<String> {
+    let host = url.host_str()?;
+    Some(match url.port() {
+        Some(port) => format!("{host}:{port}"),
+        None => host.to_string(),
+    })
+}
+
+fn url_path_with_query(url: &Url) -> String {
+    match url.query() {
+        Some(query) => format!("{}?{}", url.path(), query),
+        None => url.path().to_string(),
+    }
+}
+
+fn apply_request_targets(
+    ctx: &Ctx<'_>,
+    request: &Request,
+    method: &Method,
+    scheme: Option<&Scheme>,
+    authority: Option<&str>,
+    path_with_query: &str,
+) -> rquickjs::Result<()> {
+    request
+        .set_method(method)
+        .map_err(|_| Exception::throw_message(ctx, "failed to set request method"))?;
+    request
+        .set_scheme(scheme)
+        .map_err(|_| Exception::throw_message(ctx, "failed to set request scheme"))?;
+    request
+        .set_authority(authority)
+        .map_err(|_| Exception::throw_message(ctx, "failed to set request authority"))?;
+    request
+        .set_path_with_query(Some(path_with_query))
+        .map_err(|_| Exception::throw_message(ctx, "failed to set request path"))?;
+    Ok(())
+}
+
+/// Builds a `wasi:http` `fields` resource from a header list, skipping headers the transport
+/// forbids (e.g. `host`, which is derived from the authority) on a best-effort basis.
+fn build_fields(headers: &[(String, String)]) -> Fields {
+    let fields = Fields::new();
+    for (name, value) in headers {
+        if name.eq_ignore_ascii_case("host") {
+            continue;
         }
+        // Best effort: ignore headers the host rejects rather than failing the whole request.
+        let _ = fields.append(name, value.as_bytes());
     }
+    fields
+}
 
-    #[qjs(skip)]
-    pub fn take_receiver<'js>(
-        &mut self,
-        ctx: Ctx<'js>,
-    ) -> rquickjs::Result<UnboundedReceiver<Vec<u8>>> {
-        self.receiver.take().ok_or_else(|| {
-            Exception::throw_message(&ctx, "BodySink receiver has already been taken")
-        })
-    }
+/// Hop-by-hop / forbidden headers that the wasmtime Preview 2 host strips from
+/// incoming response fields (`remove_forbidden_headers`). The Preview 3 host
+/// passes response headers through unfiltered, so we apply the same filter here
+/// to keep the two generation targets behaviorally identical.
+fn is_forbidden_response_header(name: &str) -> bool {
+    matches!(
+        name.to_ascii_lowercase().as_str(),
+        "connection"
+            | "keep-alive"
+            | "proxy-connection"
+            | "proxy-authenticate"
+            | "proxy-authorization"
+            | "transfer-encoding"
+            | "upgrade"
+            | "host"
+            | "http2-settings"
+    )
+}
 
-    #[allow(clippy::await_holding_refcell_ref)]
-    pub async fn write<'js>(
-        &self,
-        ctx: Ctx<'js>,
-        chunk: TypedArray<'_, u8>,
-    ) -> rquickjs::Result<()> {
-        let mut sender = self.sender.borrow_mut();
-        let bytes = crate::wrappers::copy_typed_array_bytes(&chunk).ok_or_else(|| {
-            Exception::throw_message(&ctx, "the UInt8Array passed to the BodySink is detached")
-        })?;
-        sender
-            .send(bytes)
-            .await
-            .map_err(|_| Exception::throw_message(&ctx, "Failed to send chunk to BodySink"))?;
-        Ok(())
-    }
+fn fields_to_pairs(fields: &Fields) -> Vec<Vec<String>> {
+    fields
+        .copy_all()
+        .into_iter()
+        .filter(|(name, _)| !is_forbidden_response_header(name))
+        .map(|(name, value)| vec![name, String::from_utf8_lossy(&value).to_string()])
+        .collect()
+}
 
-    pub fn close(&self) {
-        let sender = self.sender.borrow();
-        sender.close_channel();
+fn set_header(headers: &mut Vec<(String, String)>, name: &str, value: &str) {
+    remove_header(headers, name);
+    headers.push((name.to_string(), value.to_string()));
+}
+
+fn remove_header(headers: &mut Vec<(String, String)>, name: &str) {
+    headers.retain(|(existing, _)| !existing.eq_ignore_ascii_case(name));
+}
+
+/// Applies credentials filtering based on the credentials mode.
+fn apply_credentials_filtering(headers: &mut Vec<(String, String)>, credentials: CredentialsMode) {
+    if credentials == CredentialsMode::Omit {
+        remove_header(headers, "authorization");
+        remove_header(headers, "cookie");
     }
 }
 
-/// Determines the referer value to send based on the policy, origin, and destination
+/// Determines the referer value to send based on the policy, origin, and destination.
 fn apply_referrer_policy(
     policy: ReferrerPolicy,
     referer: &str,
     request_url: &Url,
 ) -> Option<String> {
-    // Policy: no-referrer - never send
-    if policy == ReferrerPolicy::NoReferrer {
+    if policy == ReferrerPolicy::NoReferrer || referer.is_empty() || referer == "about:client" {
         return None;
     }
 
-    // If referer is empty string (explicitly set to omit), don't send
-    if referer.is_empty() {
-        return None;
-    }
-
-    // If referer is "about:client", don't send the literal value
-    if referer == "about:client" {
-        return None;
-    }
-
-    // Parse the referer URL
-    let referer_url = match Url::parse(referer) {
-        Ok(url) => url,
-        Err(_) => return None, // Invalid referer URL, don't send
-    };
-
-    // Extract origins and schemes
+    let referer_url = Url::parse(referer).ok()?;
     let request_origin = extract_origin(request_url);
     let referer_origin = extract_origin(&referer_url);
     let is_same_origin = request_origin == referer_origin;
     let is_downgrade = is_https_to_http(&referer_url, request_url);
 
-    // Apply policy rules
     match policy {
-        // no-referrer-when-downgrade: send full, except HTTPS->HTTP
         ReferrerPolicy::NoReferrerWhenDowngrade => {
             if is_downgrade {
                 None
@@ -1426,9 +1605,7 @@ fn apply_referrer_policy(
                 Some(referer.to_string())
             }
         }
-        // origin: always send origin only
         ReferrerPolicy::Origin => Some(referer_origin),
-        // origin-when-cross-origin: full for same-origin, origin for cross-origin
         ReferrerPolicy::OriginWhenCrossOrigin => {
             if is_same_origin {
                 Some(referer.to_string())
@@ -1436,7 +1613,6 @@ fn apply_referrer_policy(
                 Some(referer_origin)
             }
         }
-        // same-origin: full for same-origin, none for cross-origin
         ReferrerPolicy::SameOrigin => {
             if is_same_origin {
                 Some(referer.to_string())
@@ -1444,7 +1620,6 @@ fn apply_referrer_policy(
                 None
             }
         }
-        // strict-origin: origin only, none for HTTPS->HTTP
         ReferrerPolicy::StrictOrigin => {
             if is_downgrade {
                 None
@@ -1452,7 +1627,6 @@ fn apply_referrer_policy(
                 Some(referer_origin)
             }
         }
-        // strict-origin-when-cross-origin (default): full for same-origin, origin for cross-origin, none for HTTPS->HTTP
         ReferrerPolicy::StrictOriginWhenCrossOrigin => {
             if is_downgrade {
                 None
@@ -1462,18 +1636,14 @@ fn apply_referrer_policy(
                 Some(referer_origin)
             }
         }
-        // unsafe-url: always send full URL
         ReferrerPolicy::UnsafeUrl => Some(referer.to_string()),
-        // no-referrer should already be handled above
         ReferrerPolicy::NoReferrer => None,
     }
 }
 
-/// Extracts the origin (scheme + host) from a URL
 fn extract_origin(url: &Url) -> String {
     match (url.scheme(), url.host_str()) {
         (scheme, Some(host)) => {
-            // Include port if it's not the default for the scheme
             if let Some(port) = url.port() {
                 let default_port = match scheme {
                     "http" => 80,
@@ -1481,52 +1651,37 @@ fn extract_origin(url: &Url) -> String {
                     _ => 0,
                 };
                 if port != default_port {
-                    format!("{}://{}:{}", scheme, host, port)
+                    format!("{scheme}://{host}:{port}")
                 } else {
-                    format!("{}://{}", scheme, host)
+                    format!("{scheme}://{host}")
                 }
             } else {
-                format!("{}://{}", scheme, host)
+                format!("{scheme}://{host}")
             }
         }
         _ => String::new(),
     }
 }
 
-/// Checks if the request is an HTTPS->HTTP downgrade
 fn is_https_to_http(from_url: &Url, to_url: &Url) -> bool {
-    let from_scheme = from_url.scheme();
-    let to_scheme = to_url.scheme();
-    from_scheme == "https" && to_scheme == "http"
+    from_url.scheme() == "https" && to_url.scheme() == "http"
 }
 
-/// Applies credentials filtering based on the credentials mode and origin policy
-/// According to fetch spec:
-/// - Omit: Never send credentials
-/// - SameOrigin: Send credentials only for same-origin requests
-/// - Include: Always send credentials
-fn apply_credentials_filtering(
-    headers: &mut golem_wasi_http::header::HeaderMap,
-    credentials: CredentialsMode,
-    _request_url: &Url,
-) {
-    match credentials {
-        CredentialsMode::Omit => {
-            // Remove Authorization and Cookie headers
-            headers.remove(HeaderName::from_bytes(b"authorization").expect("valid header name"));
-            headers.remove(HeaderName::from_bytes(b"cookie").expect("valid header name"));
-        }
-        CredentialsMode::SameOrigin | CredentialsMode::Include => {
-            // Keep all headers as-is for these modes
-            // In a full browser context, "same-origin" would only send credentials for same-origin,
-            // but in WASM we don't have the referrer context to determine origin properly.
-        }
-    }
-}
+// ---------------------------------------------------------------------------
+// JavaScript sources.
+// ---------------------------------------------------------------------------
 
+#[cfg(not(feature = "internal-test-execution"))]
 pub const HTTP_JS: &str = include_str!("http.js");
+#[cfg(feature = "internal-test-execution")]
+pub const HTTP_JS: &str = concat!(
+    include_str!("http.js"),
+    "\n",
+    include_str!("http_internal_test.js")
+);
 pub const FETCH_BLOB_JS: &str = include_str!("fetch-blob-4.0.0.js");
 pub const FORMDATA_JS: &str = include_str!("formdata-polyfill-4.0.10.js");
+
 pub const WIRE_JS: &str = r#"
         import * as __wasm_rquickjs_http from '__wasm_rquickjs_builtin/http';
         import * as __wasm_rquickjs_http_blob from '__wasm_rquickjs_builtin/http_blob';

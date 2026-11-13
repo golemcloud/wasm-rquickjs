@@ -64,7 +64,7 @@ async fn invoke_hello_static_u32(
     test_instance: &mut TestInstance,
     name: &str,
 ) -> anyhow::Result<u32> {
-    // P2 host drops are consumed by a concurrent dropper after a JS entry completes. The first
+    // Host resource drops are consumed by a concurrent dropper after a JS entry completes. The first
     // diagnostic call provides that entry; the second observes the settled resource table.
     let _ = test_instance
         .invoke_and_capture_output(Some("quickjs:example3/iface"), name, &[])

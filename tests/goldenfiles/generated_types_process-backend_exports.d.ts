@@ -1,3 +1,3 @@
 declare module 'process-backend' {
-  export function run(): Promise<boolean>;
+  export function run(): boolean;
 }

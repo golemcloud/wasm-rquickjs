@@ -29,62 +29,32 @@ pub fn generate_export_impls(
     let world_name_lit = LitStr::new(&context.world_name, Span::call_site());
     let with_block = generate_wasi_remaps(context);
 
-    // The Preview 3 path enables the component-model async ABI. It uses a renamed
-    // `wit-bindgen` dependency (`wit-bindgen-p3`, compiled with the
-    // `async`/`macros`/`inter-task-wakeup` features) so that it can coexist with the Preview 2
-    // `wit-bindgen` in the single shared skeleton; `runtime_path` points the generated bindings
-    // at that renamed crate's runtime module.
+    // The bindings enable the component-model async ABI. The skeleton depends on `wit-bindgen`
+    // under the `wit-bindgen-p3` name (compiled with the `async`/`macros`/`inter-task-wakeup`
+    // features); `runtime_path` points the generated bindings at that crate's runtime module.
     //
-    // `ownership: Owning` and `generate_all` match the Preview 2 invocation below.
     // `ownership: Owning` keeps generated ADTs owned (no lifetime-parameterized borrowed
     // variants), which is what the import/export codegen in this crate models. `generate_all`
     // is required so that interfaces without a `with:` remap entry — user-defined imports and
     // WASI interfaces whose version does not match the `wasip3` crate (e.g.
     // `wasi:io/poll@0.2.3`) — get bindings generated instead of making the macro fail.
-    let bindings_module = if context.target.is_p3() {
-        quote! {
-            #[allow(unsafe_op_in_unsafe_fn)]
-            pub(crate) mod bindings {
-                wit_bindgen_p3::generate!({
-                    path: "wit",
-                    world: #world_name_lit,
-                    runtime_path: "wit_bindgen_p3::rt",
-                    ownership: Owning,
-                    generate_all,
-                    #with_block
-                });
-            }
+    let bindings_module = quote! {
+        #[allow(unsafe_op_in_unsafe_fn)]
+        pub(crate) mod bindings {
+            wit_bindgen_p3::generate!({
+                path: "wit",
+                world: #world_name_lit,
+                runtime_path: "wit_bindgen_p3::rt",
+                ownership: Owning,
+                generate_all,
+                #with_block
+            });
         }
-    } else {
-        quote! {
-            #[allow(unsafe_op_in_unsafe_fn)]
-            pub(crate) mod bindings {
-                wit_bindgen::generate!({
-                    path: "wit",
-                    world: #world_name_lit,
-                    ownership: Owning,
-                    generate_all,
-                    #with_block
-                });
-            }
-        }
-    };
-
-    // In the Preview 3 path the Node.js builtin tree (`builtin/`) is not compiled at all;
-    // `mod builtin` is bound to the minimal `builtin_p3.rs` stub instead, so none of the
-    // P2-only builtin dependencies are pulled in. See `builtin_p3.rs`.
-    let builtin_module = if context.target.is_p3() {
-        quote! {
-            #[path = "builtin_p3.rs"]
-            mod builtin;
-        }
-    } else {
-        quote! { mod builtin; }
     };
 
     let lib_tokens = quote! {
         #bindings_module
-        #builtin_module
+        mod builtin;
         mod conversions;
         #[allow(unused)]
         mod internal;
@@ -220,14 +190,11 @@ fn generate_guest_impl(
     let mut resource_impls = Vec::new();
     let mut resource_functions = BTreeMap::new();
 
-    let is_p3 = context.target.is_p3();
-
-    // The Preview 3 path supports exported resources that have at least one
-    // constructor/method/static function. A resource with no functions produces no entries in
-    // `exports` (so no `GuestX` impl would be generated — the same limitation exists on the P2
-    // path), which would surface as an obscure compile error. Reject such methodless exported
-    // resources at the type level here with an actionable message.
-    if is_p3 && let Some((_, iface, interface_id)) = interface {
+    // Exported resources must have at least one constructor/method/static function. A resource
+    // with no functions produces no entries in `exports` (so no `GuestX` impl would be
+    // generated), which would surface as an obscure compile error. Reject such methodless
+    // exported resources at the type level here with an actionable message.
+    if let Some((_, iface, interface_id)) = interface {
         let mut resource_ids_with_functions = std::collections::HashSet::new();
         for (_, function) in exports {
             match &function.kind {
@@ -289,31 +256,21 @@ fn generate_guest_impl(
                 }
             }
             FunctionKind::AsyncFreestanding => {
-                if is_p3 && name == "wizer-initialize" {
+                if name == "wizer-initialize" {
                     func_impls.push(quote! {
                         async fn wizer_initialize() {
                             crate::internal::wizer_initialize().await;
                         }
                     });
-                } else if is_p3 {
+                } else {
                     let func_impl =
                         generate_exported_function_impl(context, interface, name, function)?;
                     func_impls.push(func_impl);
-                } else {
-                    return Err(anyhow!("Async exported functions are not supported yet"));
                 }
             }
-            FunctionKind::AsyncMethod(type_id) | FunctionKind::AsyncStatic(type_id) => {
-                if is_p3 {
-                    resource_functions
-                        .entry(type_id)
-                        .or_insert_with(Vec::new)
-                        .push((name, function));
-                } else {
-                    return Err(anyhow!("Async exported functions are not supported yet"));
-                }
-            }
-            FunctionKind::Method(type_id)
+            FunctionKind::AsyncMethod(type_id)
+            | FunctionKind::AsyncStatic(type_id)
+            | FunctionKind::Method(type_id)
             | FunctionKind::Static(type_id)
             | FunctionKind::Constructor(type_id) => {
                 resource_functions
@@ -457,8 +414,7 @@ fn generate_exported_function_impl(
     let rust_fn = RustWitFunction::new(context, name, function);
     let func_name = rust_fn.function_name_ident();
 
-    if context.target.is_p3()
-        && matches!(function.kind, FunctionKind::Freestanding)
+    if matches!(function.kind, FunctionKind::Freestanding)
         && function
             .result
             .as_ref()
@@ -572,7 +528,7 @@ fn generate_exported_function_impl(
                 ).await;
                 #build_reader
         };
-        return if context.target.is_p3() && matches!(function.kind, FunctionKind::Freestanding) {
+        return if matches!(function.kind, FunctionKind::Freestanding) {
             Ok(quote! {
                 fn #func_name(#(#func_arg_list),*) -> #reader_type {
                     crate::internal::run_sync(async move { #body })
@@ -594,15 +550,12 @@ fn generate_exported_function_impl(
     let unwrap = &return_types.wit_level_ret.unwrap;
     let unwrap_result = unwrap.run(quote! { result });
     let has_exception = return_types.expected_exception.is_some();
-    let is_p3 = context.target.is_p3();
     let is_async = matches!(function.kind, FunctionKind::AsyncFreestanding);
-    let call = match (is_p3, is_async, has_exception) {
-        (true, true, true) => quote! { call_js_export_returning_result },
-        (true, true, false) => quote! { call_js_export },
-        (true, false, true) => quote! { call_js_export_sync_returning_result },
-        (true, false, false) => quote! { call_js_export_sync },
-        (false, _, true) => quote! { call_js_export_returning_result },
-        (false, _, false) => quote! { call_js_export },
+    let call = match (is_async, has_exception) {
+        (true, true) => quote! { call_js_export_returning_result },
+        (true, false) => quote! { call_js_export },
+        (false, true) => quote! { call_js_export_sync_returning_result },
+        (false, false) => quote! { call_js_export_sync },
     };
     let body = quote! {
         let result: #wrapped_result = crate::internal::#call(
@@ -612,24 +565,16 @@ fn generate_exported_function_impl(
         ).await;
         #unwrap_result
     };
-    let func_impl = if is_p3 && is_async {
+    let func_impl = if is_async {
         quote! {
            async fn #func_name(#(#func_arg_list),*) -> #original_result {
                #body
             }
         }
-    } else if is_p3 {
-        quote! {
-           fn #func_name(#(#func_arg_list),*) -> #original_result {
-               crate::internal::run_sync(async move { #body })
-           }
-        }
     } else {
         quote! {
            fn #func_name(#(#func_arg_list),*) -> #original_result {
-               crate::internal::async_exported_function(async move {
-                   #body
-               })
+               crate::internal::run_sync(async move { #body })
            }
         }
     };
@@ -649,17 +594,15 @@ fn generate_exported_resource_function_impl(
     let rust_fn = RustWitFunction::new(context, &func_name, function);
     let func_name_ident = rust_fn.function_name_ident();
 
-    if context.target.is_p3()
-        && !matches!(
-            function.kind,
-            FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_)
-        )
-        && function
-            .result
-            .as_ref()
-            .map(|result| crate::async_values::contains(context, result))
-            .transpose()?
-            .unwrap_or(false)
+    if !matches!(
+        function.kind,
+        FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_)
+    ) && function
+        .result
+        .as_ref()
+        .map(|result| crate::async_values::contains(context, result))
+        .transpose()?
+        .unwrap_or(false)
     {
         return Err(anyhow!(
             "future<T> and stream<T> in exported resource function results require an `async func` on the WASI Preview 3 generation path"
@@ -781,14 +724,11 @@ fn generate_exported_resource_function_impl(
         None => quote! { &[#js_func_name_str] },
     };
 
-    // On the Preview 3 path the generated Guest trait methods mirror the shape wit-bindgen-p3
-    // emits: constructors and *synchronous* methods/statics are plain `fn`s (their component-model
-    // exports are not `start_task`-wrapped), so they drive the async JS helpers to completion with
+    // The generated Guest trait methods mirror the shape wit-bindgen emits: constructors and
+    // *synchronous* methods/statics are plain `fn`s (their component-model exports are not
+    // `start_task`-wrapped), so they drive the async JS helpers to completion with
     // `crate::internal::run_sync` (a self-contained `block_on`); `async` methods/statics are
-    // `async fn`s that `.await` the helpers directly. On the Preview 2 path everything is a
-    // synchronous `fn` driven by `async_exported_function`, and `async` resource functions are
-    // rejected.
-    let is_p3 = context.target.is_p3();
+    // `async fn`s that `.await` the helpers directly.
 
     let func_impl = match &function.kind {
         FunctionKind::Constructor(_) => {
@@ -803,24 +743,14 @@ fn generate_exported_resource_function_impl(
                     resource_id
                 }
             };
-            let driver = if is_p3 {
-                quote! { crate::internal::run_sync }
-            } else {
-                quote! { crate::internal::async_exported_function }
-            };
             quote! {
               fn #func_name_ident(#(#func_arg_list),*) -> Self {
-                  #driver(async move { #body })
+                  crate::internal::run_sync(async move { #body })
               }
             }
         }
         FunctionKind::Method(_) | FunctionKind::AsyncMethod(_) => {
             let is_async = matches!(function.kind, FunctionKind::AsyncMethod(_));
-            if is_async && !is_p3 {
-                return Err(anyhow::anyhow!(
-                    "Async exported functions are not supported yet"
-                ));
-            }
             let param_refs = param_refs[1..].to_vec();
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
             let original_result = &return_types.func_ret.original_type_ref;
@@ -828,16 +758,13 @@ fn generate_exported_resource_function_impl(
             let unwrap = &return_types.func_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
             let has_exception = return_types.expected_exception.is_some();
-            let call = match (is_p3, is_async, has_exception) {
-                // Preview 3, async method: await the async helper directly.
-                (true, true, true) => quote! { call_js_resource_method_returning_result },
-                (true, true, false) => quote! { call_js_resource_method },
-                // Preview 3, sync method: driven by `block_on`, traps on a returned Promise.
-                (true, false, true) => quote! { call_js_resource_method_sync_returning_result },
-                (true, false, false) => quote! { call_js_resource_method_sync },
-                // Preview 2: only synchronous methods, driven by `async_exported_function`.
-                (false, _, true) => quote! { call_js_resource_method_returning_result },
-                (false, _, false) => quote! { call_js_resource_method },
+            let call = match (is_async, has_exception) {
+                // Async method: await the async helper directly.
+                (true, true) => quote! { call_js_resource_method_returning_result },
+                (true, false) => quote! { call_js_resource_method },
+                // Sync method: driven by `block_on`, awaits a returned Promise inside it.
+                (false, true) => quote! { call_js_resource_method_sync_returning_result },
+                (false, false) => quote! { call_js_resource_method_sync },
             };
             let body = quote! {
                 let result: #wrapped_result = crate::internal::#call(
@@ -849,48 +776,35 @@ fn generate_exported_resource_function_impl(
                 ).await;
                 #unwrap_result
             };
-            if is_p3 && is_async {
+            if is_async {
                 quote! {
                    async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                        #body
                    }
                 }
             } else {
-                let driver = if is_p3 {
-                    quote! { crate::internal::run_sync }
-                } else {
-                    quote! { crate::internal::async_exported_function }
-                };
                 quote! {
                    fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       #driver(async move { #body })
+                       crate::internal::run_sync(async move { #body })
                    }
                 }
             }
         }
         FunctionKind::Static(_) | FunctionKind::AsyncStatic(_) => {
             let is_async = matches!(function.kind, FunctionKind::AsyncStatic(_));
-            if is_async && !is_p3 {
-                return Err(anyhow::anyhow!(
-                    "Async exported functions are not supported yet"
-                ));
-            }
             let param_refs_tuple = param_refs_as_tuple(&param_refs);
             let original_result = &return_types.wit_level_ret.original_type_ref;
             let wrapped_result = &return_types.wit_level_ret.wrapped_type_ref;
             let unwrap = &return_types.wit_level_ret.unwrap;
             let unwrap_result = unwrap.run(quote! { result });
             let has_exception = return_types.expected_exception.is_some();
-            let call = match (is_p3, is_async, has_exception) {
-                // Preview 3, async static: await the async helper directly.
-                (true, true, true) => quote! { call_js_export_returning_result },
-                (true, true, false) => quote! { call_js_export },
-                // Preview 3, sync static: driven by `block_on`, traps on a returned Promise.
-                (true, false, true) => quote! { call_js_export_sync_returning_result },
-                (true, false, false) => quote! { call_js_export_sync },
-                // Preview 2: only synchronous statics, driven by `async_exported_function`.
-                (false, _, true) => quote! { call_js_export_returning_result },
-                (false, _, false) => quote! { call_js_export },
+            let call = match (is_async, has_exception) {
+                // Async static: await the async helper directly.
+                (true, true) => quote! { call_js_export_returning_result },
+                (true, false) => quote! { call_js_export },
+                // Sync static: driven by `block_on`, awaits a returned Promise inside it.
+                (false, true) => quote! { call_js_export_sync_returning_result },
+                (false, false) => quote! { call_js_export_sync },
             };
             let body = quote! {
                 let result: #wrapped_result = crate::internal::#call(
@@ -900,21 +814,16 @@ fn generate_exported_resource_function_impl(
                 ).await;
                 #unwrap_result
             };
-            if is_p3 && is_async {
+            if is_async {
                 quote! {
                    async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
                        #body
                    }
                 }
             } else {
-                let driver = if is_p3 {
-                    quote! { crate::internal::run_sync }
-                } else {
-                    quote! { crate::internal::async_exported_function }
-                };
                 quote! {
                    fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       #driver(async move { #body })
+                       crate::internal::run_sync(async move { #body })
                    }
                 }
             }
@@ -998,6 +907,15 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
         };
 
         let export_module_def = match &export_module.mode {
+            EmbeddingMode::Composition => quote! {
+                static JS_EXPORT_MODULE_NAME: &str = #export_module_name;
+
+                fn js_export_module() -> &'static str {
+                    static SOURCE: std::sync::LazyLock<String> =
+                        std::sync::LazyLock::new(crate::bindings::get_script);
+                    SOURCE.as_str()
+                }
+            },
             EmbeddingMode::BinarySlot => {
                 let slot_file_name = LitStr::new(
                     &(export_module.name.replace('/', "_") + ".slot"),
@@ -1100,78 +1018,25 @@ fn generate_module_defs(js_modules: &[JsModuleSpec]) -> anyhow::Result<TokenStre
 }
 
 /// Generates the `with: { ... }` entries for `wit_bindgen::generate!` to remap
-/// standard WASI interfaces to the `wasip2` crate, avoiding duplicate bindings.
+/// standard WASI interfaces to the `wasip3` crate, avoiding duplicate bindings.
 ///
 /// Only interfaces that are actually used by the resolved world are included,
 /// because unused `with:` entries cause compilation errors.
 fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
-    // Preview 3 remaps: only the clock interfaces are remapped to the `wasip3` crate for now
-    // (Phase 1). Any other WASI interface present in the world keeps the bindings generated by
+    // Only the clock interfaces are remapped to the `wasip3` crate for now. Any other WASI interface present in the world keeps the bindings generated by
     // `wit_bindgen::generate!`. The actual `with:` entries use the fully-versioned names from the
     // resolved world, so the exact `@0.3.0-rc-...` snapshot is picked up automatically.
     // The WASI Preview 3 `clocks` package (`wasi:clocks@0.3.x`) exposes `types`,
     // `monotonic-clock` and `system-clock` (there is no `wall-clock`; that was the Preview 2
     // name). Each maps to the corresponding `wasip3::clocks::*` module. Only interfaces that
     // are actually used by the world get a `with:` entry, so listing all of them is safe.
-    static WASI_REMAPS_P3: &[(&str, &str)] = &[
+    static WASI_REMAPS: &[(&str, &str)] = &[
         ("wasi:clocks/types", "wasip3::clocks::types"),
         (
             "wasi:clocks/monotonic-clock",
             "wasip3::clocks::monotonic_clock",
         ),
         ("wasi:clocks/system-clock", "wasip3::clocks::system_clock"),
-    ];
-
-    // Static mapping from unversioned WIT interface names to wasip2 Rust module paths.
-    // The actual `with:` entries use the fully-versioned names from the resolved world.
-    static WASI_REMAPS: &[(&str, &str)] = &[
-        ("wasi:cli/environment", "wasip2::cli::environment"),
-        ("wasi:cli/exit", "wasip2::cli::exit"),
-        ("wasi:cli/stderr", "wasip2::cli::stderr"),
-        ("wasi:cli/stdin", "wasip2::cli::stdin"),
-        ("wasi:cli/stdout", "wasip2::cli::stdout"),
-        ("wasi:cli/terminal-input", "wasip2::cli::terminal_input"),
-        ("wasi:cli/terminal-output", "wasip2::cli::terminal_output"),
-        ("wasi:cli/terminal-stderr", "wasip2::cli::terminal_stderr"),
-        ("wasi:cli/terminal-stdin", "wasip2::cli::terminal_stdin"),
-        ("wasi:cli/terminal-stdout", "wasip2::cli::terminal_stdout"),
-        (
-            "wasi:clocks/monotonic-clock",
-            "wasip2::clocks::monotonic_clock",
-        ),
-        ("wasi:clocks/wall-clock", "wasip2::clocks::wall_clock"),
-        ("wasi:filesystem/preopens", "wasip2::filesystem::preopens"),
-        ("wasi:filesystem/types", "wasip2::filesystem::types"),
-        (
-            "wasi:http/outgoing-handler",
-            "wasip2::http::outgoing_handler",
-        ),
-        ("wasi:http/types", "wasip2::http::types"),
-        ("wasi:io/error", "wasip2::io::error"),
-        ("wasi:io/poll", "wasip2::io::poll"),
-        ("wasi:io/streams", "wasip2::io::streams"),
-        ("wasi:random/insecure", "wasip2::random::insecure"),
-        ("wasi:random/insecure-seed", "wasip2::random::insecure_seed"),
-        ("wasi:random/random", "wasip2::random::random"),
-        (
-            "wasi:sockets/instance-network",
-            "wasip2::sockets::instance_network",
-        ),
-        (
-            "wasi:sockets/ip-name-lookup",
-            "wasip2::sockets::ip_name_lookup",
-        ),
-        ("wasi:sockets/network", "wasip2::sockets::network"),
-        ("wasi:sockets/tcp", "wasip2::sockets::tcp"),
-        (
-            "wasi:sockets/tcp-create-socket",
-            "wasip2::sockets::tcp_create_socket",
-        ),
-        ("wasi:sockets/udp", "wasip2::sockets::udp"),
-        (
-            "wasi:sockets/udp-create-socket",
-            "wasip2::sockets::udp_create_socket",
-        ),
     ];
 
     // Collect all interfaces used in the world, with their fully-qualified versioned names
@@ -1185,8 +1050,8 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
                 && let Some(package_id) = interface.package
             {
                 // Only packages accepted by `is_wasi_remapped_package` may get a `with:`
-                // entry; the check is version-aware, so e.g. `wasi:clocks/...@0.2.3` in a
-                // Preview 3 world is not remapped to the (API-incompatible) `wasip3` crate
+                // entry; the check is version-aware, so e.g. `wasi:clocks/...@0.2.3` is not
+                // remapped to the (API-incompatible) `wasip3` crate
                 // and keeps its generated bindings instead.
                 if !context.is_wasi_remapped_package(package_id) {
                     continue;
@@ -1200,16 +1065,10 @@ fn generate_wasi_remaps(context: &GeneratorContext<'_>) -> TokenStream {
         }
     }
 
-    let remaps: &[(&str, &str)] = if context.target.is_p3() {
-        WASI_REMAPS_P3
-    } else {
-        WASI_REMAPS
-    };
-
     // Build with: entries only for WASI interfaces that are actually used,
     // using the fully-versioned WIT name as the key
     let mut entries = Vec::new();
-    for (wit_name, rust_path) in remaps {
+    for (wit_name, rust_path) in WASI_REMAPS {
         if let Some(versioned_name) = used_interfaces.get(*wit_name) {
             let wit_lit = LitStr::new(versioned_name, Span::call_site());
             let rust_path: syn::Path = syn::parse_str(rust_path)

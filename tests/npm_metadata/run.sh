@@ -9,7 +9,7 @@ iterations=${NPM_METADATA_ITERATIONS:-5}
 if [ "${1:-}" = "--check" ]; then
     cd "$repo_root"
     tools/performance-report-currentness.sh check npm-metadata -- \
-        tools/dev-test.sh p2 standard npm_metadata ""
+        tools/dev-test.sh fork standard npm_metadata ""
     exit 0
 fi
 
@@ -22,7 +22,7 @@ if [ "${1:-}" = "--check-current" ]; then
 
     cd "$repo_root"
     tools/performance-report-currentness.sh check npm-metadata "$@" -- \
-        tools/dev-test.sh p2 standard npm_metadata ""
+        tools/dev-test.sh fork standard npm_metadata ""
     exit 0
 fi
 
@@ -67,27 +67,22 @@ fi
 
 mkdir -p "$results_dir"
 measurement_date=$(date +%Y-%m-%d)
-generated_reports=""
-for target in p2 p3; do
-    report="$results_dir/${measurement_date}-release-$target-$platform-$arch.json"
-    (
-        cd "$repo_root"
-        NPM_METADATA_RUN=1 \
-        NPM_METADATA_RELEASE_BASELINE=1 \
-        NPM_METADATA_ITERATIONS="$iterations" \
-        NPM_METADATA_REPORT="$report" \
-        NPM_METADATA_SOURCE_ROOT="$repo_root" \
-        tools/dev-test.sh "$target" release npm_metadata ""
-    )
-    generated_reports="${generated_reports}${report}\n"
-done
-
-reports_to_check=$(printf '%b' "$generated_reports")
+target=p3
+report="$results_dir/${measurement_date}-release-$target-$platform-$arch.json"
+(
+    cd "$repo_root"
+    NPM_METADATA_RUN=1 \
+    NPM_METADATA_RELEASE_BASELINE=1 \
+    NPM_METADATA_ITERATIONS="$iterations" \
+    NPM_METADATA_REPORT="$report" \
+    NPM_METADATA_SOURCE_ROOT="$repo_root" \
+    tools/dev-test.sh stock release npm_metadata ""
+)
 (
     cd "$repo_root"
     NPM_METADATA_VALIDATE_REPORTS=1 \
     NPM_METADATA_ALLOW_UNTRACKED_REPORTS=1 \
-    NPM_METADATA_REPORTS_TO_CHECK="$reports_to_check" \
+    NPM_METADATA_REPORTS_TO_CHECK="$report" \
     NPM_METADATA_SOURCE_ROOT="$repo_root" \
-    tools/dev-test.sh p2 standard npm_metadata ""
+    tools/dev-test.sh fork standard npm_metadata ""
 )

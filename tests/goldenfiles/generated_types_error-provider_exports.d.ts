@@ -3,25 +3,25 @@ declare module 'error-provider' {
     /**
      * @throws Failure
      */
-    export function fail(kind: string): Promise<string>;
+    export function fail(kind: string): string;
     /**
      * @throws Status
      */
-    export function failEnum(): Promise<string>;
+    export function failEnum(): string;
     /**
      * @throws string
      */
-    export function failString(): Promise<string>;
+    export function failString(): string;
     /**
      * @throws RecordError
      */
-    export function failRecord(): Promise<string>;
+    export function failRecord(): string;
     export class Gate {
       constructor();
       /**
        * @throws Failure
        */
-      static failStatic(kind: string): Promise<string>;
+      static failStatic(kind: string): string;
     }
     export type Detail =
     {

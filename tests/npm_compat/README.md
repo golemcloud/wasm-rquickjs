@@ -87,7 +87,7 @@ without reusing the stream; post-close private-handle reuse is not supported.
 
 ## Remaining progression
 
-The P2 and P3 baseline covers CLI startup, config inspection, local and registry
+The baseline covers CLI startup, config inspection, local and registry
 installation, ci, offline cache restoration, fresh-job loading, JavaScript
 lifecycle/run scripts, a `typescript-transform-runtime` workspace entry
 consuming an installed JavaScript dependency, tree inspection and mutation,

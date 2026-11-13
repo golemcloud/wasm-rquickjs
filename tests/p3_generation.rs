@@ -533,6 +533,152 @@ fn p3_sync_freestanding_export_runs() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A plain (synchronous) WIT export implemented by an `async` JavaScript function: a returned
+/// Promise that settles without waiting on the host is awaited. (A synchronous task cannot block
+/// on host waits such as timers, so those still trap.)
+#[test]
+fn p3_sync_export_awaits_a_returned_promise() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package bug:p3-sync-promise;
+
+            world p3-sync-promise {
+              export run: func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            async function label() {
+              await null;
+              return 'awaited';
+            }
+
+            export async function run() {
+              await Promise.resolve();
+              return await label();
+            }
+        "#},
+    )?;
+
+    generate_p3(temp.path())?;
+    let wasm_path = build_p3(temp.path(), "p3_sync_promise")?;
+    assert_eq!(run_p3_string_export(&wasm_path, "run")?, "awaited");
+    Ok(())
+}
+
+/// Plugs the exports of `provider` into the matching imports of `socket`.
+fn compose_provider(
+    socket: &Utf8Path,
+    provider: &Utf8Path,
+    output: &Utf8Path,
+) -> anyhow::Result<()> {
+    use wac_graph::types::Package;
+    use wac_graph::{CompositionGraph, EncodeOptions, plug};
+
+    let mut graph = CompositionGraph::new();
+    let socket = Package::from_file("socket", None, socket, graph.types_mut())?;
+    let socket = graph.register_package(socket)?;
+    let provider = Package::from_file("provider", None, provider, graph.types_mut())?;
+    let provider = graph.register_package(provider)?;
+    plug(&mut graph, vec![provider], socket)?;
+    std::fs::write(output, graph.encode(EncodeOptions::default())?)?;
+    Ok(())
+}
+
+/// `@composition` modules are loaded at runtime through the generated synchronous `get-script`
+/// import, both as an additional module and as the primary (exporting) module.
+#[test]
+fn p3_composition_modules_load_through_get_script() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let wit = indoc! {r#"
+        package bug:p3-composition;
+
+        world p3-composition {
+          export run: func() -> string;
+        }
+    "#};
+
+    let additional = temp.path().join("additional");
+    write_fixture(
+        &additional,
+        wit,
+        indoc! {r#"
+            import { label } from 'user-lib';
+            export function run() { return `embedded:${label()}`; }
+        "#},
+    )?;
+    generate_wrapper_crate_with_target(
+        &additional.join("wit"),
+        &[
+            JsModuleSpec {
+                name: "module".to_string(),
+                mode: EmbeddingMode::EmbedFile(additional.join("src").join("module.js")),
+            },
+            JsModuleSpec {
+                name: "user-lib".to_string(),
+                mode: EmbeddingMode::Composition,
+            },
+        ],
+        &additional.join("out"),
+        None,
+        GenerationTarget::WasiP3,
+    )?;
+    let generated_wit =
+        std::fs::read_to_string(additional.join("out").join("wit").join("world.wit"))?;
+    assert!(
+        generated_wit.contains("import get-script: func() -> string;"),
+        "{generated_wit}"
+    );
+
+    let primary = temp.path().join("primary");
+    write_fixture(&primary, wit, "")?;
+    generate_wrapper_crate_with_target(
+        &primary.join("wit"),
+        &[JsModuleSpec {
+            name: "module".to_string(),
+            mode: EmbeddingMode::Composition,
+        }],
+        &primary.join("out"),
+        None,
+        GenerationTarget::WasiP3,
+    )?;
+
+    let mut providers = Vec::new();
+    for (name, script) in [
+        (
+            "additional-provider",
+            "export function label() { return 'composed'; }",
+        ),
+        (
+            "primary-provider",
+            "export function run() { return 'composed-primary'; }",
+        ),
+    ] {
+        let root = temp.path().join(name);
+        write_fixture(
+            &root,
+            &format!(
+                "package bug:{name};\n\nworld {name} {{\n  export get-script: func() -> string;\n}}\n"
+            ),
+            &format!("export function getScript() {{ return {script:?}; }}\n"),
+        )?;
+        generate_p3(&root)?;
+        providers.push(build_p3(&root, &name.replace('-', "_"))?);
+    }
+
+    for (root, provider, expected) in [
+        (&additional, &providers[0], "embedded:composed"),
+        (&primary, &providers[1], "composed-primary"),
+    ] {
+        let socket = build_p3(root, "p3_composition")?;
+        let composed = root.join("composed.wasm");
+        compose_provider(&socket, provider, &composed)?;
+        assert_eq!(run_p3_string_export(&composed, "run")?, expected);
+    }
+    Ok(())
+}
+
 #[test]
 fn p3_wizer_preinitializes_component_with_async_export() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
@@ -1030,17 +1176,15 @@ fn p3_generated_crate_builds_with_multiple_wasi_package_versions() -> anyhow::Re
 /// features, on the `wasm32-wasip2` build target that P3 actually compiles to) and asserts that
 /// none of the Preview 2 runtime dependencies are active, while the Preview 3 bindings are.
 ///
-/// Note on scope: the check deliberately targets the P2 *runtime* crates our own skeleton would
-/// pull in via the `p2`/`fetch` features (`wstd`, `golem-wasi-http`). It does **not** assert the
-/// absence of:
-/// - the `wasip2` crate: that appears purely as `getrandom`'s WASI backend for the
-///   `wasm32-wasip2` target and is unavoidable until a dedicated `wasm32-wasip3` rustc target
-///   exists — it is not evidence of a Preview 2 runtime leak in our code;
+/// Note on scope: the check deliberately targets the P2 *runtime* crates the removed Preview 2
+/// skeleton pulled in (`wstd`, `golem-wasi-http`). It does **not** assert the absence of:
+/// - the `wasip2` crate: the skeleton binds the synchronous Preview 2 `set-times-at` through it,
+///   and it is also `getrandom`'s WASI backend for the `wasm32-wasip2` target — it is not evidence
+///   of a Preview 2 runtime leak in our code;
 /// - the 0.42 `wit-bindgen-rt` and the target-agnostic binding crates that use it
 ///   (`wasi-logging`, `golem-context`, `golem-websocket`): they bind fully synchronous
 ///   interfaces that work on both targets (P3 components legitimately import residual 0.2-style
-///   sync interfaces), and `wasi-logging` is part of the default `normal-p3` tier, mirroring the
-///   Preview 2 `normal` tier.
+///   sync interfaces), and `wasi-logging` is part of the default `normal-p3` tier.
 #[test]
 fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
@@ -1101,6 +1245,79 @@ fn p3_dependency_graph_excludes_preview2_runtime_crates() -> anyhow::Result<()> 
         "Preview 3 crate `wasip3` must appear in the P3 dependency graph; full graph:\n{stdout}"
     );
 
+    Ok(())
+}
+
+/// Consumers such as Golem's SDK agent templates replace the whole `wit-bindgen-p3` entry with
+/// `--dependency` and keep `optional = true` in it. The `p3` feature must still activate the
+/// replacement, or the generated bindings cannot find `wit_bindgen_p3`.
+#[test]
+fn p3_feature_activates_an_optional_wit_bindgen_p3_override() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package test:p3-override;
+
+            world p3-override {
+              export run: func() -> string;
+            }
+        "#},
+        "export function run() { return \"ok\"; }\n",
+    )?;
+    generate_p3(temp.path())?;
+    let skeleton_manifest = std::fs::read_to_string(temp.path().join("out").join("Cargo.toml"))?;
+    let entry = skeleton_manifest
+        .lines()
+        .find_map(|line| line.strip_prefix("wit-bindgen-p3 = "))
+        .expect("the skeleton declares wit-bindgen-p3");
+    let replacement = entry
+        .replace(", optional = true", "")
+        .trim_end()
+        .strip_suffix('}')
+        .expect("wit-bindgen-p3 is an inline table")
+        .trim_end()
+        .to_string()
+        + ", optional = true }";
+    std::fs::remove_dir_all(temp.path().join("out"))?;
+
+    generate_wrapper_crate_with_options(
+        &temp.path().join("wit"),
+        &[JsModuleSpec {
+            name: "module".to_string(),
+            mode: EmbeddingMode::EmbedFile(temp.path().join("src").join("module.js")),
+        }],
+        &temp.path().join("out"),
+        None,
+        GenerationTarget::WasiP3,
+        &WrapperCrateOptions {
+            native_modules: vec![],
+            dependencies: vec![DependencySpec {
+                key: "wit-bindgen-p3".to_string(),
+                value: replacement,
+            }],
+        },
+    )?;
+
+    let output = Command::new("cargo")
+        .arg("tree")
+        .arg("--manifest-path")
+        .arg(temp.path().join("out").join("Cargo.toml"))
+        .args(["--target", "wasm32-wasip2", "-e", "normal", "--depth", "1"])
+        .args(["--prefix", "none"])
+        .args(["--no-default-features", "--features", "p3"])
+        .output()?;
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    assert!(
+        output.status.success(),
+        "cargo tree failed; stdout:\n{stdout}\nstderr:\n{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        stdout.lines().any(|line| line.starts_with("wit-bindgen v")),
+        "the `p3` feature must activate the optional wit-bindgen-p3 override; direct \
+         dependencies:\n{stdout}"
+    );
     Ok(())
 }
 
@@ -1832,11 +2049,9 @@ fn p3_rejects_methodless_world_level_resource() -> anyhow::Result<()> {
 
 #[test]
 fn p3_rejects_world_level_imported_resource() -> anyhow::Result<()> {
-    // A resource declared directly in the world (rather than inside an interface) is only usable
-    // through functions imported directly into the world. Those are a documented limitation
-    // ("only whole interfaces" are supported for imports): they would land in the synthetic
-    // global import module, which is never registered with QuickJS's module resolver/loader.
-    // The Preview 3 path must reject this instead of emitting a crate that fails to compile.
+    // A resource declared directly in the world (rather than inside an interface) is a documented
+    // limitation. The Preview 3 path must reject it instead of emitting a crate that fails to
+    // compile.
     let temp = Utf8TempDir::new()?;
     write_fixture(
         temp.path(),
@@ -1861,36 +2076,56 @@ fn p3_rejects_world_level_imported_resource() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// Functions imported directly into the world are importable from a JavaScript module named after
+/// the world, both synchronous and `async` ones.
 #[test]
-fn p3_rejects_world_level_freestanding_import() -> anyhow::Result<()> {
-    // Functions imported directly into the world (not through an interface) are a documented
-    // limitation ("only whole interfaces" are supported for imports). On the Preview 3 path such
-    // an import would build but trap at runtime ("Error resolving module ...") because the global
-    // import module is never registered with QuickJS, so generation must reject it up front.
+fn p3_world_level_function_imports_are_importable() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
+    let consumer = temp.path().join("consumer");
     write_fixture(
-        temp.path(),
+        &consumer,
         indoc! {r#"
-            package bug:async-import-runtime;
+            package bug:world-imports;
 
-            world async-import-runtime {
-              import get-number: async func() -> u32;
-              export run: async func() -> u32;
+            world world-imports {
+              import get-number: func() -> u32;
+              import get-label: async func() -> string;
+              export run: async func() -> string;
             }
         "#},
         indoc! {r#"
-            import { getNumber } from 'async-import-runtime';
+            import { getNumber, getLabel } from 'world-imports';
 
             export async function run() {
-              return await getNumber();
+              return `${getNumber() + 1}:${await getLabel()}`;
             }
         "#},
     )?;
+    generate_p3(&consumer)?;
 
-    assert!(
-        generate_p3(temp.path()).is_err(),
-        "P3 generation must reject functions imported directly into the world"
-    );
+    let provider = temp.path().join("provider");
+    write_fixture(
+        &provider,
+        indoc! {r#"
+            package bug:world-imports-provider;
+
+            world world-imports-provider {
+              export get-number: func() -> u32;
+              export get-label: async func() -> string;
+            }
+        "#},
+        indoc! {r#"
+            export function getNumber() { return 41; }
+            export async function getLabel() { return 'label'; }
+        "#},
+    )?;
+    generate_p3(&provider)?;
+    let provider = build_p3(&provider, "world_imports_provider")?;
+
+    let socket = build_p3(&consumer, "world_imports")?;
+    let composed = consumer.join("composed.wasm");
+    compose_provider(&socket, &provider, &composed)?;
+    assert_eq!(run_p3_string_export(&composed, "run")?, "42:label");
     Ok(())
 }
 
@@ -1898,8 +2133,8 @@ fn p3_rejects_world_level_freestanding_import() -> anyhow::Result<()> {
 fn p3_fetch_get_returns_body_on_wasi_p3() -> anyhow::Result<()> {
     // Strong functional check that `fetch`/HTTP actually *executes* on the Preview 3 path: the
     // request is driven through `wasip3::http::client::send` (Component Model async bodies), not
-    // through P2 pollables. A regression back to the `http_disabled` stub (which throws for every
-    // call) would fail this test.
+    // through P2 pollables. A regression to a disabled HTTP stub (which throws for every call)
+    // would fail this test.
     let port = spawn_test_http_server();
     let temp = Utf8TempDir::new()?;
     write_fixture(
@@ -1967,7 +2202,7 @@ fn p3_fetch_post_echoes_body_on_wasi_p3() -> anyhow::Result<()> {
 
 #[test]
 fn p3_fetch_follows_redirect_on_wasi_p3() -> anyhow::Result<()> {
-    // Validates the redirect-following logic in `http_p3.rs`: `GET /redirect` returns a 302 to
+    // Validates the redirect-following logic in `builtin/http.rs`: `GET /redirect` returns a 302 to
     // `/hello`, and the default `redirect: 'follow'` policy must transparently follow it and
     // surface `redirected === true` plus the final body.
     let port = spawn_test_http_server();

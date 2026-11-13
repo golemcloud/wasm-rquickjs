@@ -1,16 +1,16 @@
 declare module 'assert' {
-  export function testOk(): Promise<boolean>;
-  export function testEqual(): Promise<boolean>;
-  export function testStrictEqual(): Promise<boolean>;
-  export function testDeepEqual(): Promise<boolean>;
-  export function testDeepStrictEqual(): Promise<boolean>;
-  export function testThrows(): Promise<boolean>;
-  export function testDoesNotThrow(): Promise<boolean>;
-  export function testIfError(): Promise<boolean>;
-  export function testMatch(): Promise<boolean>;
-  export function testFail(): Promise<boolean>;
-  export function testRejects(): Promise<boolean>;
-  export function testStrictMode(): Promise<boolean>;
-  export function testAssertionError(): Promise<boolean>;
-  export function testEvalGeneratedMessage(): Promise<boolean>;
+  export function testOk(): boolean;
+  export function testEqual(): boolean;
+  export function testStrictEqual(): boolean;
+  export function testDeepEqual(): boolean;
+  export function testDeepStrictEqual(): boolean;
+  export function testThrows(): boolean;
+  export function testDoesNotThrow(): boolean;
+  export function testIfError(): boolean;
+  export function testMatch(): boolean;
+  export function testFail(): boolean;
+  export function testRejects(): boolean;
+  export function testStrictMode(): boolean;
+  export function testAssertionError(): boolean;
+  export function testEvalGeneratedMessage(): boolean;
 }
