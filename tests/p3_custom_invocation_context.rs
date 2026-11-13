@@ -220,6 +220,21 @@ async fn run_exports(component_path: &Utf8Path, exports: &[&str]) -> Result<Outc
     wasmtime_wasi::p2::add_to_linker_async(&mut linker)?;
     wasmtime_wasi::p3::add_to_linker(&mut linker)?;
     wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+    // Timer sleeps are host calls too: record the invocation each `wait-for` starts in.
+    linker.allow_shadowing(true);
+    linker
+        .instance("wasi:clocks/monotonic-clock@0.3.0")?
+        .func_wrap_concurrent(
+            "wait-for",
+            |accessor: &Accessor<Host>, (how_long,): (u64,)| {
+                Box::pin(async move {
+                    accessor.with(|mut access| access.get().record("wait-for"));
+                    tokio::time::sleep(Duration::from_nanos(how_long)).await;
+                    Ok(())
+                })
+            },
+        )?;
+    linker.allow_shadowing(false);
     host_durability::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |host| host)?;
     host_effects::add_to_linker::<Host, HasSelf<Host>>(&mut linker, |host| host)?;
 
@@ -374,6 +389,15 @@ fn position(records: &[String], record: &str) -> usize {
         .unwrap_or_else(|| panic!("missing record {record} in {records:#?}"))
 }
 
+/// The `wait-for` records: one per timer sleep.
+fn waits(records: &[String]) -> Vec<&str> {
+    records
+        .iter()
+        .map(String::as_str)
+        .filter(|record| record.starts_with("wait-for@"))
+        .collect()
+}
+
 #[test]
 fn p3_custom_invocation_context_follows_each_flow() {
     let temp = Utf8TempDir::new().expect("temp dir");
@@ -429,6 +453,15 @@ fn p3_custom_invocation_context_follows_each_flow() {
     // The siblings really overlapped: b finished while a was still waiting.
     assert!(
         position(records, "finish:b@b") < position(records, "a2@a"),
+        "{records:#?}"
+    );
+    // A timer sleeps in the scope that registered it: the `cb` timer and the wakeup timer of
+    // `process.nextTick` in `cb`, and the root's `sleep(10)` and shared `sleep(5)` at the root.
+    let mut sleeps = waits(records);
+    sleeps.sort();
+    assert_eq!(
+        sleeps,
+        ["wait-for@cb", "wait-for@cb", "wait-for@root", "wait-for@root"],
         "{records:#?}"
     );
 
@@ -491,6 +524,22 @@ fn p3_custom_invocation_context_covers_edge_cases() {
         3,
         "{records:#?}"
     );
+    // Every period of the intervals, the immediate and each sleep wait in `cb2`. `late`'s
+    // interval sleeps in `late` while it is open, and in `cb2` once it closed, right after its drop.
+    let closed_at = position(records, "drop:late@late");
+    assert!(closed_at < position(records, "late-tick@cb2"), "{records:#?}");
+    let sleeps = waits(records);
+    assert!(sleeps.len() >= 6, "{records:#?}");
+    assert!(
+        sleeps
+            .iter()
+            .all(|r| *r == "wait-for@cb2" || *r == "wait-for@late"),
+        "{records:#?}"
+    );
+    assert!(
+        !records[closed_at..].iter().any(|r| r == "wait-for@late"),
+        "{records:#?}"
+    );
     for expected in [
         "immediate@cb2",
         "race@cb2",
@@ -525,6 +574,7 @@ fn p3_custom_invocation_context_keeps_root_work_queued_before_the_first_scope() 
         "first-microtask@root",
         "first-tick@root",
         "first-timer@root",
+        "wait-for@root",
         "first-child@first",
         "finish:first@first",
         "first-after@root",

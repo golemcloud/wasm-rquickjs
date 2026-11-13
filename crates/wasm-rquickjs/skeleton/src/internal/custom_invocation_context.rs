@@ -247,9 +247,13 @@ pub(crate) fn restore_root() {
     switch_to(&root);
 }
 
+/// The scope captured for futures that are created later, such as each sleep of a timer.
+/// `None` stands for a capture before the first scope opened, so at the root.
+pub(crate) type FutureScope = Option<Rc<ScopeInfo>>;
+
 /// Captures the current scope for a future that is created now and polled later. Returns `None`
 /// when no scope was ever opened.
-fn capture_for_future() -> Option<Rc<ScopeInfo>> {
+fn capture_for_future() -> FutureScope {
     if HOOK_INSTALLED.get() {
         Some(current_scope())
     } else {
@@ -291,8 +295,14 @@ pub struct Scoped<F> {
 /// Wraps an import future so that the host call it starts, and its cancellation, are attributed
 /// to the scope that is current now, when JavaScript calls the import.
 pub fn scoped<F: Future>(inner: F) -> Scoped<F> {
+    scoped_in(capture_for_future(), inner)
+}
+
+/// Wraps a future so that every poll, and its drop, runs in `scope`, captured earlier with
+/// [`future_scope_of`]. A closed scope resolves to its nearest open ancestor.
+pub(crate) fn scoped_in<F: Future>(scope: FutureScope, inner: F) -> Scoped<F> {
     Scoped {
-        scope: capture_for_future(),
+        scope,
         inner: Some(inner),
     }
 }
@@ -409,6 +419,11 @@ pub(crate) fn capture_for_callback<'js>(
     } else {
         Ok(None)
     }
+}
+
+/// The scope for futures of a callback registration, from the result of [`capture_for_callback`].
+pub(crate) fn future_scope_of(token: Option<Class<'_, Token>>) -> FutureScope {
+    token.map(|token| scope_of(&token))
 }
 
 /// Enters the scope of a callback that the runtime schedules itself, before the callback runs.
