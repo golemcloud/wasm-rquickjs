@@ -148,10 +148,13 @@ impl State {
 
 fn report_stale(scope: &ScopeInfo, reason: &str) {
     if !scope.reported.replace(true) {
-        eprintln!(
-            "wasm-rquickjs: work captured in custom invocation context {} runs in an enclosing context because {reason}",
+        // Unbuffered stderr writes every piece of a format string separately, and a host that
+        // journals output records each write. Write the report as one line.
+        let report = format!(
+            "wasm-rquickjs: work captured in custom invocation context {} runs in an enclosing context because {reason}\n",
             scope.id
         );
+        let _ = std::io::Write::write_all(&mut std::io::stderr(), report.as_bytes());
     }
 }
 
