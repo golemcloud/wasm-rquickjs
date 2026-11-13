@@ -461,7 +461,12 @@ fn p3_custom_invocation_context_follows_each_flow() {
     sleeps.sort();
     assert_eq!(
         sleeps,
-        ["wait-for@cb", "wait-for@cb", "wait-for@root", "wait-for@root"],
+        [
+            "wait-for@cb",
+            "wait-for@cb",
+            "wait-for@root",
+            "wait-for@root"
+        ],
         "{records:#?}"
     );
 
@@ -527,7 +532,10 @@ fn p3_custom_invocation_context_covers_edge_cases() {
     // Every period of the intervals, the immediate and each sleep wait in `cb2`. `late`'s
     // interval sleeps in `late` while it is open, and in `cb2` once it closed, right after its drop.
     let closed_at = position(records, "drop:late@late");
-    assert!(closed_at < position(records, "late-tick@cb2"), "{records:#?}");
+    assert!(
+        closed_at < position(records, "late-tick@cb2"),
+        "{records:#?}"
+    );
     let sleeps = waits(records);
     assert!(sleeps.len() >= 6, "{records:#?}");
     assert!(
