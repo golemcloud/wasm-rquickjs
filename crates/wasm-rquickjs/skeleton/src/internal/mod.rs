@@ -5,6 +5,7 @@
 //! `crate::internal::*`, so this module re-exports the public surface its generated code
 //! expects.
 
+pub mod custom_invocation_context;
 pub(crate) mod error_formatting;
 pub(crate) mod module_loading;
 pub(crate) mod preinit;

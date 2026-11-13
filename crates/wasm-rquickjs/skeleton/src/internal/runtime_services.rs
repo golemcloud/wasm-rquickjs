@@ -753,6 +753,7 @@ impl OwnedJsRuntime {
             // Child bootstrap must return diagnostic allocation failures to its
             // caller rather than trapping the entire component.
             super::error_formatting::initialize(&ctx)?;
+            super::custom_invocation_context::initialize(&ctx)?;
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
             #[cfg(feature = "test-observability")]

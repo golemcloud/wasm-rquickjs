@@ -60,6 +60,7 @@ world async-values {
   export run-nested: async func() -> result<nested-values, string>;
   export run-nested-error: async func() -> result<nested-values, string>;
   export take-future: async func(f: future<u32>) -> u32;
+  export inspect-future: async func(mode: u8, f: future<u32>) -> future<u32>;
   export take-stream: async func(s: stream<u8>) -> u32;
   export inspect-stream-completion: async func(s: stream<u8>) -> string;
   export break-stream: async func(s: stream<u8>) -> u8;

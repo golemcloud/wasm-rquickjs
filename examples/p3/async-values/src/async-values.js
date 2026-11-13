@@ -161,6 +161,24 @@ export async function takeFuture(f) {
   return v + 1;
 }
 
+let retainedUnobservedFuture;
+
+export function inspectFuture(mode, f) {
+  if (mode === 0) {
+    retainedUnobservedFuture = f;
+    return 42;
+  }
+  if (mode === 1) return f;
+  return (async () => {
+    const first = await f.then(value => value + 1);
+    const [second, third] = await Promise.all([f, f]);
+    let finallyCalls = 0;
+    const fourth = await f.finally(() => { finallyCalls++; });
+    const fifth = await f.catch(() => 999);
+    return first + 2 * second + 3 * third + 4 * fourth + 5 * fifth + finallyCalls;
+  })();
+}
+
 // Receives a component `stream<u8>` from the host, exposed to JS as an async-iterable.
 export async function takeStream(s) {
   let sum = 0;

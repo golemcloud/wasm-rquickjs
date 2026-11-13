@@ -17,6 +17,17 @@ export async function runDroppedOptionalFuture() {
   await host.storeOptionalFuture(new Promise(() => {}));
 }
 
+let retainedUnobservedFuture;
+
+export async function runUnusedFuture() {
+  retainedUnobservedFuture = (await host.makePendingFuture()).value;
+  return 42;
+}
+
+export async function readRetainedFuture() {
+  return await retainedUnobservedFuture;
+}
+
 export async function runBufferTransfer() {
   const bytes = Uint8Array.from({ length: 16384 }, (_, i) => i & 255);
   const pending = host.echoBytes(bytes);

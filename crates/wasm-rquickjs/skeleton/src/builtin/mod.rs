@@ -16,6 +16,7 @@ pub(crate) mod child_process;
 pub(crate) mod child_timers;
 mod cluster;
 mod console;
+mod custom_invocation_context;
 mod constants;
 mod dgram;
 mod diagnostics_channel;
@@ -293,6 +294,8 @@ pub fn add_module_resolvers(
 
     let resolver = resolver
         .with_module("__wasm_rquickjs_builtin/execution_native")
+        .with_module("__wasm_rquickjs_builtin/custom_invocation_context_native")
+        .with_module("wasm-rquickjs:custom-invocation-context")
         .with_module("wasm-rquickjs:execution")
         .with_module("__wasm_rquickjs_builtin/typescript_native");
 
@@ -397,6 +400,10 @@ pub fn module_loader() -> (
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/execution_native",
         execution::js_native_module,
+    )
+    .with_module(
+        "__wasm_rquickjs_builtin/custom_invocation_context_native",
+        custom_invocation_context::js_native_module,
     );
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/typescript_native",
@@ -607,7 +614,12 @@ pub fn module_loader() -> (
         .with_syncable_module("node:sqlite", sqlite::SQLITE_JS);
 
     let builtin_loader =
-        builtin_loader.with_module("wasm-rquickjs:execution", execution::EXECUTION_JS);
+        builtin_loader
+        .with_module("wasm-rquickjs:execution", execution::EXECUTION_JS)
+        .with_module(
+            "wasm-rquickjs:custom-invocation-context",
+            custom_invocation_context::CUSTOM_INVOCATION_CONTEXT_JS,
+        );
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(
@@ -630,6 +642,7 @@ pub fn wire_builtins() -> String {
     writeln!(result, "{}", buffer::WIRE_JS).unwrap();
     writeln!(result, "{}", console::WIRE_JS).unwrap();
     writeln!(result, "{}", timeout::WIRE_JS).unwrap();
+    writeln!(result, "{}", custom_invocation_context::WIRE_JS).unwrap();
     writeln!(result, "{}", gc::WIRE_JS).unwrap();
     writeln!(result, "{}", http::WIRE_JS).unwrap();
     writeln!(result, "{}", webstreams::WIRE_JS).unwrap();

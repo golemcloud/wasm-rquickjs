@@ -78,6 +78,7 @@ struct Host {
     table: ResourceTable,
     stored_future: Option<oneshot::Receiver<u32>>,
     stored_optional_future: Option<oneshot::Receiver<Option<u32>>>,
+    pending_optional_future: Option<oneshot::Sender<Option<u32>>>,
     export_gates: Vec<Option<ExportGate>>,
     cleanup_notification: Option<oneshot::Sender<()>>,
     nested_cleanup_calls: usize,
@@ -172,6 +173,18 @@ impl<T> export_bindings::test::async_values::observer::HostWrappedStreamWithStor
 }
 
 impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
+    async fn make_pending_future(
+        accessor: &Accessor<T, Self>,
+    ) -> test::async_values_import::host::OptionalFuture {
+        accessor.with(|mut access| {
+            let (tx, rx) = oneshot::channel();
+            access.get().pending_optional_future = Some(tx);
+            let value = FutureReader::new(&mut access, OneshotProducer::new(rx))
+                .expect("failed to create pending future");
+            test::async_values_import::host::OptionalFuture { value }
+        })
+    }
+
     async fn consume_optional_future(
         accessor: &Accessor<T, Self>,
         f: FutureReader<Option<u32>>,
@@ -307,6 +320,7 @@ fn new_store(engine: &Engine) -> Store<Host> {
             table: ResourceTable::new(),
             stored_future: None,
             stored_optional_future: None,
+            pending_optional_future: None,
             export_gates: Vec::new(),
             cleanup_notification: None,
             nested_cleanup_calls: 0,
@@ -1404,6 +1418,130 @@ fn p3_imported_resources_use_engine_dispose_symbol() {
             .await??;
         Ok::<(), anyhow::Error>(())
     });
+}
+
+#[test]
+fn p3_unused_imported_future_does_not_retain_guest_tasks() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values-import", "async_values_import")
+        .expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let mut linker = base_linker(&engine)?;
+        test::async_values_import::host::add_to_linker::<Host, HasSelf<Host>>(
+            &mut linker,
+            |host| host,
+        )?;
+        let mut store = new_store(&engine);
+        let bindings =
+            AsyncValuesImport::instantiate_async(&mut store, &component, &linker).await?;
+        store
+            .run_concurrent(async |accessor| -> Result<()> {
+                assert_eq!(bindings.call_run_unused_future(accessor).await?, 42);
+                tokio::time::timeout(
+                    Duration::from_secs(30),
+                    futures::future::poll_fn(|cx| accessor.poll_no_interesting_tasks(cx)),
+                )
+                .await
+                .expect("an unused imported future must not retain the guest task");
+                Ok(())
+            })
+            .await??;
+        store
+            .data_mut()
+            .pending_optional_future
+            .take()
+            .expect("pending future writer")
+            .send(Some(29))
+            .expect("unused future reader must remain alive");
+        assert_eq!(
+            store
+                .run_concurrent(async move |accessor| {
+                    bindings.call_read_retained_future(accessor).await
+                })
+                .await??,
+            Some(29)
+        );
+        Ok::<(), anyhow::Error>(())
+    });
+}
+
+#[test]
+fn p3_future_readers_start_on_observation_and_support_forwarding() {
+    let temp = Utf8TempDir::new().expect("temp dir");
+    let wasm = generate_and_build(&temp, "async-values", "async_values").expect("generate + build");
+    block_on_with_timeout(120, async {
+        let engine = engine()?;
+        let component = Component::from_file(&engine, wasm)?;
+        let linker = base_linker(&engine)?;
+        for (mode, expected) in [(0, 42), (1, 17), (2, 257)] {
+            let mut store = new_store(&engine);
+            let bindings = AsyncValues::instantiate_async(&mut store, &component, &linker).await?;
+            let reads = Arc::new(AtomicUsize::new(0));
+            let (tx, rx) = oneshot::channel();
+            let reader = FutureReader::new(
+                &mut store,
+                ObservedFutureProducer {
+                    inner: OneshotProducer::new(rx),
+                    reads: reads.clone(),
+                },
+            )?;
+            let pending = if mode == 0 {
+                Some(tx)
+            } else {
+                tx.send(17).expect("future receiver");
+                None
+            };
+            store
+                .run_concurrent(async move |accessor| -> Result<()> {
+                    let reader = bindings.call_inspect_future(accessor, mode, reader).await?;
+                    let (tx, rx) = oneshot::channel();
+                    accessor.with(|access| reader.pipe(access, OneshotConsumer::new(tx)))?;
+                    assert_eq!(rx.await?, expected);
+                    tokio::time::timeout(
+                        Duration::from_secs(30),
+                        futures::future::poll_fn(|cx| accessor.poll_no_interesting_tasks(cx)),
+                    )
+                    .await
+                    .expect("an unused future must not retain the guest task");
+                    Ok(())
+                })
+                .await??;
+            if mode == 0 {
+                assert_eq!(reads.load(Ordering::SeqCst), 0, "unused future was read");
+            } else {
+                assert!(
+                    reads.load(Ordering::SeqCst) > 0,
+                    "observed future was not read"
+                );
+            }
+            drop(pending);
+        }
+        Ok::<(), anyhow::Error>(())
+    });
+}
+
+struct ObservedFutureProducer {
+    inner: OneshotProducer<u32>,
+    reads: Arc<AtomicUsize>,
+}
+
+impl FutureProducer<Host> for ObservedFutureProducer {
+    type Item = u32;
+
+    fn poll_produce(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        store: StoreContextMut<Host>,
+        finish: bool,
+    ) -> Poll<Result<Option<u32>>> {
+        let this = self.get_mut();
+        if !finish {
+            this.reads.fetch_add(1, Ordering::SeqCst);
+        }
+        Pin::new(&mut this.inner).poll_produce(cx, store, finish)
+    }
 }
 
 #[test]

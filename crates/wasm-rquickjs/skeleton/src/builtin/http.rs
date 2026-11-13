@@ -25,8 +25,11 @@
 //! instead of being buffered. Redirects for streaming bodies are resolved by the shared JS loop,
 //! one native request/response attempt at a time.
 
+use crate::internal::custom_invocation_context::{ScopedImport, scoped_import};
 use http::{HeaderName, HeaderValue, StatusCode, Version};
+use rquickjs::class::OwnedBorrowMut;
 use rquickjs::convert::Coerced;
+use rquickjs::function::This;
 use rquickjs::prelude::List;
 use rquickjs::{ArrayBuffer, Ctx, Exception, FromJs, IntoJs, JsLifetime, TypedArray, Value};
 
@@ -492,7 +495,11 @@ impl HttpRequest {
                 "HTTP request has not been initialized for sending",
             ));
         };
-        self.send_future = Some(Box::pin(wasip3::http::client::send(request)));
+        // The request starts when the future is first polled; it belongs to the custom
+        // invocation context of this JavaScript call.
+        self.send_future = Some(Box::pin(
+            crate::internal::custom_invocation_context::scoped(wasip3::http::client::send(request)),
+        ));
         Ok(())
     }
 
@@ -581,13 +588,19 @@ impl HttpRequest {
     /// Buffered send with redirect handling. Only the final visible response body is read; the
     /// bodies of followed redirects, rejected redirects, and opaque responses are discarded without
     /// reading, so a large or never-ending discarded body cannot stall the fetch.
-    pub async fn simple_send<'js>(
-        &mut self,
+    ///
+    /// The send is built during the JavaScript call, so the request belongs to the caller's custom
+    /// invocation context.
+    pub fn simple_send<'js>(
+        this: This<OwnedBorrowMut<'js, Self>>,
         ctx: Ctx<'js>,
         signal: Option<Value<'js>>,
-    ) -> rquickjs::Result<HttpResponse> {
-        let send = self.simple_send_inner(ctx.clone());
-        with_abort_signal(&ctx, signal, send).await
+    ) -> ScopedImport<'js, rquickjs::Result<HttpResponse>> {
+        let mut this = this.0;
+        scoped_import(async move {
+            let send = this.simple_send_inner(ctx.clone());
+            with_abort_signal(&ctx, signal, send).await
+        })
     }
 
     async fn simple_send_inner<'js>(&mut self, ctx: Ctx<'js>) -> rquickjs::Result<HttpResponse> {
