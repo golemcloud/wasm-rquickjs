@@ -4,6 +4,8 @@
 compared against Node.js 24.22.3. The harness, CI and runtime remain pinned to 22.14.0 until
 NJ-02 switches them. This record is a qualification result, not implemented runtime support.
 The runtime still reports `process.version` `v22.0.0`.
+No material blocker to Node 26 was found, and it is supported one year longer than Node 24
+(end of life 2029-04-30 against 2028-04-30).
 
 Qualified on 11 November 2026 against `golemcloud/wasm-rquickjs`
 `21a6c10b4c871bf1c686ce7584ade770991e79ed` on the P2 Golem Wasmtime fork lane
@@ -168,6 +170,9 @@ The 141 Node 26-only additions missing from the runtime are:
 | Globals `Temporal`, `localStorage`/`sessionStorage`/`Storage` and `QuotaExceededError` | 5 | `Temporal` depends on the engine |
 | `fs.Stats` `*Instant` and `fs.openAsBlobSync` | 5 | |
 | Other | 17 | |
+
+These additions are not part of restoring the baseline. They become chart rows and
+improvement-campaign work.
 
 The 50 Node 26 removals the runtime still exposes are `_stream_*` modules,
 `assert.CallTracker`, `buffer.SlowBuffer`, `fs.ReadStream#open`/`WriteStream#open` and dgram
@@ -343,45 +348,6 @@ All of this is required for either target unless marked "26 only".
    - **26 only:** `tests/libraries/better-sqlite3` pins 12.6.2, which does not build on 26.13.1.
      Bump it to a release that supports ABI 147 (not yet identified) or record the host install
      failure.
-
-## Estimated engineering effort
-
-These are estimates, not measurements. They assume one engineer who knows the harness and
-skeleton, the single surviving P3 path, and the failure counts above. The failures were grouped
-by error message but not root-caused, so the runtime ranges are wide.
-
-| Work | Either target | Additional for 26.13.1 |
-| --- | --- | --- |
-| Pins, CI, docs and skills (item 1) | 0.5–1 day | — |
-| `migrate_config_split`, runner and vendoring fixes (items 2–4) | 2–3 days | 0.25 day (`trace_events` decision) |
-| Shim helpers (item 5) | 0.5–1 day | 0.25 day |
-| Mapping review (item 6) | 2–4 days (55 renamed, 38 ignored, 41 removed) | 0.5–1 day (8 renamed, 44 removed, 30 of them EOL) |
-| Runtime restoration of failing baseline cases | 10–20 days (257 cases, 106 files; crypto 71, `util.inspect` 41, sqlite 20, File/Blob 18, module/esm 15, fs 15) | 2–5 days (23 cases, 20 files) |
-| npm 11 fixture refresh (item 7) | 1–2.25 days (was 2–5 days, unmeasured) | 0–0.25 day (better-sqlite3 fixture) |
-| Runtime metadata alignment | 0.5 day | — |
-| **Total** | **≈16.5–32 days** | **≈3–7 days, about 18–21% more** |
-
-The npm 11 range covers about 0.25–0.5 day for pins and labels, 0.25 day for the allowScripts
-decision and stderr expectation, 0.25–1 day to regenerate the `npm_metadata` and `agentic_ts`
-reports, and 0.25–0.5 day for whatever the unrun `agentic_ts` component suite exposes. The
-measured npm 11 differences were stderr notices only, on both P2 and P3.
-
-The 141 Node 26-only API additions are not part of restoring the baseline. They become chart
-rows and improvement-campaign work; `node:ffi` (46) is WASI-impossible. Mapping the sqlite
-`Database`/`Statement` aliases would take about 1–2 more days if it is wanted early.
-
-Main uncertainties:
-
-- A single shared root cause, such as a crypto key-export path, could shrink the crypto range
-  considerably.
-- npm 11 inside the component was exercised with `npm_compat` and a one-iteration
-  `npm_metadata` smoke, on P3 and P2. `agentic_ts` and the full `npm_metadata` timings were not
-  run.
-- P3 reproduced the P2 failure counts within two cases, so the lane change does not move these
-  estimates. P3 adds one `child_process` stdio gap in a case outside the baseline.
-
-No material blocker to Node 26 was found. Its incremental cost is small next to the shared switch
-cost, and it adds one year of support (end of life 2029-04-30 against 2028-04-30).
 
 ## Implementer instructions
 
