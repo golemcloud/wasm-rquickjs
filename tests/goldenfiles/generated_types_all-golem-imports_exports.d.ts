@@ -1,3 +1,3 @@
 declare module 'all-golem-imports' {
-  export function test(): Promise<void>;
+  export function test(): void;
 }

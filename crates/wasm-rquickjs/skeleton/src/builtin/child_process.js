@@ -1,7 +1,6 @@
 // node:child_process implementation for WASM.
 //
-// Local Node commands run in the component. Preview 3 gives each child a fresh
-// runtime; Preview 2 retains inline execution with a temporary process view.
+// Local Node commands run in the component. Each child gets a fresh runtime.
 // Optional embedding backends handle other commands without host subprocesses.
 
 import * as path from 'node:path';
@@ -24,7 +23,18 @@ function createNotSupportedError(method) {
     return err;
 }
 
+const UNFORMATTABLE_ERROR = 'Uncaught exception: the thrown value could not be formatted\n';
+
+// Reporting must not fail: a thrown value's getters, proxy traps or coercions can throw.
 function formatErrorForStderr(err) {
+    try { return formatErrorText(err); }
+    catch (_) {
+        try { return String(err) + '\n'; }
+        catch (_) { return UNFORMATTABLE_ERROR; }
+    }
+}
+
+function formatErrorText(err) {
     let text;
     if (err && err.stack) {
         text = String(err.stack);
@@ -633,10 +643,6 @@ function completedInlineSession(result) {
     return { beforeExit() {}, finish() { return result; } };
 }
 
-function runInline(command, args, options) {
-    return beginInline(command, args, options, false).finish();
-}
-
 // Native children reuse the CLI loader but retain its process view and output
 // interception until their own event loop has reached natural completion.
 function beginInline(command, args, options, isolated) {
@@ -781,20 +787,27 @@ function beginInline(command, args, options, isolated) {
 
     function handleError(err, handlerFailed = false) {
         failed = true;
-        if (firstExitCode !== null) {
-            status = firstExitCode;
-            reportFirstExitError();
-        } else if (err && err.__isProcessExit) {
-            status = toNumber(err.code || 0);
-        } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
-            status = 9;
-            capture(false, String(command) + ': ' + err.message + '\n');
-        } else {
-            status = handlerFailed ? 7 : 1;
-            if (checkSyntaxMode && currentScriptPath) capture(false, currentScriptPath + '\n');
-            capture(false, formatErrorForStderr(err));
+        // Reading a thrown value can throw. The failure keeps its default status, and the
+        // child stops either way.
+        status = handlerFailed ? 7 : 1;
+        try {
+            if (firstExitCode !== null) {
+                status = firstExitCode;
+                reportFirstExitError();
+            } else if (err && err.__isProcessExit) {
+                status = toNumber(err.code || 0);
+            } else if (err && err.code === 9 && isInlineEvalOption(invocationArgs[0])) {
+                status = 9;
+                capture(false, String(command) + ': ' + err.message + '\n');
+            } else {
+                if (checkSyntaxMode && currentScriptPath) capture(false, currentScriptPath + '\n');
+                capture(false, formatErrorForStderr(err));
+            }
+        } catch (_) {
+            capture(false, UNFORMATTABLE_ERROR);
+        } finally {
+            if (isolated) childNative.stop_child();
         }
-        if (isolated) childNative.stop_child();
     }
 
     function execute() {
@@ -832,7 +845,9 @@ function beginInline(command, args, options, isolated) {
                 return oldQueueMicrotask(() => {
                     try { callback(); }
                     catch (error) {
-                        if (error && error.__isProcessExit) {
+                        let isProcessExit = false;
+                        try { isProcessExit = !!(error && error.__isProcessExit); } catch (_) {}
+                        if (isProcessExit) {
                             handleError(error);
                         } else {
                             try { handleUncaught(error); }
@@ -2232,30 +2247,10 @@ export function exec(command, options, callback) {
 
 export function execFile(file, args, options, callback) {
     const normalized = normalizeExecFileParams(args, options, callback);
-    const backend = getProcessBackend();
-    if ((backend && backend.spawn) || childNative.supports_isolation()) {
-        const resolvedOptions = normalizeBackendExecOptions(normalized.options);
-        return collectExecChild(spawnCommand(String(file), normalized.args, resolvedOptions, resolvedOptions.maxBuffer),
-            resolvedOptions, normalized.callback,
-            result => createExecFileError(file, normalized.args, result));
-    }
-    const child = createExecChildProcess();
-    const resolvedOptions = cloneObject(normalized.options);
-
-    if (resolvedOptions.encoding === undefined) {
-        resolvedOptions.encoding = 'utf8';
-    }
-
-    const result = convertSpawnResultEncoding(
-        spawnSync(String(file), normalized.args, resolvedOptions),
-        resolvedOptions,
-    );
-    const error = createExecFileError(file, normalized.args, result);
-    child.spawnfile = String(file);
-    child.spawnargs = [String(file)].concat(normalized.args);
-    finishExecChild(child, normalized.callback, error, result);
-
-    return child;
+    const resolvedOptions = normalizeBackendExecOptions(normalized.options);
+    return collectExecChild(spawnCommand(String(file), normalized.args, resolvedOptions, resolvedOptions.maxBuffer),
+        resolvedOptions, normalized.callback,
+        result => createExecFileError(file, normalized.args, result));
 }
 
 function promisifyExec(fn) {
@@ -2370,7 +2365,7 @@ export function spawn(command, args, options) {
 
 function spawnCommand(command, args, options, maxBuffer) {
     ({ args, options } = normalizeSpawnParams(args, options));
-    if (childNative.supports_isolation() && !options.shell) {
+    if (!options.shell) {
         const local = resolveBackendInlineCommand(String(command), args, options);
         if (local) return spawnNode(local.command, local.args, options, maxBuffer);
     }
@@ -2517,15 +2512,12 @@ export function spawnSync(command, args, options) {
             unsupportedSpawnSyncResult(cmd);
     }
 
-    if (childNative.supports_isolation()) {
-        const request = nodeRequest(cmd, resolvedArgs, normalizedOptions, true);
-        const native = new childNative.Child(JSON.stringify(request));
-        const state = JSON.parse(native.runSync());
-        const output = [[], []];
-        deliverNodeOutput(state.events, request.options.stdio, (stdout, bytes) => output[stdout ? 0 : 1].push(bytes));
-        return nodeResult(state.result, request, output.map(chunks => Buffer.concat(chunks)), true);
-    }
-    return runInline(cmd, resolvedArgs, normalizedOptions);
+    const request = nodeRequest(cmd, resolvedArgs, normalizedOptions, true);
+    const native = new childNative.Child(JSON.stringify(request));
+    const state = JSON.parse(native.runSync());
+    const output = [[], []];
+    deliverNodeOutput(state.events, request.options.stdio, (stdout, bytes) => output[stdout ? 0 : 1].push(bytes));
+    return nodeResult(state.result, request, output.map(chunks => Buffer.concat(chunks)), true);
 }
 
 function nodeSignal(signal) {
@@ -2633,11 +2625,26 @@ function spawnNode(command, args, options, maxBuffer) {
     child.stdio = [child.stdin, child.stdout, child.stderr];
     let completed = false;
     let abortError;
-    // Listener exceptions belong to the parent, not to the native output pump.
-    // Use the ordinary nextTick uncaught-error path without cancelling a child.
+    // Listener exceptions belong to the parent, not to the native output pump, and do
+    // not cancel the child. Report them as uncaught at once, as Node does for an
+    // exception thrown from an I/O callback, so they precede later events such as
+    // 'close' that the pump may deliver in the same turn. A failing handler is fatal to
+    // the parent: the child gets no 'error' and delivers no further events.
+    let handlerFailed = false;
     const dispatch = callback => {
+        if (handlerFailed) return;
         try { callback(); }
-        catch (error) { process.nextTick(() => { throw error; }); }
+        catch (error) {
+            try { globalThis.__wasm_rquickjs_handleUncaughtError(error, process.domain || null); }
+            catch (handlerError) {
+                handlerFailed = completed = true;
+                // End the context that owns the handler at once, whichever driver runs this
+                // job: a child runtime exits 7, and the component itself traps.
+                const childUncaught = globalThis.__wasm_rquickjs_child_uncaught;
+                if (typeof childUncaught === 'function') childUncaught(handlerError, true);
+                else childNative.fail_uncaught_handler(formatErrorForStderr(handlerError));
+            }
+        }
     };
     child.kill = signal => {
         const selected = nodeSignal(signal ?? 'SIGTERM');

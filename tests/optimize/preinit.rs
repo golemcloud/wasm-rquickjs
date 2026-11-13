@@ -358,10 +358,7 @@ fn check_guest_denials(cases: &[(&str, &str)]) -> anyhow::Result<()> {
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    for (target, tier) in [
-        (GenerationTarget::WasiP2, "p2,full,websocket"),
-        (GenerationTarget::WasiP3, "full-p3,websocket"),
-    ] {
+    for (target, tier) in [(GenerationTarget::WasiP3, "full-p3,websocket")] {
         let root = temp.path().join(tier.replace(',', "-"));
         let template = build_preinit_template(&root, target, tier)?;
         let input = root.join("input.wasm");
@@ -413,9 +410,7 @@ fn optimizer_preserves_console_stdio_after_preinit() -> anyhow::Result<()> {
         .enable_all()
         .build()?;
     for (target, tier) in [
-        (GenerationTarget::WasiP2, "p2,full"),
         (GenerationTarget::WasiP3, "full-p3"),
-        (GenerationTarget::WasiP2, "p2,full-no-logging"),
         (GenerationTarget::WasiP3, "full-no-logging-p3"),
     ] {
         let root = temp.path().join(tier.replace(',', "-"));
@@ -480,10 +475,7 @@ fn optimizer_preserves_pure_sources_and_runtime_filesystem() -> anyhow::Result<(
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()?;
-    for (target, tier) in [
-        (GenerationTarget::WasiP2, "p2,full,websocket"),
-        (GenerationTarget::WasiP3, "full-p3,websocket"),
-    ] {
+    for (target, tier) in [(GenerationTarget::WasiP3, "full-p3,websocket")] {
         let root = temp.path().join(tier.replace(',', "-"));
         let template = build_preinit_template(&root, target, tier)?;
         let input = root.join("input.wasm");

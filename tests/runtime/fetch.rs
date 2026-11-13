@@ -2,9 +2,7 @@ use crate::common::test_server::{
     ResponseBodyServerEvent, start_abort_test_server, start_response_body_abort_test_server,
     start_test_server,
 };
-use crate::common::{
-    CompiledTest, FeatureCombination, TestTarget, invoke_and_capture_output, test_target,
-};
+use crate::common::{CompiledTest, FeatureCombination, invoke_and_capture_output};
 use camino::Utf8Path;
 
 use test_r::{test, test_dep};
@@ -850,11 +848,11 @@ async fn fetch_response_body_get_reader_after_access(
 /// loop re-polls send; the `Err` branch just needs to do the same.
 ///
 /// The Golem wasmtime fork (`use-golem-wasmtime`, branch `golem-wasmtime-v46.0.1-p3`) carries
-/// exactly that fix, so these tests run on P3 when the fork is enabled. On stock wasmtime the
-/// guest never sees the response head and there is nothing the skeleton can do, so skip under P3
-/// rather than faking the behavior; Preview 2 keeps full coverage on both hosts.
+/// exactly that fix, so these tests run when the fork is enabled. On stock wasmtime the guest
+/// never sees the response head and there is nothing the skeleton can do, so skip rather than
+/// faking the behavior.
 fn skip_streaming_redirect_on_p3(test_name: &str) -> bool {
-    if matches!(test_target(), TestTarget::P3) && !cfg!(feature = "use-golem-wasmtime") {
+    if !cfg!(feature = "use-golem-wasmtime") {
         println!(
             "{test_name}: SKIPPED on WASI Preview 3 with stock wasmtime — wasmtime-wasi-http's \
              p3 send masks early (pre-body-completion) responses with \

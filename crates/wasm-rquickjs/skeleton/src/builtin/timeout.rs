@@ -41,7 +41,6 @@ pub mod native_module {
         // `scope` is the token the timer captured at registration. Its sleeps run in it, so the
         // host attributes their clock calls to that scope, like the callback.
         let scope = future_scope_of(scope);
-        #[cfg(feature = "p3")]
         if let Some(owner) = timers
             .child_owner
             .borrow()
@@ -221,13 +220,6 @@ async fn scheduled_loop<F: Future<Output = bool>>(
     mut callback: impl FnMut() -> F,
 ) {
     loop {
-        #[cfg(feature = "p2")]
-        scoped_in(
-            scope.clone(),
-            wstd::task::sleep(wstd::time::Duration::from_millis(delay as u64)),
-        )
-        .await;
-        #[cfg(feature = "p3")]
         scoped_in(
             scope.clone(),
             wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)),

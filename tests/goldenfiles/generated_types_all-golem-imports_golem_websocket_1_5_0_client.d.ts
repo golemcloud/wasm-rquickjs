@@ -15,13 +15,13 @@ declare module 'golem:websocket/client@1.5.0' {
      * Receive the next message (blocks until available)
      * @throws Error
      */
-    receive(): Message;
+    receive(): Promise<Message>;
     /**
      * Receive the next message with a timeout in milliseconds.
      * Returns none if the timeout expires before a message arrives.
      * @throws Error
      */
-    receiveWithTimeout(timeoutMs: bigint): Message | undefined;
+    receiveWithTimeout(timeoutMs: bigint): Promise<Message | undefined>;
     /**
      * Send a close frame with optional code and reason. A reconstructed handle
      * using report-connection-loss returns session-lost without reconnecting.

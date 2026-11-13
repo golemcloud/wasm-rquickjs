@@ -10,7 +10,7 @@ if [ "${1:-}" = "--check" ] || [ "${1:-}" = "--check-current" ]; then
         export TYPESCRIPT_TRANSFORM_LATENCY_CHECK_CURRENT=1
     fi
     TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
-        tools/dev-test.sh p2 standard typescript_transform_latency ""
+        tools/dev-test.sh fork standard typescript_transform_latency ""
     exit 0
 fi
 
@@ -26,22 +26,21 @@ case "$arch" in
 esac
 
 mkdir -p "$results_dir"
-for target in p2 p3; do
-    for mode in strip transform; do
-        report="$results_dir/$(date +%Y-%m-%d)-$target-$mode-$platform-$arch.json"
-        (
-            cd "$repo_root"
-            TYPESCRIPT_TRANSFORM_LATENCY_MEASURE=1 \
-            TYPESCRIPT_TRANSFORM_LATENCY_MODE="$mode" \
-            TYPESCRIPT_TRANSFORM_LATENCY_REPORT="$report" \
-            TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
-            tools/dev-test.sh "$target" standard typescript_transform_latency ""
-        )
-    done
+target=p3
+for mode in strip transform; do
+    report="$results_dir/$(date +%Y-%m-%d)-$target-$mode-$platform-$arch.json"
+    (
+        cd "$repo_root"
+        TYPESCRIPT_TRANSFORM_LATENCY_MEASURE=1 \
+        TYPESCRIPT_TRANSFORM_LATENCY_MODE="$mode" \
+        TYPESCRIPT_TRANSFORM_LATENCY_REPORT="$report" \
+        TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
+        tools/dev-test.sh stock standard typescript_transform_latency ""
+    )
 done
 
 (
     cd "$repo_root"
     TYPESCRIPT_TRANSFORM_LATENCY_SOURCE_ROOT="$repo_root" \
-        tools/dev-test.sh p2 standard typescript_transform_latency ""
+        tools/dev-test.sh fork standard typescript_transform_latency ""
 )

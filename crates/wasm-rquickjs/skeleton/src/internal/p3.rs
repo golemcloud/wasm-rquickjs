@@ -1,7 +1,6 @@
 //! Minimal WASI Preview 3 runtime spine for the generated rquickjs component.
 //!
-//! Unlike the Preview 2 skeleton this module does NOT depend on `wstd`, `wasip2`,
-//! pollables, or `block_on`. Exported WIT functions are generated as `async fn`s
+//! This module does NOT depend on `wstd`, `wasip2` pollables, or `block_on`. Exported WIT functions are generated as `async fn`s
 //! that `.await` directly on the component-model async executor, and the single
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
@@ -31,13 +30,13 @@ use super::runtime_services::{
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
-/// so it must match the constant the Preview 2 path uses (`internal/p2.rs`).
+/// so it must match the constant the generated resource code uses.
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 /// Global object holding live *exported* resource instances, keyed by the stringified
 /// monotonic resource id. Generated exported-resource code stores each constructed JS instance
 /// here so the host-facing resource handle (which only carries the numeric id) can be mapped back
-/// to the JS object. Mirrors the Preview 2 path (`internal/p2.rs`).
+/// to the JS object.
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 /// WeakMap from exported JavaScript resource objects to their current native resource ids.
 /// Keeping identity outside the resource object allows frozen and sealed instances.
@@ -116,7 +115,7 @@ impl JsState {
             .unwrap_or_else(|error| panic!("{error}"));
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        // `idle()` from ever returning.
         drain_and_idle(self).await;
     }
 
@@ -312,7 +311,7 @@ impl JsState {
         .await;
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        // `idle()` from ever returning.
         drain_and_idle(self).await;
     }
 
@@ -685,8 +684,7 @@ async fn spawn_drive_guard(rt: &AsyncRuntime, ctx: &AsyncContext) -> DriveGuard 
 /// After the export produces its result (a direct value or an awaited Promise) the P3 wrapper would
 /// otherwise return immediately and drop its [`DriveGuard`], so any work the export merely
 /// *scheduled* — `setTimeout`/`setInterval`/`setImmediate` callbacks, `queueMicrotask`/Promise jobs,
-/// `future<T>`/`stream<T>` writer tasks — would never run. This mirrors the Preview 2 `drain_and_idle`:
-/// it waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
+/// `future<T>`/`stream<T>` writer tasks — would never run. It waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
 /// event loop exits once only unref'd timers are left) so [`AsyncRuntime::idle`] can complete.
 ///
 /// `idle()` drives the runtime on its own (exactly as the plain `idle()` calls during
@@ -841,11 +839,13 @@ where
     .await
 }
 
-/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported resource static
-/// method. It is driven to completion by [`run_sync`] (`block_on`) from a synchronous Guest trait
-/// method, so it must never suspend: if the JavaScript static returns a `Promise`, it traps with
-/// an actionable message instead of awaiting it (which could deadlock the whole instance). Declare
-/// the static as `async func` in WIT to get the awaiting behavior.
+/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported function or
+/// resource static method. It is driven to completion by [`run_sync`] (`block_on`) from a
+/// synchronous Guest trait method. If the JavaScript function returns a `Promise`, it is awaited
+/// inside that `block_on`, which runs QuickJS jobs and scheduler tasks. A synchronous
+/// component-model task cannot block on the host, so a promise that waits on timers or host I/O
+/// traps ("cannot block a synchronous task before returning"); declare such functions as
+/// `async func` in WIT.
 pub async fn call_js_export_sync<A, R>(
     wit_package: &'static str,
     function_path: &'static [&'static str],
@@ -904,10 +904,11 @@ where
     // (which live as scheduler tasks) make progress even while this call is parked awaiting the JS
     // result promise. Dropped (aborted) when this call returns.
     //
-    // The synchronous path (`allow_async == false`, used for synchronous exported resource statics
-    // driven by `block_on`) never awaits a JS promise and never spawns scheduler tasks, so it must
-    // NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned inside a `block_on`
-    // would prevent it from returning.
+    // The synchronous path (`allow_async == false`, used for synchronous exports driven by
+    // `block_on`) must NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned
+    // inside a `block_on` would prevent it from returning. A returned promise is awaited inside
+    // `with_component_context`, whose `async_with!` future drives the scheduler and pending jobs
+    // itself.
     let drive_guard = if allow_async {
         Some(spawn_drive_guard(&js_state.rt, &js_state.ctx).await)
     } else {
@@ -938,14 +939,6 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
-                    if !allow_async {
-                        panic!(
-                            "The synchronous exported function {fun} returned a Promise. Synchronous \
-                             exported functions must return a value directly on the WASI Preview 3 \
-                             path; declare it as `async func` in WIT to return a Promise.",
-                            fun = function_path.join(".")
-                        );
-                    }
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<Value>();
 
@@ -1001,10 +994,10 @@ where
 // trait methods for them are ordinary `fn`s. They still need to enter the shared async QuickJS
 // runtime, which is only reachable through `async_with!` (an `async` operation). The generated sync
 // methods therefore drive the corresponding `async fn` helper below to completion with
-// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). To keep `block_on` from ever blocking
-// the whole component instance, the synchronous helpers never spawn a scheduler driver and never
-// await a JS promise — a sync-declared op whose JavaScript returns a `Promise` traps with an
-// actionable message telling the author to declare it `async func`.
+// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). The synchronous helpers never spawn a
+// persistent scheduler driver, which would keep `block_on` from returning. A sync-declared op
+// whose JavaScript returns a `Promise` awaits it within that `block_on` (see
+// [`call_js_export_sync`]).
 //
 // `async` WIT resource methods/statics are generated as `async fn`s that `.await` the async
 // helpers directly (with a `DriveGuard`), exactly like freestanding async exports.
@@ -1247,8 +1240,8 @@ where
 }
 
 /// Synchronous variant of [`call_js_resource_method`], used for a *synchronous* exported resource
-/// method and driven by [`run_sync`]. It never awaits a JS promise: if the method returns one it
-/// traps with an actionable message (declare the method `async func` in WIT).
+/// method and driven by [`run_sync`]. A returned promise is awaited as described on
+/// [`call_js_export_sync`].
 pub async fn call_js_resource_method_sync<A, R>(
     wit_package: &'static str,
     resource_path: &'static [&'static str],
@@ -1375,14 +1368,6 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
-                    if !allow_async {
-                        panic!(
-                            "The synchronous exported method {name} of {path} returned a Promise. \
-                             Synchronous exported resource methods must return a value directly on the \
-                             WASI Preview 3 path; declare it as `async func` in WIT to return a Promise.",
-                            path = resource_path.join(".")
-                        );
-                    }
                     let promise: Promise = value.into_promise().unwrap();
                     match promise.into_future::<Value>().await {
                         Ok(value) => {
@@ -1597,6 +1582,35 @@ fn dump_cannot_find_export(
     }
     keys.sort();
     panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+
+    if let [name] = path {
+        panic_message.push_str(&format!(
+            "\nTry adding an export `export const {name} = ...`\n"
+        ));
+    } else {
+        let mut current_object = module.clone();
+        for (i, segment) in path.iter().enumerate() {
+            match current_object.get::<&str, Object>(*segment) {
+                Ok(child) => current_object = child,
+                Err(_) => {
+                    if i == 0 {
+                        panic_message.push_str(&format!(
+                            "\nTry adding an export `export const {segment} = {{ ... }}`\n"
+                        ));
+                    } else {
+                        let parent = path[..i].join(".");
+                        panic_message.push_str(&format!("\nKeys in {parent}:\n"));
+                        let mut keys: Vec<String> = current_object.keys().flatten().collect();
+                        keys.sort();
+                        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+                        panic_message
+                            .push_str(&format!("\nTry adding a field `{segment}` to {parent}\n"));
+                    }
+                    break;
+                }
+            }
+        }
+    }
     panic_message
 }
 
