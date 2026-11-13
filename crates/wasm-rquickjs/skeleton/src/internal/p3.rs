@@ -1611,12 +1611,27 @@ fn dump_cannot_find_export(
 // task keeps running on the component-model async executor after the initiating call returns.
 // ---------------------------------------------------------------------------
 
+fn normalize_js_promise<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Value<'js>> {
+    if value.is_promise() {
+        return Ok(value);
+    }
+    match value.as_object() {
+        Some(object) if object.get::<_, Value>("then")?.is_function() => {
+            let resolve: Function = ctx.eval("(value) => Promise.resolve(value)")?;
+            resolve.call((value,))
+        }
+        _ => Ok(value),
+    }
+}
+
 /// Awaits a JavaScript value, transparently resolving it if it is a promise, and converts the
 /// result to `R` without trapping so callers can perform required cleanup first.
 async fn try_resolve_js_value<'js, R>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<R, String>
 where
     R: FromJs<'js>,
 {
+    let value = normalize_js_promise(ctx, value)
+        .map_err(|error| format!("Failed to resolve a JavaScript async value: {error:?}"))?;
     if value.is_promise() {
         let promise: Promise = value
             .into_promise()
@@ -1983,6 +1998,7 @@ where
         }
     });
 
+    let value = normalize_js_promise(ctx, value)?;
     if value.is_promise() {
         let promise = value
             .into_promise()
@@ -2279,8 +2295,8 @@ where
     Ok(iterable)
 }
 
-/// Awaits a component future reader and converts its payload to a JS value via `wrap`. Exposed to
-/// JavaScript as a `Promise` (through rquickjs' `Promised`).
+/// Converts a component future reader to a promise-compatible thenable. Reading starts only
+/// when the guest observes the future, so an unused future cannot keep the export alive.
 pub fn future_reader_to_js<'js, T, R, F>(
     ctx: &Ctx<'js>,
     reader: FutureReader<T>,
@@ -2291,16 +2307,32 @@ where
     R: for<'a> IntoJs<'a> + 'static,
     F: FnOnce(T) -> R + 'static,
 {
-    Promised(async move {
-        let payload: T = reader.await;
-        wrap(payload)
-    })
-    .into_js(ctx)
+    let pending = RefCell::new(Some((reader, wrap)));
+    let start = Function::new(ctx.clone(), move || {
+        let (reader, wrap) = pending.borrow_mut().take().expect("future already started");
+        Promised(async move {
+            let payload: T = reader.await;
+            wrap(payload)
+        })
+    })?;
+    let make: Function = ctx.eval(
+        r#"(start) => {
+            let promise;
+            const observe = () => promise ??= start();
+            return {
+                then(resolve, reject) { return observe().then(resolve, reject); },
+                catch(reject) { return observe().catch(reject); },
+                finally(callback) { return observe().finally(callback); },
+                [Symbol.toStringTag]: 'Promise',
+            };
+        }"#,
+    )?;
+    make.call((start,))
 }
 
-/// An `IntoJs` wrapper around a component future reader, so the backing `Promise` is created
-/// lazily inside the QuickJS context (where a `Ctx` is available), e.g. when passed as an
-/// exported function argument or returned from an imported-function bridge.
+/// An `IntoJs` wrapper that creates a promise-compatible thenable inside the QuickJS context,
+/// e.g. when passed as an exported function argument or returned from an imported-function
+/// bridge. The backing read starts when JavaScript observes the thenable.
 pub struct FutureReaderIntoJs<T: 'static, F> {
     reader: FutureReader<T>,
     wrap: F,
