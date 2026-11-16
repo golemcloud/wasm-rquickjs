@@ -1,4 +1,4 @@
-import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, createSign, createVerify, createPublicKey, sign, verify } from 'node:crypto';
+import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify } from 'node:crypto';
 
 export function newUuids() {
     const uuid1 = crypto.randomUUID()
@@ -274,4 +274,50 @@ export async function subtleSignVerifyRsaPss(message) {
     const pss = { name: 'RSA-PSS', saltLength: 32 };
     const signature = await crypto.subtle.sign(pss, keyPair.privateKey, data);
     return await crypto.subtle.verify(pss, keyPair.publicKey, signature, data);
+}
+
+export function cryptoErrorContracts() {
+    const lines = [];
+    const check = (name, fn) => {
+        try {
+            const value = fn();
+            lines.push(`${name}: ok ${typeof value === 'string' ? value.split('\n')[0] : typeof value}`);
+        } catch (e) {
+            lines.push(`${name}: ${e.name} ${e.code} ${e.message}`);
+        }
+    };
+    const aeadFinal = (algorithm, tamper) => {
+        const key = Buffer.alloc(32, 1);
+        const iv = Buffer.alloc(12, 2);
+        const cipher = createCipheriv(algorithm, key, iv);
+        const ciphertext = Buffer.concat([cipher.update('payload'), cipher.final()]);
+        const tag = cipher.getAuthTag();
+        const decipher = createDecipheriv(algorithm, key, iv);
+        if (tamper !== 'no-tag') {
+            tag[0] ^= 1;
+            decipher.setAuthTag(tag);
+        }
+        decipher.update(ciphertext);
+        return decipher.final();
+    };
+    check('gcm tampered tag', () => aeadFinal('aes-256-gcm', 'tag'));
+    check('gcm missing tag', () => aeadFinal('aes-256-gcm', 'no-tag'));
+    check('chacha20-poly1305 tampered tag', () => aeadFinal('chacha20-poly1305', 'tag'));
+
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 512 });
+    const ed = generateKeyPairSync('ed25519');
+    check('public pkcs8', () => rsa.publicKey.export({ format: 'pem', type: 'pkcs8' }));
+    check('public without format', () => rsa.publicKey.export({ type: 'spki' }));
+    check('public spki ignores cipher', () => rsa.publicKey.export({ format: 'pem', type: 'spki', cipher: 'aes-128-cbc', passphrase: 'x' }));
+    check('private without type', () => rsa.privateKey.export({ format: 'pem' }));
+    check('private passphrase without cipher', () => rsa.privateKey.export({ format: 'pem', type: 'pkcs8', passphrase: 'x' }));
+    check('private der pkcs1 encrypted', () => rsa.privateKey.export({ format: 'der', type: 'pkcs1', cipher: 'aes-128-cbc', passphrase: 'x' }));
+    check('private unknown cipher', () => rsa.privateKey.export({ format: 'pem', type: 'pkcs8', cipher: 'nope', passphrase: 'x' }));
+    check('private pem pkcs8 encrypted', () => rsa.privateKey.export({ format: 'pem', type: 'pkcs8', cipher: 'aes-128-cbc', passphrase: 'x' }));
+    check('ed25519 public pkcs1', () => ed.publicKey.export({ format: 'pem', type: 'pkcs1' }));
+    check('ed25519 private sec1', () => ed.privateKey.export({ format: 'pem', type: 'sec1' }));
+    check('keygen passphrase without cipher', () => generateKeyPairSync('ed25519', { privateKeyEncoding: { format: 'jwk', passphrase: 'x' } }));
+    check('keygen public pkcs8', () => generateKeyPairSync('ed25519', { publicKeyEncoding: { format: 'pem', type: 'pkcs8' } }));
+    check('createPrivateKey der spki', () => createPrivateKey({ key: Buffer.alloc(0), format: 'der', type: 'spki' }));
+    return lines;
 }

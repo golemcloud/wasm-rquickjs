@@ -1054,3 +1054,43 @@ async fn crypto_subtle_sign_verify_rsa_pss(
         _ => Err(anyhow!("Expected bool result")),
     }
 }
+
+/// Error contracts of AEAD decryption and key encoding options, as Node.js 26.13.1 reports them.
+#[test]
+async fn crypto_error_contracts(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "crypto-error-contracts", &[]).await;
+
+    let lines = match result? {
+        Some(Val::List(vals)) => vals
+            .into_iter()
+            .map(|v| match v {
+                Val::String(s) => Ok(s),
+                other => Err(anyhow!("Expected string, got {other:?}")),
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?,
+        _ => return Err(anyhow!("Expected list result")),
+    };
+    let expected = [
+        "gcm tampered tag: Error undefined Unsupported state or unable to authenticate data",
+        "gcm missing tag: Error undefined Unsupported state or unable to authenticate data",
+        "chacha20-poly1305 tampered tag: Error undefined Unsupported state or unable to authenticate data",
+        "public pkcs8: TypeError ERR_INVALID_ARG_VALUE The property 'options.type' is invalid. Received 'pkcs8'",
+        "public without format: TypeError ERR_INVALID_ARG_VALUE The property 'options.format' is invalid. Received undefined",
+        "public spki ignores cipher: ok -----BEGIN PUBLIC KEY-----",
+        "private without type: TypeError ERR_INVALID_ARG_VALUE The property 'options.type' is invalid. Received undefined",
+        "private passphrase without cipher: TypeError ERR_INVALID_ARG_VALUE The property 'options.cipher' is required when a passphrase is specified. Received undefined",
+        "private der pkcs1 encrypted: Error ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS The selected key encoding pkcs1 does not support encryption.",
+        "private unknown cipher: Error ERR_CRYPTO_UNKNOWN_CIPHER Unknown cipher",
+        "private pem pkcs8 encrypted: ok -----BEGIN ENCRYPTED PRIVATE KEY-----",
+        "ed25519 public pkcs1: Error ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS The selected key encoding pkcs1 can only be used for RSA keys.",
+        "ed25519 private sec1: Error ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS The selected key encoding sec1 can only be used for EC keys.",
+        "keygen passphrase without cipher: TypeError ERR_INVALID_ARG_VALUE The property 'options.privateKeyEncoding.cipher' is required when a passphrase is specified. Received undefined",
+        "keygen public pkcs8: TypeError ERR_INVALID_ARG_VALUE The property 'options.publicKeyEncoding.type' is invalid. Received 'pkcs8'",
+        "createPrivateKey der spki: TypeError ERR_INVALID_ARG_VALUE The property 'key.type' is invalid. Received 'spki'",
+    ];
+    assert_eq!(lines, expected);
+    Ok(())
+}

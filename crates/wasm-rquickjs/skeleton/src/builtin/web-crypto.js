@@ -2855,6 +2855,51 @@ function createInvalidKeyObjectTypeError(type_) {
     return err;
 }
 
+// Output encoding of KeyObject#export and generateKeyPair, as Node's parseKeyEncoding validates it
+// (lib/internal/crypto/keys.js). `objName` prefixes the option names in errors. The raw key formats
+// are not parsed here; callers handle them before calling this.
+function parseKeyOutputEncoding(enc, asymmetricKeyType, isPublic, objName) {
+    const { format, type } = enc;
+    if (format !== 'pem' && format !== 'der' && format !== 'jwk') {
+        throw new ERR_INVALID_ARG_VALUE(`${objName}.format`, format);
+    }
+    if (type !== undefined || format !== 'jwk') {
+        if (type === 'pkcs1') {
+            if (asymmetricKeyType !== 'rsa') {
+                throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(type, 'can only be used for RSA keys');
+            }
+        } else if (type === 'sec1' && !isPublic) {
+            if (asymmetricKeyType !== 'ec') {
+                throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(type, 'can only be used for EC keys');
+            }
+        } else if (!(type === 'spki' && isPublic) && !(type === 'pkcs8' && !isPublic)) {
+            throw new ERR_INVALID_ARG_VALUE(`${objName}.type`, type);
+        }
+    }
+    if (isPublic) {
+        return { format, type };
+    }
+    const { cipher, passphrase } = enc;
+    if (cipher != null) {
+        if (typeof cipher !== 'string') {
+            throw new ERR_INVALID_ARG_VALUE(`${objName}.cipher`, cipher);
+        }
+        if (format === 'der' && (type === 'pkcs1' || type === 'sec1')) {
+            throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(type, 'does not support encryption');
+        }
+        if (!isStringOrBufferLike(passphrase)) {
+            throw new ERR_INVALID_ARG_VALUE(`${objName}.passphrase`, passphrase);
+        }
+    } else if (passphrase !== undefined) {
+        throw new ERR_INVALID_ARG_VALUE(`${objName}.cipher`, cipher, 'is required when a passphrase is specified');
+    }
+    return { format, type, cipher, passphrase };
+}
+
+function isRawKeyFormat(format) {
+    return format === 'raw-public' || format === 'raw-private' || format === 'raw-seed';
+}
+
 // ===== KeyObject =====
 
 class KeyObject {
@@ -2974,17 +3019,18 @@ class KeyObject {
             throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
         }
 
-        const format = options.format || (options.type ? 'pem' : 'der');
-        const type_ = options.type || null;
-
-        if (format === 'jwk' && (options.passphrase !== undefined || options.cipher !== undefined)) {
-            throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('jwk', 'does not support encryption');
+        const isPublic = this._type === 'public';
+        let format = options.format;
+        if (!isPublic && options.passphrase !== undefined && format !== 'pem' && format !== 'der') {
+            throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(format, 'does not support encryption');
         }
-
-        if (options.passphrase !== undefined && options.cipher === undefined) {
-            const err = new TypeError("The property 'options.cipher' is invalid. Received undefined");
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
+        // Raw formats keep the native path; they are not implemented, and fail there.
+        let type_ = options.type || null;
+        let cipher;
+        let passphrase;
+        if (!isRawKeyFormat(format) && format !== 'jwk') {
+            ({ format, type: type_, cipher, passphrase } =
+                parseKeyOutputEncoding(options, this.asymmetricKeyType, isPublic, 'options'));
         }
 
         // JWK export
@@ -3005,10 +3051,11 @@ class KeyObject {
             throw new Error('Failed to export key as JWK');
         }
 
-        // Encrypted PEM export
-        if (options.cipher && options.passphrase !== undefined) {
-            const passBytes = toBytes(options.passphrase);
-            const result = webCryptoNative.key_export_encrypted(this._handle, format, type_ || 'pkcs8', options.cipher, passBytes);
+        // Encrypted private key export
+        if (cipher != null) {
+            const cipherName = normalizeCipherAlgorithm(cipher);
+            const passBytes = toBytes(passphrase);
+            const result = webCryptoNative.key_export_encrypted(this._handle, format, type_, cipherName, passBytes);
             if (result === null || result === undefined) {
                 throw new Error('Failed to export encrypted key');
             }
@@ -5741,9 +5788,8 @@ export function createPrivateKey(key) {
             }
             const format = key.format || 'pem';
             if (format === 'der' && key.type !== undefined && key.type !== 'pkcs1' && key.type !== 'pkcs8' && key.type !== 'sec1') {
-                const err = new TypeError("The property 'options.type' is invalid. Received '" + key.type + "'");
-                err.code = 'ERR_INVALID_ARG_VALUE';
-                throw err;
+                // Node 26 names input encoding options after the `key` argument.
+                throw new ERR_INVALID_ARG_VALUE('key.type', key.type);
             }
             const normalizedKeyData = normalizeAsymmetricKeyDataForEncoding(innerKey, format, key.encoding);
             const normalizedPassphrase = normalizeAsymmetricPassphraseForEncoding(key.passphrase, key.encoding);
@@ -6420,41 +6466,6 @@ function isStringOrBufferLike(value) {
     return typeof value === 'string' || ArrayBuffer.isView(value) || isAnyArrayBuffer(value);
 }
 
-function validateGeneratedKeyEncodingFormat(optionName, encodingOptions) {
-    const format = encodingOptions.format;
-    if (format !== 'pem' && format !== 'der' && format !== 'jwk') {
-        throw createInvalidKeygenPropertyError(`${optionName}.format`, format);
-    }
-    return format;
-}
-
-function validateGeneratedPublicKeyEncodingType(type_, encodingOptions, format) {
-    const keyType = encodingOptions.type;
-    if ((format !== 'jwk' && keyType === undefined) ||
-        (keyType !== undefined && keyType !== 'pkcs1' && keyType !== 'spki')) {
-        throw createInvalidKeygenPropertyError('publicKeyEncoding.type', keyType);
-    }
-
-    if (keyType === 'pkcs1' && type_ !== 'rsa') {
-        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('pkcs1', 'can only be used for RSA keys');
-    }
-}
-
-function validateGeneratedPrivateKeyEncodingType(type_, encodingOptions, format) {
-    const keyType = encodingOptions.type;
-    if ((format !== 'jwk' && keyType === undefined) ||
-        (keyType !== undefined && keyType !== 'pkcs1' && keyType !== 'pkcs8' && keyType !== 'sec1')) {
-        throw createInvalidKeygenPropertyError('privateKeyEncoding.type', keyType);
-    }
-
-    if (keyType === 'pkcs1' && type_ !== 'rsa') {
-        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('pkcs1', 'can only be used for RSA keys');
-    }
-    if (keyType === 'sec1' && type_ !== 'ec') {
-        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('sec1', 'can only be used for EC keys');
-    }
-}
-
 function validateGeneratedPublicKeyEncoding(type_, publicKeyEncoding) {
     if (publicKeyEncoding == null) {
         return;
@@ -6462,9 +6473,7 @@ function validateGeneratedPublicKeyEncoding(type_, publicKeyEncoding) {
     if (typeof publicKeyEncoding !== 'object' || Array.isArray(publicKeyEncoding)) {
         throw createInvalidKeygenPropertyError('publicKeyEncoding', publicKeyEncoding);
     }
-
-    const format = validateGeneratedKeyEncodingFormat('publicKeyEncoding', publicKeyEncoding);
-    validateGeneratedPublicKeyEncodingType(type_, publicKeyEncoding, format);
+    parseKeyOutputEncoding(publicKeyEncoding, type_, true, 'options.publicKeyEncoding');
 }
 
 function validateGeneratedPrivateKeyEncoding(type_, privateKeyEncoding) {
@@ -6474,28 +6483,7 @@ function validateGeneratedPrivateKeyEncoding(type_, privateKeyEncoding) {
     if (typeof privateKeyEncoding !== 'object' || Array.isArray(privateKeyEncoding)) {
         throw createInvalidKeygenPropertyError('privateKeyEncoding', privateKeyEncoding);
     }
-
-    const format = validateGeneratedKeyEncodingFormat('privateKeyEncoding', privateKeyEncoding);
-    validateGeneratedPrivateKeyEncodingType(type_, privateKeyEncoding, format);
-
-    const cipher = privateKeyEncoding.cipher;
-    const passphrase = privateKeyEncoding.passphrase;
-    if (format === 'jwk' && (cipher !== undefined || passphrase !== undefined)) {
-        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS('jwk', 'does not support encryption');
-    }
-    if (cipher != null && typeof cipher !== 'string') {
-        throw createInvalidKeygenPropertyError('privateKeyEncoding.cipher', cipher);
-    }
-    if (cipher == null && passphrase !== undefined) {
-        throw createInvalidKeygenPropertyError('privateKeyEncoding.cipher', cipher);
-    }
-    if (cipher != null && !isStringOrBufferLike(passphrase)) {
-        throw createInvalidKeygenPropertyError('privateKeyEncoding.passphrase', passphrase);
-    }
-    if (cipher != null && format === 'der' &&
-        (privateKeyEncoding.type === 'pkcs1' || privateKeyEncoding.type === 'sec1')) {
-        throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(privateKeyEncoding.type, 'does not support encryption');
-    }
+    const { cipher } = parseKeyOutputEncoding(privateKeyEncoding, type_, false, 'options.privateKeyEncoding');
     if (cipher != null) {
         privateKeyEncoding.cipher = normalizeCipherAlgorithm(cipher);
     }
