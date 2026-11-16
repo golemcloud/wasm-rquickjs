@@ -2991,6 +2991,20 @@ pub fn load_node_compat_config_with_suite_root(
         .and_then(|v| v.as_object())
         .ok_or_else(|| anyhow::anyhow!("config.jsonc missing 'tests' object"))?;
 
+    // Every configured entry counts in the inventory, so its source must exist; otherwise the
+    // runner and report would silently disagree about the denominator.
+    let missing: Vec<&String> = tests_obj
+        .keys()
+        .filter(|path| !suite_root.join(path).is_file())
+        .collect();
+    if !missing.is_empty() {
+        return Err(anyhow!(
+            "{} node_compat config entries have no vendored source under {}: {missing:?}; map each one to its replacement or remove it with a recorded reason",
+            missing.len(),
+            suite_root.display()
+        ));
+    }
+
     let mut tests = Vec::new();
     for (path, opts) in tests_obj {
         let category = node_compat_category_from_entry(path, opts, None, suite_root)?;

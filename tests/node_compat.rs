@@ -690,13 +690,8 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
         } else {
             // Split: one Rust test per subtest
             let suite_path = format!("tests/node_compat/suite/{}", path);
-            let source = match fs::read_to_string(&suite_path) {
-                Ok(s) => s,
-                Err(e) => {
-                    eprintln!("WARNING: Cannot read split test file {}: {}", suite_path, e);
-                    continue;
-                }
-            };
+            let source = fs::read_to_string(&suite_path)
+                .unwrap_or_else(|e| panic!("Cannot read split test file {suite_path}: {e}"));
 
             let discovery = discover_subtests_with_options(
                 &path,
@@ -705,17 +700,22 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                 entry.isolate_block_subtests,
             );
 
-            // Staleness check: compare discovered subtest count vs config count
-            let discovered_count = match &discovery {
-                SubtestDiscovery::None => 0,
-                SubtestDiscovery::Block(blocks) => blocks.len(),
-                SubtestDiscovery::NodeTest(tests) => tests.len(),
+            // Staleness check: a subtest runs by the index in its configured name, so the names,
+            // not just their number, must match the vendored source.
+            let mut discovered: Vec<&str> = match &discovery {
+                SubtestDiscovery::None => Vec::new(),
+                SubtestDiscovery::Block(blocks) => blocks.iter().map(|b| b.name.as_str()).collect(),
+                SubtestDiscovery::NodeTest(tests) => {
+                    tests.iter().map(|t| t.name.as_str()).collect()
+                }
             };
+            let mut configured: Vec<&str> =
+                entry.subtests.iter().map(|s| s.name.as_str()).collect();
+            discovered.sort_unstable();
+            configured.sort_unstable();
             assert_eq!(
-                discovered_count,
-                entry.subtests.len(),
-                "Subtest count mismatch for {path}: config has {}, discovered {discovered_count}. Run migration tool.",
-                entry.subtests.len()
+                configured, discovered,
+                "Subtest names for {path} differ between config.jsonc and the vendored source. Run the migration tool (cargo test --test migrate_config_split -- --exact migrate_config_split) and map its report."
             );
 
             for subtest in &entry.subtests {

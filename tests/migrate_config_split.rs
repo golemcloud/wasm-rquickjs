@@ -1,524 +1,830 @@
+//! Re-synchronises `tests/node_compat/config.jsonc` with the vendored Node.js suite.
+//!
+//! Run it after re-vendoring with `cargo test --test migrate_config_split -- --exact migrate_config_split`.
+//! The migration rewrites only entries whose subtests changed, keeps every metadata key of every
+//! entry and surviving subtest, and adds vendored `.js`/`.mjs` tests that are not listed yet as
+//! `unevaluated`. It never deletes an entry and never guesses a classification. It writes a
+//! review report to `NODE_COMPAT_MIGRATION_REPORT` (default
+//! `target/node-compat-migration-report.json`) and fails when an entry needs a manual mapping:
+//! a configured file whose source is gone, a subtest that disappeared, or a split file that can
+//! no longer be split and whose subtests had different metadata.
+//!
+//! The contract tests run against temporary fixtures:
+//! `cargo test --test migrate_config_split -- ':tag:migration_contract'`.
+
 test_r::enable!();
 
 #[allow(dead_code)]
 #[path = "common/mod.rs"]
 mod common;
 
-use crate::common::js_subtest_parser::{
-    SubtestDiscovery, discover_subtests, discover_subtests_with_options,
-};
+use crate::common::js_subtest_parser::{SubtestDiscovery, discover_subtests_with_options};
 use crate::common::strip_jsonc_comments;
-use serde_json::Value;
-use std::collections::BTreeSet;
+use anyhow::{anyhow, bail};
+use serde_json::{Map, Value, json};
+use std::collections::{BTreeMap, BTreeSet};
 use std::fs;
+use std::path::Path;
 use test_r::test;
 
-/// Find the byte span (start, end) of a JSON object value for a given key in JSONC text.
-/// Returns the byte range of the value object `{...}` (inclusive of braces).
-/// Handles JSONC line/block comments and nested objects.
-fn find_value_span(content: &str, key: &str) -> Option<(usize, usize)> {
-    let search = format!("\"{}\"", key);
-    let key_pos = content.find(&search)?;
-    let bytes = content.as_bytes();
-    let mut pos = key_pos + search.len();
+const SUITES: [&str; 3] = ["parallel", "sequential", "es-module"];
+const NEW_FILE_REASON: &str = "newly discovered, not yet evaluated";
+const NEW_SUBTEST_REASON: &str = "newly discovered subtest, not yet evaluated";
+/// Keys written first, in this order; any other key follows alphabetically, then `split` and
+/// `subtests`.
+const KEY_ORDER: [&str; 6] = [
+    "category",
+    "reason",
+    "flaky",
+    "timeout",
+    "nestedNodeTest",
+    "isolateBlockSubtests",
+];
 
-    // Skip whitespace
-    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-        pos += 1;
-    }
-    // Expect ':'
-    if pos >= bytes.len() || bytes[pos] != b':' {
-        return None;
-    }
-    pos += 1;
-    // Skip whitespace
-    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-        pos += 1;
-    }
-    if pos >= bytes.len() || bytes[pos] != b'{' {
-        return None;
-    }
-
-    let value_start = pos;
-    let mut depth = 0;
-    let mut in_string = false;
-
-    while pos < bytes.len() {
-        if in_string {
-            if bytes[pos] == b'\\' && pos + 1 < bytes.len() {
-                pos += 2;
-                continue;
-            }
-            if bytes[pos] == b'"' {
-                in_string = false;
-            }
-        } else {
-            match bytes[pos] {
-                b'"' => in_string = true,
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some((value_start, pos + 1));
-                    }
-                }
-                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' => {
-                    pos += 2;
-                    while pos < bytes.len() && bytes[pos] != b'\n' {
-                        pos += 1;
-                    }
-                    continue;
-                }
-                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
-                    pos += 2;
-                    while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
-                        pos += 1;
-                    }
-                    if pos + 1 < bytes.len() {
-                        pos += 2;
-                    }
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        pos += 1;
-    }
-
-    None
+#[derive(Debug, Default, serde::Serialize, PartialEq)]
+#[serde(rename_all = "camelCase")]
+struct MigrationReport {
+    /// Unsplit entries that are now split; their subtests inherit the file's metadata.
+    split: Vec<String>,
+    /// Split entries whose subtests changed.
+    resplit: Vec<String>,
+    /// Split entries that are now one test; their subtests carried identical metadata.
+    unsplit: Vec<String>,
+    /// Vendored tests that were not listed, added as `unevaluated`.
+    added: Vec<String>,
+    /// Subtests matched across an index shift by their unchanged description.
+    renamed: Vec<Value>,
+    /// Subtests without a previous entry.
+    new_subtests: Vec<Value>,
+    /// Subtests that are gone, with their previous metadata. Needs a mapping.
+    removed_subtests: Vec<Value>,
+    /// Configured files whose vendored source is gone, left unchanged. Needs a mapping.
+    missing_sources: Vec<Value>,
+    /// Split files that can no longer be split, left unchanged. Needs a decision.
+    needs_decision: Vec<Value>,
 }
 
-/// Find the byte position of the closing '}' of the "tests" object in JSONC content.
-fn find_tests_object_close(content: &str) -> Option<usize> {
-    let tests_key = "\"tests\"";
-    let key_pos = content.find(tests_key)?;
-    let bytes = content.as_bytes();
-    let mut pos = key_pos + tests_key.len();
-
-    // Skip to ':'
-    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-        pos += 1;
+impl MigrationReport {
+    fn needs_review(&self) -> usize {
+        self.removed_subtests.len() + self.missing_sources.len() + self.needs_decision.len()
     }
-    if pos >= bytes.len() || bytes[pos] != b':' {
-        return None;
-    }
-    pos += 1;
-    // Skip to '{'
-    while pos < bytes.len() && bytes[pos].is_ascii_whitespace() {
-        pos += 1;
-    }
-    if pos >= bytes.len() || bytes[pos] != b'{' {
-        return None;
-    }
-
-    let mut depth = 0;
-    let mut in_string = false;
-
-    while pos < bytes.len() {
-        if in_string {
-            if bytes[pos] == b'\\' && pos + 1 < bytes.len() {
-                pos += 2;
-                continue;
-            }
-            if bytes[pos] == b'"' {
-                in_string = false;
-            }
-        } else {
-            match bytes[pos] {
-                b'"' => in_string = true,
-                b'{' => depth += 1,
-                b'}' => {
-                    depth -= 1;
-                    if depth == 0 {
-                        return Some(pos);
-                    }
-                }
-                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'/' => {
-                    pos += 2;
-                    while pos < bytes.len() && bytes[pos] != b'\n' {
-                        pos += 1;
-                    }
-                    continue;
-                }
-                b'/' if pos + 1 < bytes.len() && bytes[pos + 1] == b'*' => {
-                    pos += 2;
-                    while pos + 1 < bytes.len() && !(bytes[pos] == b'*' && bytes[pos + 1] == b'/') {
-                        pos += 1;
-                    }
-                    if pos + 1 < bytes.len() {
-                        pos += 2;
-                    }
-                    continue;
-                }
-                _ => {}
-            }
-        }
-        pos += 1;
-    }
-
-    None
 }
 
-/// Escape a string for embedding in a JSON string literal.
-fn escape_json(s: &str) -> String {
-    s.replace('\\', "\\\\")
-        .replace('"', "\\\"")
-        .replace('\n', "\\n")
-        .replace('\r', "\\r")
-        .replace('\t', "\\t")
+struct Migration {
+    content: String,
+    report: MigrationReport,
 }
 
-/// Format a split entry value (the part after `"key": `).
-fn format_split_value(
-    skip: bool,
-    reason: &str,
-    subtests: &[(String, bool, String)], // (name, skip, reason)
-) -> String {
-    let mut lines = Vec::new();
-    lines.push("{".to_string());
+/// A member key and the end-exclusive byte span of its value.
+type Member = (String, (usize, usize));
 
-    if skip {
-        lines.push("      \"skip\": true,".to_string());
-        if !reason.is_empty() {
-            lines.push(format!("      \"reason\": \"{}\",", escape_json(reason)));
+/// Byte spans of the members of the top-level `"tests"` object.
+struct TestsLayout {
+    /// Member key to the span of its value, end-exclusive.
+    values: BTreeMap<String, (usize, usize)>,
+    /// Position of the closing `}` of the `"tests"` object.
+    close: usize,
+}
+
+/// Strict JSONC scanner: every member is located by structure, never by searching text, so a
+/// key quoted in a comment or reason cannot be mistaken for the entry.
+struct Scanner<'a> {
+    text: &'a str,
+    pos: usize,
+}
+
+impl<'a> Scanner<'a> {
+    fn bytes(&self) -> &'a [u8] {
+        self.text.as_bytes()
+    }
+
+    fn peek(&self) -> Option<u8> {
+        self.bytes().get(self.pos).copied()
+    }
+
+    fn skip_trivia(&mut self) -> anyhow::Result<()> {
+        loop {
+            match self.peek() {
+                Some(c) if c.is_ascii_whitespace() => self.pos += 1,
+                Some(b'/') if self.bytes().get(self.pos + 1) == Some(&b'/') => {
+                    while self.peek().is_some_and(|c| c != b'\n') {
+                        self.pos += 1;
+                    }
+                }
+                Some(b'/') if self.bytes().get(self.pos + 1) == Some(&b'*') => {
+                    let end = self.text[self.pos + 2..]
+                        .find("*/")
+                        .ok_or_else(|| anyhow!("unterminated block comment at {}", self.pos))?;
+                    self.pos += 2 + end + 2;
+                }
+                _ => return Ok(()),
+            }
         }
     }
 
+    fn expect(&mut self, c: u8) -> anyhow::Result<()> {
+        self.skip_trivia()?;
+        if self.peek() != Some(c) {
+            bail!("expected '{}' at byte {}", c as char, self.pos);
+        }
+        self.pos += 1;
+        Ok(())
+    }
+
+    fn string(&mut self) -> anyhow::Result<String> {
+        self.skip_trivia()?;
+        let start = self.pos;
+        if self.peek() != Some(b'"') {
+            bail!("expected a string at byte {start}");
+        }
+        self.pos += 1;
+        loop {
+            match self.peek() {
+                None => bail!("unterminated string at byte {start}"),
+                Some(b'\\') => self.pos += 2,
+                Some(b'"') => {
+                    self.pos += 1;
+                    return Ok(serde_json::from_str(&self.text[start..self.pos])?);
+                }
+                Some(_) => self.pos += 1,
+            }
+        }
+    }
+
+    /// Skips one value and returns its span.
+    fn value(&mut self) -> anyhow::Result<(usize, usize)> {
+        self.skip_trivia()?;
+        let start = self.pos;
+        match self.peek() {
+            Some(b'"') => {
+                self.string()?;
+            }
+            Some(open @ (b'{' | b'[')) => {
+                let close = if open == b'{' { b'}' } else { b']' };
+                self.pos += 1;
+                self.skip_trivia()?;
+                if self.peek() == Some(close) {
+                    self.pos += 1;
+                } else {
+                    loop {
+                        if open == b'{' {
+                            self.string()?;
+                            self.expect(b':')?;
+                        }
+                        self.value()?;
+                        self.skip_trivia()?;
+                        match self.peek() {
+                            Some(b',') => {
+                                self.pos += 1;
+                                self.skip_trivia()?;
+                                if self.peek() == Some(close) {
+                                    self.pos += 1;
+                                    break;
+                                }
+                            }
+                            Some(c) if c == close => {
+                                self.pos += 1;
+                                break;
+                            }
+                            _ => bail!("malformed {} at byte {}", open as char, self.pos),
+                        }
+                    }
+                }
+            }
+            Some(_) => {
+                while self
+                    .peek()
+                    .is_some_and(|c| !matches!(c, b',' | b'}' | b']') && !c.is_ascii_whitespace())
+                {
+                    self.pos += 1;
+                }
+                if self.pos == start {
+                    bail!("expected a value at byte {start}");
+                }
+            }
+            None => bail!("unexpected end of input"),
+        }
+        Ok((start, self.pos))
+    }
+
+    /// Reads the members of the object starting here: key to value span, and the closing brace.
+    fn members(&mut self) -> anyhow::Result<(Vec<Member>, usize)> {
+        self.expect(b'{')?;
+        let mut members = Vec::new();
+        loop {
+            self.skip_trivia()?;
+            if self.peek() == Some(b'}') {
+                let close = self.pos;
+                self.pos += 1;
+                return Ok((members, close));
+            }
+            let key = self.string()?;
+            self.expect(b':')?;
+            let span = self.value()?;
+            members.push((key, span));
+            self.skip_trivia()?;
+            match self.peek() {
+                Some(b',') => self.pos += 1,
+                Some(b'}') => {}
+                _ => bail!("expected ',' or '}}' at byte {}", self.pos),
+            }
+        }
+    }
+}
+
+fn tests_layout(content: &str) -> anyhow::Result<TestsLayout> {
+    let mut scanner = Scanner {
+        text: content,
+        pos: 0,
+    };
+    let (top, _) = scanner.members()?;
+    let (_, (start, _)) = top
+        .into_iter()
+        .find(|(key, _)| key == "tests")
+        .ok_or_else(|| anyhow!("config has no top-level \"tests\" object"))?;
+    let mut scanner = Scanner {
+        text: content,
+        pos: start,
+    };
+    let (members, close) = scanner.members()?;
+    let mut values = BTreeMap::new();
+    for (key, span) in members {
+        if values.insert(key.clone(), span).is_some() {
+            bail!("duplicate node_compat config entry {key:?}");
+        }
+    }
+    Ok(TestsLayout { values, close })
+}
+
+fn ordered_keys(map: &Map<String, Value>) -> Vec<&String> {
+    let mut keys: Vec<&String> = KEY_ORDER
+        .iter()
+        .filter_map(|k| map.get_key_value(*k).map(|(k, _)| k))
+        .collect();
+    let mut rest: Vec<&String> = map
+        .keys()
+        .filter(|k| !KEY_ORDER.contains(&k.as_str()))
+        .collect();
+    rest.sort();
+    keys.extend(rest);
+    keys
+}
+
+fn format_inline(map: &Map<String, Value>) -> String {
+    if map.is_empty() {
+        return "{}".to_string();
+    }
+    let members: Vec<String> = ordered_keys(map)
+        .into_iter()
+        .map(|k| format!("{}: {}", json!(k), map[k]))
+        .collect();
+    format!("{{ {} }}", members.join(", "))
+}
+
+fn format_split(meta: &Map<String, Value>, subtests: &[(String, Value)]) -> String {
+    let mut lines = vec!["{".to_string()];
+    for k in ordered_keys(meta) {
+        lines.push(format!("      {}: {},", json!(k), meta[k]));
+    }
     lines.push("      \"split\": true,".to_string());
     lines.push("      \"subtests\": {".to_string());
-
-    for (i, (name, sub_skip, sub_reason)) in subtests.iter().enumerate() {
+    for (i, (name, value)) in subtests.iter().enumerate() {
         let comma = if i + 1 < subtests.len() { "," } else { "" };
-        if *sub_skip {
-            lines.push(format!(
-                "        \"{}\": {{ \"skip\": true, \"reason\": \"{}\" }}{}",
-                escape_json(name),
-                escape_json(sub_reason),
-                comma
-            ));
-        } else {
-            lines.push(format!("        \"{}\": {{}}{}", escape_json(name), comma));
-        }
+        let value = value.as_object().cloned().unwrap_or_default();
+        lines.push(format!(
+            "        {}: {}{comma}",
+            json!(name),
+            format_inline(&value)
+        ));
     }
-
     lines.push("      }".to_string());
     lines.push("    }".to_string());
     lines.join("\n")
 }
 
-/// Build subtests list from discovery, inheriting skip/reason from file level.
-fn build_subtests(
-    discovery: &SubtestDiscovery,
-    file_skip: bool,
-    file_reason: &str,
-) -> Vec<(String, bool, String)> {
-    let names: Vec<String> = match discovery {
-        SubtestDiscovery::None => return Vec::new(),
-        SubtestDiscovery::Block(blocks) => blocks.iter().map(|b| b.name.clone()).collect(),
-        SubtestDiscovery::NodeTest(tests) => tests.iter().map(|t| t.name.clone()).collect(),
-    };
-
-    names
-        .into_iter()
-        .map(|name| {
-            if file_skip {
-                let reason = if file_reason.is_empty() {
-                    "inherited".to_string()
-                } else {
-                    format!("inherited: {}", file_reason)
-                };
-                (name, true, reason)
-            } else {
-                (name, false, String::new())
-            }
-        })
-        .collect()
-}
-
-/// Build merged subtests from discovery, preserving existing skip/reason for subtests
-/// that still exist in the new discovery.
-fn build_merged_subtests(
-    discovery: &SubtestDiscovery,
-    existing_subtests: &serde_json::Map<String, Value>,
-    file_skip: bool,
-    file_reason: &str,
-) -> Vec<(String, bool, String)> {
-    let names: Vec<String> = match discovery {
-        SubtestDiscovery::None => return Vec::new(),
-        SubtestDiscovery::Block(blocks) => blocks.iter().map(|b| b.name.clone()).collect(),
-        SubtestDiscovery::NodeTest(tests) => tests.iter().map(|t| t.name.clone()).collect(),
-    };
-
-    names
-        .into_iter()
-        .map(|name| {
-            if let Some(existing) = existing_subtests.get(&name) {
-                // Preserve existing skip/reason
-                let skip = existing
-                    .get("skip")
-                    .and_then(|v| v.as_bool())
-                    .unwrap_or(false);
-                let reason = existing
-                    .get("reason")
-                    .and_then(|v| v.as_str())
-                    .unwrap_or("")
-                    .to_string();
-                (name, skip, reason)
-            } else if file_skip {
-                let reason = if file_reason.is_empty() {
-                    "inherited".to_string()
-                } else {
-                    format!("inherited: {}", file_reason)
-                };
-                (name, true, reason)
-            } else {
-                (name, false, String::new())
-            }
-        })
-        .collect()
-}
-
-/// Format a non-split entry value.
-fn format_unsplit_value(skip: bool, reason: &str) -> String {
-    if skip {
-        if reason.is_empty() {
-            "{ \"skip\": true }".to_string()
-        } else {
-            format!(
-                "{{ \"skip\": true, \"reason\": \"{}\" }}",
-                escape_json(reason)
-            )
-        }
-    } else {
-        "{}".to_string()
-    }
-}
-
-/// Extract discovered subtest names as a BTreeSet.
-fn discovered_names(discovery: &SubtestDiscovery) -> BTreeSet<String> {
+fn discovered_names(discovery: &SubtestDiscovery) -> Vec<String> {
     match discovery {
-        SubtestDiscovery::None => BTreeSet::new(),
+        SubtestDiscovery::None => Vec::new(),
         SubtestDiscovery::Block(blocks) => blocks.iter().map(|b| b.name.clone()).collect(),
         SubtestDiscovery::NodeTest(tests) => tests.iter().map(|t| t.name.clone()).collect(),
     }
 }
 
-/// Discover all `.js` test files from vendored suite directories.
-/// Matches the approach used by the config report generator.
-fn discover_suite_files() -> BTreeSet<String> {
-    let suites = ["parallel", "sequential", "es-module"];
-    let mut files = BTreeSet::new();
+/// The description part of a generated subtest name (`test_03_assert_throws` → `assert_throws`),
+/// or `None` when the description is itself generated (`block_02_block_02`).
+fn subtest_description(name: &str) -> Option<&str> {
+    let (_, rest) = name.split_once('_')?;
+    let (index, description) = rest.split_once('_')?;
+    if !index.bytes().all(|b| b.is_ascii_digit()) {
+        return None;
+    }
+    let generated = description.rsplit_once('_').is_some_and(|(word, digits)| {
+        !digits.is_empty()
+            && digits.bytes().all(|b| b.is_ascii_digit())
+            && word.bytes().all(|b| b.is_ascii_lowercase())
+    });
+    (!generated).then_some(description)
+}
 
-    for suite in &suites {
-        let suite_dir = format!("tests/node_compat/suite/{suite}");
-        let suite_path = std::path::Path::new(&suite_dir);
-        if !suite_path.exists() {
-            eprintln!("Suite directory {suite_dir} not found, skipping");
+/// The only name in `pool` with this description, if there is exactly one.
+fn unique_by_description<'a>(pool: &[&'a String], description: &str) -> Option<&'a String> {
+    let mut matches = pool
+        .iter()
+        .filter(|name| subtest_description(name) == Some(description));
+    let first = matches.next().copied();
+    if matches.next().is_some() {
+        None
+    } else {
+        first
+    }
+}
+
+fn is_listable_test(name: &str) -> bool {
+    name.starts_with("test-") && (name.ends_with(".js") || name.ends_with(".mjs"))
+}
+
+fn discover_suite_files(suite_root: &Path) -> anyhow::Result<BTreeSet<String>> {
+    let mut files = BTreeSet::new();
+    for suite in SUITES {
+        let dir = suite_root.join(suite);
+        if !dir.is_dir() {
             continue;
         }
-        if let Ok(entries) = fs::read_dir(&suite_dir) {
-            for entry in entries.flatten() {
-                let name = entry.file_name().to_string_lossy().to_string();
-                if name.ends_with(".js") {
-                    files.insert(format!("{suite}/{name}"));
-                }
+        for entry in fs::read_dir(&dir)? {
+            let entry = entry?;
+            let name = entry.file_name().to_string_lossy().to_string();
+            if entry.file_type()?.is_file() && is_listable_test(&name) {
+                files.insert(format!("{suite}/{name}"));
             }
         }
     }
-
-    files
+    Ok(files)
 }
 
-#[test]
-fn migrate_config_split() {
-    let config_path = "tests/node_compat/config.jsonc";
-    let content = fs::read_to_string(config_path).expect("Failed to read config.jsonc");
-    let json_str = strip_jsonc_comments(&content);
-    let config: Value = serde_json::from_str(&json_str).expect("Failed to parse config");
+fn bool_option(opts: &Map<String, Value>, key: &str) -> bool {
+    opts.get(key).and_then(Value::as_bool).unwrap_or(false)
+}
 
-    let tests_obj = config
+fn discover(path: &str, source: &str, opts: &Map<String, Value>) -> Vec<String> {
+    discovered_names(&discover_subtests_with_options(
+        path,
+        source,
+        bool_option(opts, "nestedNodeTest"),
+        bool_option(opts, "isolateBlockSubtests"),
+    ))
+}
+
+/// A new subtest inherits a file-level classification that keeps it out of the runner; in a
+/// runnable file it starts as `unevaluated`, because it is not part of the historical baseline.
+fn new_subtest_value(meta: &Map<String, Value>) -> Value {
+    let inherits_excluded = meta
+        .get("category")
+        .and_then(Value::as_str)
+        .is_some_and(|c| !matches!(c, "runnable" | "expected-pass"));
+    if inherits_excluded {
+        json!({})
+    } else {
+        json!({ "category": "unevaluated", "reason": NEW_SUBTEST_REASON })
+    }
+}
+
+fn migrate(content: &str, suite_root: &Path) -> anyhow::Result<Migration> {
+    let config: Value = serde_json::from_str(&strip_jsonc_comments(content))?;
+    let tests = config
         .get("tests")
-        .and_then(|v| v.as_object())
-        .expect("config.jsonc missing 'tests' object");
+        .and_then(Value::as_object)
+        .ok_or_else(|| anyhow!("config.jsonc missing 'tests' object"))?;
+    let layout = tests_layout(content)?;
+    let mut report = MigrationReport::default();
+    let mut replacements: Vec<(usize, usize, String)> = Vec::new();
 
-    let existing_keys: BTreeSet<String> = tests_obj.keys().cloned().collect();
-
-    // Discover all .js files from suite directories
-    let all_suite_files = discover_suite_files();
-    let new_files: Vec<String> = all_suite_files
-        .difference(&existing_keys)
-        .cloned()
-        .collect();
-
-    let mut modified_content = content.clone();
-    let mut split_count = 0;
-    let mut update_count = 0;
-    let mut unsplit_count = 0;
-    let mut total_subtests = 0;
-    let mut new_count = 0;
-    let mut new_split_count = 0;
-    let empty_map = serde_json::Map::new();
-
-    // Phase 1: Split new entries and update stale split entries
-    let mut split_updates: Vec<(String, String)> = Vec::new();
-
-    for (test_path, opts) in tests_obj.iter() {
-        let is_split = opts.get("split").and_then(|v| v.as_bool()).unwrap_or(false);
-
-        let suite_file = format!("tests/node_compat/suite/{}", test_path);
-        let source = match fs::read_to_string(&suite_file) {
-            Ok(s) => s,
+    for (path, opts) in tests {
+        let opts = opts
+            .as_object()
+            .ok_or_else(|| anyhow!("entry {path:?} is not an object"))?;
+        let source = match fs::read_to_string(suite_root.join(path)) {
+            Ok(source) => source,
             Err(_) => {
-                eprintln!("Skipping {}: file not found", test_path);
+                report
+                    .missing_sources
+                    .push(json!({ "file": path, "entry": opts }));
                 continue;
             }
         };
+        let names = discover(path, &source, opts);
+        let mut meta = opts.clone();
+        meta.remove("split");
+        let existing = meta
+            .remove("subtests")
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default();
 
-        let nested_node_test = opts
-            .get("nestedNodeTest")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let isolate_block_subtests = opts
-            .get("isolateBlockSubtests")
-            .and_then(|v| v.as_bool())
-            .unwrap_or(false);
-        let discovery = discover_subtests_with_options(
-            test_path,
-            &source,
-            nested_node_test,
-            isolate_block_subtests,
-        );
-        let file_skip = opts.get("skip").and_then(|v| v.as_bool()).unwrap_or(false);
-        let file_reason = opts.get("reason").and_then(|v| v.as_str()).unwrap_or("");
-
-        if is_split {
-            // Check if subtests need updating
-            let existing_subtests = opts
-                .get("subtests")
-                .and_then(|v| v.as_object())
-                .unwrap_or(&empty_map);
-            let existing_names: BTreeSet<String> = existing_subtests.keys().cloned().collect();
-            let disc_names = discovered_names(&discovery);
-
-            if existing_names == disc_names {
-                continue; // No change needed
-            }
-
-            if disc_names.len() < 2 {
-                // Discovery no longer warrants split, convert back to unsplit
-                let new_value = format_unsplit_value(file_skip, file_reason);
-                split_updates.push((test_path.clone(), new_value));
-                unsplit_count += 1;
-            } else {
-                // Update split with merged subtests, preserving existing skip/reason
-                let subtests =
-                    build_merged_subtests(&discovery, existing_subtests, file_skip, file_reason);
-                let new_value = format_split_value(file_skip, file_reason, &subtests);
-                split_updates.push((test_path.clone(), new_value));
-                update_count += 1;
-                total_subtests += subtests.len();
-            }
-        } else {
-            let subtests = build_subtests(&discovery, file_skip, file_reason);
-            if subtests.len() < 2 {
+        let replacement = if !bool_option(opts, "split") {
+            // An explicit `"split": false` keeps the file as one test.
+            if names.len() < 2 || opts.contains_key("split") {
                 continue;
             }
-
-            let new_value = format_split_value(file_skip, file_reason, &subtests);
-            split_updates.push((test_path.clone(), new_value));
-            split_count += 1;
-            total_subtests += subtests.len();
-        }
-    }
-
-    // Apply split updates in reverse order of position to preserve byte offsets
-    let mut positioned_updates: Vec<(usize, usize, String)> = Vec::new();
-    for (key, new_value) in &split_updates {
-        if let Some((start, end)) = find_value_span(&modified_content, key) {
-            positioned_updates.push((start, end, new_value.clone()));
+            report.split.push(path.clone());
+            let subtests: Vec<(String, Value)> =
+                names.into_iter().map(|name| (name, json!({}))).collect();
+            format_split(&meta, &subtests)
         } else {
-            eprintln!("WARNING: Could not find value span for key: {}", key);
-        }
-    }
-    positioned_updates.sort_by_key(|b| std::cmp::Reverse(b.0)); // reverse order preserves offsets
-
-    for (start, end, new_value) in positioned_updates {
-        modified_content.replace_range(start..end, &new_value);
-    }
-
-    // Phase 2: Insert new entries before the closing '}' of the tests object
-    if !new_files.is_empty() {
-        let close_pos = find_tests_object_close(&modified_content)
-            .expect("Could not find closing brace of tests object");
-
-        // Split content at the tests object closing brace
-        let prefix = &modified_content[..close_pos];
-        let suffix = &modified_content[close_pos..]; // starts with '}'
-
-        // Check if the last existing entry needs a trailing comma
-        let trimmed_prefix = prefix.trim_end();
-        let needs_comma = !trimmed_prefix.ends_with(',') && !trimmed_prefix.ends_with('{');
-
-        let mut new_section = String::new();
-
-        if needs_comma {
-            // Insert comma right after the last entry value
-            // We append it to trimmed_prefix and then re-add the whitespace
-            new_section.push(',');
-        }
-
-        new_section.push_str("\n\n    // === newly discovered tests (not yet evaluated) ===");
-
-        for test_path in &new_files {
-            let suite_file = format!("tests/node_compat/suite/{}", test_path);
-            let source = match fs::read_to_string(&suite_file) {
-                Ok(s) => s,
-                Err(_) => {
-                    eprintln!("Skipping new file {}: could not read", test_path);
+            let discovered: BTreeSet<&String> = names.iter().collect();
+            if existing.keys().collect::<BTreeSet<_>>() == discovered && names.len() >= 2 {
+                continue;
+            }
+            if names.len() < 2 {
+                let mut values = existing.values();
+                let first = values.next().cloned().unwrap_or_else(|| json!({}));
+                if values.any(|v| *v != first) {
+                    report.needs_decision.push(json!({
+                        "file": path,
+                        "problem": "no longer splits, but its subtests carried different metadata",
+                        "entry": opts,
+                    }));
                     continue;
                 }
-            };
-
-            let discovery = discover_subtests(test_path, &source);
-            let subtests = build_subtests(&discovery, true, "newly discovered, not yet evaluated");
-
-            if subtests.len() >= 2 {
-                let value =
-                    format_split_value(true, "newly discovered, not yet evaluated", &subtests);
-                new_section.push_str(&format!("\n    \"{}\": {},", test_path, value));
-                total_subtests += subtests.len();
-                new_split_count += 1;
+                for (k, v) in first.as_object().into_iter().flatten() {
+                    meta.insert(k.clone(), v.clone());
+                }
+                report.unsplit.push(path.clone());
+                format_inline(&meta)
             } else {
-                new_section.push_str(&format!(
-                    "\n    \"{}\": {{ \"skip\": true, \"reason\": \"newly discovered, not yet evaluated\" }},",
-                    test_path
-                ));
+                let removed: Vec<&String> = existing
+                    .keys()
+                    .filter(|name| !discovered.contains(name))
+                    .collect();
+                let added: Vec<&String> = names
+                    .iter()
+                    .filter(|name| !existing.contains_key(*name))
+                    .collect();
+                let mut renamed_from: BTreeMap<&String, &String> = BTreeMap::new();
+                for name in &added {
+                    if let Some(description) = subtest_description(name)
+                        && unique_by_description(&added, description) == Some(*name)
+                        && let Some(old) = unique_by_description(&removed, description)
+                    {
+                        renamed_from.insert(*name, old);
+                    }
+                }
+                let carried: BTreeSet<&String> = renamed_from.values().copied().collect();
+                let mut subtests = Vec::new();
+                for name in &names {
+                    let value = if let Some(value) = existing.get(name) {
+                        value.clone()
+                    } else if let Some(old) = renamed_from.get(name) {
+                        report
+                            .renamed
+                            .push(json!({ "file": path, "from": old, "to": name }));
+                        existing[old.as_str()].clone()
+                    } else {
+                        report
+                            .new_subtests
+                            .push(json!({ "file": path, "subtest": name }));
+                        new_subtest_value(&meta)
+                    };
+                    subtests.push((name.clone(), value));
+                }
+                for old in removed.into_iter().filter(|old| !carried.contains(old)) {
+                    report.removed_subtests.push(json!({
+                        "file": path,
+                        "subtest": old,
+                        "fileEntry": meta,
+                        "entry": existing[old.as_str()],
+                    }));
+                }
+                report.resplit.push(path.clone());
+                format_split(&meta, &subtests)
             }
-            new_count += 1;
-        }
-
-        // Remove trailing comma from the very last new entry
-        if new_section.ends_with(',') {
-            new_section.pop();
-        }
-
-        new_section.push_str("\n  "); // indentation before closing '}'
-
-        // Reconstruct: trimmed prefix + new section + suffix
-        modified_content = format!("{}{}{}", trimmed_prefix, new_section, suffix);
+        };
+        let (start, end) = layout.values[path.as_str()];
+        replacements.push((start, end, replacement));
     }
 
-    // Write back
-    fs::write(config_path, &modified_content).expect("Failed to write config.jsonc");
+    let mut migrated = content.to_string();
+    let added: Vec<String> = discover_suite_files(suite_root)?
+        .into_iter()
+        .filter(|path| !tests.contains_key(path))
+        .collect();
+    if !added.is_empty() {
+        let mut section = String::new();
+        let before = migrated[..layout.close].trim_end();
+        if !before.ends_with(',') && !before.ends_with('{') {
+            section.push(',');
+        }
+        section.push_str("\n\n    // === newly discovered tests (not yet evaluated) ===");
+        let mut meta = Map::new();
+        meta.insert("category".into(), json!("unevaluated"));
+        meta.insert("reason".into(), json!(NEW_FILE_REASON));
+        for (i, path) in added.iter().enumerate() {
+            let source = fs::read_to_string(suite_root.join(path))?;
+            let names = discover(path, &source, &Map::new());
+            let value = if names.len() >= 2 {
+                let subtests: Vec<(String, Value)> =
+                    names.into_iter().map(|name| (name, json!({}))).collect();
+                format_split(&meta, &subtests)
+            } else {
+                format_inline(&meta)
+            };
+            let comma = if i + 1 < added.len() { "," } else { "" };
+            section.push_str(&format!("\n    {}: {value}{comma}", json!(path)));
+        }
+        section.push_str("\n  ");
+        let trimmed_end = before.len();
+        replacements.push((trimmed_end, layout.close, section));
+        report.added = added;
+    }
 
-    println!("Migration complete:");
-    println!("  Existing files split: {}", split_count);
-    println!("  Existing splits updated: {}", update_count);
-    println!("  Existing splits unsplit: {}", unsplit_count);
+    replacements.sort_by_key(|(start, _, _)| std::cmp::Reverse(*start));
+    for (start, end, text) in replacements {
+        migrated.replace_range(start..end, &text);
+    }
+    // The result must still be a valid config with the same top-level shape.
+    tests_layout(&migrated)?;
+    Ok(Migration {
+        content: migrated,
+        report,
+    })
+}
+
+#[test]
+fn migrate_config_split() -> anyhow::Result<()> {
+    let config_path = "tests/node_compat/config.jsonc";
+    let report_path = std::env::var("NODE_COMPAT_MIGRATION_REPORT")
+        .unwrap_or_else(|_| "target/node-compat-migration-report.json".to_string());
+    let content = fs::read_to_string(config_path)?;
+    let Migration {
+        content: migrated,
+        report,
+    } = migrate(&content, Path::new("tests/node_compat/suite"))?;
+    fs::write(config_path, migrated)?;
+    if let Some(parent) = Path::new(&report_path).parent() {
+        fs::create_dir_all(parent)?;
+    }
+    fs::write(&report_path, serde_json::to_string_pretty(&report)? + "\n")?;
+
+    println!("Migration of {config_path}:");
+    println!("  newly split: {}", report.split.len());
+    println!("  re-split: {}", report.resplit.len());
+    println!("  unsplit: {}", report.unsplit.len());
+    println!("  added as unevaluated: {}", report.added.len());
     println!(
-        "  New files added: {} ({} with splits)",
-        new_count, new_split_count
+        "  subtests renamed by index shift: {}",
+        report.renamed.len()
     );
-    println!("  Total subtests discovered: {}", total_subtests);
-    println!("  Config written to: {}", config_path);
+    println!("  new subtests: {}", report.new_subtests.len());
+    println!("  removed subtests: {}", report.removed_subtests.len());
+    println!(
+        "  configured files without source: {}",
+        report.missing_sources.len()
+    );
+    println!(
+        "  entries needing a decision: {}",
+        report.needs_decision.len()
+    );
+    println!("  review report: {report_path}");
+    if report.needs_review() > 0 {
+        bail!(
+            "{} config entries need a manual mapping; see {report_path}. Map each one to its replacement or record the target change; never by count alone",
+            report.needs_review()
+        );
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod contract {
+    use super::*;
+    use camino_tempfile::Utf8TempDir;
+    use test_r::test;
+
+    const TWO_TESTS: &str =
+        "const test = require('node:test');\ntest('alpha', () => {});\ntest('beta', () => {});\n";
+
+    struct Fixture {
+        temp: Utf8TempDir,
+    }
+
+    impl Fixture {
+        fn new() -> Self {
+            Self {
+                temp: Utf8TempDir::new().unwrap(),
+            }
+        }
+
+        fn source(&self, path: &str, source: &str) -> &Self {
+            let path = self.temp.path().join(path);
+            fs::create_dir_all(path.parent().unwrap()).unwrap();
+            fs::write(path, source).unwrap();
+            self
+        }
+
+        fn migrate(&self, tests: &str) -> Migration {
+            let content = format!(
+                "{{\n  \"nodeVersion\": \"22.14.0\",\n  // \"parallel/test-a.js\" is quoted here\n  \"tests\": {{\n{tests}\n  }}\n}}\n"
+            );
+            migrate(&content, self.temp.path().as_std_path()).unwrap()
+        }
+    }
+
+    fn entries(migration: &Migration) -> Map<String, Value> {
+        let config: Value =
+            serde_json::from_str(&strip_jsonc_comments(&migration.content)).unwrap();
+        config["tests"].as_object().unwrap().clone()
+    }
+
+    fn node_tests(names: &[&str]) -> String {
+        let mut source = "const test = require('node:test');\n".to_string();
+        for name in names {
+            source.push_str(&format!("test('{name}', () => {{}});\n"));
+        }
+        source
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn splitting_keeps_every_file_level_key() {
+        let fixture = Fixture::new();
+        fixture.source("parallel/test-a.js", TWO_TESTS);
+        let migration = fixture.migrate(
+            r#"    "parallel/test-a.js": { "category": "known-gap", "reason": "gap", "flaky": true, "timeout": 300, "custom": 1 }"#,
+        );
+        let entry = &entries(&migration)["parallel/test-a.js"];
+        assert_eq!(
+            *entry,
+            json!({
+                "category": "known-gap", "reason": "gap", "flaky": true, "timeout": 300,
+                "custom": 1, "split": true,
+                "subtests": { "test_00_alpha": {}, "test_01_beta": {} },
+            })
+        );
+        assert_eq!(migration.report.split, ["parallel/test-a.js"]);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn an_explicit_split_false_is_kept() {
+        let fixture = Fixture::new();
+        fixture.source("parallel/test-a.js", TWO_TESTS);
+        let entry = r#"    "parallel/test-a.js": { "category": "runnable", "split": false }"#;
+        let migration = fixture.migrate(entry);
+        assert!(migration.content.contains(entry));
+        assert_eq!(migration.report, MigrationReport::default());
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn resplitting_keeps_metadata_and_reports_changed_subtests() {
+        let fixture = Fixture::new();
+        // `alpha` stays, `beta` moves from index 1 to 2, `gone` disappears, `fresh` is new.
+        fixture.source(
+            "parallel/test-a.js",
+            &node_tests(&["alpha", "fresh", "beta"]),
+        );
+        let migration = fixture.migrate(
+            r#"    "parallel/test-a.js": {
+      "timeout": 30,
+      "isolateBlockSubtests": false,
+      "split": true,
+      "subtests": {
+        "test_00_alpha": { "category": "known-gap", "reason": "a" },
+        "test_01_beta": { "flaky": true },
+        "test_02_gone": { "category": "runnable" }
+      }
+    }"#,
+        );
+        let entry = &entries(&migration)["parallel/test-a.js"];
+        assert_eq!(
+            *entry,
+            json!({
+                "timeout": 30, "isolateBlockSubtests": false, "split": true,
+                "subtests": {
+                    "test_00_alpha": { "category": "known-gap", "reason": "a" },
+                    "test_01_fresh": { "category": "unevaluated", "reason": NEW_SUBTEST_REASON },
+                    "test_02_beta": { "flaky": true },
+                },
+            })
+        );
+        let report = &migration.report;
+        assert_eq!(
+            report.renamed,
+            [json!({ "file": "parallel/test-a.js", "from": "test_01_beta", "to": "test_02_beta" })]
+        );
+        assert_eq!(report.removed_subtests.len(), 1);
+        assert_eq!(report.removed_subtests[0]["subtest"], "test_02_gone");
+        assert_eq!(report.removed_subtests[0]["entry"]["category"], "runnable");
+        assert_eq!(report.needs_review(), 1);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn new_subtests_inherit_an_excluded_file_category() {
+        let fixture = Fixture::new();
+        fixture.source(
+            "parallel/test-a.js",
+            &node_tests(&["alpha", "beta", "gamma"]),
+        );
+        let migration = fixture.migrate(
+            r#"    "parallel/test-a.js": { "category": "wasi-impossible", "split": true, "subtests": { "test_00_alpha": {}, "test_01_beta": {} } }"#,
+        );
+        let entry = &entries(&migration)["parallel/test-a.js"];
+        assert_eq!(entry["subtests"]["test_02_gamma"], json!({}));
+        assert_eq!(entry["category"], "wasi-impossible");
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn unsplitting_requires_identical_subtest_metadata() {
+        let fixture = Fixture::new();
+        fixture
+            .source("parallel/test-same.js", &node_tests(&["only"]))
+            .source("parallel/test-mixed.js", &node_tests(&["only"]));
+        let mixed = r#"    "parallel/test-mixed.js": { "split": true, "subtests": { "test_00_only": {}, "test_01_other": { "category": "known-gap" } } }"#;
+        let migration = fixture.migrate(&format!(
+            "{mixed},\n    \"parallel/test-same.js\": {{ \"reason\": \"r\", \"split\": true, \"subtests\": {{ \"test_00_a\": {{ \"category\": \"known-gap\" }}, \"test_01_b\": {{ \"category\": \"known-gap\" }} }} }}"
+        ));
+        let entries = entries(&migration);
+        assert_eq!(
+            entries["parallel/test-same.js"],
+            json!({ "category": "known-gap", "reason": "r" })
+        );
+        assert!(
+            migration.content.contains(mixed),
+            "mixed entry must stay untouched"
+        );
+        assert_eq!(migration.report.needs_decision.len(), 1);
+        assert_eq!(
+            migration.report.needs_decision[0]["file"],
+            "parallel/test-mixed.js"
+        );
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn unlisted_js_and_mjs_tests_are_added_as_unevaluated() {
+        let fixture = Fixture::new();
+        fixture
+            .source("parallel/test-a.js", "")
+            .source("parallel/test-b.mjs", "import 'node:assert';\n")
+            .source("es-module/test-c.mjs", &node_tests(&["one", "two"]))
+            .source("parallel/helper.js", "")
+            .source("parallel/test-notes.txt", "");
+        let migration = fixture.migrate(r#"    "parallel/test-a.js": {}"#);
+        let entries = entries(&migration);
+        assert_eq!(
+            migration.report.added,
+            ["es-module/test-c.mjs", "parallel/test-b.mjs"]
+        );
+        assert_eq!(
+            entries["parallel/test-b.mjs"],
+            json!({ "category": "unevaluated", "reason": NEW_FILE_REASON })
+        );
+        assert_eq!(
+            entries["es-module/test-c.mjs"],
+            json!({
+                "category": "unevaluated", "reason": NEW_FILE_REASON, "split": true,
+                "subtests": { "test_00_one": {}, "test_01_two": {} },
+            })
+        );
+        assert!(!entries.contains_key("parallel/helper.js"));
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn missing_sources_are_reported_and_kept() {
+        let fixture = Fixture::new();
+        let missing = r#"    "sequential/test-moved.js": { "category": "runnable" }"#;
+        let migration = fixture.migrate(missing);
+        assert!(migration.content.contains(missing));
+        assert_eq!(migration.report.missing_sources.len(), 1);
+        assert_eq!(
+            migration.report.missing_sources[0]["file"],
+            "sequential/test-moved.js"
+        );
+        assert_eq!(migration.report.needs_review(), 1);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_second_run_changes_nothing() {
+        let fixture = Fixture::new();
+        fixture
+            .source("parallel/test-a.js", TWO_TESTS)
+            .source("parallel/test-b.mjs", "");
+        let first = fixture.migrate(r#"    "parallel/test-a.js": { "category": "known-gap" }"#);
+        let second = migrate(&first.content, fixture.temp.path().as_std_path()).unwrap();
+        assert_eq!(second.content, first.content);
+        assert_eq!(second.report, MigrationReport::default());
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn duplicate_entries_are_rejected() {
+        let fixture = Fixture::new();
+        let content = "{ \"nodeVersion\": \"22.14.0\", \"tests\": { \"parallel/test-a.js\": {}, \"parallel/test-a.js\": { \"category\": \"known-gap\" } } }";
+        let error = migrate(content, fixture.temp.path().as_std_path())
+            .err()
+            .unwrap();
+        assert!(error.to_string().contains("duplicate"), "{error:#}");
+    }
 }

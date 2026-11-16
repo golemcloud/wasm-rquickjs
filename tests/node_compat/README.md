@@ -40,9 +40,40 @@ developer runs the vendor script to populate it.
 
 Configuration loading and report generation inspect these pinned sources to
 distinguish public API coverage from tests that rely on Node.js internals. They
-fail when the suite is absent, a source required for implicit classification is
-missing, or the vendored version differs from `config.jsonc`; this prevents
-missing classification inputs from silently changing the compatibility totals.
+fail when the suite is absent, any configured entry has no vendored source, or
+the vendored version differs from `config.jsonc`; this prevents missing inputs
+from silently changing the compatibility totals. The runner also fails when a
+split entry's subtest names differ from the names discovered in its source,
+because each subtest runs by the index in its configured name.
+
+## Migrating the Config After Re-vendoring
+
+After vendoring another version, set `nodeVersion` and run:
+
+```bash
+cargo test --test migrate_config_split -- --exact migrate_config_split
+```
+
+The migration rewrites only entries whose subtests changed and keeps every
+metadata key (`category`, `reason`, `flaky`, `timeout`, split options) of the file
+and of each surviving subtest:
+
+- An unsplit file that now has several subtests is split; each subtest inherits
+  the file's metadata. An explicit `"split": false` keeps it whole.
+- A subtest whose index shifted keeps its metadata when its description is
+  unchanged and unique. A new subtest starts `unevaluated` unless the file is
+  already excluded from the runner.
+- A split file that no longer splits becomes one entry only when all its
+  subtests carried identical metadata; otherwise it is left unchanged for a
+  decision.
+- Unlisted vendored `test-*.js` and `test-*.mjs` files are added as
+  `unevaluated`.
+
+It never deletes an entry. Configured files without a source, removed subtests and
+undecided unsplits are written to `target/node-compat-migration-report.json`
+(override with `NODE_COMPAT_MIGRATION_REPORT`), and the run fails until each one
+is mapped by reading both versions. The tool's contract tests run with
+`cargo test --test migrate_config_split -- ':tag:migration_contract'`.
 
 ## Target Selection
 
@@ -59,8 +90,10 @@ passing case that does not pass unchanged on both candidates.
 are run by the test harness. Each entry can include:
 
 - `{}` — test should pass
+- `{ "category": "...", "reason": "..." }` — classification; see the header of
+  `config.jsonc` for the categories. Only `runnable` entries run.
 - `{ "flaky": true }` — one retry (two total attempts, each with fresh runtime state)
-- `{ "skip": true, "reason": "..." }` — skip with explanation
+- `{ "timeout": 300 }` — per-case timeout in seconds
 
 Retries are bounded by test-r's native `RetryKnownFlaky(2)` policy: a passing
 attempt ends the test, and two failed attempts fail it. Non-split tests use the

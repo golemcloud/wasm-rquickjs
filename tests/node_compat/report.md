@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3260/4451 (73.2%)
+**Primary compatibility (CI-enforced):** 3260/4447 (73.3%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3260 | 73.2% | 56.1% | 47.2% |
-| 🧩 known gap | 1191 | 26.8% | 20.5% | 17.2% |
-| 🚫 WASI-impossible (excluded) | 1192 | — | 20.5% | 17.2% |
+| ✅ passing (runnable) | 3260 | 73.3% | 56.1% | 47.2% |
+| 🧩 known gap | 1187 | 26.7% | 20.4% | 17.2% |
+| 🚫 WASI-impossible (excluded) | 1192 | — | 20.5% | 17.3% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1101 | — | — | 15.9% |
-| **Total** | **6911** |  |  | **100.0%** |
+| **Total** | **6907** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3260/5810 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3260/5806 (56.1%)**.
 
 ## Inventory by Module
 
@@ -52,7 +52,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 240 | 275 | 301 | 2 | 0 | 80 | 46.6% | 29.3% |
+| http | 894 | 240 | 271 | 301 | 2 | 0 | 80 | 47.0% | 29.5% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
 | module | 174 | 123 | 31 | 7 | 1 | 0 | 12 | 79.9% | 75.9% |
@@ -688,7 +688,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1191)
+### known gap (1187)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -808,7 +808,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.permission worker-thread restrictions are incomplete | 2 | `parallel/test-permission-dc-worker-threads.js`, `parallel/test-permission-worker-threads-cli.js` |
 | process.report.writeReport and permission-model integration are missing | 2 | `parallel/test-permission-fs-write-report.js#block_00_block_00`, `parallel/test-permission-fs-write-report.js#block_01_block_01` |
 | promisified exec()/execFile() rejection errors miss stdout/stderr fields | 2 | `parallel/test-child-process-promisified.js#block_04_block_04`, `parallel/test-child-process-promisified.js#block_05_block_05` |
-| requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_async_resolve_hook_registered` |
+| requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_an_async_resolve_hook_registered` |
 | requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 2 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-module.mjs` |
 | requires spawned process.execPath entry-point execution for extensionless ESM files | 2 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_00_should_run_as_the_entry_point`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_06_should_run_as_the_entry_point` |
 | spawn() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01` |
@@ -1219,10 +1219,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 1 | `es-module/test-esm-import-meta-resolve.mjs` |
 | sendBlockList connect path can crash in WASI UDP implementation | 1 | `parallel/test-dgram-blocklist.js#block_00_block_00` |
 | sendBlockList send() callback path is not Node-compatible and can hang | 1 | `parallel/test-dgram-blocklist.js#block_01_block_01` |
-| sequential path is stale in vendored suite; equivalent Upgrade timeout-disabling semantics are not Node-compatible | 1 | `sequential/test-http-server-request-timeout-upgrade.js` |
-| sequential path is stale in vendored suite; equivalent maxSockets queueing/release behavior is not Node-compatible | 1 | `sequential/test-http-max-sockets.js` |
-| sequential path is stale in vendored suite; equivalent server.requestTimeout keep-alive handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeout-keepalive.js` |
-| sequential path is stale in vendored suite; equivalent server.requestTimeout pipelining handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeout-pipelining.js` |
 | server listen/close race with async DNS lookup is not Node-compatible | 1 | `parallel/test-net-server-close-before-calling-lookup-callback.js` |
 | server option insecureHTTPParser:true is ignored for incoming invalid headers | 1 | `parallel/test-http-insecure-parser-per-stream.js#block_02_test_3_the_client_sends_an_invalid_header` |
 | server option maxHeaderSize is ignored for incoming oversized headers | 1 | `parallel/test-http-max-header-size-per-stream.js#block_02_test_3_the_client_sends_larger_headers_than_what_would_other` |
@@ -1282,7 +1278,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | uncaught exception handling in HTTP request callbacks does not recover/terminate like Node and hangs | 1 | `parallel/test-http-exceptions.js` |
 | uncaughtException rethrow exit-code semantics are incomplete | 1 | `parallel/test-unhandled-exception-rethrow-error.js` |
 | uses V8 native %GetUndetectable() syntax which QuickJS cannot evaluate | 1 | `parallel/test-util-inspect.js#block_83_https_github_com_nodejs_node_issues_31889` |
-| uses child_process spawn path (spawnPromisified) | 1 | `parallel/test-find-package-json.js#test_07_should_resolve_root_and_closest_package_json` |
+| uses child_process spawn path (spawnPromisified) | 1 | `parallel/test-find-package-json.js#test_07_should_be_able_to_resolve_both_root_and_closest_package_json` |
 | util.MIMEType parsing API is not implemented | 1 | `parallel/test-mime-whatwg.js` |
 | util.MIMEType/util.MIMEParams are not implemented | 1 | `parallel/test-mime-api.js` |
 | util.debuglog formatting/callback behavior is not fully Node-compatible | 1 | `sequential/test-util-debug.js` |

@@ -199,11 +199,26 @@ fn node_compat_config_requires_source_for_implicit_classification() -> anyhow::R
     fixture.write_suite_version("22.14.0")?;
     let error = fixture.load().unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("cannot classify node-compat entry"),
+        error.to_string().contains("no vendored source"),
         "{error:#}"
     );
+    Ok(())
+}
+
+#[test]
+#[test_r::tag(report_contract)]
+fn node_compat_config_requires_source_for_classified_entries() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::with_tests(
+        r#"{"parallel/test-internal.js": {"category": "known-gap", "reason": "gap"}}"#,
+    )?;
+    fixture.write_suite_version("22.14.0")?;
+    let error = fixture.load().unwrap_err();
+    assert!(
+        error.to_string().contains("parallel/test-internal.js"),
+        "{error:#}"
+    );
+    fixture.write_source("'use strict';\n")?;
+    assert_eq!(fixture.load()?[0].category, NodeCompatCategory::KnownGap);
     Ok(())
 }
 
@@ -235,14 +250,17 @@ impl NodeCompatConfigFixture {
     }
 
     fn create(with_implicit_entry: bool) -> anyhow::Result<Self> {
-        let temp = Utf8TempDir::new()?;
-        let config_path = temp.path().join("config.jsonc");
-        let suite_root = temp.path().join("suite");
-        let tests = if with_implicit_entry {
+        Self::with_tests(if with_implicit_entry {
             r#"{"parallel/test-internal.js": {}}"#
         } else {
             "{}"
-        };
+        })
+    }
+
+    fn with_tests(tests: &str) -> anyhow::Result<Self> {
+        let temp = Utf8TempDir::new()?;
+        let config_path = temp.path().join("config.jsonc");
+        let suite_root = temp.path().join("suite");
         fs::write(
             &config_path,
             format!(r#"{{"nodeVersion": "22.14.0", "tests": {tests}}}"#),

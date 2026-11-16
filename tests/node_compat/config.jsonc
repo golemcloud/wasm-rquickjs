@@ -5899,11 +5899,7 @@
     "parallel/test-https-unix-socket-self-signed.js": { "category": "wasi-impossible", "reason": "requires https.createServer/TLS server behavior, unsupported by WASI transport" },
 
     // === Additional sequential tests (http/https/net) ===
-    "sequential/test-http-max-sockets.js": { "category": "known-gap", "reason": "sequential path is stale in vendored suite; equivalent maxSockets queueing/release behavior is not Node-compatible" },
     "sequential/test-http-regr-gh-2928.js": { "category": "node-internals", "reason": "uses private `_http_common.parsers` and `HTTPParser` internals" },
-    "sequential/test-http-server-request-timeout-keepalive.js": { "category": "known-gap", "reason": "sequential path is stale in vendored suite; equivalent server.requestTimeout keep-alive handling is not Node-compatible" },
-    "sequential/test-http-server-request-timeout-pipelining.js": { "category": "known-gap", "reason": "sequential path is stale in vendored suite; equivalent server.requestTimeout pipelining handling is not Node-compatible" },
-    "sequential/test-http-server-request-timeout-upgrade.js": { "category": "known-gap", "reason": "sequential path is stale in vendored suite; equivalent Upgrade timeout-disabling semantics are not Node-compatible" },
     "sequential/test-https-connect-localport.js": { "category": "wasi-impossible", "reason": "https.createServer (TLS server) is not supported in WebAssembly environment" },
     "sequential/test-net-connect-local-error.js": {},
     "sequential/test-net-localport.js": {},
@@ -6793,13 +6789,13 @@
       "nestedNodeTest": true,
       "subtests": {
         "test_00_should_throw_when_no_arguments_are_provided": { "category": "runnable" },
-        "test_01_should_throw_when_parent_location_is_invalid": { "category": "runnable" },
-        "test_02_should_accept_a_file_url_string": { "category": "runnable" },
+        "test_01_should_throw_when_parentlocation_is_invalid": { "category": "runnable" },
+        "test_02_should_accept_a_file_url_string_like_from_import_meta_resolv": { "category": "runnable" },
         "test_03_should_accept_a_file_url_instance": { "category": "runnable" },
         "test_04_should_be_able_to_crawl_up_cjs": { "category": "runnable" },
         "test_05_should_be_able_to_crawl_up_esm": { "category": "runnable" },
         "test_06_can_require_via_package_json": { "category": "runnable" },
-        "test_07_should_resolve_root_and_closest_package_json": {
+        "test_07_should_be_able_to_resolve_both_root_and_closest_package_json": {
           "category": "known-gap",
           "reason": "uses child_process spawn path (spawnPromisified)"
         },
@@ -6807,7 +6803,7 @@
           "category": "known-gap",
           "reason": "requires child process loader/eval flags"
         },
-        "test_09_should_work_with_async_resolve_hook_registered": {
+        "test_09_should_work_with_an_async_resolve_hook_registered": {
           "category": "known-gap",
           "reason": "requires child process loader/eval flags"
         }

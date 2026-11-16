@@ -353,7 +353,9 @@ All of this is required for either target unless marked "26 only".
 
 1. Create a fresh worktree, run `./tests/node_compat/vendor.sh 26.13.1`, and set
    `"nodeVersion": "26.13.1"`.
-2. Apply harness item 2 first, then run `cargo test --test migrate_config_split`.
+2. Harness items 2 and 3 are in place. Run
+   `cargo test --test migrate_config_split -- --exact migrate_config_split` and map every
+   entry in its review report (see the [README](README.md#migrating-the-config-after-re-vendoring)).
 3. Keep each 22.14.0 category. New files start as `unevaluated`; they are not part of the
    restored baseline.
 4. Map every 22.14.0 passing case using the mapping file:
