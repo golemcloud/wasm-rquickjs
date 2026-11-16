@@ -3207,6 +3207,7 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
 /// - `/home/node/test/common/` — common shims
 /// - `/tmp/` — for tmpdir shim
 /// - `/home/node/test/fixtures/` — fixture data files (recursively copied)
+/// - `/home/node/test/sqlite/` — vendored sqlite test helpers, when present
 pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> anyhow::Result<()> {
     // Parse the suite name from the relative path (e.g., "parallel/test-foo.js" → "parallel")
     let suite = test_rel_path.split('/').next().unwrap_or("parallel");
@@ -3308,6 +3309,12 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
 
     if test_rel_path == "sequential/test-module-loading.js" && vendored_fixtures_src.exists() {
         copy_dir_recursive(vendored_fixtures_src, fixtures_dst.as_std_path())?;
+    }
+
+    // Shared sqlite test helpers, such as `require('../sqlite/next-db.js')`
+    let vendored_sqlite_src = std::path::Path::new("tests/node_compat/suite/sqlite");
+    if vendored_sqlite_src.exists() {
+        copy_dir_recursive(vendored_sqlite_src, test_root.join("sqlite").as_std_path())?;
     }
 
     Ok(())
