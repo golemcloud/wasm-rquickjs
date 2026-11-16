@@ -277,7 +277,7 @@ Object.defineProperty(process, 'title', {
     enumerable: true,
     configurable: true,
 });
-process.release = { name: 'node' };
+process.release = { name: 'node', lts: 'Lithium' };
 process.allowedNodeEnvironmentFlags = new Set();
 
 const _reportOptions = {

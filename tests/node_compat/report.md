@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2863/4452 (64.3%)
+**Primary compatibility (CI-enforced):** 2864/4452 (64.3%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2863 | 64.3% | 29.8% | 26.5% |
-| 🧩 known gap | 1589 | 35.7% | 16.5% | 14.7% |
+| ✅ passing (runnable) | 2864 | 64.3% | 29.8% | 26.6% |
+| 🧩 known gap | 1588 | 35.7% | 16.5% | 14.7% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3845 | — | 40.0% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1175 | — | — | 10.9% |
 | **Total** | **10787** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2863/9612 (29.8%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2864/9612 (29.8%)**.
 
 ## Inventory by Module
 
@@ -63,7 +63,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | path | 17 | 12 | 4 | 0 | 0 | 1 | 0 | 75.0% | 70.6% |
 | perf_hooks | 123 | 4 | 28 | 1 | 0 | 88 | 2 | 12.5% | 3.3% |
 | permission | 162 | 3 | 40 | 9 | 2 | 106 | 2 | 7.0% | 1.9% |
-| process | 118 | 41 | 35 | 4 | 0 | 26 | 12 | 53.9% | 38.7% |
+| process | 118 | 42 | 34 | 4 | 0 | 26 | 12 | 55.3% | 39.6% |
 | promises | 24 | 4 | 11 | 0 | 7 | 2 | 0 | 26.7% | 16.7% |
 | querystring | 15 | 14 | 0 | 0 | 0 | 1 | 0 | 100.0% | 93.3% |
 | readline | 102 | 0 | 22 | 0 | 0 | 1 | 79 | 0.0% | 0.0% |
@@ -1094,12 +1094,12 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1589)
+### known gap (1588)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
-| Node 26.13.1 baseline gap: Expected values to be strictly equal: | 66 | `es-module/test-require-module-twice.js`, `es-module/test-require-module.js#block_02_test_esm_that_import_cjs`, `parallel/test-console.js`, ... (+63) |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal: | 65 | `es-module/test-require-module-twice.js`, `es-module/test-require-module.js#block_02_test_esm_that_import_cjs`, `parallel/test-console.js`, ... (+62) |
 | requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 30 | `es-module/test-typescript.mjs#test_00_expect_process_features_typescript_to_be_false_when_no_exper`, `es-module/test-typescript.mjs#test_01_execute_a_typescript_file`, `es-module/test-typescript.mjs#test_02_execute_a_typescript_file_with_imports`, ... (+27) |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly | 29 | `es-module/test-esm-import-attributes-errors.js`, `es-module/test-require-module-cached-tla.js`, `es-module/test-require-module-dynamic-import-1.js`, ... (+26) |
 | requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 29 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs#test_00_module_syntax_detection`, `es-module/test-esm-detect-ambiguous.mjs#test_01_wrapping_a_require_of_an_es_module_while_using_abort_on_unca`, ... (+26) |

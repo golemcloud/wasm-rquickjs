@@ -29,8 +29,8 @@
    "renamed / failed": 106,
    "renamed / passed": 189,
    "renamed / skipped": 4,
-   "same / failed": 168,
-   "same / passed": 2632,
+   "same / failed": 167,
+   "same / passed": 2633,
    "same / skipped": 35,
    "target-change-eol / -": 38,
    "target-change-eol / skipped": 10,
@@ -39,7 +39,7 @@
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
-  "baselineGapCases": 344,
+  "baselineGapCases": 343,
   "nowNodeInternalsCases": 45
  },
  "missingSources": [
@@ -4864,13 +4864,6 @@
     "error": "mustCall verification failed:"
    },
    {
-    "file": "parallel/test-process-release.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly equal:"
-   },
-   {
     "file": "parallel/test-require-delete-array-iterator.js",
     "subtest": null,
     "baseline": true,
@@ -6315,7 +6308,14 @@
     "error": "util.inspect prints the symbol key of a boxed String as [Symbol(foo)]; 26.13.1 expects Symbol(foo)"
    }
   ],
-  "passedOnRerun": []
+  "passedOnRerun": [],
+  "repairedInSwitch": [
+   {
+    "file": "parallel/test-process-release.js",
+    "subtest": null,
+    "fix": "process.release.lts reports 'Lithium', the LTS codename of 26.13.1 in the official dist index"
+   }
+  ]
  },
  "matchedByPosition": [
   {

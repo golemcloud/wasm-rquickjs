@@ -3082,7 +3082,7 @@
     "parallel/test-process-initgroups.js": {},
     "parallel/test-process-kill-pid.js": {},
     "parallel/test-process-prototype.js": { "category": "known-gap", "reason": "process prototype chain is not fully Node-compatible (prototype is not EventEmitter-based)" },
-    "parallel/test-process-release.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-process-release.js": {},
     "parallel/test-process-setgroups.js": {},
     "parallel/test-process-setsourcemapsenabled.js": {},
     "parallel/test-process-uid-gid.js": { "category": "known-gap", "reason": "process.setuid()/process.setgid() are stubbed and do not mutate credentials" },
