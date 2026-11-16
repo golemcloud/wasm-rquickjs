@@ -39,7 +39,7 @@
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
-  "baselineGapCases": 327,
+  "baselineGapCases": 313,
   "nowNodeInternalsCases": 45
  },
  "missingSources": [
@@ -5905,109 +5905,11 @@
     "error": "Unhandled promise rejection (likely cause of mustCall failure): Error: Module status must not be unlinked or l"
    },
    {
-    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
-    "subtest": "block_00_test_aes_cbc_vectors",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
-    "subtest": "block_01_test_aes_ctr_vectors",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
-    "subtest": "block_02_test_aes_gcm_vectors",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
-    "subtest": "block_00_test_encrypt_decrypt_aes_ctr",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
-    "subtest": "block_01_test_encrypt_decrypt_aes_cbc",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
-    "subtest": "block_02_test_encrypt_decrypt_aes_gcm",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_00_block_00",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_02_import_export_hmac_secret_key",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_03_import_export_aes_secret_key",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_04_import_export_rsa_key_pairs",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_05_import_export_ec_key_pairs",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-random.js",
-    "subtest": "block_00_block_00",
-    "baseline": true,
-    "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
-   },
-   {
-    "file": "parallel/test-webcrypto-random.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
-   },
-   {
     "file": "parallel/test-webcrypto-random.js",
     "subtest": "block_02_block_02",
     "baseline": true,
     "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
-   },
-   {
-    "file": "parallel/test-webcrypto-random.js",
-    "subtest": "block_03_block_03",
-    "baseline": true,
-    "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
+    "error": "QuotaExceededError is not defined"
    },
    {
     "file": "parallel/test-webstorage.js",
@@ -6276,6 +6178,76 @@
     "file": "parallel/test-crypto-authenticated.js",
     "subtest": "block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305",
     "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-webcrypto-random.js",
+    "subtest": "block_00_block_00",
+    "fix": "crypto.getRandomValues rejects missing and non-ArrayBufferView arguments with Node's WebIDL TypeErrors (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE) and reports TypeMismatchError and QuotaExceededError with Node's messages"
+   },
+   {
+    "file": "parallel/test-webcrypto-random.js",
+    "subtest": "block_01_block_01",
+    "fix": "crypto.getRandomValues rejects missing and non-ArrayBufferView arguments with Node's WebIDL TypeErrors (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE) and reports TypeMismatchError and QuotaExceededError with Node's messages"
+   },
+   {
+    "file": "parallel/test-webcrypto-random.js",
+    "subtest": "block_03_block_03",
+    "fix": "crypto.getRandomValues rejects missing and non-ArrayBufferView arguments with Node's WebIDL TypeErrors (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE) and reports TypeMismatchError and QuotaExceededError with Node's messages"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
+    "subtest": "block_00_test_encrypt_decrypt_aes_ctr",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
+    "subtest": "block_01_test_encrypt_decrypt_aes_cbc",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
+    "subtest": "block_02_test_encrypt_decrypt_aes_gcm",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
+    "subtest": "block_00_test_aes_cbc_vectors",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
+    "subtest": "block_01_test_aes_ctr_vectors",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
+    "subtest": "block_02_test_aes_gcm_vectors",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_00_block_00",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_02_import_export_hmac_secret_key",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_03_import_export_aes_secret_key",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_04_import_export_rsa_key_pairs",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_05_import_export_ec_key_pairs",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
    }
   ]
  },

@@ -321,3 +321,52 @@ export function cryptoErrorContracts() {
     check('createPrivateKey der spki', () => createPrivateKey({ key: Buffer.alloc(0), format: 'der', type: 'spki' }));
     return lines;
 }
+
+export async function webcryptoErrorContracts() {
+    const lines = [];
+    const describe = (e) => `${e.name} ${e.code} ${e.message}`;
+    const check = (name, fn) => {
+        try {
+            fn();
+            lines.push(`${name}: ok`);
+        } catch (e) {
+            lines.push(`${name}: ${describe(e)}`);
+        }
+    };
+    const checkAsync = async (name, fn) => {
+        try {
+            const value = await fn();
+            lines.push(`${name}: ok ${value}`);
+        } catch (e) {
+            lines.push(`${name}: ${describe(e)}`);
+        }
+    };
+    const { subtle } = crypto;
+    check('getRandomValues()', () => crypto.getRandomValues());
+    check('getRandomValues(ArrayBuffer)', () => crypto.getRandomValues(new ArrayBuffer(1)));
+    check('getRandomValues(Float32Array)', () => crypto.getRandomValues(new Float32Array(1)));
+    check('getRandomValues(65537 bytes)', () => crypto.getRandomValues(new Uint8Array(65537)));
+
+    const iv = new Uint8Array(16);
+    const cbcDecrypt = await subtle.importKey('raw', new Uint8Array(16), { name: 'AES-CBC' }, false, ['decrypt']);
+    const cbcEncrypt = await subtle.importKey('raw', new Uint8Array(16), { name: 'AES-CBC' }, false, ['encrypt']);
+    await checkAsync('encrypt without usage', () => subtle.encrypt({ name: 'AES-CBC', iv }, cbcDecrypt, new Uint8Array(1)));
+    await checkAsync('decrypt without usage', () => subtle.decrypt({ name: 'AES-CBC', iv }, cbcEncrypt, new Uint8Array(16)));
+    await checkAsync('decrypt wrong algorithm without usage', () => subtle.decrypt({ name: 'AES-CTR', counter: iv, length: 64 }, cbcEncrypt, new Uint8Array(16)));
+    const hmacSign = await subtle.importKey('raw', new Uint8Array(32), { name: 'HMAC', hash: 'SHA-256' }, true, ['sign']);
+    await checkAsync('verify without usage', () => subtle.verify('HMAC', hmacSign, new Uint8Array(32), new Uint8Array(1)));
+    const kw = await subtle.importKey('raw', new Uint8Array(16), { name: 'AES-KW' }, false, ['unwrapKey']);
+    await checkAsync('wrapKey without usage', () => subtle.wrapKey('raw', hmacSign, kw, 'AES-KW'));
+
+    const hmac = (length, usages) => subtle.importKey('raw', new Uint8Array(32), { name: 'HMAC', hash: 'SHA-256', length }, false, usages);
+    await checkAsync('HMAC usage deriveBits', () => hmac(undefined, ['deriveBits']));
+    await checkAsync('HMAC length 0', () => hmac(0, ['sign']));
+    await checkAsync('HMAC length 384', () => hmac(384, ['sign']));
+    const jwk = await subtle.exportKey('jwk', hmacSign);
+    lines.push(`HMAC SHA-256 jwk alg: ${jwk.alg}`);
+    await checkAsync('HMAC jwk alg HS384', () => subtle.importKey('jwk', { ...jwk, alg: 'HS384' }, { name: 'HMAC', hash: 'SHA-256' }, true, ['sign']));
+    await checkAsync('HMAC jwk without alg', async () => (await subtle.importKey('jwk', { ...jwk, alg: undefined }, { name: 'HMAC', hash: 'SHA-256' }, true, ['sign'])).algorithm.length);
+    const sha3 = await subtle.importKey('raw', new Uint8Array(32), { name: 'HMAC', hash: 'SHA3-256' }, true, ['sign']);
+    lines.push(`HMAC SHA3-256 jwk alg: ${(await subtle.exportKey('jwk', sha3)).alg}`);
+    return lines;
+}

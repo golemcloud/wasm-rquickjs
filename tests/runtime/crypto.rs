@@ -1094,3 +1094,44 @@ async fn crypto_error_contracts(
     assert_eq!(lines, expected);
     Ok(())
 }
+
+/// WebCrypto getRandomValues, key usage/algorithm and HMAC import/JWK error contracts, as Node.js 26.13.1 reports them.
+#[test]
+async fn webcrypto_error_contracts(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "webcrypto-error-contracts", &[])
+            .await;
+
+    let lines = match result? {
+        Some(Val::List(vals)) => vals
+            .into_iter()
+            .map(|v| match v {
+                Val::String(s) => Ok(s),
+                other => Err(anyhow!("Expected string, got {other:?}")),
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?,
+        _ => return Err(anyhow!("Expected list result")),
+    };
+    let expected = [
+        "getRandomValues(): TypeError ERR_MISSING_ARGS Failed to execute 'getRandomValues' on 'Crypto': 1 argument required, but only 0 present.",
+        "getRandomValues(ArrayBuffer): TypeError ERR_INVALID_ARG_TYPE Failed to execute 'getRandomValues' on 'Crypto': 1st argument is not an ArrayBufferView.",
+        "getRandomValues(Float32Array): TypeMismatchError 17 The data argument must be an integer-type TypedArray",
+        "getRandomValues(65537 bytes): QuotaExceededError 22 The requested length exceeds 65,536 bytes",
+        "encrypt without usage: InvalidAccessError 15 Unable to use this key to encrypt",
+        "decrypt without usage: InvalidAccessError 15 Unable to use this key to decrypt",
+        "decrypt wrong algorithm without usage: InvalidAccessError 15 Key algorithm mismatch",
+        "verify without usage: InvalidAccessError 15 Unable to use this key to verify",
+        "wrapKey without usage: InvalidAccessError 15 Unable to use this key to wrapKey",
+        "HMAC usage deriveBits: SyntaxError 12 Unsupported key usage for HMAC key",
+        "HMAC length 0: DataError 0 HmacImportParams.length cannot be 0",
+        "HMAC length 384: DataError 0 Invalid key length",
+        "HMAC SHA-256 jwk alg: HS256",
+        "HMAC jwk alg HS384: DataError 0 JWK \"alg\" does not match the requested algorithm",
+        "HMAC jwk without alg: ok 256",
+        "HMAC SHA3-256 jwk alg: undefined",
+    ];
+    assert_eq!(lines, expected);
+    Ok(())
+}

@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2880/4452 (64.7%)
+**Primary compatibility (CI-enforced):** 2894/4452 (65.0%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2880 | 64.7% | 30.0% | 26.7% |
-| 🧩 known gap | 1572 | 35.3% | 16.4% | 14.6% |
+| ✅ passing (runnable) | 2894 | 65.0% | 30.1% | 26.8% |
+| 🧩 known gap | 1558 | 35.0% | 16.2% | 14.4% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3845 | — | 40.0% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1175 | — | — | 10.9% |
 | **Total** | **10787** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2880/9612 (30.0%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2894/9612 (30.1%)**.
 
 ## Inventory by Module
 
@@ -84,7 +84,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | util | 235 | 27 | 70 | 0 | 0 | 20 | 118 | 27.8% | 23.1% |
 | v8 | 57 | 14 | 1 | 0 | 30 | 12 | 0 | 93.3% | 24.6% |
 | vm | 173 | 68 | 44 | 3 | 13 | 45 | 0 | 60.7% | 39.3% |
-| webcrypto | 175 | 29 | 36 | 1 | 0 | 62 | 47 | 44.6% | 22.7% |
+| webcrypto | 175 | 43 | 22 | 1 | 0 | 62 | 47 | 66.2% | 33.6% |
 | webstreams | 89 | 65 | 2 | 0 | 0 | 21 | 1 | 97.0% | 73.9% |
 | whatwg | 322 | 41 | 37 | 0 | 0 | 59 | 185 | 52.6% | 29.9% |
 | worker_threads | 202 | 25 | 29 | 127 | 0 | 13 | 8 | 46.3% | 12.9% |
@@ -964,14 +964,14 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-webcrypto-deduplicate-usages.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-webcrypto-derivebits.js` | 5 | 0 | 2 | 0 | 0 | 1 | 2 |
 | `test-webcrypto-derivekey.js` | 6 | 3 | 3 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-encrypt-decrypt-aes.js` | 4 | 1 | 3 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-encrypt-decrypt-aes.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-encrypt-decrypt-chacha20-poly1305.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
-| `test-webcrypto-encrypt-decrypt.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-encrypt-decrypt.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-export-import-ec.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-export-import.js` | 7 | 0 | 5 | 0 | 0 | 2 | 0 |
+| `test-webcrypto-export-import.js` | 7 | 5 | 0 | 0 | 0 | 2 | 0 |
 | `test-webcrypto-keygen.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
 | `test-webcrypto-prototype-pollution.mjs` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
-| `test-webcrypto-random.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-random.js` | 4 | 3 | 1 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-sign-verify.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-util.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
 | `test-webcrypto-webidl.js` | 31 | 0 | 0 | 0 | 0 | 0 | 31 |
@@ -1094,20 +1094,20 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1572)
+### known gap (1558)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
 | Node 26.13.1 baseline gap: Expected values to be strictly equal: | 65 | `es-module/test-require-module-twice.js`, `es-module/test-require-module.js#block_02_test_esm_that_import_cjs`, `parallel/test-console.js`, ... (+62) |
 | requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 30 | `es-module/test-typescript.mjs#test_00_expect_process_features_typescript_to_be_false_when_no_exper`, `es-module/test-typescript.mjs#test_01_execute_a_typescript_file`, `es-module/test-typescript.mjs#test_02_execute_a_typescript_file_with_imports`, ... (+27) |
-| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly | 29 | `es-module/test-esm-import-attributes-errors.js`, `es-module/test-require-module-cached-tla.js`, `es-module/test-require-module-dynamic-import-1.js`, ... (+26) |
 | requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 29 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs#test_00_module_syntax_detection`, `es-module/test-esm-detect-ambiguous.mjs#test_01_wrapping_a_require_of_an_es_module_while_using_abort_on_unca`, ... (+26) |
 | Node 26.13.1 baseline gap: Failed to export key | 26 | `parallel/test-crypto-key-objects.js#block_00_block_00`, `parallel/test-crypto-key-objects.js#block_01_block_01`, `parallel/test-crypto-key-objects.js#block_02_block_02`, ... (+23) |
 | Node 26.13.1 baseline gap: not a function | 26 | `parallel/test-sqlite-session.js#test_00_creating_and_applying_a_changeset`, `parallel/test-sqlite-session.js#test_01_database_createsession_closed_database_results_in_exception`, `parallel/test-sqlite-session.js#test_02_session_changeset_closed_database_results_in_exception`, ... (+23) |
 | requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 24 | `es-module/test-typescript-eval.mjs#test_00_eval_typescript_esm_syntax`, `es-module/test-typescript-eval.mjs#test_01_eval_typescript_esm_syntax_with_input_type_module`, `es-module/test-typescript-eval.mjs#test_02_eval_typescript_commonjs_syntax`, ... (+21) |
 | requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 24 | `es-module/test-typescript-commonjs.mjs#test_00_require_a_ts_file_with_explicit_extension_succeeds`, `es-module/test-typescript-commonjs.mjs#test_01_eval_require_a_ts_file_with_implicit_extension_fails`, `es-module/test-typescript-commonjs.mjs#test_02_eval_require_a_cts_file_with_implicit_extension_fails`, ... (+21) |
 | Node 26.13.1 baseline gap: Expected values to be strictly deep-equal: | 23 | `es-module/test-esm-import-attributes-errors.mjs`, `es-module/test-esm-import-meta.mjs`, `es-module/test-require-module-error-catching.js`, ... (+20) |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly | 23 | `es-module/test-esm-import-attributes-errors.js`, `es-module/test-require-module-cached-tla.js`, `es-module/test-require-module-dynamic-import-1.js`, ... (+20) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | Node 26.13.1 baseline gap: mustCall verification failed: | 20 | `parallel/test-domain-with-abort-on-uncaught-exception.js`, `parallel/test-fs-watch-recursive-watch-file.js`, `parallel/test-http-outgoing-writableFinished.js#block_01_finish_the_end_callback_receives_the_write_error_instead`, ... (+17) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 19 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+16) |
@@ -1143,7 +1143,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 6 | `es-module/test-esm-import-meta-resolve.mjs#block_00_block_00`, `es-module/test-esm-import-meta-resolve.mjs#block_01_block_01`, `es-module/test-esm-import-meta-resolve.mjs#block_02_block_02`, ... (+3) |
 | the test's meaningful body requires rooted symlink targets; common.canCreateSymLink skips it under the supported relative-only WASI boundary | 6 | `parallel/test-fs-options-immutable.js#block_00_block_00`, `parallel/test-fs-options-immutable.js#block_01_block_01`, `parallel/test-fs-options-immutable.js#block_02_block_02`, ... (+3) |
 | Node 26.13.1 baseline gap: 5 test(s) failed | 5 | `parallel/test-sqlite-database.js#test_03_database_prototype_prepare`, `parallel/test-sqlite-database.js#test_04_database_prototype_exec`, `parallel/test-sqlite-database.js#test_06_database_prototype_location`, ... (+2) |
-| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da | 5 | `parallel/test-webcrypto-export-import.js#block_00_block_00`, `parallel/test-webcrypto-export-import.js#block_02_import_export_hmac_secret_key`, `parallel/test-webcrypto-export-import.js#block_03_import_export_aes_secret_key`, ... (+2) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 5 | `parallel/test-webstorage.js#test_00_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_02_sessionstorage_is_not_persisted`, `parallel/test-webstorage.js#test_05_localstorage_is_not_persisted_if_it_is_unused`, ... (+2) |
 | inherited: buffer.transcode and ICU transcoding are not implemented | 5 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+2) |
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
@@ -1156,7 +1155,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: 3 test(s) failed | 4 | `parallel/test-sqlite-database.js#test_01_database_prototype_open`, `parallel/test-sqlite-database.js#test_05_database_prototype_istransaction`, `parallel/test-sqlite-named-parameters.js#test_01_statement_prototype_setallowunknownnamedparameters`, ... (+1) |
 | Node 26.13.1 baseline gap: 7 test(s) failed | 4 | `parallel/test-sqlite-data-types.js`, `parallel/test-sqlite-statement.js#test_01_statement_prototype_get`, `parallel/test-sqlite-statement.js#test_04_statement_prototype_run`, ... (+1) |
 | Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09) | 4 | `es-module/test-require-module-tla-nested.js`, `es-module/test-require-module-tla-rejected.js`, `es-module/test-require-module-tla-resolved.js`, ... (+1) |
-| Node 26.13.1 baseline gap: The error is expected to be an instance of "TypeError". Received "DOMException" | 4 | `parallel/test-webcrypto-random.js#block_00_block_00`, `parallel/test-webcrypto-random.js#block_01_block_01`, `parallel/test-webcrypto-random.js#block_02_block_02`, ... (+1) |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception. | 4 | `parallel/test-fs-opendir.js#block_01_check_that_passing_a_positive_integer_as_buffersize_works`, `parallel/test-fs-opendir.js#block_02_check_read_throw_exceptions_on_invalid_callback`, `parallel/test-fs-opendir.js#block_03_check_if_directory_already_closed_the_callback_should_pass_a`, ... (+1) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |
@@ -1366,6 +1364,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: Missing expected exception.; carries 22.14.0 subtest block_02_guarantee_dot_left_numbers_are_ignored | 1 | `parallel/test-util-getcallsites.js#block_02_framecount_must_be_an_integer` |
 | Node 26.13.1 baseline gap: Missing expected exception.; the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests | 1 | `parallel/test-url-parse-invalid-input.js` |
 | Node 26.13.1 baseline gap: Only --eval/-e, --input-type, and script files are supported in WASM child emulation; carries 22.14.0 subtest test_00_disabled_without_experimental_webstorage | 1 | `parallel/test-webstorage.js#test_08_disabled_with_no_webstorage` |
+| Node 26.13.1 baseline gap: QuotaExceededError is not defined (the Node 26 QuotaExceededError global is not implemented) | 1 | `parallel/test-webcrypto-random.js#block_02_block_02` |
 | Node 26.13.1 baseline gap: The argument 'format' must be a valid string format. Received "grey" | 1 | `parallel/test-util-styletext.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected "actual" to be strict | 1 | `parallel/test-stream-readable-to-web-termination.js#block_01_block_01` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception (Ty | 1 | `parallel/test-vm-module-errors.js` |

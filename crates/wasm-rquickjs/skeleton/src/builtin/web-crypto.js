@@ -656,12 +656,23 @@ function isIntegerTypedArray(value) {
         value instanceof BigUint64Array;
 }
 
+const kGetRandomValuesPrefix = "Failed to execute 'getRandomValues' on 'Crypto'";
+
+function codedTypeError(message, code) {
+    const err = new TypeError(message);
+    err.code = code;
+    return err;
+}
+
 export function getRandomValues(typedArray) {
+    if (!ArrayBuffer.isView(typedArray)) {
+        throw codedTypeError(`${kGetRandomValuesPrefix}: 1st argument is not an ArrayBufferView.`, 'ERR_INVALID_ARG_TYPE');
+    }
     if (!isIntegerTypedArray(typedArray)) {
-        throw new DOMException('The provided value is not of type \'(Int8Array or Int16Array or Int32Array or Uint8Array or Uint16Array or Uint32Array or Uint8ClampedArray or Float32Array or Float64Array or DataView or BigInt64Array or BigUint64Array)\'', 'TypeMismatchError');
+        throw new DOMException('The data argument must be an integer-type TypedArray', 'TypeMismatchError');
     }
     if (typedArray.byteLength > 65536) {
-        throw new DOMException('The ArrayBufferView\'s byte length (' + typedArray.byteLength + ') exceeds the number of bytes of entropy available via this API (65536)', 'QuotaExceededError');
+        throw new DOMException('The requested length exceeds 65,536 bytes', 'QuotaExceededError');
     }
     // Use a plain Uint8Array view to randomize the underlying buffer,
     // which works for all integer typed array types including Buffer subclasses
@@ -3148,7 +3159,15 @@ class KeyObject {
                 cryptoAlgorithm = { name: 'HKDF' };
             } else if (normalizedAlgorithm.upperName === 'HMAC') {
                 const requestedLength = getRequestedHmacLength(algorithm, keyLengthBits);
-                if (requestedLength === 0 || keyLengthBits === 0) {
+                if (requestedLength === 0 && typeof algorithm === 'object' && algorithm.length !== undefined) {
+                    throw createDataError('HmacImportParams.length cannot be 0');
+                }
+                ensureAllowedCryptoKeyUsages(
+                    usages,
+                    new Set(['sign', 'verify']),
+                    'Unsupported key usage for HMAC key',
+                );
+                if (keyLengthBits === 0) {
                     throw createDataError('Zero-length key is not supported');
                 }
                 if (requestedLength !== keyLengthBits) {
@@ -3161,11 +3180,6 @@ class KeyObject {
                 if (usages.length === 0) {
                     throw createSyntaxError('Usages cannot be empty when importing a secret key.');
                 }
-                ensureAllowedCryptoKeyUsages(
-                    usages,
-                    new Set(['sign', 'verify']),
-                    'Unsupported key usage for an HMAC key',
-                );
                 cryptoAlgorithm = {
                     name: 'HMAC',
                     hash: { name: normalizeToCryptoKeyHash(algorithm) },
@@ -3285,15 +3299,11 @@ Object.defineProperty(KeyObject.prototype, Symbol.toStringTag, {
 export { KeyObject };
 
 function createDataError(message) {
-    const err = new Error(message);
-    err.name = 'DataError';
-    return err;
+    return new DOMException(message, 'DataError');
 }
 
 function createSyntaxError(message) {
-    const err = new Error(message);
-    err.name = 'SyntaxError';
-    return err;
+    return new DOMException(message, 'SyntaxError');
 }
 
 function normalizeToCryptoKeyAlgorithm(algorithm) {
@@ -7818,23 +7828,30 @@ function concatBytesParts(...parts) {
     return result;
 }
 
-function throwInvalidAccessError() {
-    throw new DOMException('The requested operation is not valid for the provided key', 'InvalidAccessError');
-}
-
 function throwOperationError() {
     throw new DOMException('The operation failed for an operation-specific reason', 'OperationError');
 }
 
+const HMAC_JWK_ALGS = { 'SHA-1': 'HS1', 'SHA-256': 'HS256', 'SHA-384': 'HS384', 'SHA-512': 'HS512' };
+
+// JWK "alg" for an HMAC hash; undefined for hashes without a registered value, such as SHA-3.
+function getHmacJwkAlg(algorithm) {
+    return HMAC_JWK_ALGS[normalizeToCryptoKeyHash(algorithm)];
+}
+
+function throwUnusableKeyError(usage) {
+    throw new DOMException(`Unable to use this key to ${usage}`, 'InvalidAccessError');
+}
+
 function validateKeyUsage(key, usage) {
     if (!key || !key._usages || !key._usages.includes(usage)) {
-        throwInvalidAccessError();
+        throwUnusableKeyError(usage);
     }
 }
 
 function validateKeyAlgorithm(key, algorithmName) {
     if (!key || !key._algorithm || key._algorithm.name.toUpperCase() !== algorithmName.toUpperCase()) {
-        throwInvalidAccessError();
+        throw new DOMException('Key algorithm mismatch', 'InvalidAccessError');
     }
 }
 
@@ -7996,7 +8013,7 @@ class SubtleCrypto {
             }
             for (const u of keyUsages) {
                 if (u !== 'sign' && u !== 'verify') {
-                    throw new DOMException('Unsupported key usage for an HMAC key', 'SyntaxError');
+                    throw new DOMException('Unsupported key usage for HMAC key', 'SyntaxError');
                 }
             }
             if (keyUsages.length === 0) {
@@ -8261,6 +8278,12 @@ class SubtleCrypto {
                 throw createDataError('Invalid keyData');
             }
             if (keyData.kty === 'oct') {
+                if (name === 'HMAC' && keyData.alg !== undefined) {
+                    const expected = getHmacJwkAlg(algorithm);
+                    if (expected !== undefined && keyData.alg !== expected) {
+                        throw createDataError('JWK "alg" does not match the requested algorithm');
+                    }
+                }
                 const raw = base64UrlToBytes(keyData.k);
                 const secretKey = createSecretKey(raw);
                 return secretKey.toCryptoKey(algorithm, extractable, keyUsages);
@@ -8312,6 +8335,10 @@ class SubtleCrypto {
             }
             jwk.key_ops = [...key._usages];
             jwk.ext = key._extractable;
+            if (key._algorithm.name === 'HMAC') {
+                const alg = getHmacJwkAlg(key._algorithm);
+                if (alg !== undefined) jwk.alg = alg;
+            }
             return jwk;
         }
         if (format === 'spki') {
@@ -8337,14 +8364,14 @@ class SubtleCrypto {
         }
 
         const name = algoName.toUpperCase();
+        validateKeyAlgorithm(key, algoName);
         if (name === 'AES-KW') {
             if (!key._usages.includes('wrapKey') && !key._usages.includes('encrypt')) {
-                throwInvalidAccessError();
+                throwUnusableKeyError('encrypt');
             }
         } else {
             validateKeyUsage(key, 'encrypt');
         }
-        validateKeyAlgorithm(key, algoName);
         const dataBytes = toBytes(data);
 
         if (name === 'AES-KW') {
@@ -8417,14 +8444,14 @@ class SubtleCrypto {
         }
 
         const name = algoName.toUpperCase();
+        validateKeyAlgorithm(key, algoName);
         if (name === 'AES-KW') {
             if (!key._usages.includes('unwrapKey') && !key._usages.includes('decrypt')) {
-                throwInvalidAccessError();
+                throwUnusableKeyError('decrypt');
             }
         } else {
             validateKeyUsage(key, 'decrypt');
         }
-        validateKeyAlgorithm(key, algoName);
         const dataBytes = toBytes(data);
 
         try {
@@ -8651,6 +8678,9 @@ class Crypto {
 
     getRandomValues(array) {
         assertCrypto(this);
+        if (arguments.length < 1) {
+            throw codedTypeError(`${kGetRandomValuesPrefix}: 1 argument required, but only 0 present.`, 'ERR_MISSING_ARGS');
+        }
         return getRandomValues(array);
     }
 
