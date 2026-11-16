@@ -49,11 +49,14 @@ because each subtest runs by the index in its configured name.
 
 ## Migrating the Config After Re-vendoring
 
-After vendoring another version, set `nodeVersion` and run:
+Keep a copy of the previously vendored suite, vendor the new version, set `nodeVersion` and run:
 
 ```bash
-cargo test --test migrate_config_split -- --exact migrate_config_split
+NODE_COMPAT_MIGRATION_PREVIOUS_SUITE=/path/to/previous/suite \
+  cargo test --test migrate_config_split -- --exact migrate_config_split
 ```
+
+The previous suite is required whenever the subtests of a split file changed.
 
 The migration rewrites only entries whose subtests changed and keeps every
 metadata key (`category`, `reason`, `flaky`, `timeout`, split options) of the file
@@ -61,9 +64,14 @@ and of each surviving subtest:
 
 - An unsplit file that now has several subtests is split; each subtest inherits
   the file's metadata. An explicit `"split": false` keeps it whole.
-- A subtest whose index shifted keeps its metadata when its description is
-  unchanged and unique. A new subtest starts `unevaluated` unless the file is
-  already excluded from the runner.
+- A subtest keeps the metadata of the previous subtest with identical source,
+  even when its index, and with it a generated name such as `block_05_block_05`,
+  changed. Otherwise it keeps the metadata of the previous subtest with the same
+  name, or of the one with the same unique description. A new subtest starts
+  `unevaluated` unless the file is already excluded from the runner.
+- A changed subtest with a generated name keeps the metadata of the previous
+  subtest at its position. The report lists these under `matchedByPosition`; check
+  them where the file's subtests have different classifications.
 - A split file that no longer splits becomes one entry only when all its
   subtests carried identical metadata; otherwise it is left unchanged for a
   decision.
