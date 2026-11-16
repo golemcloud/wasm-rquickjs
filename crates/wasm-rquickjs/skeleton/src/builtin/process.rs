@@ -94,6 +94,18 @@ pub mod native_module {
     }
 
     #[rquickjs::function]
+    pub fn sqlite_version() -> Option<&'static str> {
+        #[cfg(feature = "sqlite")]
+        {
+            Some(rusqlite::version())
+        }
+        #[cfg(not(feature = "sqlite"))]
+        {
+            None
+        }
+    }
+
+    #[rquickjs::function]
     pub fn typescript_runtime_mode() -> Option<&'static str> {
         if cfg!(feature = "typescript-transform-runtime") {
             Some("transform")
