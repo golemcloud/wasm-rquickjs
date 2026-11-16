@@ -552,13 +552,25 @@ fn migrate(
                         consumed.insert(old.clone());
                     }
                 }
-                if same_names && origin.iter().all(|(name, (old, _))| name == old) {
-                    continue;
-                }
                 let current_text: BTreeMap<&str, &str> = discovered_subtests
                     .iter()
                     .map(|(name, text)| (name.as_str(), text.as_str()))
                     .collect();
+                // A generated name kept by position whose source changed is audited even when
+                // the entry itself needs no rewrite.
+                for name in &names {
+                    if origin.get(name).is_some_and(|(old, _)| old == name)
+                        && subtest_description(name).is_none()
+                        && previous_text.get(name.as_str()) != current_text.get(name.as_str())
+                    {
+                        report
+                            .matched_by_position
+                            .push(json!({ "file": path, "subtest": name }));
+                    }
+                }
+                if same_names && origin.iter().all(|(name, (old, _))| name == old) {
+                    continue;
+                }
                 let mut subtests = Vec::new();
                 for name in &names {
                     let value = match origin.get(name) {
@@ -568,17 +580,7 @@ fn migrate(
                                 .push(json!({ "file": path, "from": old, "to": name, "by": by }));
                             existing[old.as_str()].clone()
                         }
-                        Some((old, _)) => {
-                            if subtest_description(name).is_none()
-                                && previous_text.get(name.as_str())
-                                    != current_text.get(name.as_str())
-                            {
-                                report
-                                    .matched_by_position
-                                    .push(json!({ "file": path, "subtest": name }));
-                            }
-                            existing[old.as_str()].clone()
-                        }
+                        Some((old, _)) => existing[old.as_str()].clone(),
                         None => {
                             report
                                 .new_subtests
@@ -894,6 +896,33 @@ mod contract {
         assert_eq!(
             report.removed_subtests[0]["entry"]["category"],
             "node-internals"
+        );
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn changed_blocks_with_unchanged_names_are_reported() {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ passes(1); }\n{ gap(); }\n")
+            .source("parallel/test-a.js", "{ passes(2); }\n{ gap(); }\n");
+        let tests = r#"    "parallel/test-a.js": {
+      "split": true,
+      "subtests": {
+        "block_00_block_00": { "category": "runnable" },
+        "block_01_block_01": { "category": "known-gap", "reason": "gap" }
+      }
+    }"#;
+        let migration = fixture.migrate(tests);
+        assert!(migration.content.contains(tests));
+        assert_eq!(
+            migration.report,
+            MigrationReport {
+                matched_by_position: vec![
+                    json!({ "file": "parallel/test-a.js", "subtest": "block_00_block_00" })
+                ],
+                ..MigrationReport::default()
+            }
         );
     }
 
