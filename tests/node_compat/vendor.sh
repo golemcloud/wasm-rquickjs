@@ -10,7 +10,7 @@
 
 set -euo pipefail
 
-NODE_VERSION="${1:-22.14.0}"
+NODE_VERSION="${1:-26.13.1}"
 TAG="v${NODE_VERSION}"
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SUITE_DIR="${SCRIPT_DIR}/suite"
