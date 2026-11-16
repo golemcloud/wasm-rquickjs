@@ -13,6 +13,7 @@ tests/node_compat/
 │   ├── es-module/          # ~190 test files from test/es-module/
 │   ├── common/             # Node.js test/common/ infrastructure
 │   ├── fixtures/           # Node.js test/fixtures/ data files
+│   ├── sqlite/             # Node.js test/sqlite/ helpers (next-db.js in newer releases)
 │   └── NODE_VERSION        # Version string (e.g., "22.14.0")
 ├── common-shim/            # Our WASM-compatible shim for test/common
 │   └── index.js
@@ -34,7 +35,7 @@ To fetch (or update) the vendored test suite:
 ```
 
 This sparse-checkouts `test/parallel/`, `test/sequential/`, `test/es-module/`,
-`test/common/`, and `test/fixtures/` from the Node.js repository at the
+`test/common/`, `test/fixtures/`, and `test/sqlite/` from the Node.js repository at the
 specified tag. The `suite/` directory is gitignored — each
 developer runs the vendor script to populate it.
 
@@ -117,6 +118,11 @@ WASM-appropriate stubs. Key differences:
 - `mustCall()` / `mustCallAtLeast()` are pass-through (no `process.on('exit')`)
 - `canCreateSymLink()` returns false
 - Network/process-related helpers are stubbed or throw
+- `common.skip()` counts as a pass, so capability flags added by newer
+  `test/common` releases (`hasSQLite`, `hasInspector`, `hasFFI`, `hasFIPS()` and
+  others) report what the component actually provides; `hasSQLite` probes
+  `node:sqlite` instead of reading `process.versions.sqlite`. A guard must not
+  skip a test whose module is available.
 
 ## How Tests Run
 

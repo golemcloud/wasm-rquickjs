@@ -317,6 +317,8 @@ All of this is required for either target unless marked "26 only".
 4. **Vendoring.** Vendor `test/sqlite/`, which `test-sqlite*.js` now load as `../sqlite/next-db.js`,
    and copy it in `setup_node_compat_test_files`. `test/sea/` and `test/trace_events/` (26 only)
    are where moved tests now live; vendor them only if those cases stay classified.
+   `test/sqlite/` vendoring and copying are in place; `test/sea/` and `test/trace_events/` are
+   still open.
 5. **Shim helpers.**
    - Both targets need `hasFIPS` and `isBoringSSL` in `common-shim/crypto.js`, plus
      `hasInspector`, `hasSQLite`, `skipIfSQLiteMissing`, `expectRequireStack`,
@@ -324,6 +326,8 @@ All of this is required for either target unless marked "26 only".
    - 26 only: `hasFFI`, `skipIfFFIMissing`, `hasPerfetto`, `skipIfPerfettoEnabled`/`Disabled`,
      `hasDtls`, `hasQuic`, `hasLocalStorage`, `hasTemporal`, `hasFullICU` and `hasV8Sandbox`.
    - Export them from `index.mjs` too.
+   - These helpers are in place. Capability flags report what the component provides, because
+     `common.skip()` counts as a pass; `hasSQLite` probes `node:sqlite`.
 6. **Mapping review.** Review the renamed-unmapped (63), now-ignored (38) and removed (85) rows
    in the mapping file. Where a subtest of an `--expose-internals` file such as
    `test-stream-finished.js` uses only public API, give it an explicit `runnable` category rather

@@ -89,6 +89,12 @@ module.exports = {
   sec1Exp: sec1Exp,
   sec1EncExp: sec1EncExp,
   hasOpenSSL: hasOpenSSL,
+  // Upstream: crypto.getFips() === 1 && hasOpenSSL(major, minor, patch).
+  hasFIPS: function(major, minor, patch) {
+    return typeof crypto.getFips === 'function' && crypto.getFips() === 1 &&
+      hasOpenSSL(major, minor, patch);
+  },
+  isBoringSSL: Boolean(process.features && process.features.openssl_is_boringssl),
   get hasOpenSSL3() {
     return false;
   },
