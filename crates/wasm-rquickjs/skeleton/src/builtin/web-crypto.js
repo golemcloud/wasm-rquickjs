@@ -166,13 +166,31 @@ function isAnyArrayBuffer(data) {
     return data instanceof ArrayBuffer || data instanceof SharedArrayBuffer;
 }
 
+const intrinsicGetter = (proto, name) => Function.prototype.call.bind(Object.getOwnPropertyDescriptor(proto, name).get);
+const TypedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const typedArrayBuffer = intrinsicGetter(TypedArrayPrototype, 'buffer');
+const typedArrayByteOffset = intrinsicGetter(TypedArrayPrototype, 'byteOffset');
+const typedArrayByteLength = intrinsicGetter(TypedArrayPrototype, 'byteLength');
+const dataViewBuffer = intrinsicGetter(DataView.prototype, 'buffer');
+const dataViewByteOffset = intrinsicGetter(DataView.prototype, 'byteOffset');
+const dataViewByteLength = intrinsicGetter(DataView.prototype, 'byteLength');
+
+// Read the view's real backing range, as Node does, so user-defined
+// `buffer`/`byteOffset`/`byteLength` properties cannot change it.
+function viewBytes(view) {
+    if (view instanceof DataView) {
+        return new Uint8Array(dataViewBuffer(view), dataViewByteOffset(view), dataViewByteLength(view));
+    }
+    return new Uint8Array(typedArrayBuffer(view), typedArrayByteOffset(view), typedArrayByteLength(view));
+}
+
 function toHkdfByteSource(data, name) {
     if (typeof data === 'string') {
         return toBytes(data);
     }
 
     if (ArrayBuffer.isView(data)) {
-        return new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+        return viewBytes(data);
     }
 
     if (isAnyArrayBuffer(data)) {
@@ -461,7 +479,7 @@ function trackCipherOutputEncoding(currentEncoding, outputEncoding) {
         throw new ERR_UNKNOWN_ENCODING(outputEncoding);
     }
     if (currentEncoding !== null && currentEncoding !== normalizedEncoding) {
-        throw new Error('Cannot change encoding');
+        throw new ERR_INVALID_ARG_VALUE('outputEncoding', outputEncoding, `cannot be changed from '${currentEncoding}'`);
     }
     return normalizedEncoding;
 }
@@ -1979,7 +1997,9 @@ function validateDecipherAuthTagLength(decipher, actualLength) {
             if (actualLength !== decipher._authTagLength) {
                 throwInvalidAuthTagLength(actualLength);
             }
-        } else if (!isValidGcmAuthTagLength(actualLength)) {
+        } else if (actualLength !== 16) {
+            // Node 26 removed implicit short GCM tags (DEP0182): without
+            // authTagLength, only a full 16-byte tag is accepted.
             throwInvalidAuthTagLength(actualLength);
         }
         return;
@@ -6338,6 +6358,8 @@ function createInvalidKeygenPropertyError(propertyName, value) {
     return err;
 }
 
+const KEY_PAIR_TYPES = new Set(['rsa', 'rsa-pss', 'dsa', 'ec', 'ed25519', 'ed448', 'x25519', 'x448', 'dh']);
+
 function createUnsupportedKeyTypeError(type_) {
     const err = new TypeError(`The argument 'type' must be a supported key type. Received ${formatInvalidArgValue(type_)}`);
     err.code = 'ERR_INVALID_ARG_VALUE';
@@ -6636,6 +6658,10 @@ export function generateKeyPair(type_, options, callback) {
     }
 
     options = normalizeGenerateKeyPairOptions(type_, options);
+    // Node validates the key type synchronously; only generation failures reach the callback.
+    if (!KEY_PAIR_TYPES.has(type_)) {
+        throw createUnsupportedKeyTypeError(type_);
+    }
     if (type_ === 'rsa' || type_ === 'rsa-pss') {
         if (type_ === 'rsa-pss') {
             validateRsaPssKeyPairOptions(options);

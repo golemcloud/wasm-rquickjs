@@ -1055,7 +1055,7 @@ async fn crypto_subtle_sign_verify_rsa_pss(
     }
 }
 
-/// Error contracts of AEAD decryption and key encoding options, as Node.js 26.13.1 reports them.
+/// Error contracts of AEAD decryption, key encoding options and crypto argument validation, as Node.js 26.13.1 reports them.
 #[test]
 async fn crypto_error_contracts(
     #[tagged_as("crypto")] compiled: &CompiledTest,
@@ -1090,6 +1090,12 @@ async fn crypto_error_contracts(
         "keygen passphrase without cipher: TypeError ERR_INVALID_ARG_VALUE The property 'options.privateKeyEncoding.cipher' is required when a passphrase is specified. Received undefined",
         "keygen public pkcs8: TypeError ERR_INVALID_ARG_VALUE The property 'options.publicKeyEncoding.type' is invalid. Received 'pkcs8'",
         "createPrivateKey der spki: TypeError ERR_INVALID_ARG_VALUE The property 'key.type' is invalid. Received 'spki'",
+        "gcm implicit 12-byte tag: TypeError ERR_CRYPTO_INVALID_AUTH_TAG Invalid authentication tag length: 12",
+        "gcm authTagLength 12-byte tag: ok set",
+        "hkdfSync info with fake byteLength: RangeError ERR_OUT_OF_RANGE The value of \"info\" is out of range. It must be must not contain more than 1024 bytes. Received 2048",
+        "cipher output encoding change: TypeError ERR_INVALID_ARG_VALUE The argument 'outputEncoding' cannot be changed from 'utf8'. Received 'hex'",
+        "generateKeyPair Ed25519: TypeError ERR_INVALID_ARG_VALUE The argument 'type' must be a supported key type. Received 'Ed25519'",
+        "generateKeyPair toString: TypeError ERR_INVALID_ARG_VALUE The argument 'type' must be a supported key type. Received 'toString'",
     ];
     assert_eq!(lines, expected);
     Ok(())

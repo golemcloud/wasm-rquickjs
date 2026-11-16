@@ -1676,8 +1676,8 @@
     "parallel/test-crypto-encoding-validation-error.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "block_00_block_00": {},
+        "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {}
       }
@@ -1692,7 +1692,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-crypto-gcm-implicit-short-tag.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+    "parallel/test-crypto-gcm-implicit-short-tag.js": {},
     "parallel/test-crypto-getcipherinfo.js": {},
     "parallel/test-crypto-hash-stream-pipe.js": {},
     "parallel/test-crypto-hash.js": {
@@ -1704,7 +1704,7 @@
         "block_03_block_03": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
     },
-    "parallel/test-crypto-hkdf.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+    "parallel/test-crypto-hkdf.js": {},
     "parallel/test-crypto-hmac.js": {
       "split": true,
       "subtests": {
@@ -1763,7 +1763,7 @@
     "parallel/test-crypto-keygen-async-rsa.js": {},
     "parallel/test-crypto-keygen-bit-length.js": {},
     "parallel/test-crypto-keygen-dh-classic.js": {},
-    "parallel/test-crypto-keygen-eddsa.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
+    "parallel/test-crypto-keygen-eddsa.js": {},
     "parallel/test-crypto-keygen-empty-passphrase-no-error.js": {},
     "parallel/test-crypto-keygen-empty-passphrase-no-prompt.js": { "category": "known-gap", "reason": "decoding empty-passphrase encrypted PEM traps in the WASM crypto backend" },
     "parallel/test-crypto-keygen-invalid-parameter-encoding-dsa.js": {},
@@ -1782,7 +1782,7 @@
       "split": true,
       "subtests": {
         "block_00_test_invalid_parameter_encoding": {},
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
+        "block_01_block_01": {},
         "block_02_block_02": {},
         "block_03_block_03": {},
         "block_04_test_rsa_parameters": {},

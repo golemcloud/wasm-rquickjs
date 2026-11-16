@@ -1,4 +1,4 @@
-import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify } from 'node:crypto';
+import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPair, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify } from 'node:crypto';
 
 export function newUuids() {
     const uuid1 = crypto.randomUUID()
@@ -319,6 +319,19 @@ export function cryptoErrorContracts() {
     check('keygen passphrase without cipher', () => generateKeyPairSync('ed25519', { privateKeyEncoding: { format: 'jwk', passphrase: 'x' } }));
     check('keygen public pkcs8', () => generateKeyPairSync('ed25519', { publicKeyEncoding: { format: 'pem', type: 'pkcs8' } }));
     check('createPrivateKey der spki', () => createPrivateKey({ key: Buffer.alloc(0), format: 'der', type: 'spki' }));
+    const shortTag = createDecipheriv('aes-256-gcm', Buffer.alloc(32), Buffer.alloc(12));
+    check('gcm implicit 12-byte tag', () => shortTag.setAuthTag(Buffer.alloc(12)));
+    check('gcm authTagLength 12-byte tag', () => createDecipheriv('aes-256-gcm', Buffer.alloc(32), Buffer.alloc(12), { authTagLength: 12 }).setAuthTag(Buffer.alloc(12)) && 'set');
+    const info = new Uint8Array(2048);
+    Object.defineProperty(info, 'byteLength', { get() { return 1; } });
+    check('hkdfSync info with fake byteLength', () => hkdfSync('sha256', 'a', '', info, 10));
+    check('cipher output encoding change', () => {
+        const cipher = createCipheriv('aes-256-cbc', Buffer.alloc(32), Buffer.alloc(16));
+        cipher.update('test', 'utf-8', 'utf-8');
+        return cipher.final('hex');
+    });
+    check('generateKeyPair Ed25519', () => generateKeyPair('Ed25519', () => {}));
+    check('generateKeyPair toString', () => generateKeyPair('toString', () => {}));
     return lines;
 }
 

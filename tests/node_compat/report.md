@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2894/4452 (65.0%)
+**Primary compatibility (CI-enforced):** 2900/4452 (65.1%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2894 | 65.0% | 30.1% | 26.8% |
-| 🧩 known gap | 1558 | 35.0% | 16.2% | 14.4% |
+| ✅ passing (runnable) | 2900 | 65.1% | 30.2% | 26.9% |
+| 🧩 known gap | 1552 | 34.9% | 16.1% | 14.4% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3845 | — | 40.0% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1175 | — | — | 10.9% |
 | **Total** | **10787** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2894/9612 (30.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2900/9612 (30.2%)**.
 
 ## Inventory by Module
 
@@ -39,7 +39,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | common | 16 | 1 | 8 | 0 | 0 | 7 | 0 | 11.1% | 6.2% |
 | compile | 29 | 0 | 0 | 0 | 15 | 14 | 0 | 0.0% | 0.0% |
 | console | 32 | 28 | 2 | 0 | 0 | 1 | 1 | 93.3% | 90.3% |
-| crypto | 398 | 153 | 60 | 7 | 0 | 171 | 7 | 71.8% | 39.1% |
+| crypto | 398 | 159 | 54 | 7 | 0 | 171 | 7 | 74.6% | 40.7% |
 | dgram | 141 | 22 | 74 | 7 | 0 | 24 | 14 | 22.9% | 17.3% |
 | diagnostics_channel | 102 | 23 | 7 | 1 | 2 | 69 | 0 | 76.7% | 22.5% |
 | dns | 54 | 2 | 29 | 0 | 0 | 9 | 14 | 6.5% | 5.0% |
@@ -208,7 +208,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-crypto-dh-stateless.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-crypto-dh.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-ecb.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-encoding-validation-error.js` | 4 | 2 | 2 | 0 | 0 | 0 | 0 |
+| `test-crypto-encoding-validation-error.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-gcm-explicit-short-tag.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-hash.js` | 4 | 3 | 0 | 0 | 0 | 1 | 0 |
 | `test-crypto-hmac.js` | 10 | 7 | 0 | 0 | 0 | 3 | 0 |
@@ -217,7 +217,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-crypto-key-objects.js` | 20 | 0 | 16 | 0 | 0 | 4 | 0 |
 | `test-crypto-key-store.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `test-crypto-keygen-raw.js` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
-| `test-crypto-keygen.js` | 10 | 9 | 1 | 0 | 0 | 0 | 0 |
+| `test-crypto-keygen.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-keyobject-hidden-slots.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
 | `test-crypto-negative-zero.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-crypto-pbkdf2.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -1094,7 +1094,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1558)
+### known gap (1552)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1106,16 +1106,16 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: not a function | 26 | `parallel/test-sqlite-session.js#test_00_creating_and_applying_a_changeset`, `parallel/test-sqlite-session.js#test_01_database_createsession_closed_database_results_in_exception`, `parallel/test-sqlite-session.js#test_02_session_changeset_closed_database_results_in_exception`, ... (+23) |
 | requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 24 | `es-module/test-typescript-eval.mjs#test_00_eval_typescript_esm_syntax`, `es-module/test-typescript-eval.mjs#test_01_eval_typescript_esm_syntax_with_input_type_module`, `es-module/test-typescript-eval.mjs#test_02_eval_typescript_commonjs_syntax`, ... (+21) |
 | requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 24 | `es-module/test-typescript-commonjs.mjs#test_00_require_a_ts_file_with_explicit_extension_succeeds`, `es-module/test-typescript-commonjs.mjs#test_01_eval_require_a_ts_file_with_implicit_extension_fails`, `es-module/test-typescript-commonjs.mjs#test_02_eval_require_a_cts_file_with_implicit_extension_fails`, ... (+21) |
-| Node 26.13.1 baseline gap: Expected values to be strictly deep-equal: | 23 | `es-module/test-esm-import-attributes-errors.mjs`, `es-module/test-esm-import-meta.mjs`, `es-module/test-require-module-error-catching.js`, ... (+20) |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly | 23 | `es-module/test-esm-import-attributes-errors.js`, `es-module/test-require-module-cached-tla.js`, `es-module/test-require-module-dynamic-import-1.js`, ... (+20) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
+| Node 26.13.1 baseline gap: Expected values to be strictly deep-equal: | 21 | `es-module/test-esm-import-attributes-errors.mjs`, `es-module/test-esm-import-meta.mjs`, `es-module/test-require-module-error-catching.js`, ... (+18) |
 | Node 26.13.1 baseline gap: mustCall verification failed: | 20 | `parallel/test-domain-with-abort-on-uncaught-exception.js`, `parallel/test-fs-watch-recursive-watch-file.js`, `parallel/test-http-outgoing-writableFinished.js#block_01_finish_the_end_callback_receives_the_write_error_instead`, ... (+17) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 19 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+16) |
-| Node 26.13.1 baseline gap: Missing expected exception. | 16 | `parallel/test-assert-deep.js#test_02_date`, `parallel/test-assert-deep.js#test_03_regexp`, `parallel/test-assert-deep.js#test_07_gh_14441_circular_structures_should_be_consistent`, ... (+13) |
-| Node 26.13.1 baseline gap: Missing expected exception (TypeError). | 14 | `parallel/test-buffer-pool-untransferable.js`, `parallel/test-crypto-dh-stateless.js#block_00_block_00`, `parallel/test-crypto-dh-stateless.js#block_01_block_01`, ... (+11) |
+| Node 26.13.1 baseline gap: Missing expected exception. | 14 | `parallel/test-assert-deep.js#test_02_date`, `parallel/test-assert-deep.js#test_03_regexp`, `parallel/test-assert-deep.js#test_07_gh_14441_circular_structures_should_be_consistent`, ... (+11) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
 | the shared fixture creates rooted symlink targets that cannot be resolved inside a WASI preopen | 13 | `sequential/test-fs-opendir-recursive.js#block_00_block_00`, `sequential/test-fs-opendir-recursive.js#block_01_block_01`, `sequential/test-fs-opendir-recursive.js#block_02_block_02`, ... (+10) |
+| Node 26.13.1 baseline gap: Missing expected exception (TypeError). | 12 | `parallel/test-buffer-pool-untransferable.js`, `parallel/test-crypto-dh-stateless.js#block_00_block_00`, `parallel/test-crypto-dh-stateless.js#block_01_block_01`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
 | inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 11 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+8) |
 | inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 11 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+8) |

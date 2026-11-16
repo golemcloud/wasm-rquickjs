@@ -39,7 +39,7 @@
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
-  "baselineGapCases": 313,
+  "baselineGapCases": 307,
   "nowNodeInternalsCases": 45
  },
  "missingSources": [
@@ -4111,34 +4111,6 @@
     "error": "Missing expected exception (TypeError)."
    },
    {
-    "file": "parallel/test-crypto-encoding-validation-error.js",
-    "subtest": "block_00_block_00",
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly deep-equal:"
-   },
-   {
-    "file": "parallel/test-crypto-encoding-validation-error.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly deep-equal:"
-   },
-   {
-    "file": "parallel/test-crypto-gcm-implicit-short-tag.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception."
-   },
-   {
-    "file": "parallel/test-crypto-hkdf.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception."
-   },
-   {
     "file": "parallel/test-crypto-key-objects.js",
     "subtest": "block_00_block_00",
     "baseline": true,
@@ -4248,20 +4220,6 @@
     "baseline": true,
     "previous": {},
     "error": "Failed to export key"
-   },
-   {
-    "file": "parallel/test-crypto-keygen-eddsa.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception (TypeError)."
-   },
-   {
-    "file": "parallel/test-crypto-keygen.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception (TypeError)."
    },
    {
     "file": "parallel/test-crypto-sign-verify.js",
@@ -6248,6 +6206,36 @@
     "file": "parallel/test-webcrypto-export-import.js",
     "subtest": "block_05_import_export_ec_key_pairs",
     "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-crypto-gcm-implicit-short-tag.js",
+    "subtest": null,
+    "fix": "Decipheriv#setAuthTag accepts only a 16-byte GCM tag when authTagLength is not set, as Node 26 does after removing implicit short tags (DEP0182)"
+   },
+   {
+    "file": "parallel/test-crypto-hkdf.js",
+    "subtest": null,
+    "fix": "hkdf and hkdfSync read the info view's intrinsic byte range, so a user-defined byteLength cannot bypass the 1024-byte limit"
+   },
+   {
+    "file": "parallel/test-crypto-encoding-validation-error.js",
+    "subtest": "block_00_block_00",
+    "fix": "Cipheriv/Decipheriv report an output-encoding change as ERR_INVALID_ARG_VALUE \"The argument 'outputEncoding' cannot be changed from '<encoding>'\""
+   },
+   {
+    "file": "parallel/test-crypto-encoding-validation-error.js",
+    "subtest": "block_01_block_01",
+    "fix": "Cipheriv/Decipheriv report an output-encoding change as ERR_INVALID_ARG_VALUE \"The argument 'outputEncoding' cannot be changed from '<encoding>'\""
+   },
+   {
+    "file": "parallel/test-crypto-keygen-eddsa.js",
+    "subtest": null,
+    "fix": "generateKeyPair rejects unsupported key types synchronously with ERR_INVALID_ARG_VALUE, as generateKeyPairSync and Node do"
+   },
+   {
+    "file": "parallel/test-crypto-keygen.js",
+    "subtest": "block_01_block_01",
+    "fix": "generateKeyPair rejects unsupported key types synchronously with ERR_INVALID_ARG_VALUE, as generateKeyPairSync and Node do"
    }
   ]
  },
