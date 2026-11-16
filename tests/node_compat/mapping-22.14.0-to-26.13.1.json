@@ -39,7 +39,7 @@
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
-  "baselineGapCases": 343,
+  "baselineGapCases": 327,
   "nowNodeInternalsCases": 45
  },
  "missingSources": [
@@ -4020,117 +4020,6 @@
     "error": "error:0408006C:rsa routines::digest too big for rsa key"
    },
    {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_00_non_authenticating_mode",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_01_throw",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_04_test_that_users_can_manually_restrict_the_gcm_tag_length_to_",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_05_authentication_tag_length_has_been_specified",
-    "baseline": true,
-    "previous": {
-     "category": "runnable",
-     "reason": "carries 22.14.0 subtest block_04_authentication_tag_length_has_been_specified"
-    },
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_06_authentication_tag_length_has_been_specified",
-    "baseline": true,
-    "previous": {
-     "category": "runnable",
-     "reason": "carries 22.14.0 subtest block_05_authentication_tag_has_been_specified"
-    },
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_07_test_that_setaad_throws_if_an_invalid_plaintext_length_has_b",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_08_test_that_setaad_and_update_throw_if_the_plaintext_is_too_lo",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_09_been_specified",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_10_test_that_final_throws_in_ccm_mode_when_no_authentication_ta",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_11_test_that_setauthtag_does_not_throw_in_gcm_mode_when_called_",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_12_test_that_an_iv_length_of_11_does_not_overflow_max_message_s",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_14_test_that_setauthtag_can_only_be_called_once",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_15_https_www_openssl_org_news_secadv_20190306_txt",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_16_block_16",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
     "file": "parallel/test-crypto-cipheriv-decipheriv.js",
     "subtest": "block_00_block_00",
     "baseline": true,
@@ -6263,15 +6152,6 @@
     "error": "Unhandled promise rejection: AssertionError: 'a\\rb' !== 'a\\nb'"
    },
    {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305",
-    "baseline": true,
-    "previous": {
-     "category": "unevaluated"
-    },
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input"
-   },
-   {
     "file": "parallel/test-sqlite.js",
     "subtest": "test_08_sql_apis_enabled_at_build_time",
     "baseline": true,
@@ -6314,6 +6194,88 @@
     "file": "parallel/test-process-release.js",
     "subtest": null,
     "fix": "process.release.lts reports 'Lithium', the LTS codename of 26.13.1 in the official dist index"
+   }
+  ],
+  "repaired": [
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_00_non_authenticating_mode",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_01_throw",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_04_test_that_users_can_manually_restrict_the_gcm_tag_length_to_",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_05_authentication_tag_length_has_been_specified",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_06_authentication_tag_length_has_been_specified",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_07_test_that_setaad_throws_if_an_invalid_plaintext_length_has_b",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_08_test_that_setaad_and_update_throw_if_the_plaintext_is_too_lo",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_09_been_specified",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_10_test_that_final_throws_in_ccm_mode_when_no_authentication_ta",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_11_test_that_setauthtag_does_not_throw_in_gcm_mode_when_called_",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_12_test_that_an_iv_length_of_11_does_not_overflow_max_message_s",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_14_test_that_setauthtag_can_only_be_called_once",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_15_https_www_openssl_org_news_secadv_20190306_txt",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_16_block_16",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
    }
   ]
  },

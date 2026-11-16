@@ -2072,11 +2072,11 @@ Decipheriv.prototype.final = function(outputEncoding) {
             }
             throw createWrongFinalBlockLengthError();
         }
-        const err = new Error(
-            isMissingTag
-                ? 'Unsupported state or unable to authenticate data'
-                : 'Decipher final failed (possibly wrong key, IV, or auth tag)'
-        );
+        if (this._aeadConfig.mode !== null) {
+            // Node reports a missing or mismatched AEAD tag with OpenSSL's generic message and no code.
+            throw new Error('Unsupported state or unable to authenticate data');
+        }
+        const err = new Error('Decipher final failed (possibly wrong key, IV, or auth tag)');
         err.code = 'ERR_CRYPTO_INVALID_STATE';
         throw err;
     }

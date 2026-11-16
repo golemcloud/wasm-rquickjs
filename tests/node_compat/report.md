@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2864/4452 (64.3%)
+**Primary compatibility (CI-enforced):** 2880/4452 (64.7%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2864 | 64.3% | 29.8% | 26.6% |
-| 🧩 known gap | 1588 | 35.7% | 16.5% | 14.7% |
+| ✅ passing (runnable) | 2880 | 64.7% | 30.0% | 26.7% |
+| 🧩 known gap | 1572 | 35.3% | 16.4% | 14.6% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3845 | — | 40.0% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1175 | — | — | 10.9% |
 | **Total** | **10787** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2864/9612 (29.8%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2880/9612 (30.0%)**.
 
 ## Inventory by Module
 
@@ -39,7 +39,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | common | 16 | 1 | 8 | 0 | 0 | 7 | 0 | 11.1% | 6.2% |
 | compile | 29 | 0 | 0 | 0 | 15 | 14 | 0 | 0.0% | 0.0% |
 | console | 32 | 28 | 2 | 0 | 0 | 1 | 1 | 93.3% | 90.3% |
-| crypto | 398 | 137 | 76 | 7 | 0 | 171 | 7 | 64.3% | 35.0% |
+| crypto | 398 | 153 | 60 | 7 | 0 | 171 | 7 | 71.8% | 39.1% |
 | dgram | 141 | 22 | 74 | 7 | 0 | 24 | 14 | 22.9% | 17.3% |
 | diagnostics_channel | 102 | 23 | 7 | 1 | 2 | 69 | 0 | 76.7% | 22.5% |
 | dns | 54 | 2 | 29 | 0 | 0 | 9 | 14 | 6.5% | 5.0% |
@@ -201,7 +201,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-console-instance.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-argon2.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-crypto-async-sign-verify.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
-| `test-crypto-authenticated.js` | 17 | 0 | 16 | 0 | 0 | 1 | 0 |
+| `test-crypto-authenticated.js` | 17 | 16 | 0 | 0 | 0 | 1 | 0 |
 | `test-crypto-certificate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-cipheriv-decipheriv.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-crypto-dh-constructor.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -1094,7 +1094,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1588)
+### known gap (1572)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1114,7 +1114,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: Missing expected exception. | 16 | `parallel/test-assert-deep.js#test_02_date`, `parallel/test-assert-deep.js#test_03_regexp`, `parallel/test-assert-deep.js#test_07_gh_14441_circular_structures_should_be_consistent`, ... (+13) |
 | Node 26.13.1 baseline gap: Missing expected exception (TypeError). | 14 | `parallel/test-buffer-pool-untransferable.js`, `parallel/test-crypto-dh-stateless.js#block_00_block_00`, `parallel/test-crypto-dh-stateless.js#block_01_block_01`, ... (+11) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
-| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input: | 13 | `parallel/test-crypto-authenticated.js#block_00_non_authenticating_mode`, `parallel/test-crypto-authenticated.js#block_01_throw`, `parallel/test-crypto-authenticated.js#block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1`, ... (+10) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
 | the shared fixture creates rooted symlink targets that cannot be resolved inside a WASI preopen | 13 | `sequential/test-fs-opendir-recursive.js#block_00_block_00`, `sequential/test-fs-opendir-recursive.js#block_01_block_01`, `sequential/test-fs-opendir-recursive.js#block_02_block_02`, ... (+10) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
@@ -1368,9 +1367,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: Missing expected exception.; the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests | 1 | `parallel/test-url-parse-invalid-input.js` |
 | Node 26.13.1 baseline gap: Only --eval/-e, --input-type, and script files are supported in WASM child emulation; carries 22.14.0 subtest test_00_disabled_without_experimental_webstorage | 1 | `parallel/test-webstorage.js#test_08_disabled_with_no_webstorage` |
 | Node 26.13.1 baseline gap: The argument 'format' must be a valid string format. Received "grey" | 1 | `parallel/test-util-styletext.js` |
-| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:; carries 22.14.0 subtest block_04_authentication_tag_length_has_been_specified | 1 | `parallel/test-crypto-authenticated.js#block_05_authentication_tag_length_has_been_specified` |
-| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:; carries 22.14.0 subtest block_05_authentication_tag_has_been_specified | 1 | `parallel/test-crypto-authenticated.js#block_06_authentication_tag_length_has_been_specified` |
-| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input; carries 22.14.0 subtest block_12_final_in_gcm_or_ocb_mode | 1 | `parallel/test-crypto-authenticated.js#block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected "actual" to be strict | 1 | `parallel/test-stream-readable-to-web-termination.js#block_01_block_01` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception (Ty | 1 | `parallel/test-vm-module-errors.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab | 1 | `parallel/test-fs-promises-file-handle-append-file.js` |
