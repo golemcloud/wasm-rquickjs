@@ -1,4 +1,4 @@
-import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPair, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify, getDiffieHellman, createDiffieHellman } from 'node:crypto';
+import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPair, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify, getDiffieHellman, createDiffieHellman, createSecretKey } from 'node:crypto';
 
 export function newUuids() {
     const uuid1 = crypto.randomUUID()
@@ -335,14 +335,14 @@ export async function cryptoErrorContracts() {
 
     // One-shot sign()/verify() validate synchronously but deliver errors of the
     // signing job to the callback, after returning.
-    const viaCallback = (name, fn) => new Promise((resolve) => {
+    const viaCallback = (name, fn, show = (value) => value) => new Promise((resolve) => {
         let returned = false;
         const done = (outcome) => {
             lines.push(`${name}: ${returned ? '' : 'before return '}${outcome}`);
             resolve();
         };
         try {
-            fn((err, value) => done(err ? `callback ${err.name} ${err.code}` : `callback ok ${value}`));
+            fn((err, value) => done(err ? `callback ${err.name} ${err.code}` : `callback ok ${show(value)}`));
             returned = true;
         } catch (e) {
             lines.push(`${name}: throws ${e.name} ${e.code}`);
@@ -354,6 +354,25 @@ export async function cryptoErrorContracts() {
     await viaCallback('verify with x25519 key', (cb) => verify(undefined, Buffer.from('message'), x25519.publicKey, Buffer.alloc(16), cb));
     await viaCallback('sign invalid padding', (cb) => sign('sha256', Buffer.from('message'), { key: rsa.privateKey, padding: 'x' }, cb));
     await viaCallback('verify mismatching signature', (cb) => verify('sha256', Buffer.from('message'), rsa.publicKey, Buffer.alloc(64), cb));
+
+    // A key of the wrong type is rejected synchronously and never reaches the callback.
+    const secretKey = createSecretKey(Buffer.alloc(32, 1));
+    const message = Buffer.from('message');
+    await viaCallback('sign with public KeyObject', (cb) => sign('sha256', message, rsa.publicKey, cb));
+    await viaCallback('sign with nested secret KeyObject', (cb) => sign('sha256', message, { key: secretKey }, cb));
+    await viaCallback('verify with secret KeyObject', (cb) => verify('sha256', message, secretKey, Buffer.alloc(64), cb));
+    await viaCallback('verify with nested private KeyObject', (cb) => verify('sha256', message, { key: rsa.privateKey }, sign('sha256', message, rsa.privateKey), cb));
+
+    // Inherited and non-enumerable padding/saltLength options reach the job.
+    const pss = { padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 20 };
+    const privatePem = rsa.privateKey.export({ format: 'pem', type: 'pkcs8' });
+    const signatureKind = (signature) => `pkcs1=${verify('sha256', message, rsa.publicKey, signature)} pss=${verify('sha256', message, { key: rsa.publicKey, ...pss }, signature)}`;
+    await viaCallback('sign inherited PSS options', (cb) => sign('sha256', message, Object.assign(Object.create(pss), { key: privatePem }), cb), signatureKind);
+    await viaCallback('sign non-enumerable PSS options', (cb) => sign('sha256', message, Object.defineProperties({ key: privatePem }, { padding: { value: pss.padding }, saltLength: { value: pss.saltLength } }), cb), signatureKind);
+    await viaCallback('sign default padding', (cb) => sign('sha256', message, { key: privatePem }, cb), signatureKind);
+    const pssSignature = sign('sha256', message, { key: rsa.privateKey, ...pss });
+    await viaCallback('verify inherited PSS options', (cb) => verify('sha256', message, Object.assign(Object.create(pss), { key: rsa.publicKey.export({ format: 'pem', type: 'spki' }) }), pssSignature, cb));
+    await viaCallback('verify PSS signature with default padding', (cb) => verify('sha256', message, { key: rsa.publicKey }, pssSignature, cb));
 
     const modp14 = getDiffieHellman('modp14');
     const alice = createDiffieHellman(modp14.getPrime(), modp14.getGenerator());

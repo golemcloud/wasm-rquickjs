@@ -7311,7 +7311,7 @@ export function sign(algorithm, data, key, callback) {
     if (!callback || key === null || key === undefined) {
         return s.sign(key);
     }
-    const preparedKey = prepareOneShotKey(key, createPrivateKey);
+    const preparedKey = prepareOneShotKey(key, createPrivateKey, createPrivateKey, ['private'], 'private');
     runOneShotJob(() => s.sign(preparedKey), callback);
 }
 
@@ -7330,23 +7330,35 @@ export function verify(algorithm, data, key, signature, callback) {
     if (!callback || key === null || key === undefined) {
         return v.verify(key, signature);
     }
-    const preparedKey = prepareOneShotKey(key, (k) =>
-        typeof k === 'object' && k.passphrase !== undefined ? createPublicKey(createPrivateKey(k)) : createPublicKey(k));
+    const preparedKey = prepareOneShotKey(
+        key,
+        createPublicKey,
+        (k) => (k.passphrase !== undefined ? createPublicKey(createPrivateKey(k)) : createPublicKey(k)),
+        ['public', 'private'],
+        'private or public');
     runOneShotJob(() => v.verify(preparedKey, signature), callback);
 }
 
-// Node.js validates one-shot sign()/verify() options and parses the key
-// synchronously; only errors of the signing job itself reach the callback.
-function prepareOneShotKey(key, toKeyObject) {
+// Node.js validates one-shot sign()/verify() options, parses the key and
+// checks its type synchronously; only errors of the signing job itself reach
+// the callback. The job gets the options read here, including inherited ones.
+function prepareOneShotKey(key, fromKey, fromKeyOptions, allowedTypes, expectedType) {
+    let keyObject;
+    let padding;
+    let saltLength;
     if (key instanceof KeyObject) {
-        return key;
+        keyObject = key;
+    } else if (typeof key === 'object' && key.key !== undefined) {
+        padding = getSignVerifyIntOption('padding', key);
+        saltLength = getSignVerifyIntOption('saltLength', key);
+        keyObject = key.key instanceof KeyObject ? key.key : fromKeyOptions(key);
+    } else {
+        keyObject = fromKey(key);
     }
-    if (typeof key === 'object' && key.key !== undefined) {
-        getSignVerifyIntOption('padding', key);
-        getSignVerifyIntOption('saltLength', key);
-        return key.key instanceof KeyObject ? key : { ...key, key: toKeyObject(key) };
+    if (!allowedTypes.includes(keyObject.type)) {
+        throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(keyObject.type, expectedType);
     }
-    return toKeyObject(key);
+    return { key: keyObject, padding, saltLength };
 }
 
 function runOneShotJob(job, callback) {

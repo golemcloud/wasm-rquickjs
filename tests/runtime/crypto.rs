@@ -1056,7 +1056,7 @@ async fn crypto_subtle_sign_verify_rsa_pss(
 }
 
 /// Error contracts of AEAD decryption, key encoding options, crypto argument validation, one-shot sign/verify
-/// callback delivery and DH peer key limits, as Node.js 26.13.1 reports them.
+/// key type checks, option resolution, callback delivery and DH peer key limits, as Node.js 26.13.1 reports them.
 #[test]
 async fn crypto_error_contracts(
     #[tagged_as("crypto")] compiled: &CompiledTest,
@@ -1101,6 +1101,15 @@ async fn crypto_error_contracts(
         "verify with x25519 key: callback Error ERR_OSSL_EVP_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE",
         "sign invalid padding: throws TypeError ERR_INVALID_ARG_VALUE",
         "verify mismatching signature: callback ok false",
+        "sign with public KeyObject: throws TypeError ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE",
+        "sign with nested secret KeyObject: throws TypeError ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE",
+        "verify with secret KeyObject: throws TypeError ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE",
+        "verify with nested private KeyObject: callback ok true",
+        "sign inherited PSS options: callback ok pkcs1=false pss=true",
+        "sign non-enumerable PSS options: callback ok pkcs1=false pss=true",
+        "sign default padding: callback ok pkcs1=true pss=false",
+        "verify inherited PSS options: callback ok true",
+        "verify PSS signature with default padding: callback ok false",
         "DH computeSecret(1): RangeError ERR_CRYPTO_INVALID_KEYLEN Supplied key is too small",
         "DH computeSecret(p - 1): RangeError ERR_CRYPTO_INVALID_KEYLEN Supplied key is too large",
     ];
