@@ -132,9 +132,12 @@ with `NODE_COMPAT_MIGRATION_DECISIONS=/path/to/decisions.json`:
   `moved` or `none`) and `note` record what happened to the old assertions.
 - A formerly runnable subtest that no longer runs, and a former known gap that
   leaves the primary surface, need an `obligation`: `baseline-gap` (runnable to a
-  known gap with a reason), `moved` with `movedTo` naming `file` or
-  `file#subtest` targets that run or are themselves baseline gaps, or
-  `target-change` with `evidence`. The report lists these under `obligations` for
+  known gap with a reason), `moved` with `movedTo` naming tests the runner
+  selects that run or are themselves baseline gaps, or `target-change` with
+  `evidence`. The runner runs a split file with subtests only as its subtests and
+  any other file only as a whole, so a target is a `file#subtest` of a split file
+  with subtests and otherwise the `file`; a split parent or a subtest listed
+  under an unsplit file is rejected. The report lists these under `obligations` for
   review; the tool checks their shape, not whether the old assertions really are
   kept.
 - Duplicate or malformed decisions fail the run; a decision that matches no

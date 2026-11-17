@@ -706,7 +706,9 @@ fn check_decision(
     Ok(Ok((entry, reported)))
 }
 
-/// The category the migrated config gives a `file` or `file#subtest` target.
+/// The category the migrated config gives a `file` or `file#subtest` target. Like the runner, a
+/// split file with subtests is run only as its subtests and any other file only as a whole, so
+/// a target must name the test the runner selects.
 fn target_category(
     tests: &Map<String, Value>,
     target: &str,
@@ -720,7 +722,22 @@ fn target_category(
         .get(file)
         .and_then(Value::as_object)
         .ok_or_else(|| format!("movedTo target {target} is not in the migrated config"))?;
+    let runs_subtests = bool_option(entry, "split")
+        && entry
+            .get("subtests")
+            .and_then(Value::as_object)
+            .is_some_and(|subtests| !subtests.is_empty());
     let resolved = match subtest {
+        None if runs_subtests => {
+            return Err(format!(
+                "movedTo target {target} is split, so the runner runs its subtests, not the file; name a file#subtest target"
+            ));
+        }
+        Some(_) if !runs_subtests => {
+            return Err(format!(
+                "movedTo target {target} is a subtest of a file the runner runs whole; name the file"
+            ));
+        }
         None => {
             node_compat_category_from_entry(file, &Value::Object(entry.clone()), None, suite_root)
         }
@@ -1975,6 +1992,108 @@ mod contract {
             pending(&rejected, "block_00_block_00")["file"],
             "parallel/test-a.js"
         );
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn moved_assertions_must_land_on_a_test_the_runner_selects() {
+        let fixture = blocks_fixture();
+        let internals = r#"{ "category": "node-internals", "reason": "internal" }"#;
+        fixture
+            .previous("parallel/test-b.js", "{ b(1); }\n{ b(2); }\n")
+            .source("parallel/test-b.js", "{ b(1); }\n{ b(2); }\n")
+            .source("parallel/test-c.js", "{ c(1); }\n{ c(2); }\n")
+            .source("parallel/test-d.js", "d();\n");
+        // test-b is split and every subtest it runs is excluded; test-c runs whole and is
+        // excluded, although its listed subtest is runnable; test-d runs whole.
+        let input = config(&format!(
+            "{},\n    \"parallel/test-b.js\": {{ \"split\": true, \"subtests\": {{ \"block_00_block_00\": {internals}, \"block_01_block_01\": {internals} }} }},\n    \"parallel/test-c.js\": {{ \"category\": \"wasi-impossible\", \"reason\": \"socket\", \"split\": false, \"subtests\": {{ \"block_00_block_00\": {{ \"category\": \"runnable\" }} }} }},\n    \"parallel/test-d.js\": {{}}",
+            blocks("{}", "{}", internals)
+        ));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let impossible = json!({ "category": "wasi-impossible", "reason": "needs a socket" });
+        let moved = |target: &str| {
+            decision(
+                &proposal,
+                "block_00_block_00",
+                impossible.clone(),
+                json!({ "assertions": "moved", "obligation": "moved", "movedTo": [target] }),
+            )
+        };
+        let second =
+            |entry: Value, extra: Value| decision(&proposal, "block_01_block_01", entry, extra);
+        let kept = second(json!({}), json!({}));
+        let excluded = second(
+            impossible.clone(),
+            json!({ "assertions": "changed", "obligation": "target-change", "evidence": "socket" }),
+        );
+        let run = |rows: Vec<Value>| {
+            fixture
+                .migrate_with(&input, Some(&record(&proposal, rows)))
+                .unwrap()
+        };
+        let first_entry = |migration: &Migration| {
+            entries(migration)["parallel/test-a.js"]["subtests"]["block_00_block_00"].clone()
+        };
+        for (target, other) in [
+            // The file's own parent, whose subtests are now all excluded.
+            ("parallel/test-a.js", excluded.clone()),
+            // A split parent is never run itself, even while one of its subtests is.
+            ("parallel/test-a.js", kept.clone()),
+            ("parallel/test-b.js", kept.clone()),
+            // A listed subtest of a file the runner runs whole.
+            ("parallel/test-c.js#block_00_block_00", kept.clone()),
+        ] {
+            let rejected = run(vec![moved(target), other]);
+            let row = pending(&rejected, "block_00_block_00");
+            assert!(
+                row["problem"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("obligationViolation"),
+                "{target}: {row:#}"
+            );
+            assert_eq!(first_entry(&rejected), json!({}), "{target}");
+            assert_eq!(rejected.report.needs_review(), 1, "{target}");
+            assert_eq!(rejected.report.matched_by_position.len(), 2, "{target}");
+            assert!(
+                rejected
+                    .report
+                    .obligations
+                    .iter()
+                    .all(|o| o["subtest"] != "block_00_block_00"),
+                "{target}"
+            );
+        }
+        let gap = json!({ "category": "known-gap", "reason": "the new assertion needs X" });
+        for (target, other) in [
+            ("parallel/test-a.js#block_01_block_01", kept.clone()),
+            ("parallel/test-d.js", kept.clone()),
+            (
+                "parallel/test-a.js#block_01_block_01",
+                second(
+                    gap,
+                    json!({ "assertions": "changed", "obligation": "baseline-gap" }),
+                ),
+            ),
+        ] {
+            let accepted = run(vec![moved(target), other]);
+            assert_eq!(
+                accepted.report.needs_review(),
+                0,
+                "{target}: {:#?}",
+                accepted.report
+            );
+            assert_eq!(first_entry(&accepted), impossible, "{target}");
+            assert!(
+                accepted
+                    .report
+                    .obligations
+                    .iter()
+                    .any(|o| o["subtest"] == "block_00_block_00" && o["obligation"] == "moved"),
+                "{target}"
+            );
+        }
     }
 
     #[test]
