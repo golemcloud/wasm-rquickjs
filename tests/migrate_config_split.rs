@@ -14,6 +14,14 @@
 //! with identical source, so an unchanged block that moved to another index (and therefore another
 //! generated name such as `block_05_block_05`) keeps its own classification.
 //!
+//! A changed subtest with a generated name keeps the metadata of the previous subtest at its
+//! position only as a proposal. The run fails until each one has an accepted decision in the file
+//! named by `NODE_COMPAT_MIGRATION_DECISIONS`. A decision is bound to the previous and current
+//! suite versions, to the parsed `tests` object of the input config, and to both versions of the
+//! test file, and it records the previous metadata, which the migration recomputes and compares.
+//! A decision that stops running a formerly runnable subtest, or that excludes a former known gap,
+//! must state how that obligation is kept.
+//!
 //! The contract tests run against temporary fixtures:
 //! `cargo test --test migrate_config_split -- ':tag:migration_contract'`.
 
@@ -24,7 +32,7 @@ test_r::enable!();
 mod common;
 
 use crate::common::js_subtest_parser::{SubtestDiscovery, discover_subtests_with_options};
-use crate::common::strip_jsonc_comments;
+use crate::common::{NodeCompatCategory, node_compat_category_from_entry, strip_jsonc_comments};
 use anyhow::{anyhow, bail};
 use serde_json::{Map, Value, json};
 use std::collections::{BTreeMap, BTreeSet};
@@ -61,9 +69,20 @@ struct MigrationReport {
     /// unchanged description (`"by": "description"`).
     renamed: Vec<Value>,
     /// Subtests with a generated name whose source changed; they keep the metadata of the
-    /// previous subtest at the same position. Review them when that file's subtests have
-    /// different classifications.
+    /// previous subtest at the same position unless a decision accepted another value.
     matched_by_position: Vec<Value>,
+    /// The inputs a decision for these subtests is bound to (suite versions and the hash of the
+    /// input `tests` object); set when `matched_by_position` is not empty.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    position_inputs: Option<Value>,
+    /// Subtests matched by position without an accepted decision, with the hashes and previous
+    /// metadata a decision must record, and the problem of a rejected decision. Needs a decision.
+    pending_position_decisions: Vec<Value>,
+    /// Decisions that match no subtest matched by position. Needs a fix of the decisions file.
+    unused_decisions: Vec<Value>,
+    /// Accepted decisions that changed the classification of a formerly runnable or known-gap
+    /// subtest, with the obligation that keeps it accounted for.
+    obligations: Vec<Value>,
     /// Subtests without a previous entry.
     new_subtests: Vec<Value>,
     /// Subtests that are gone, with their previous metadata. Needs a mapping.
@@ -76,7 +95,11 @@ struct MigrationReport {
 
 impl MigrationReport {
     fn needs_review(&self) -> usize {
-        self.removed_subtests.len() + self.missing_sources.len() + self.needs_decision.len()
+        self.removed_subtests.len()
+            + self.missing_sources.len()
+            + self.needs_decision.len()
+            + self.pending_position_decisions.len()
+            + self.unused_decisions.len()
     }
 }
 
@@ -440,19 +463,365 @@ fn new_subtest_value(meta: &Map<String, Value>) -> Value {
     }
 }
 
+/// Keys of a positional decision.
+const DECISION_KEYS: [&str; 11] = [
+    "file",
+    "subtest",
+    "previousBlake3",
+    "currentBlake3",
+    "previous",
+    "entry",
+    "assertions",
+    "note",
+    "obligation",
+    "movedTo",
+    "evidence",
+];
+/// What a decision says about the assertions of the previous subtest.
+const ASSERTIONS: [&str; 4] = ["kept", "changed", "moved", "none"];
+/// How a decision keeps a formerly runnable or known-gap subtest accounted for.
+const OBLIGATIONS: [&str; 3] = ["baseline-gap", "moved", "target-change"];
+
+/// Accepted mapping decisions for subtests matched by position, by file and subtest.
+type Decisions = BTreeMap<(String, String), Map<String, Value>>;
+/// Accepted decisions that moved their assertions, with the `movedTo` targets.
+type Moves = Vec<((String, String), Vec<String>)>;
+
+fn blake3_hex(bytes: &[u8]) -> String {
+    blake3::hash(bytes).to_hex().to_string()
+}
+
+/// The hash a decisions file binds the input config to: the parsed `tests` object, so that
+/// comments and `nodeVersion` do not matter but every entry does.
+fn tests_digest(tests: &Map<String, Value>) -> String {
+    blake3_hex(Value::Object(tests.clone()).to_string().as_bytes())
+}
+
+fn suite_version(root: &Path) -> anyhow::Result<String> {
+    let version = fs::read_to_string(root.join("NODE_VERSION"))
+        .map_err(|e| anyhow!("{} has no NODE_VERSION: {e}", root.display()))?;
+    Ok(version.trim().to_string())
+}
+
+fn category_name(category: NodeCompatCategory) -> &'static str {
+    match category {
+        NodeCompatCategory::Runnable => "runnable",
+        NodeCompatCategory::KnownGap => "known-gap",
+        NodeCompatCategory::WasmImpossible => "wasi-impossible",
+        NodeCompatCategory::EngineDifference => "engine-difference",
+        NodeCompatCategory::NodeInternals => "node-internals",
+        NodeCompatCategory::Unevaluated => "unevaluated",
+    }
+}
+
+/// The category, reason and flaky flag the harness gives a subtest of `file` in `suite_root`.
+fn effective(
+    path: &str,
+    file: &Map<String, Value>,
+    subtest: &Value,
+    suite_root: &Path,
+) -> anyhow::Result<(NodeCompatCategory, Value)> {
+    let file_category =
+        node_compat_category_from_entry(path, &Value::Object(file.clone()), None, suite_root)?;
+    let category = node_compat_category_from_entry(path, subtest, Some(file_category), suite_root)?;
+    let reason = subtest
+        .get("reason")
+        .and_then(Value::as_str)
+        .or_else(|| file.get("reason").and_then(Value::as_str));
+    let flaky = subtest
+        .get("flaky")
+        .and_then(Value::as_bool)
+        .unwrap_or(file.get("flaky").and_then(Value::as_bool).unwrap_or(false));
+    Ok((
+        category,
+        json!({ "category": category_name(category), "reason": reason, "flaky": flaky }),
+    ))
+}
+
+/// Reads a decisions file and rejects it unless it is for these suite versions and this input
+/// config, and every row is well formed and unique.
+fn load_decisions(
+    text: &str,
+    previous_root: &Path,
+    suite_root: &Path,
+    tests_hash: &str,
+) -> anyhow::Result<Decisions> {
+    let record: Value = serde_json::from_str(text)?;
+    let (from, to) = (suite_version(previous_root)?, suite_version(suite_root)?);
+    if record["from"] != json!(from) || record["to"] != json!(to) {
+        bail!(
+            "the decisions are for {} -> {}, but the suites are {from} -> {to}",
+            record["from"],
+            record["to"]
+        );
+    }
+    let bound = &record["previousConfig"]["testsBlake3"];
+    if *bound != json!(tests_hash) {
+        bail!(
+            "the decisions are bound to an input config whose tests hash to {bound}, but this config's tests hash to {tests_hash:?}; restore the config named by previousConfig.revision instead of applying them to another config"
+        );
+    }
+    let rows = record["positionDecisions"]
+        .as_array()
+        .ok_or_else(|| anyhow!("the decisions lack a positionDecisions array"))?;
+    let mut decisions = Decisions::new();
+    for row in rows {
+        let row = row
+            .as_object()
+            .ok_or_else(|| anyhow!("decision {row} is not an object"))?;
+        if let Some(key) = row.keys().find(|k| !DECISION_KEYS.contains(&k.as_str())) {
+            bail!("decision {row:?} has an unknown key {key:?}");
+        }
+        let text = |key: &str| {
+            row.get(key)
+                .and_then(Value::as_str)
+                .filter(|s| !s.trim().is_empty())
+        };
+        let (Some(file), Some(subtest)) = (text("file"), text("subtest")) else {
+            bail!("decision {row:?} needs a file and a subtest");
+        };
+        let at = format!("{file}#{subtest}");
+        for key in ["previousBlake3", "currentBlake3", "note"] {
+            if text(key).is_none() {
+                bail!("the decision for {at} needs a non-empty {key}");
+            }
+        }
+        if !row.get("previous").is_some_and(Value::is_object)
+            || !row.get("entry").is_some_and(Value::is_object)
+        {
+            bail!("the decision for {at} needs previous and entry objects");
+        }
+        let assertions = text("assertions").filter(|a| ASSERTIONS.contains(a));
+        if assertions.is_none() {
+            bail!("the decision for {at} needs assertions, one of {ASSERTIONS:?}");
+        }
+        let obligation =
+            match row.get("obligation") {
+                None => None,
+                Some(o) => Some(o.as_str().filter(|o| OBLIGATIONS.contains(o)).ok_or_else(
+                    || {
+                        anyhow!(
+                            "the decision for {at} has an obligation other than {OBLIGATIONS:?}"
+                        )
+                    },
+                )?),
+            };
+        let moved = assertions == Some("moved") || obligation == Some("moved");
+        match row.get("movedTo") {
+            None if moved => bail!("the decision for {at} moves its assertions but has no movedTo"),
+            Some(_) if !moved => bail!("the decision for {at} has movedTo without moving"),
+            Some(targets)
+                if !targets.as_array().is_some_and(|t| {
+                    !t.is_empty() && t.iter().all(|t| t.as_str().is_some_and(|t| !t.is_empty()))
+                }) =>
+            {
+                bail!("the movedTo of the decision for {at} must list file or file#subtest targets")
+            }
+            _ => {}
+        }
+        let target_change = obligation == Some("target-change");
+        if target_change && text("evidence").is_none() {
+            bail!("the target-change decision for {at} needs non-empty evidence");
+        }
+        if !target_change && row.contains_key("evidence") {
+            bail!("the decision for {at} has evidence without a target-change obligation");
+        }
+        if decisions
+            .insert((file.to_string(), subtest.to_string()), row.clone())
+            .is_some()
+        {
+            bail!("duplicate decision for {at}");
+        }
+    }
+    Ok(decisions)
+}
+
+/// Checks a decision against the subtest it maps. `Ok(Err(problem))` rejects the decision; on
+/// acceptance it returns the entry to write and, when the decision changes the classification of
+/// a formerly runnable or known-gap subtest, the obligation to report.
+fn check_decision(
+    decision: &Map<String, Value>,
+    pending: &Value,
+    meta: &Map<String, Value>,
+    suite_root: &Path,
+) -> anyhow::Result<Result<(Value, Option<Value>), String>> {
+    for key in ["previousBlake3", "currentBlake3"] {
+        if decision[key] != pending[key] {
+            return Ok(Err(format!(
+                "stale: {key} {} differs from the vendored file's {}",
+                decision[key], pending[key]
+            )));
+        }
+    }
+    if decision["previous"] != pending["previous"] {
+        return Ok(Err(format!(
+            "previousMismatch: the recorded previous metadata {} differs from the input config's {}",
+            decision["previous"], pending["previous"]
+        )));
+    }
+    let path = pending["file"].as_str().unwrap_or_default();
+    let entry = decision["entry"].clone();
+    let (now, now_effective) = match effective(path, meta, &entry, suite_root) {
+        Ok(resolved) => resolved,
+        Err(e) => return Ok(Err(format!("invalidEntry: {e}"))),
+    };
+    let before = NodeCompatCategory::from_config_value(
+        pending["previous"]["effective"]["category"]
+            .as_str()
+            .unwrap_or_default(),
+    )?;
+    let obligation = decision.get("obligation").and_then(Value::as_str);
+    let needed = (before == NodeCompatCategory::Runnable && now != NodeCompatCategory::Runnable)
+        || (before == NodeCompatCategory::KnownGap && !now.is_primary_surface());
+    if needed && obligation.is_none() {
+        return Ok(Err(format!(
+            "obligationViolation: the formerly {} subtest becomes {}; an obligation (baseline-gap, moved or target-change) must keep it accounted for",
+            category_name(before),
+            category_name(now)
+        )));
+    }
+    if obligation == Some("baseline-gap")
+        && (before != NodeCompatCategory::Runnable
+            || now != NodeCompatCategory::KnownGap
+            || now_effective["reason"]
+                .as_str()
+                .is_none_or(|r| r.trim().is_empty()))
+    {
+        return Ok(Err(
+            "obligationViolation: a baseline-gap obligation needs a formerly runnable subtest that becomes a known gap with a reason"
+                .to_string(),
+        ));
+    }
+    let reported = (before.is_primary_surface() && now != before).then(|| {
+        json!({
+            "file": path,
+            "subtest": pending["subtest"],
+            "previous": category_name(before),
+            "entry": category_name(now),
+            "obligation": obligation,
+            "movedTo": decision.get("movedTo"),
+            "evidence": decision.get("evidence"),
+        })
+    });
+    Ok(Ok((entry, reported)))
+}
+
+/// The category the migrated config gives a `file` or `file#subtest` target.
+fn target_category(
+    tests: &Map<String, Value>,
+    target: &str,
+    suite_root: &Path,
+) -> Result<NodeCompatCategory, String> {
+    let (file, subtest) = match target.split_once('#') {
+        Some((file, subtest)) => (file, Some(subtest)),
+        None => (target, None),
+    };
+    let entry = tests
+        .get(file)
+        .and_then(Value::as_object)
+        .ok_or_else(|| format!("movedTo target {target} is not in the migrated config"))?;
+    let resolved = match subtest {
+        None => {
+            node_compat_category_from_entry(file, &Value::Object(entry.clone()), None, suite_root)
+        }
+        Some(subtest) => {
+            let value = entry
+                .get("subtests")
+                .and_then(|s| s.get(subtest))
+                .ok_or_else(|| format!("movedTo target {target} is not in the migrated config"))?;
+            effective(file, entry, value, suite_root).map(|(category, _)| category)
+        }
+    };
+    resolved.map_err(|e| format!("movedTo target {target}: {e}"))
+}
+
 fn migrate(
     content: &str,
     suite_root: &Path,
     previous_suite: Option<&Path>,
+    decisions: Option<&str>,
 ) -> anyhow::Result<Migration> {
     let config: Value = serde_json::from_str(&strip_jsonc_comments(content))?;
     let tests = config
         .get("tests")
         .and_then(Value::as_object)
         .ok_or_else(|| anyhow!("config.jsonc missing 'tests' object"))?;
+    let decisions = match (decisions, previous_suite) {
+        (None, _) => None,
+        (Some(_), None) => bail!("mapping decisions need NODE_COMPAT_MIGRATION_PREVIOUS_SUITE"),
+        (Some(text), Some(previous_root)) => Some(load_decisions(
+            text,
+            previous_root,
+            suite_root,
+            &tests_digest(tests),
+        )?),
+    };
+    // A decision whose movedTo targets do not keep its assertions running is rejected, which can
+    // in turn invalidate a decision that moved its assertions to that subtest.
+    let mut rejected: BTreeMap<(String, String), String> = BTreeMap::new();
+    loop {
+        let (migration, moves) = migrate_once(
+            content,
+            tests,
+            suite_root,
+            previous_suite,
+            decisions.as_ref(),
+            &rejected,
+        )?;
+        let migrated: Value = serde_json::from_str(&strip_jsonc_comments(&migration.content))?;
+        let migrated_tests = migrated["tests"].as_object().cloned().unwrap_or_default();
+        let baseline_gaps: BTreeSet<String> = migration
+            .report
+            .obligations
+            .iter()
+            .filter(|o| o["obligation"] == "baseline-gap")
+            .map(|o| {
+                format!(
+                    "{}#{}",
+                    o["file"].as_str().unwrap_or_default(),
+                    o["subtest"].as_str().unwrap_or_default()
+                )
+            })
+            .collect();
+        let mut newly = BTreeMap::new();
+        for (key, targets) in moves {
+            let problem = targets.iter().find_map(|target| {
+                match target_category(&migrated_tests, target, suite_root) {
+                    Ok(NodeCompatCategory::Runnable) => None,
+                    Ok(_) if baseline_gaps.contains(target) => None,
+                    Ok(category) => Some(format!(
+                        "obligationViolation: movedTo target {target} is {}, neither runnable nor a baseline gap",
+                        category_name(category)
+                    )),
+                    Err(problem) => Some(format!("obligationViolation: {problem}")),
+                }
+            });
+            if let Some(problem) = problem {
+                newly.insert(key, problem);
+            }
+        }
+        if newly.is_empty() {
+            return Ok(migration);
+        }
+        rejected.extend(newly);
+    }
+}
+
+/// One migration pass; decisions in `rejected` are reported as pending with their problem.
+/// Returns the accepted decisions whose assertions moved, with their targets.
+fn migrate_once(
+    content: &str,
+    tests: &Map<String, Value>,
+    suite_root: &Path,
+    previous_suite: Option<&Path>,
+    decisions: Option<&Decisions>,
+    rejected: &BTreeMap<(String, String), String>,
+) -> anyhow::Result<(Migration, Moves)> {
     let layout = tests_layout(content)?;
     let mut report = MigrationReport::default();
     let mut replacements: Vec<(usize, usize, String)> = Vec::new();
+    let mut used: BTreeSet<(String, String)> = BTreeSet::new();
+    let mut moves = Vec::new();
 
     for (path, opts) in tests {
         let opts = opts
@@ -557,7 +926,9 @@ fn migrate(
                     .map(|(name, text)| (name.as_str(), text.as_str()))
                     .collect();
                 // A generated name kept by position whose source changed is audited even when
-                // the entry itself needs no rewrite.
+                // the entry itself needs no rewrite, and keeps its previous metadata only until
+                // a decision accepts it or another value.
+                let mut decided: BTreeMap<&String, Value> = BTreeMap::new();
                 for name in &names {
                     if origin.get(name).is_some_and(|(old, _)| old == name)
                         && subtest_description(name).is_none()
@@ -566,9 +937,55 @@ fn migrate(
                         report
                             .matched_by_position
                             .push(json!({ "file": path, "subtest": name }));
+                        let raw = &existing[name.as_str()];
+                        let (_, previous_effective) = effective(path, &meta, raw, previous_root)?;
+                        let mut pending = json!({
+                            "file": path,
+                            "subtest": name,
+                            "previousBlake3": blake3_hex(previous_source.as_bytes()),
+                            "currentBlake3": blake3_hex(source.as_bytes()),
+                            "previous": {
+                                "raw": raw,
+                                "fileEntry": meta,
+                                "effective": previous_effective,
+                            },
+                        });
+                        let key = (path.clone(), name.clone());
+                        let Some(decision) = decisions.and_then(|d| d.get(&key)) else {
+                            report.pending_position_decisions.push(pending);
+                            continue;
+                        };
+                        used.insert(key.clone());
+                        let checked = match rejected.get(&key) {
+                            Some(problem) => Err(problem.clone()),
+                            None => check_decision(decision, &pending, &meta, suite_root)?,
+                        };
+                        match checked {
+                            Ok((entry, obligation)) => {
+                                if let Some(targets) = decision.get("movedTo") {
+                                    let targets = targets
+                                        .as_array()
+                                        .into_iter()
+                                        .flatten()
+                                        .filter_map(Value::as_str)
+                                        .map(str::to_string)
+                                        .collect();
+                                    moves.push((key, targets));
+                                }
+                                report.obligations.extend(obligation);
+                                decided.insert(name, entry);
+                            }
+                            Err(problem) => {
+                                pending["problem"] = json!(problem);
+                                report.pending_position_decisions.push(pending);
+                            }
+                        }
                     }
                 }
-                if same_names && origin.iter().all(|(name, (old, _))| name == old) {
+                let unchanged = decided
+                    .iter()
+                    .all(|(name, entry)| existing[name.as_str()] == *entry);
+                if same_names && unchanged && origin.iter().all(|(name, (old, _))| name == old) {
                     continue;
                 }
                 let mut subtests = Vec::new();
@@ -580,7 +997,10 @@ fn migrate(
                                 .push(json!({ "file": path, "from": old, "to": name, "by": by }));
                             existing[old.as_str()].clone()
                         }
-                        Some((old, _)) => existing[old.as_str()].clone(),
+                        Some((old, _)) => decided
+                            .get(name)
+                            .cloned()
+                            .unwrap_or_else(|| existing[old.as_str()].clone()),
                         None => {
                             report
                                 .new_subtests
@@ -604,6 +1024,22 @@ fn migrate(
         };
         let (start, end) = layout.values[path.as_str()];
         replacements.push((start, end, replacement));
+    }
+    for (file, subtest) in decisions.into_iter().flat_map(BTreeMap::keys) {
+        if !used.contains(&(file.clone(), subtest.clone())) {
+            report.unused_decisions.push(json!({
+                "file": file,
+                "subtest": subtest,
+                "problem": "no changed subtest with a generated name is matched by position here",
+            }));
+        }
+    }
+    if !report.matched_by_position.is_empty() {
+        report.position_inputs = Some(json!({
+            "from": previous_suite.and_then(|root| suite_version(root).ok()),
+            "to": suite_version(suite_root).ok(),
+            "testsBlake3": tests_digest(tests),
+        }));
     }
 
     let mut migrated = content.to_string();
@@ -648,10 +1084,13 @@ fn migrate(
     }
     // The result must still be a valid config with the same top-level shape.
     tests_layout(&migrated)?;
-    Ok(Migration {
-        content: migrated,
-        report,
-    })
+    Ok((
+        Migration {
+            content: migrated,
+            report,
+        },
+        moves,
+    ))
 }
 
 #[test]
@@ -660,6 +1099,10 @@ fn migrate_config_split() -> anyhow::Result<()> {
     let report_path = std::env::var("NODE_COMPAT_MIGRATION_REPORT")
         .unwrap_or_else(|_| "target/node-compat-migration-report.json".to_string());
     let previous_suite = std::env::var("NODE_COMPAT_MIGRATION_PREVIOUS_SUITE").ok();
+    let decisions = std::env::var("NODE_COMPAT_MIGRATION_DECISIONS")
+        .ok()
+        .map(|path| fs::read_to_string(&path).map_err(|e| anyhow!("cannot read {path}: {e}")))
+        .transpose()?;
     let content = fs::read_to_string(config_path)?;
     let Migration {
         content: migrated,
@@ -668,6 +1111,7 @@ fn migrate_config_split() -> anyhow::Result<()> {
         &content,
         Path::new("tests/node_compat/suite"),
         previous_suite.as_deref().map(Path::new),
+        decisions.as_deref(),
     )?;
     fs::write(config_path, migrated)?;
     if let Some(parent) = Path::new(&report_path).parent() {
@@ -687,6 +1131,15 @@ fn migrate_config_split() -> anyhow::Result<()> {
     println!(
         "  changed generated-name subtests matched by position: {}",
         report.matched_by_position.len()
+    );
+    println!(
+        "  of which pending a decision: {}",
+        report.pending_position_decisions.len()
+    );
+    println!("  unused decisions: {}", report.unused_decisions.len());
+    println!(
+        "  accepted classification changes: {}",
+        report.obligations.len()
     );
     println!("  new subtests: {}", report.new_subtests.len());
     println!("  removed subtests: {}", report.removed_subtests.len());
@@ -724,10 +1177,13 @@ mod contract {
 
     impl Fixture {
         fn new() -> Self {
-            Self {
+            let fixture = Self {
                 temp: Utf8TempDir::new().unwrap(),
                 previous: Utf8TempDir::new().unwrap(),
-            }
+            };
+            fs::write(fixture.temp.path().join("NODE_VERSION"), "26.13.1\n").unwrap();
+            fs::write(fixture.previous.path().join("NODE_VERSION"), "22.14.0\n").unwrap();
+            fixture
         }
 
         fn source(&self, path: &str, source: &str) -> &Self {
@@ -746,16 +1202,27 @@ mod contract {
         }
 
         fn migrate(&self, tests: &str) -> Migration {
-            let content = format!(
-                "{{\n  \"nodeVersion\": \"22.14.0\",\n  // \"parallel/test-a.js\" is quoted here\n  \"tests\": {{\n{tests}\n  }}\n}}\n"
-            );
+            self.migrate_with(&config(tests), None).unwrap()
+        }
+
+        fn migrate_with(
+            &self,
+            content: &str,
+            decisions: Option<&Value>,
+        ) -> anyhow::Result<Migration> {
             migrate(
-                &content,
+                content,
                 self.temp.path().as_std_path(),
                 Some(self.previous.path().as_std_path()),
+                decisions.map(Value::to_string).as_deref(),
             )
-            .unwrap()
         }
+    }
+
+    fn config(tests: &str) -> String {
+        format!(
+            "{{\n  \"nodeVersion\": \"22.14.0\",\n  // \"parallel/test-a.js\" is quoted here\n  \"tests\": {{\n{tests}\n  }}\n}}\n"
+        )
     }
 
     fn entries(migration: &Migration) -> Map<String, Value> {
@@ -915,15 +1382,33 @@ mod contract {
     }"#;
         let migration = fixture.migrate(tests);
         assert!(migration.content.contains(tests));
+        let parsed: Value = serde_json::from_str(&format!("{{{tests}}}")).unwrap();
         assert_eq!(
             migration.report,
             MigrationReport {
                 matched_by_position: vec![
                     json!({ "file": "parallel/test-a.js", "subtest": "block_00_block_00" })
                 ],
+                position_inputs: Some(json!({
+                    "from": "22.14.0",
+                    "to": "26.13.1",
+                    "testsBlake3": blake3::hash(parsed.to_string().as_bytes()).to_hex().to_string(),
+                })),
+                pending_position_decisions: vec![json!({
+                    "file": "parallel/test-a.js",
+                    "subtest": "block_00_block_00",
+                    "previousBlake3": blake3::hash(b"{ passes(1); }\n{ gap(); }\n").to_hex().to_string(),
+                    "currentBlake3": blake3::hash(b"{ passes(2); }\n{ gap(); }\n").to_hex().to_string(),
+                    "previous": {
+                        "raw": { "category": "runnable" },
+                        "fileEntry": {},
+                        "effective": { "category": "runnable", "reason": null, "flaky": false },
+                    },
+                })],
                 ..MigrationReport::default()
             }
         );
+        assert_eq!(migration.report.needs_review(), 1);
     }
 
     #[test]
@@ -935,7 +1420,7 @@ mod contract {
             &node_tests(&["alpha", "beta", "gamma"]),
         );
         let content = "{ \"nodeVersion\": \"22.14.0\", \"tests\": { \"parallel/test-a.js\": { \"split\": true, \"subtests\": { \"test_00_alpha\": {}, \"test_01_beta\": {} } } } }";
-        let error = migrate(content, fixture.temp.path().as_std_path(), None)
+        let error = migrate(content, fixture.temp.path().as_std_path(), None, None)
             .err()
             .unwrap();
         assert!(
@@ -1044,7 +1529,13 @@ mod contract {
             .source("parallel/test-a.js", TWO_TESTS)
             .source("parallel/test-b.mjs", "");
         let first = fixture.migrate(r#"    "parallel/test-a.js": { "category": "known-gap" }"#);
-        let second = migrate(&first.content, fixture.temp.path().as_std_path(), None).unwrap();
+        let second = migrate(
+            &first.content,
+            fixture.temp.path().as_std_path(),
+            None,
+            None,
+        )
+        .unwrap();
         assert_eq!(second.content, first.content);
         assert_eq!(second.report, MigrationReport::default());
     }
@@ -1054,9 +1545,518 @@ mod contract {
     fn duplicate_entries_are_rejected() {
         let fixture = Fixture::new();
         let content = "{ \"nodeVersion\": \"22.14.0\", \"tests\": { \"parallel/test-a.js\": {}, \"parallel/test-a.js\": { \"category\": \"known-gap\" } } }";
-        let error = migrate(content, fixture.temp.path().as_std_path(), None)
+        let error = migrate(content, fixture.temp.path().as_std_path(), None, None)
             .err()
             .unwrap();
         assert!(error.to_string().contains("duplicate"), "{error:#}");
+    }
+
+    // The next four cases use only the interface of the migration before decisions existed, so
+    // they also show what it got wrong: a changed block was silently accepted by position.
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_changed_runnable_block_needs_a_decision() {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ passes(1); }\n{ gap(); }\n")
+            .source("parallel/test-a.js", "{ passes(2); }\n{ gap(); }\n");
+        let tests = r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": {}, "block_01_block_01": { "category": "known-gap", "reason": "gap" } } }"#;
+        let migration = fixture.migrate(tests);
+        assert!(migration.content.contains(tests));
+        assert_eq!(migration.report.needs_review(), 1);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_changed_excluded_block_needs_a_decision() {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ internals(1); }\n{ passes(); }\n")
+            .source("parallel/test-a.js", "{ internals(2); }\n{ passes(); }\n");
+        let tests = r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": { "category": "node-internals", "reason": "internal" }, "block_01_block_01": {} } }"#;
+        let migration = fixture.migrate(tests);
+        assert!(migration.content.contains(tests));
+        assert_eq!(migration.report.needs_review(), 1);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_changed_block_with_an_unchanged_entry_but_new_internals_needs_a_decision() {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ passes(1); }\n{ passes(); }\n")
+            .source(
+                "parallel/test-a.js",
+                "{ passes(2); internalBinding('x'); }\n{ passes(); }\n",
+            );
+        let tests = r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": {}, "block_01_block_01": {} } }"#;
+        let migration = fixture.migrate(tests);
+        assert!(migration.content.contains(tests));
+        assert_eq!(migration.report.needs_review(), 1);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_block_moved_with_identical_source_needs_no_decision() {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ gap(); }\n{ passes(); }\n")
+            .source(
+                "parallel/test-a.js",
+                "{ added(); }\n{ gap(); }\n{ passes(); }\n",
+            );
+        let migration = fixture.migrate(
+            r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": { "category": "known-gap", "reason": "gap" }, "block_01_block_01": {} } }"#,
+        );
+        let subtests = &entries(&migration)["parallel/test-a.js"]["subtests"];
+        assert_eq!(
+            subtests["block_01_block_01"],
+            json!({ "category": "known-gap", "reason": "gap" })
+        );
+        assert_eq!(subtests["block_02_block_02"], json!({}));
+        assert_eq!(migration.report.needs_review(), 0);
+    }
+
+    /// Three blocks: the first two change, the third does not.
+    const PREVIOUS_BLOCKS: &str = "{ one(1); }\n{ two(1); }\n{ three(); }\n";
+    const CURRENT_BLOCKS: &str = "{ one(2); }\n{ two(2); }\n{ three(); }\n";
+
+    fn blocks(first: &str, second: &str, third: &str) -> String {
+        format!(
+            "    \"parallel/test-a.js\": {{ \"split\": true, \"subtests\": {{ \"block_00_block_00\": {first}, \"block_01_block_01\": {second}, \"block_02_block_02\": {third} }} }}"
+        )
+    }
+
+    fn pending<'a>(migration: &'a Migration, subtest: &str) -> &'a Value {
+        migration
+            .report
+            .pending_position_decisions
+            .iter()
+            .find(|row| row["subtest"] == subtest)
+            .unwrap_or_else(|| panic!("{subtest} is not pending: {:#?}", migration.report))
+    }
+
+    /// A decision built from the pending row of `subtest`, with `extra` keys.
+    fn decision(proposal: &Migration, subtest: &str, entry: Value, extra: Value) -> Value {
+        let row = pending(proposal, subtest);
+        let mut decision = json!({
+            "file": row["file"],
+            "subtest": subtest,
+            "previousBlake3": row["previousBlake3"],
+            "currentBlake3": row["currentBlake3"],
+            "previous": row["previous"],
+            "entry": entry,
+            "assertions": "kept",
+            "note": "reviewed against both versions",
+        });
+        for (key, value) in extra.as_object().unwrap() {
+            decision[key] = value.clone();
+        }
+        decision
+    }
+
+    fn record(proposal: &Migration, rows: Vec<Value>) -> Value {
+        let inputs = proposal.report.position_inputs.as_ref().unwrap();
+        json!({
+            "from": inputs["from"],
+            "to": inputs["to"],
+            "previousConfig": {
+                "revision": "fixture",
+                "path": "tests/node_compat/config.jsonc",
+                "testsBlake3": inputs["testsBlake3"],
+            },
+            "positionDecisions": rows,
+        })
+    }
+
+    fn blocks_fixture() -> Fixture {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", PREVIOUS_BLOCKS)
+            .source("parallel/test-a.js", CURRENT_BLOCKS);
+        fixture
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn accepted_decisions_replace_the_positional_proposal() {
+        let fixture = blocks_fixture();
+        let input = config(&blocks("{}", "{}", "{}"));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let gap = json!({ "category": "known-gap", "reason": "the new assertion needs X" });
+        let decisions = record(
+            &proposal,
+            vec![
+                decision(
+                    &proposal,
+                    "block_00_block_00",
+                    json!({}),
+                    json!({ "assertions": "none" }),
+                ),
+                decision(
+                    &proposal,
+                    "block_01_block_01",
+                    gap.clone(),
+                    json!({ "assertions": "changed", "obligation": "baseline-gap" }),
+                ),
+            ],
+        );
+        let migration = fixture.migrate_with(&input, Some(&decisions)).unwrap();
+        let subtests = &entries(&migration)["parallel/test-a.js"]["subtests"];
+        assert_eq!(subtests["block_00_block_00"], json!({}));
+        assert_eq!(subtests["block_01_block_01"], gap);
+        assert_eq!(subtests["block_02_block_02"], json!({}));
+        // The audit list stays complete; only the decisions are settled.
+        assert_eq!(migration.report.matched_by_position.len(), 2);
+        assert_eq!(
+            migration.report.obligations,
+            [json!({
+                "file": "parallel/test-a.js",
+                "subtest": "block_01_block_01",
+                "previous": "runnable",
+                "entry": "known-gap",
+                "obligation": "baseline-gap",
+                "movedTo": null,
+                "evidence": null,
+            })]
+        );
+        assert_eq!(migration.report.needs_review(), 0);
+        // The same decisions on the same input give the same result.
+        let again = fixture.migrate_with(&input, Some(&decisions)).unwrap();
+        assert_eq!(again.content, migration.content);
+        assert_eq!(again.report, migration.report);
+        // They are bound to the input config, so they do not apply to the migrated one.
+        let error = fixture
+            .migrate_with(&migration.content, Some(&decisions))
+            .err()
+            .unwrap();
+        assert!(
+            error.to_string().contains("testsBlake3") || error.to_string().contains("tests hash"),
+            "{error:#}"
+        );
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_kept_decision_leaves_the_config_untouched() {
+        let fixture = blocks_fixture();
+        let input = config(&blocks(
+            "{}",
+            r#"{ "category": "node-internals", "reason": "internal" }"#,
+            "{}",
+        ));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        assert_eq!(proposal.content, input);
+        let decisions = record(
+            &proposal,
+            vec![
+                decision(&proposal, "block_00_block_00", json!({}), json!({})),
+                decision(
+                    &proposal,
+                    "block_01_block_01",
+                    json!({ "category": "node-internals", "reason": "internal" }),
+                    json!({}),
+                ),
+            ],
+        );
+        let migration = fixture.migrate_with(&input, Some(&decisions)).unwrap();
+        assert_eq!(migration.content, input);
+        assert!(migration.report.obligations.is_empty());
+        assert_eq!(migration.report.needs_review(), 0);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn decisions_must_keep_old_obligations_accounted_for() {
+        let fixture = blocks_fixture();
+        let input = config(&blocks(
+            "{}",
+            r#"{ "category": "known-gap", "reason": "gap" }"#,
+            "{}",
+        ));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let impossible = json!({ "category": "wasi-impossible", "reason": "needs a socket" });
+        let problem = |rows: Vec<Value>| {
+            let migration = fixture
+                .migrate_with(&input, Some(&record(&proposal, rows)))
+                .unwrap();
+            assert!(migration.content.contains(&blocks(
+                "{}",
+                r#"{ "category": "known-gap", "reason": "gap" }"#,
+                "{}"
+            )));
+            migration
+                .report
+                .pending_position_decisions
+                .iter()
+                .map(|row| row["problem"].as_str().unwrap_or("none").to_string())
+                .collect::<Vec<_>>()
+        };
+        let gap = json!({ "category": "known-gap", "reason": "gap" });
+        // A runnable subtest that stops running, and a known gap that becomes excluded, each
+        // need an obligation of the right kind.
+        let rejected = problem(vec![
+            decision(
+                &proposal,
+                "block_00_block_00",
+                gap.clone(),
+                json!({ "assertions": "changed" }),
+            ),
+            decision(
+                &proposal,
+                "block_01_block_01",
+                impossible.clone(),
+                json!({ "assertions": "changed", "obligation": "baseline-gap" }),
+            ),
+        ]);
+        assert_eq!(rejected.len(), 2);
+        assert!(
+            rejected
+                .iter()
+                .all(|p| p.starts_with("obligationViolation")),
+            "{rejected:?}"
+        );
+        // A baseline gap needs a reason.
+        let rejected = problem(vec![decision(
+            &proposal,
+            "block_00_block_00",
+            json!({ "category": "known-gap" }),
+            json!({ "assertions": "changed", "obligation": "baseline-gap" }),
+        )]);
+        assert!(
+            rejected[0].starts_with("obligationViolation"),
+            "{rejected:?}"
+        );
+
+        let accepted = fixture
+            .migrate_with(
+                &input,
+                Some(&record(
+                    &proposal,
+                    vec![
+                        decision(
+                            &proposal,
+                            "block_00_block_00",
+                            gap.clone(),
+                            json!({ "assertions": "changed", "obligation": "baseline-gap" }),
+                        ),
+                        decision(
+                            &proposal,
+                            "block_01_block_01",
+                            impossible.clone(),
+                            json!({
+                                "assertions": "changed",
+                                "obligation": "target-change",
+                                "evidence": "Node 26 rewrote the block to need a listening socket",
+                            }),
+                        ),
+                    ],
+                )),
+            )
+            .unwrap();
+        assert_eq!(accepted.report.needs_review(), 0);
+        assert_eq!(accepted.report.obligations.len(), 2);
+        assert_eq!(
+            entries(&accepted)["parallel/test-a.js"]["subtests"]["block_01_block_01"],
+            impossible
+        );
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn an_unchanged_entry_whose_effective_category_changed_needs_an_obligation() {
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ passes(1); }\n{ passes(); }\n")
+            .source(
+                "parallel/test-a.js",
+                "{ passes(2); internalBinding('x'); }\n{ passes(); }\n",
+            );
+        let input = config(
+            r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": {}, "block_01_block_01": {} } }"#,
+        );
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        assert_eq!(
+            pending(&proposal, "block_00_block_00")["previous"]["effective"]["category"],
+            "runnable"
+        );
+        let kept = record(
+            &proposal,
+            vec![decision(
+                &proposal,
+                "block_00_block_00",
+                json!({}),
+                json!({}),
+            )],
+        );
+        let migration = fixture.migrate_with(&input, Some(&kept)).unwrap();
+        let row = pending(&migration, "block_00_block_00");
+        assert!(
+            row["problem"]
+                .as_str()
+                .unwrap()
+                .contains("becomes node-internals"),
+            "{row:#}"
+        );
+        let decided = record(
+            &proposal,
+            vec![decision(
+                &proposal,
+                "block_00_block_00",
+                json!({}),
+                json!({ "obligation": "target-change", "evidence": "Node 26 exposes internals here" }),
+            )],
+        );
+        let migration = fixture.migrate_with(&input, Some(&decided)).unwrap();
+        assert_eq!(migration.report.needs_review(), 0);
+        assert_eq!(migration.report.obligations[0]["entry"], "node-internals");
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn moved_assertions_must_land_on_a_runnable_subtest() {
+        let fixture = blocks_fixture();
+        let input = config(&blocks(
+            "{}",
+            "{}",
+            r#"{ "category": "known-gap", "reason": "gap" }"#,
+        ));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let gap = json!({ "category": "known-gap", "reason": "split elsewhere" });
+        let moved = |target: &str| {
+            decision(
+                &proposal,
+                "block_00_block_00",
+                gap.clone(),
+                json!({ "assertions": "moved", "obligation": "moved", "movedTo": [target] }),
+            )
+        };
+        let kept = decision(&proposal, "block_01_block_01", json!({}), json!({}));
+        let run = |rows| {
+            fixture
+                .migrate_with(&input, Some(&record(&proposal, rows)))
+                .unwrap()
+        };
+        let accepted = run(vec![
+            moved("parallel/test-a.js#block_01_block_01"),
+            kept.clone(),
+        ]);
+        assert_eq!(accepted.report.needs_review(), 0);
+        for target in [
+            "parallel/test-a.js#block_02_block_02",
+            "parallel/test-missing.js",
+        ] {
+            let rejected = run(vec![moved(target), kept.clone()]);
+            let row = pending(&rejected, "block_00_block_00");
+            assert!(
+                row["problem"]
+                    .as_str()
+                    .unwrap()
+                    .starts_with("obligationViolation"),
+                "{row:#}"
+            );
+            assert_eq!(rejected.report.needs_review(), 1);
+        }
+        // The target itself is a changed subtest; when its own decision stops it running
+        // without a baseline gap, the decision that moved assertions to it is rejected too.
+        let target_moved = decision(
+            &proposal,
+            "block_01_block_01",
+            json!({ "category": "wasi-impossible", "reason": "socket" }),
+            json!({ "assertions": "changed", "obligation": "target-change", "evidence": "socket" }),
+        );
+        let rejected = run(vec![
+            moved("parallel/test-a.js#block_01_block_01"),
+            target_moved,
+        ]);
+        assert_eq!(rejected.report.pending_position_decisions.len(), 1);
+        assert_eq!(
+            pending(&rejected, "block_00_block_00")["file"],
+            "parallel/test-a.js"
+        );
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn stale_mismatched_and_unused_decisions_fail() {
+        let fixture = blocks_fixture();
+        let input = config(&blocks("{}", "{}", "{}"));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let mut stale = decision(&proposal, "block_00_block_00", json!({}), json!({}));
+        stale["currentBlake3"] = json!(blake3::hash(b"another source").to_hex().to_string());
+        let mut mismatched = decision(&proposal, "block_01_block_01", json!({}), json!({}));
+        mismatched["previous"]["effective"]["category"] = json!("known-gap");
+        let mut unused = decision(&proposal, "block_01_block_01", json!({}), json!({}));
+        unused["subtest"] = json!("block_02_block_02");
+        let migration = fixture
+            .migrate_with(
+                &input,
+                Some(&record(&proposal, vec![stale, mismatched, unused])),
+            )
+            .unwrap();
+        assert_eq!(migration.content, input);
+        let problems: Vec<&str> = migration
+            .report
+            .pending_position_decisions
+            .iter()
+            .map(|row| row["problem"].as_str().unwrap())
+            .collect();
+        assert!(problems[0].starts_with("stale"), "{problems:?}");
+        assert!(problems[1].starts_with("previousMismatch"), "{problems:?}");
+        assert_eq!(
+            migration.report.unused_decisions,
+            [json!({
+                "file": "parallel/test-a.js",
+                "subtest": "block_02_block_02",
+                "problem": "no changed subtest with a generated name is matched by position here",
+            })]
+        );
+        assert_eq!(migration.report.needs_review(), 3);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn decisions_for_other_inputs_or_malformed_rows_are_rejected() {
+        let fixture = blocks_fixture();
+        let input = config(&blocks("{}", "{}", "{}"));
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let row = decision(&proposal, "block_00_block_00", json!({}), json!({}));
+        let error = |decisions: Value| {
+            fixture
+                .migrate_with(&input, Some(&decisions))
+                .err()
+                .unwrap_or_else(|| panic!("accepted {decisions:#}"))
+                .to_string()
+        };
+        let mut versions = record(&proposal, vec![row.clone()]);
+        versions["to"] = json!("24.15.0");
+        assert!(error(versions).contains("24.15.0"));
+        let mut config_hash = record(&proposal, vec![row.clone()]);
+        config_hash["previousConfig"]["testsBlake3"] = json!("0".repeat(64));
+        assert!(error(config_hash).contains("tests hash"));
+        assert!(error(record(&proposal, vec![row.clone(), row.clone()])).contains("duplicate"));
+        let mut unknown = row.clone();
+        unknown["category"] = json!("runnable");
+        assert!(error(record(&proposal, vec![unknown])).contains("unknown key"));
+        let mut no_note = row.clone();
+        no_note["note"] = json!(" ");
+        assert!(error(record(&proposal, vec![no_note])).contains("note"));
+        let mut no_evidence = row.clone();
+        no_evidence["obligation"] = json!("target-change");
+        assert!(error(record(&proposal, vec![no_evidence])).contains("evidence"));
+        let without_previous = migrate(
+            &input,
+            fixture.temp.path().as_std_path(),
+            None,
+            Some(&record(&proposal, vec![row]).to_string()),
+        )
+        .err()
+        .unwrap();
+        assert!(
+            without_previous
+                .to_string()
+                .contains("NODE_COMPAT_MIGRATION_PREVIOUS_SUITE")
+        );
     }
 }
