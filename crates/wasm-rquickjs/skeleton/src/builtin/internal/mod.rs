@@ -9,6 +9,9 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/source_map_url")
         .with_module("__wasm_rquickjs_builtin/internal/fs/utils")
         .with_module("__wasm_rquickjs_builtin/internal/fs/shared")
+        .with_module("__wasm_rquickjs_builtin/internal/fs/glob")
+        .with_module("__wasm_rquickjs_builtin/internal/glob_matcher")
+        .with_module("__wasm_rquickjs_builtin/internal/glob_matcher_vendor")
         .with_module("__wasm_rquickjs_builtin/internal/normalize_encoding")
         .with_module("__wasm_rquickjs_builtin/internal/url")
         .with_module("__wasm_rquickjs_builtin/internal/util")
@@ -65,6 +68,18 @@ pub fn module_loader() -> BuiltinLoader {
         .with_module(
             "__wasm_rquickjs_builtin/internal/fs/shared",
             include_str!("fs/shared.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/fs/glob",
+            include_str!("fs/glob.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/glob_matcher",
+            include_str!("glob_matcher.js"),
+        )
+        .with_module(
+            "__wasm_rquickjs_builtin/internal/glob_matcher_vendor",
+            include_str!("glob_matcher_vendor.js"),
         )
         .with_module(
             "__wasm_rquickjs_builtin/internal/normalize_encoding",

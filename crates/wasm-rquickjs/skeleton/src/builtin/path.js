@@ -1,6 +1,7 @@
 // node:path implementation — pure JavaScript port of Node.js v22.14.0 lib/path.js
 // Provides both POSIX and win32 path utilities.
 
+import { matchesGlob as matchPathGlob } from '__wasm_rquickjs_builtin/internal/glob_matcher';
 import { validateString, validateObject } from '__wasm_rquickjs_builtin/internal/validators';
 
 // Character code constants
@@ -109,63 +110,7 @@ function _format(sep, pathObject) {
 function _matchesGlob(path, pattern, isWindows) {
   validateString(path, 'path');
   validateString(pattern, 'pattern');
-
-  if (isWindows) {
-    path = path.replace(/\\/g, '/');
-    pattern = pattern.replace(/\\/g, '/');
-  }
-
-  // Build regex from glob pattern, preserving [...] character classes
-  let regexStr = '';
-  let i = 0;
-  while (i < pattern.length) {
-    const c = pattern[i];
-    if (c === '[') {
-      // Find closing bracket — pass through as regex character class
-      const start = i;
-      i++;
-      // Handle negation: [!...] -> [^...]
-      if (i < pattern.length && pattern[i] === '!') {
-        regexStr += '[^';
-        i++;
-      } else {
-        regexStr += '[';
-      }
-      while (i < pattern.length && pattern[i] !== ']') {
-        regexStr += pattern[i];
-        i++;
-      }
-      if (i < pattern.length) {
-        regexStr += ']';
-        i++;
-      }
-    } else if (c === '*') {
-      if (i + 1 < pattern.length && pattern[i + 1] === '*') {
-        // ** matches everything including /
-        regexStr += '.*';
-        i += 2;
-        // skip trailing separator after **
-        if (i < pattern.length && pattern[i] === '/') {
-          i++;
-        }
-      } else {
-        regexStr += '[^/]*';
-        i++;
-      }
-    } else if (c === '?') {
-      regexStr += '[^/]';
-      i++;
-    } else if ('.+^${}()|\\'.indexOf(c) !== -1) {
-      regexStr += '\\' + c;
-      i++;
-    } else {
-      regexStr += c;
-      i++;
-    }
-  }
-
-  const regex = new RegExp(`^${regexStr}$`);
-  return regex.test(path);
+  return matchPathGlob(path, pattern, isWindows);
 }
 
 // ======================== win32 ========================

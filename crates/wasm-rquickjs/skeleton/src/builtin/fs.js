@@ -1,3 +1,5 @@
+import { validateFunction } from '__wasm_rquickjs_builtin/internal/validators';
+import { Glob } from '__wasm_rquickjs_builtin/internal/fs/glob';
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     ERR_DIR_CLOSED,
@@ -4078,7 +4080,40 @@ export let _toUnixTimestamp = function _toUnixTimestamp(time, name = 'time') {
 
 // --- Default export ---
 
+const globOperations = {
+    Dirent: () => Dirent,
+    lstatSync: path => lstatSync(path),
+    readdirSync: (path, options) => readdirSync(path, options),
+    lstat: path => getPromises().lstat(path),
+    readdir: (path, options) => getPromises().readdir(path, options),
+};
+
+export let globSync = function globSync(pattern, options) {
+    return new Glob(pattern, options, globOperations).globSync();
+};
+
+export let glob = function glob(pattern, options, callback) {
+    if (typeof options === 'function') {
+        callback = options;
+        options = undefined;
+    }
+    validateFunction(callback, 'cb');
+    (async () => {
+        try {
+            const results = [];
+            for await (const entry of new Glob(pattern, options, globOperations).glob()) {
+                results.push(entry);
+            }
+            callback(null, results);
+        } catch (error) {
+            callback(error);
+        }
+    })();
+};
+
 const _default = {
+    glob,
+    globSync,
     constants,
     Stats,
     Dirent,

@@ -29,6 +29,7 @@ mod export_from_inner_package;
 mod export_interface_name_collision;
 mod fetch;
 mod fs;
+mod glob;
 mod imports;
 mod intl;
 mod module_resolution;
@@ -72,6 +73,7 @@ tag_suite!(imports, group2);
 
 tag_suite!(abort_controller, group3);
 tag_suite!(fs, group3);
+tag_suite!(glob, group3);
 tag_suite!(variant_list_roundtrip, group3);
 tag_suite!(typescript_runtime, group3);
 

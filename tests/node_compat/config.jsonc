@@ -33,6 +33,7 @@
     "parallel/test-path-zero-length-strings.js": {},
     "parallel/test-path.js": {},
     "parallel/test-path-glob.js": {},
+    "parallel/test-fs-glob.mjs": {},
     "parallel/test-path-makelong.js": {},
     "parallel/test-path-posix-exists.js": {},
     "parallel/test-path-win32-exists.js": {},
@@ -6790,7 +6791,7 @@
         "block_01_block_01": { "reason": "inherited: uses --expose-internals and internal/test/binding (internalBinding('config'))" }
       }
     },
-    "parallel/test-icu-env.js": { "category": "known-gap", "reason": "fs.globSync API is not implemented" },
+    "parallel/test-icu-env.js": { "category": "known-gap", "reason": "requires full ICU locale and timezone support and subprocess-backed Intl environment checks" },
     "parallel/test-icu-minimum-version.js": { "category": "node-internals", "reason": "depends on Node source tree files under tools/icu and deps/v8" },
     "parallel/test-icu-stringwidth.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/util/inspect" },
     "parallel/test-icu-transcode.js": {

@@ -724,8 +724,9 @@ macOS/Linux local development support these links. Windows local development
 currently requires Developer Mode or an equivalent symlink privilege; non-link
 filesystem and npm workflows are unaffected.
 
-- **Sync:** `readFileSync`, `writeFileSync`, `appendFileSync`, `openSync`, `closeSync`, `readSync`, `writeSync`, `ftruncateSync`, `fsyncSync`, `fdatasyncSync`, `statSync`, `lstatSync`, `fstatSync`, `statfsSync`, `readdirSync`, `accessSync`, `existsSync`, `realpathSync`, `truncateSync`, `copyFileSync`, `linkSync`, `symlinkSync`, `readlinkSync`, `chmodSync`, `fchmodSync`, `lchmodSync`, `chownSync`, `fchownSync`, `lchownSync`, `utimesSync`, `futimesSync`, `lutimesSync`, `unlinkSync`, `renameSync`, `mkdirSync`, `rmdirSync`, `rmSync`, `mkdtempSync`, `opendirSync`, `readvSync`, `writevSync`, `cpSync`
-- **Async (callback):** `readFile`, `writeFile`, `appendFile`, `open`, `close`, `read`, `write`, `stat`, `lstat`, `fstat`, `statfs`, `ftruncate`, `fsync`, `fdatasync`, `readdir`, `access`, `exists`, `realpath`, `truncate`, `copyFile`, `link`, `symlink`, `readlink`, `chmod`, `fchmod`, `lchmod`, `chown`, `fchown`, `lchown`, `utimes`, `futimes`, `lutimes`, `unlink`, `rename`, `mkdir`, `rmdir`, `rm`, `mkdtemp`, `opendir`, `watch`, `watchFile`, `unwatchFile`, `readv`, `writev`, `cp`, `openAsBlob`
+- **Sync:** `readFileSync`, `writeFileSync`, `appendFileSync`, `openSync`, `closeSync`, `readSync`, `writeSync`, `ftruncateSync`, `fsyncSync`, `fdatasyncSync`, `statSync`, `lstatSync`, `fstatSync`, `statfsSync`, `readdirSync`, `accessSync`, `existsSync`, `realpathSync`, `truncateSync`, `copyFileSync`, `linkSync`, `symlinkSync`, `readlinkSync`, `chmodSync`, `fchmodSync`, `lchmodSync`, `chownSync`, `fchownSync`, `lchownSync`, `utimesSync`, `futimesSync`, `lutimesSync`, `unlinkSync`, `renameSync`, `mkdirSync`, `rmdirSync`, `rmSync`, `mkdtempSync`, `opendirSync`, `readvSync`, `writevSync`, `cpSync`, `globSync`
+- **Async (callback):** `readFile`, `writeFile`, `appendFile`, `open`, `close`, `read`, `write`, `stat`, `lstat`, `fstat`, `statfs`, `ftruncate`, `fsync`, `fdatasync`, `readdir`, `access`, `exists`, `realpath`, `truncate`, `copyFile`, `link`, `symlink`, `readlink`, `chmod`, `fchmod`, `lchmod`, `chown`, `fchown`, `lchown`, `utimes`, `futimes`, `lutimes`, `unlink`, `rename`, `mkdir`, `rmdir`, `rm`, `mkdtemp`, `opendir`, `watch`, `watchFile`, `unwatchFile`, `readv`, `writev`, `cp`, `openAsBlob`, `glob`
+- **Globbing:** `globSync`, callback `glob`, and the `fs/promises.glob` async iterator traverse the real filesystem, with pattern arrays, exclusions, genuine `Dirent` results and per-operation caches. The path matcher is shared with `path.matchesGlob`. As in Node.js 22.14, async traversal can reject when reading dangling symlinks or symlinks to files as directories.
 - **Streams:** `createReadStream`, `createWriteStream`
 - **Classes:** `Stats`, `Dirent`, `Dir`, `FSWatcher`, `StatWatcher`, `ReadStream`, `WriteStream`
 - **Constants:** `F_OK`, `R_OK`, `W_OK`, `X_OK`, `O_RDONLY`, `O_WRONLY`, `O_RDWR`, `O_CREAT`, `O_EXCL`, `O_TRUNC`, `O_APPEND`, etc.
@@ -737,7 +738,7 @@ filesystem and npm workflows are unaffected.
 
 Promise-based filesystem API.
 
-- `FileHandle`, `open`, `readFile`, `writeFile`, `appendFile`, `unlink`, `rename`, `mkdir`, `rmdir`, `rm`, `stat`, `lstat`, `readdir`, `opendir`, `access`, `realpath`, `truncate`, `copyFile`, `link`, `symlink`, `readlink`, `chmod`, `lchmod`, `chown`, `lchown`, `utimes`, `lutimes`, `mkdtemp`, `cp`, `watch`, `statfs`, `constants`
+- `FileHandle`, `open`, `readFile`, `writeFile`, `appendFile`, `unlink`, `rename`, `mkdir`, `rmdir`, `rm`, `stat`, `lstat`, `readdir`, `opendir`, `access`, `realpath`, `truncate`, `copyFile`, `link`, `symlink`, `readlink`, `chmod`, `lchmod`, `chown`, `lchown`, `utimes`, `lutimes`, `mkdtemp`, `cp`, `watch`, `statfs`, `constants`, `glob`
 
 </details>
 

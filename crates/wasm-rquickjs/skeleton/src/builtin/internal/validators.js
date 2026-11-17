@@ -234,6 +234,15 @@ export const validateArray = hideStackFrames((value, name, minLength = 0) => {
     }
 });
 
+export const validateStringArray = hideStackFrames((value, name) => {
+    validateArray(value, name);
+    for (let i = 0; i < value.length; i++) {
+        if (typeof value[i] !== 'string') {
+            throw new ERR_INVALID_ARG_TYPE(`${name}[${i}]`, 'string', value[i]);
+        }
+    }
+});
+
 /**
  * @callback validateOneOf
  * @template T
@@ -342,6 +351,7 @@ export default {
     validateInteger,
     validateNumber,
     validateArray,
+    validateStringArray,
     getValidMode,
     validateOneOf,
     validateEncoding

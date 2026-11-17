@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3189/4403 (72.4%)
+**Primary compatibility (CI-enforced):** 3190/4404 (72.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3189 | 72.4% | 55.4% | 46.4% |
+| ✅ passing (runnable) | 3190 | 72.4% | 55.4% | 46.4% |
 | 🧩 known gap | 1214 | 27.6% | 21.1% | 17.6% |
 | 🚫 WASI-impossible (excluded) | 1190 | — | 20.7% | 17.3% |
 | ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
 | ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
 | 🔒 Node.js internals (excluded) | 1119 | — | — | 16.3% |
-| **Total** | **6879** |  |  | **100.0%** |
+| **Total** | **6880** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3189/5760 (55.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3190/5761 (55.4%)**.
 
 ## Inventory by Module
 
@@ -33,33 +33,33 @@ Secondary full-public compatibility, including public tests that are currently e
 | async_hooks | 38 | 4 | 28 | 4 | 0 | 0 | 2 | 12.5% | 11.1% |
 | blob | 24 | 2 | 0 | 0 | 0 | 0 | 22 | 100.0% | 100.0% |
 | buffer | 180 | 172 | 0 | 1 | 1 | 0 | 6 | 100.0% | 98.9% |
-| child_process | 208 | 37 | 67 | 89 | 0 | 0 | 15 | 35.6% | 19.2% |
+| child_process | 210 | 37 | 67 | 91 | 0 | 0 | 15 | 35.6% | 19.0% |
 | cli | 32 | 9 | 21 | 0 | 0 | 0 | 2 | 30.0% | 30.0% |
 | cluster | 87 | 0 | 0 | 85 | 0 | 0 | 2 | 0.0% | 0.0% |
 | common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
 | compile | 15 | 0 | 0 | 0 | 15 | 0 | 0 | 0.0% | 0.0% |
 | console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
 | crypto | 239 | 204 | 11 | 8 | 0 | 0 | 16 | 94.9% | 91.5% |
-| dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
+| dgram | 119 | 24 | 74 | 7 | 0 | 0 | 14 | 24.5% | 22.9% |
 | diagnostics_channel | 33 | 24 | 6 | 1 | 2 | 0 | 0 | 80.0% | 72.7% |
 | dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
 | domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | errors | 49 | 2 | 0 | 2 | 0 | 0 | 45 | 100.0% | 50.0% |
 | eslint | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 0.0% | 0.0% |
-| events | 93 | 59 | 2 | 0 | 0 | 0 | 32 | 96.7% | 96.7% |
-| fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
+| events | 94 | 59 | 3 | 0 | 0 | 0 | 32 | 95.2% | 95.2% |
+| fetch | 2 | 2 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
+| fs | 483 | 340 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
 | global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
 | heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
 | http | 898 | 239 | 276 | 301 | 2 | 0 | 80 | 46.4% | 29.2% |
 | inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
 | internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 174 | 122 | 32 | 7 | 1 | 0 | 12 | 79.2% | 75.3% |
-| net | 223 | 148 | 38 | 19 | 1 | 0 | 17 | 79.6% | 71.8% |
+| module | 305 | 191 | 90 | 10 | 1 | 0 | 13 | 68.0% | 65.4% |
+| net | 224 | 149 | 38 | 19 | 1 | 0 | 17 | 79.7% | 72.0% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
 | os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 617 | 190 | 146 | 86 | 12 | 0 | 183 | 56.5% | 43.8% |
+| other | 478 | 118 | 86 | 81 | 11 | 0 | 182 | 57.8% | 39.9% |
 | path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | perf_hooks | 41 | 4 | 33 | 2 | 0 | 0 | 2 | 10.8% | 10.3% |
 | permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
@@ -73,7 +73,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | snapshot | 57 | 0 | 0 | 0 | 57 | 0 | 0 | 0.0% | 0.0% |
 | sqlite | 39 | 36 | 3 | 0 | 0 | 0 | 0 | 92.3% | 92.3% |
 | stdio | 23 | 12 | 7 | 3 | 0 | 0 | 1 | 63.2% | 54.5% |
-| stream | 753 | 713 | 31 | 2 | 0 | 0 | 7 | 95.8% | 95.6% |
+| stream | 754 | 713 | 32 | 2 | 0 | 0 | 7 | 95.7% | 95.4% |
 | string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | test_runner | 157 | 93 | 34 | 21 | 1 | 0 | 8 | 73.2% | 62.4% |
 | timers | 97 | 48 | 3 | 0 | 0 | 0 | 46 | 94.1% | 94.1% |
@@ -83,7 +83,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | url | 29 | 19 | 9 | 0 | 0 | 0 | 1 | 67.9% | 67.9% |
 | util | 174 | 93 | 9 | 0 | 0 | 0 | 72 | 91.2% | 91.2% |
 | v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
+| vm | 129 | 73 | 39 | 3 | 14 | 0 | 0 | 65.2% | 56.6% |
 | webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
 | webstreams | 68 | 67 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
 | whatwg | 261 | 43 | 32 | 0 | 0 | 0 | 186 | 57.3% | 57.3% |
@@ -1099,7 +1099,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | fs permission coverage tables are out of sync with exposed fs API surface | 1 | `parallel/test-permission-fs-supported.js` |
 | fs symlink permission checks are incomplete | 1 | `parallel/test-permission-fs-symlink-relative.js` |
 | fs.constants includes Linux-only O_NOATIME even when common.isLinux is false in WASM | 1 | `parallel/test-process-constants-noatime.js` |
-| fs.globSync API is not implemented | 1 | `parallel/test-icu-env.js` |
 | fs.watch directory watcher filename/null and event delivery semantics are not Node-compatible | 1 | `sequential/test-fs-watch.js#block_02_block_02` |
 | fs.watch emits duplicate change events for a single write | 1 | `sequential/test-fs-watch.js#block_00_block_00` |
 | fs.watch path watcher emits duplicate change events | 1 | `sequential/test-fs-watch.js#block_01_block_01` |
@@ -1209,6 +1208,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
+| requires full ICU locale and timezone support and subprocess-backed Intl environment checks | 1 | `parallel/test-icu-env.js` |
 | requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 1 | `es-module/test-typescript-eval.mjs` |
 | requires isolated process.execPath --experimental-transform-types execution and CLI source-map configuration | 1 | `es-module/test-typescript-transform.mjs` |
 | requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 1 | `es-module/test-typescript.mjs` |

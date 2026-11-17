@@ -1,0 +1,10 @@
+package quickjs:glob;
+
+world glob {
+  export matcher-contract: func() -> bool;
+  export sync-contract: func() -> bool;
+  export callback-contract: func() -> bool;
+  export iterator-contract: func() -> bool;
+  export exclusion-contract: func() -> bool;
+  export symlink-contract: func() -> bool;
+}

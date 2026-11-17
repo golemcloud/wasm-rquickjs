@@ -5274,11 +5274,11 @@ fn plug(
 /// Classify a test filename into a module category based on its name prefix.
 pub fn classify_test(filename: &str) -> &str {
     // Strip "test-" prefix
-    let name = filename
-        .strip_prefix("test-")
-        .unwrap_or(filename)
+    let name = filename.strip_prefix("test-").unwrap_or(filename);
+    let name = name
         .strip_suffix(".js")
-        .unwrap_or(filename);
+        .or_else(|| name.strip_suffix(".mjs"))
+        .unwrap_or(name);
 
     if name.starts_with("path") {
         "path"

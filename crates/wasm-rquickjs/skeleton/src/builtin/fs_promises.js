@@ -1,3 +1,4 @@
+import { Glob } from '__wasm_rquickjs_builtin/internal/fs/glob';
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     aggregateTwoErrors,
@@ -1142,7 +1143,16 @@ export async function statfs(path, options) {
     };
 }
 
+export async function* glob(pattern, options) {
+    yield* new Glob(pattern, options, {
+        Dirent: () => require('node:fs').Dirent,
+        lstat: path => lstat(path),
+        readdir: (path, options) => readdir(path, options),
+    }).glob();
+}
+
 const _defaultExport = {
+    glob,
     FileHandle,
     open,
     readFile,

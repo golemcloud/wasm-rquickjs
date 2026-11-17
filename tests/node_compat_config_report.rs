@@ -781,3 +781,19 @@ fn pct(numerator: usize, denominator: usize) -> f64 {
 fn escape_table_cell(value: &str) -> String {
     value.replace('\n', " ").replace('|', "\\|")
 }
+
+#[test]
+#[test_r::tag(report_contract)]
+fn module_classification_handles_javascript_extensions() {
+    for (name, module) in [
+        ("test-fs-glob.mjs", "fs"),
+        ("test-fs-stat.js", "fs"),
+        ("test-path-glob.js", "path"),
+        ("test-path-exports.mjs", "path"),
+        ("test-module-exports.mjs", "module"),
+        ("test-module-exports.js", "module"),
+        ("test-unrecognized.mjs", "other"),
+    ] {
+        assert_eq!(classify_test(name), module, "{name}");
+    }
+}
