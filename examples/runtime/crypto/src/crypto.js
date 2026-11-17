@@ -1,4 +1,4 @@
-import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPair, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify } from 'node:crypto';
+import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPair, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, sign, verify, getDiffieHellman, createDiffieHellman } from 'node:crypto';
 
 export function newUuids() {
     const uuid1 = crypto.randomUUID()
@@ -276,7 +276,7 @@ export async function subtleSignVerifyRsaPss(message) {
     return await crypto.subtle.verify(pss, keyPair.publicKey, signature, data);
 }
 
-export function cryptoErrorContracts() {
+export async function cryptoErrorContracts() {
     const lines = [];
     const check = (name, fn) => {
         try {
@@ -332,6 +332,36 @@ export function cryptoErrorContracts() {
     });
     check('generateKeyPair Ed25519', () => generateKeyPair('Ed25519', () => {}));
     check('generateKeyPair toString', () => generateKeyPair('toString', () => {}));
+
+    // One-shot sign()/verify() validate synchronously but deliver errors of the
+    // signing job to the callback, after returning.
+    const viaCallback = (name, fn) => new Promise((resolve) => {
+        let returned = false;
+        const done = (outcome) => {
+            lines.push(`${name}: ${returned ? '' : 'before return '}${outcome}`);
+            resolve();
+        };
+        try {
+            fn((err, value) => done(err ? `callback ${err.name} ${err.code}` : `callback ok ${value}`));
+            returned = true;
+        } catch (e) {
+            lines.push(`${name}: throws ${e.name} ${e.code}`);
+            resolve();
+        }
+    });
+    const x25519 = generateKeyPairSync('x25519');
+    await viaCallback('sign digest too big for key', (cb) => sign('sha512', Buffer.from('message'), rsa.privateKey, cb));
+    await viaCallback('verify with x25519 key', (cb) => verify(undefined, Buffer.from('message'), x25519.publicKey, Buffer.alloc(16), cb));
+    await viaCallback('sign invalid padding', (cb) => sign('sha256', Buffer.from('message'), { key: rsa.privateKey, padding: 'x' }, cb));
+    await viaCallback('verify mismatching signature', (cb) => verify('sha256', Buffer.from('message'), rsa.publicKey, Buffer.alloc(64), cb));
+
+    const modp14 = getDiffieHellman('modp14');
+    const alice = createDiffieHellman(modp14.getPrime(), modp14.getGenerator());
+    alice.generateKeys();
+    const pMinus1 = Buffer.from(modp14.getPrime());
+    pMinus1[pMinus1.length - 1] -= 1;
+    check('DH computeSecret(1)', () => alice.computeSecret(Buffer.from([1])));
+    check('DH computeSecret(p - 1)', () => alice.computeSecret(pMinus1));
     return lines;
 }
 

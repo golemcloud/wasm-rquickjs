@@ -2378,9 +2378,12 @@ DiffieHellman.prototype.computeSecret = function(otherPublicKey, inputEncoding, 
     const pubBytes = toBytes(otherPublicKey, inputEncoding);
     const result = webCryptoNative.dh_compute_secret_err(this._handle, pubBytes);
     if (result[0] === 'error') {
-        const err = new Error(result[1]);
-        err.message = result[1];
-        throw err;
+        if (result[1] === 'Supplied key is too small' || result[1] === 'Supplied key is too large') {
+            const err = new RangeError(result[1]);
+            err.code = 'ERR_CRYPTO_INVALID_KEYLEN';
+            throw err;
+        }
+        throw new Error(result[1]);
     }
     const hexStr = result[1];
     const bytes = new Uint8Array(hexStr.length / 2);
@@ -7304,12 +7307,12 @@ export function sign(algorithm, data, key, callback) {
     const normalizedData = toBytes(data);
     const s = new Sign(algo);
     s.update(normalizedData);
-    const result = s.sign(key);
-    if (callback) {
-        process.nextTick(() => callback(null, result));
-        return;
+    // A missing key fails synchronously, as in Node.js.
+    if (!callback || key === null || key === undefined) {
+        return s.sign(key);
     }
-    return result;
+    const preparedKey = prepareOneShotKey(key, createPrivateKey);
+    runOneShotJob(() => s.sign(preparedKey), callback);
 }
 
 export function verify(algorithm, data, key, signature, callback) {
@@ -7324,12 +7327,37 @@ export function verify(algorithm, data, key, signature, callback) {
         throw new ERR_INVALID_ARG_TYPE('signature', ['Buffer', 'TypedArray', 'DataView'], signature);
     }
 
-    const result = v.verify(key, signature);
-    if (callback) {
-        process.nextTick(() => callback(null, result));
-        return;
+    if (!callback || key === null || key === undefined) {
+        return v.verify(key, signature);
     }
-    return result;
+    const preparedKey = prepareOneShotKey(key, (k) =>
+        typeof k === 'object' && k.passphrase !== undefined ? createPublicKey(createPrivateKey(k)) : createPublicKey(k));
+    runOneShotJob(() => v.verify(preparedKey, signature), callback);
+}
+
+// Node.js validates one-shot sign()/verify() options and parses the key
+// synchronously; only errors of the signing job itself reach the callback.
+function prepareOneShotKey(key, toKeyObject) {
+    if (key instanceof KeyObject) {
+        return key;
+    }
+    if (typeof key === 'object' && key.key !== undefined) {
+        getSignVerifyIntOption('padding', key);
+        getSignVerifyIntOption('saltLength', key);
+        return key.key instanceof KeyObject ? key : { ...key, key: toKeyObject(key) };
+    }
+    return toKeyObject(key);
+}
+
+function runOneShotJob(job, callback) {
+    let error = null;
+    let result;
+    try {
+        result = job();
+    } catch (err) {
+        error = err;
+    }
+    process.nextTick(() => (error ? callback(error) : callback(null, result)));
 }
 
 function rsaCacheKey(bytes, padding) {

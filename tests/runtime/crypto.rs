@@ -1055,7 +1055,8 @@ async fn crypto_subtle_sign_verify_rsa_pss(
     }
 }
 
-/// Error contracts of AEAD decryption, key encoding options and crypto argument validation, as Node.js 26.13.1 reports them.
+/// Error contracts of AEAD decryption, key encoding options, crypto argument validation, one-shot sign/verify
+/// callback delivery and DH peer key limits, as Node.js 26.13.1 reports them.
 #[test]
 async fn crypto_error_contracts(
     #[tagged_as("crypto")] compiled: &CompiledTest,
@@ -1096,6 +1097,12 @@ async fn crypto_error_contracts(
         "cipher output encoding change: TypeError ERR_INVALID_ARG_VALUE The argument 'outputEncoding' cannot be changed from 'utf8'. Received 'hex'",
         "generateKeyPair Ed25519: TypeError ERR_INVALID_ARG_VALUE The argument 'type' must be a supported key type. Received 'Ed25519'",
         "generateKeyPair toString: TypeError ERR_INVALID_ARG_VALUE The argument 'type' must be a supported key type. Received 'toString'",
+        "sign digest too big for key: callback Error ERR_OSSL_RSA_DIGEST_TOO_BIG_FOR_RSA_KEY",
+        "verify with x25519 key: callback Error ERR_OSSL_EVP_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE",
+        "sign invalid padding: throws TypeError ERR_INVALID_ARG_VALUE",
+        "verify mismatching signature: callback ok false",
+        "DH computeSecret(1): RangeError ERR_CRYPTO_INVALID_KEYLEN Supplied key is too small",
+        "DH computeSecret(p - 1): RangeError ERR_CRYPTO_INVALID_KEYLEN Supplied key is too large",
     ];
     assert_eq!(lines, expected);
     Ok(())

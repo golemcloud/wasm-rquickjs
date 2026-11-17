@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2900/4452 (65.1%)
+**Primary compatibility (CI-enforced):** 2902/4452 (65.2%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2900 | 65.1% | 30.2% | 26.9% |
-| 🧩 known gap | 1552 | 34.9% | 16.1% | 14.4% |
+| ✅ passing (runnable) | 2902 | 65.2% | 30.2% | 26.9% |
+| 🧩 known gap | 1550 | 34.8% | 16.1% | 14.4% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3845 | — | 40.0% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1175 | — | — | 10.9% |
 | **Total** | **10787** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2900/9612 (30.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2902/9612 (30.2%)**.
 
 ## Inventory by Module
 
@@ -39,7 +39,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | common | 16 | 1 | 8 | 0 | 0 | 7 | 0 | 11.1% | 6.2% |
 | compile | 29 | 0 | 0 | 0 | 15 | 14 | 0 | 0.0% | 0.0% |
 | console | 32 | 28 | 2 | 0 | 0 | 1 | 1 | 93.3% | 90.3% |
-| crypto | 398 | 159 | 54 | 7 | 0 | 171 | 7 | 74.6% | 40.7% |
+| crypto | 398 | 161 | 52 | 7 | 0 | 171 | 7 | 75.6% | 41.2% |
 | dgram | 141 | 22 | 74 | 7 | 0 | 24 | 14 | 22.9% | 17.3% |
 | diagnostics_channel | 102 | 23 | 7 | 1 | 2 | 69 | 0 | 76.7% | 22.5% |
 | dns | 54 | 2 | 29 | 0 | 0 | 9 | 14 | 6.5% | 5.0% |
@@ -200,7 +200,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-console-group.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-console-instance.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-argon2.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
-| `test-crypto-async-sign-verify.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
+| `test-crypto-async-sign-verify.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-authenticated.js` | 17 | 16 | 0 | 0 | 0 | 1 | 0 |
 | `test-crypto-certificate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-cipheriv-decipheriv.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
@@ -1094,7 +1094,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1552)
+### known gap (1550)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1376,8 +1376,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: not a function | 1 | `parallel/test-fs-promises-file-handle-dispose.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection: AssertionError: 'a\rb' !== 'a\nb'; carries 22.14.0 subtest block_32_block_32 | 1 | `parallel/test-blob.js#block_33_block_33` |
 | Node 26.13.1 baseline gap: _checkInvalidHeaderChar('\x01\x02\x03\x04\x05\x06\x07\b', true) unexpectedly failed in lenient mode | 1 | `parallel/test-http-invalidheaderfield2.js` |
-| Node 26.13.1 baseline gap: error:0408006C:rsa routines::digest too big for rsa key | 1 | `parallel/test-crypto-async-sign-verify.js#block_02_block_02` |
-| Node 26.13.1 baseline gap: error:06000068:public key routines::operation not supported for this keytype | 1 | `parallel/test-crypto-async-sign-verify.js#block_01_block_01` |
 | Node 26.13.1 baseline gap: path.win32.join resolves .. through a CON: device-name segment | 1 | `parallel/test-path-join.js` |
 | Node 26.13.1 baseline gap: path.win32.resolve("\\\\.\\PHYSICALDRIVE0") | 1 | `parallel/test-path-resolve.js` |
 | Node 26.13.1 baseline gap: util.inspect prints the symbol key of a boxed String as [Symbol(foo)]; 26.13.1 expects Symbol(foo); carries 22.14.0 subtest block_90_block_90 | 1 | `parallel/test-util-inspect.js#block_100_block_100` |

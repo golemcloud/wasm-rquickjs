@@ -39,7 +39,7 @@
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
-  "baselineGapCases": 307,
+  "baselineGapCases": 305,
   "nowNodeInternalsCases": 45
  },
  "missingSources": [
@@ -4006,20 +4006,6 @@
     "error": "Expected values to be strictly equal:"
    },
    {
-    "file": "parallel/test-crypto-async-sign-verify.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "error:06000068:public key routines::operation not supported for this keytype"
-   },
-   {
-    "file": "parallel/test-crypto-async-sign-verify.js",
-    "subtest": "block_02_block_02",
-    "baseline": true,
-    "previous": {},
-    "error": "error:0408006C:rsa routines::digest too big for rsa key"
-   },
-   {
     "file": "parallel/test-crypto-cipheriv-decipheriv.js",
     "subtest": "block_00_block_00",
     "baseline": true,
@@ -6236,6 +6222,16 @@
     "file": "parallel/test-crypto-keygen.js",
     "subtest": "block_01_block_01",
     "fix": "generateKeyPair rejects unsupported key types synchronously with ERR_INVALID_ARG_VALUE, as generateKeyPairSync and Node do"
+   },
+   {
+    "file": "parallel/test-crypto-async-sign-verify.js",
+    "subtest": "block_01_block_01",
+    "fix": "One-shot sign() and verify() validate options and parse the key synchronously and deliver errors of the signing job itself (such as an RSA key too small for the digest or a non-signing x25519 key) to the callback, as Node does"
+   },
+   {
+    "file": "parallel/test-crypto-async-sign-verify.js",
+    "subtest": "block_02_block_02",
+    "fix": "One-shot sign() and verify() validate options and parse the key synchronously and deliver errors of the signing job itself (such as an RSA key too small for the digest or a non-signing x25519 key) to the callback, as Node does"
    }
   ]
  },
