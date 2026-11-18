@@ -70,19 +70,80 @@ and of each surviving subtest:
   name, or of the one with the same unique description. A new subtest starts
   `unevaluated` unless the file is already excluded from the runner.
 - A changed subtest with a generated name keeps the metadata of the previous
-  subtest at its position. The report lists these under `matchedByPosition`; check
-  them where the file's subtests have different classifications.
+  subtest at its position only as a proposal. The report lists every such subtest
+  under `matchedByPosition`, including excluded ones, and the run fails until each
+  has an accepted mapping decision (see below).
 - A split file that no longer splits becomes one entry only when all its
   subtests carried identical metadata; otherwise it is left unchanged for a
   decision.
 - Unlisted vendored `test-*.js` and `test-*.mjs` files are added as
   `unevaluated`.
 
-It never deletes an entry. Configured files without a source, removed subtests and
-undecided unsplits are written to `target/node-compat-migration-report.json`
-(override with `NODE_COMPAT_MIGRATION_REPORT`), and the run fails until each one
-is mapped by reading both versions. The tool's contract tests run with
+It never deletes an entry. Configured files without a source, removed subtests,
+undecided unsplits, positional subtests without an accepted decision and unused
+decisions are written to `target/node-compat-migration-report.json` (override with
+`NODE_COMPAT_MIGRATION_REPORT`), and the run fails until each one is mapped by
+reading both versions. The tool's contract tests run with
 `cargo test --test migrate_config_split -- ':tag:migration_contract'`.
+
+### Mapping decisions for subtests matched by position
+
+Read both versions of each subtest in `pendingPositionDecisions`, then record a
+decision for it in a JSON file and rerun the migration on the same input config
+with `NODE_COMPAT_MIGRATION_DECISIONS=/path/to/decisions.json`:
+
+```json
+{
+  "from": "22.14.0",
+  "to": "26.13.1",
+  "previousConfig": {
+    "revision": "<commit of the input config>",
+    "path": "tests/node_compat/config.jsonc",
+    "testsBlake3": "<positionInputs.testsBlake3>"
+  },
+  "positionDecisions": [
+    {
+      "file": "parallel/test-a.js",
+      "subtest": "block_03_block_03",
+      "previousBlake3": "<from the pending row>",
+      "currentBlake3": "<from the pending row>",
+      "previous": { "raw": {}, "fileEntry": {}, "effective": { "category": "runnable", "reason": null, "flaky": false } },
+      "entry": { "category": "known-gap", "reason": "the new assertion needs X" },
+      "assertions": "changed",
+      "obligation": "baseline-gap",
+      "note": "what the old and new block assert"
+    }
+  ]
+}
+```
+
+- `from` and `to` must be the `NODE_VERSION` of the previous and current suites,
+  and `testsBlake3` the hash of the input config's `tests` object that the report
+  prints under `positionInputs`; otherwise the run fails before writing. A
+  decisions file therefore applies only to the config it was written for: after
+  changing an entry, restore that config (`revision` records where it came from)
+  and rerun, rather than applying the decisions to the migrated config.
+- `previousBlake3` and `currentBlake3` hash both versions of the whole test file,
+  and `previous` must equal the raw entry, the file's metadata and the effective
+  category, reason and flaky flag the harness gave the subtest in the previous
+  suite. A changed file or a different previous classification leaves the
+  subtest pending with a `stale` or `previousMismatch` problem. The hashes do not
+  cover helpers the test imports or the harness itself.
+- `entry` is written as the subtest's metadata. `assertions` (`kept`, `changed`,
+  `moved` or `none`) and `note` record what happened to the old assertions.
+- A formerly runnable subtest that no longer runs, and a former known gap that
+  leaves the primary surface, need an `obligation`: `baseline-gap` (runnable to a
+  known gap with a reason), `moved` with `movedTo` naming tests the runner
+  selects that run or are themselves baseline gaps, or `target-change` with
+  `evidence`. The runner runs a split file with subtests only as its subtests and
+  any other file only as a whole, so a target is a `file#subtest` of a split file
+  with subtests and otherwise the `file`; a split parent or a subtest listed
+  under an unsplit file is rejected. The report lists these under `obligations` for
+  review; the tool checks their shape, not whether the old assertions really are
+  kept.
+- Duplicate or malformed decisions fail the run; a decision that matches no
+  pending subtest is listed under `unusedDecisions` and fails it. A decision for
+  an excluded subtest is required too.
 
 ## Target Selection
 
