@@ -4361,6 +4361,13 @@
     "error": "Failed to export key"
    },
    {
+    "file": "parallel/test-crypto-key-objects.js",
+    "subtest": "block_10_block_10",
+    "baseline": true,
+    "previous": {},
+    "error": "Failed to export key"
+   },
+   {
     "file": "parallel/test-crypto-keygen-eddsa.js",
     "subtest": null,
     "baseline": true,
@@ -4850,13 +4857,6 @@
     "error": "path.win32.resolve(\"\\\\\\\\.\\\\PHYSICALDRIVE0\")"
    },
    {
-    "file": "parallel/test-permission-fs-read.js",
-    "subtest": "block_02_block_02",
-    "baseline": true,
-    "previous": {},
-    "error": "AssertionError: Missing expected exception."
-   },
-   {
     "file": "parallel/test-process-getgroups.js",
     "subtest": null,
     "baseline": true,
@@ -5326,13 +5326,6 @@
     "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
    },
    {
-    "file": "parallel/test-stream-consumers.js",
-    "subtest": "block_03_block_03",
-    "baseline": true,
-    "previous": {},
-    "error": "not a function"
-   },
-   {
     "file": "parallel/test-stream-finished.js",
     "subtest": "block_40_block_40",
     "baseline": true,
@@ -5341,20 +5334,6 @@
      "reason": "carries 22.14.0 subtest block_39_block_39"
     },
     "error": "Cannot find module 'internal/streams/end-of-stream'"
-   },
-   {
-    "file": "parallel/test-stream-pipeline.js",
-    "subtest": "block_09_block_09",
-    "baseline": true,
-    "previous": {},
-    "error": "Test timed out after 120s"
-   },
-   {
-    "file": "parallel/test-stream-pipeline.js",
-    "subtest": "block_78_block_78",
-    "baseline": true,
-    "previous": {},
-    "error": "mustCall verification failed:"
    },
    {
     "file": "parallel/test-stream-push-strings.js",
@@ -5556,15 +5535,6 @@
    {
     "file": "parallel/test-util-inspect.js",
     "subtest": "block_22_block_22",
-    "baseline": true,
-    "previous": {
-     "category": "runnable"
-    },
-    "error": "Expected values to be strictly equal:"
-   },
-   {
-    "file": "parallel/test-util-inspect.js",
-    "subtest": "block_23_block_23",
     "baseline": true,
     "previous": {
      "category": "runnable"
@@ -6306,6 +6276,13 @@
      "category": "unevaluated"
     },
     "error": "util.inspect prints the symbol key of a boxed String as [Symbol(foo)]; 26.13.1 expects Symbol(foo)"
+   },
+   {
+    "file": "parallel/test-util-inspect.js",
+    "subtest": "block_25_block_25",
+    "baseline": true,
+    "previous": {},
+    "error": "Expected values to be strictly equal:"
    }
   ],
   "passedOnRerun": [],
@@ -6838,5 +6815,163 @@
    "file": "sequential/test-performance-eventloopdelay.js",
    "subtest": "block_02_block_02"
   }
- ]
+ ],
+ "positionCorrections": {
+  "note": "Blocks the 22.14.0 to 26.13.1 migration matched by position although upstream inserted blocks before them. Each entry was relabelled after reading both versions and running the 26.13.1 block; the label follows the 22.14.0 content it holds.",
+  "cases": [
+   {
+    "file": "parallel/test-blob.js",
+    "subtest": "block_29_statement_29",
+    "entry": {
+     "category": "node-internals",
+     "reason": "Asserts internal webstreams kState"
+    },
+    "evidence": "holds 22.14.0 node-internals block_28_statement_28"
+   },
+   {
+    "file": "parallel/test-blob.js",
+    "subtest": "block_32_statement_32",
+    "entry": {
+     "category": "node-internals",
+     "reason": "Asserts internal webstreams kState"
+    },
+    "evidence": "holds 22.14.0 node-internals block_31_statement_31"
+   },
+   {
+    "file": "parallel/test-crypto-hmac.js",
+    "subtest": "block_07_block_07",
+    "entry": {
+     "category": "runnable"
+    },
+    "evidence": "holds 22.14.0 block_04_block_04 (passed); passes twice"
+   },
+   {
+    "file": "parallel/test-crypto-key-objects.js",
+    "subtest": "block_10_block_10",
+    "entry": {
+     "category": "known-gap",
+     "reason": "Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_09_block_09"
+    },
+    "evidence": "holds 22.14.0 block_09_block_09 (passed); fails twice"
+   },
+   {
+    "file": "parallel/test-permission-fs-read.js",
+    "subtest": "block_02_block_02",
+    "entry": {
+     "category": "known-gap",
+     "reason": "inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation"
+    },
+    "evidence": "holds 22.14.0 known-gap block_01_block_01, not the passing block_02"
+   },
+   {
+    "file": "parallel/test-permission-fs-read.js",
+    "subtest": "block_03_block_03",
+    "entry": {
+     "category": "runnable"
+    },
+    "evidence": "byte-identical to 22.14.0 block_02_block_02 (passed); passes twice"
+   },
+   {
+    "file": "parallel/test-stream-consumers.js",
+    "subtest": "block_03_block_03",
+    "entry": {
+     "category": "unevaluated",
+     "reason": "newly discovered subtest, not yet evaluated"
+    },
+    "evidence": "new block; 22.14.0 block_03_block_03 is now block_04_block_04 and passes"
+   },
+   {
+    "file": "parallel/test-stream-consumers.js",
+    "subtest": "block_10_block_10",
+    "entry": {
+     "category": "runnable"
+    },
+    "evidence": "holds 22.14.0 block_09_block_09 (passed); passes twice"
+   },
+   {
+    "file": "parallel/test-stream-pipeline.js",
+    "subtest": "block_08_block_08",
+    "entry": {
+     "category": "runnable"
+    },
+    "evidence": "holds 22.14.0 block_07_block_07 (passed); passes twice"
+   },
+   {
+    "file": "parallel/test-stream-pipeline.js",
+    "subtest": "block_09_block_09",
+    "entry": {
+     "category": "wasi-impossible",
+     "reason": "requires full-duplex HTTP request/response streaming semantics not provided by wasi:http"
+    },
+    "evidence": "holds 22.14.0 wasi-impossible block_08_block_08; 22.14.0 block_09_block_09 is now block_10_block_10 and passes"
+   },
+   {
+    "file": "parallel/test-stream-pipeline.js",
+    "subtest": "block_11_block_11",
+    "entry": {
+     "category": "runnable"
+    },
+    "evidence": "holds 22.14.0 block_10_block_10 (passed); passes twice"
+   },
+   {
+    "file": "parallel/test-stream-pipeline.js",
+    "subtest": "block_78_block_78",
+    "entry": {
+     "category": "unevaluated",
+     "reason": "newly discovered subtest, not yet evaluated"
+    },
+    "evidence": "new block; 22.14.0 block_78_block_78 is now block_80_block_80 and passes"
+   },
+   {
+    "file": "parallel/test-stream-pipeline.js",
+    "subtest": "block_80_block_80",
+    "entry": {
+     "category": "runnable"
+    },
+    "evidence": "holds 22.14.0 block_78_block_78 (passed); passes twice"
+   },
+   {
+    "file": "parallel/test-util-inspect.js",
+    "subtest": "block_23_block_23",
+    "entry": {},
+    "evidence": "new block under the node-internals file default; 22.14.0 block_23_block_23 is now block_25_block_25"
+   },
+   {
+    "file": "parallel/test-util-inspect.js",
+    "subtest": "block_25_block_25",
+    "entry": {
+     "category": "known-gap",
+     "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_23_block_23"
+    },
+    "evidence": "holds 22.14.0 runnable block_23_block_23; fails"
+   },
+   {
+    "file": "parallel/test-whatwg-readablestream.js",
+    "subtest": "block_71_block_71",
+    "entry": {
+     "category": "node-internals",
+     "reason": "requires --expose-internals and internal/webstreams/readablestream"
+    },
+    "evidence": "holds 22.14.0 node-internals block_70_block_70"
+   },
+   {
+    "file": "parallel/test-whatwg-readablestream.js",
+    "subtest": "block_73_block_73",
+    "entry": {
+     "category": "node-internals",
+     "reason": "requires --expose-internals and internal/webstreams/readablestream"
+    },
+    "evidence": "holds 22.14.0 node-internals block_72_block_72"
+   },
+   {
+    "file": "parallel/test-whatwg-writablestream.js",
+    "subtest": "block_08_block_08",
+    "entry": {
+     "category": "node-internals",
+     "reason": "requires --expose-internals and internal/worker/js_transferable"
+    },
+    "evidence": "holds 22.14.0 node-internals block_06_block_06"
+   }
+  ]
+ }
 }
