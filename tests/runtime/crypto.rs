@@ -1054,3 +1054,106 @@ async fn crypto_subtle_sign_verify_rsa_pss(
         _ => Err(anyhow!("Expected bool result")),
     }
 }
+
+/// Error contracts of AEAD decryption, key encoding options, crypto argument validation, one-shot sign/verify
+/// key type checks, option resolution, callback delivery and DH peer key limits, as Node.js 26.13.1 reports them.
+#[test]
+async fn crypto_error_contracts(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "crypto-error-contracts", &[]).await;
+
+    let lines = match result? {
+        Some(Val::List(vals)) => vals
+            .into_iter()
+            .map(|v| match v {
+                Val::String(s) => Ok(s),
+                other => Err(anyhow!("Expected string, got {other:?}")),
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?,
+        _ => return Err(anyhow!("Expected list result")),
+    };
+    let expected = [
+        "gcm tampered tag: Error undefined Unsupported state or unable to authenticate data",
+        "gcm missing tag: Error undefined Unsupported state or unable to authenticate data",
+        "chacha20-poly1305 tampered tag: Error undefined Unsupported state or unable to authenticate data",
+        "public pkcs8: TypeError ERR_INVALID_ARG_VALUE The property 'options.type' is invalid. Received 'pkcs8'",
+        "public without format: TypeError ERR_INVALID_ARG_VALUE The property 'options.format' is invalid. Received undefined",
+        "public spki ignores cipher: ok -----BEGIN PUBLIC KEY-----",
+        "private without type: TypeError ERR_INVALID_ARG_VALUE The property 'options.type' is invalid. Received undefined",
+        "private passphrase without cipher: TypeError ERR_INVALID_ARG_VALUE The property 'options.cipher' is required when a passphrase is specified. Received undefined",
+        "private der pkcs1 encrypted: Error ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS The selected key encoding pkcs1 does not support encryption.",
+        "private unknown cipher: Error ERR_CRYPTO_UNKNOWN_CIPHER Unknown cipher",
+        "private pem pkcs8 encrypted: ok -----BEGIN ENCRYPTED PRIVATE KEY-----",
+        "ed25519 public pkcs1: Error ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS The selected key encoding pkcs1 can only be used for RSA keys.",
+        "ed25519 private sec1: Error ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS The selected key encoding sec1 can only be used for EC keys.",
+        "keygen passphrase without cipher: TypeError ERR_INVALID_ARG_VALUE The property 'options.privateKeyEncoding.cipher' is required when a passphrase is specified. Received undefined",
+        "keygen public pkcs8: TypeError ERR_INVALID_ARG_VALUE The property 'options.publicKeyEncoding.type' is invalid. Received 'pkcs8'",
+        "createPrivateKey der spki: TypeError ERR_INVALID_ARG_VALUE The property 'key.type' is invalid. Received 'spki'",
+        "gcm implicit 12-byte tag: TypeError ERR_CRYPTO_INVALID_AUTH_TAG Invalid authentication tag length: 12",
+        "gcm authTagLength 12-byte tag: ok set",
+        "hkdfSync info with fake byteLength: RangeError ERR_OUT_OF_RANGE The value of \"info\" is out of range. It must be must not contain more than 1024 bytes. Received 2048",
+        "cipher output encoding change: TypeError ERR_INVALID_ARG_VALUE The argument 'outputEncoding' cannot be changed from 'utf8'. Received 'hex'",
+        "generateKeyPair Ed25519: TypeError ERR_INVALID_ARG_VALUE The argument 'type' must be a supported key type. Received 'Ed25519'",
+        "generateKeyPair toString: TypeError ERR_INVALID_ARG_VALUE The argument 'type' must be a supported key type. Received 'toString'",
+        "sign digest too big for key: callback Error ERR_OSSL_RSA_DIGEST_TOO_BIG_FOR_RSA_KEY",
+        "verify with x25519 key: callback Error ERR_OSSL_EVP_OPERATION_NOT_SUPPORTED_FOR_THIS_KEYTYPE",
+        "sign invalid padding: throws TypeError ERR_INVALID_ARG_VALUE",
+        "verify mismatching signature: callback ok false",
+        "sign with public KeyObject: throws TypeError ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE",
+        "sign with nested secret KeyObject: throws TypeError ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE",
+        "verify with secret KeyObject: throws TypeError ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE",
+        "verify with nested private KeyObject: callback ok true",
+        "sign inherited PSS options: callback ok pkcs1=false pss=true",
+        "sign non-enumerable PSS options: callback ok pkcs1=false pss=true",
+        "sign default padding: callback ok pkcs1=true pss=false",
+        "verify inherited PSS options: callback ok true",
+        "verify PSS signature with default padding: callback ok false",
+        "DH computeSecret(1): RangeError ERR_CRYPTO_INVALID_KEYLEN Supplied key is too small",
+        "DH computeSecret(p - 1): RangeError ERR_CRYPTO_INVALID_KEYLEN Supplied key is too large",
+    ];
+    assert_eq!(lines, expected);
+    Ok(())
+}
+
+/// WebCrypto getRandomValues, key usage/algorithm and HMAC import/JWK error contracts, as Node.js 26.13.1 reports them.
+#[test]
+async fn webcrypto_error_contracts(
+    #[tagged_as("crypto")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "webcrypto-error-contracts", &[])
+            .await;
+
+    let lines = match result? {
+        Some(Val::List(vals)) => vals
+            .into_iter()
+            .map(|v| match v {
+                Val::String(s) => Ok(s),
+                other => Err(anyhow!("Expected string, got {other:?}")),
+            })
+            .collect::<anyhow::Result<Vec<_>>>()?,
+        _ => return Err(anyhow!("Expected list result")),
+    };
+    let expected = [
+        "getRandomValues(): TypeError ERR_MISSING_ARGS Failed to execute 'getRandomValues' on 'Crypto': 1 argument required, but only 0 present.",
+        "getRandomValues(ArrayBuffer): TypeError ERR_INVALID_ARG_TYPE Failed to execute 'getRandomValues' on 'Crypto': 1st argument is not an ArrayBufferView.",
+        "getRandomValues(Float32Array): TypeMismatchError 17 The data argument must be an integer-type TypedArray",
+        "getRandomValues(65537 bytes): QuotaExceededError 22 The requested length exceeds 65,536 bytes",
+        "encrypt without usage: InvalidAccessError 15 Unable to use this key to encrypt",
+        "decrypt without usage: InvalidAccessError 15 Unable to use this key to decrypt",
+        "decrypt wrong algorithm without usage: InvalidAccessError 15 Key algorithm mismatch",
+        "verify without usage: InvalidAccessError 15 Unable to use this key to verify",
+        "wrapKey without usage: InvalidAccessError 15 Unable to use this key to wrapKey",
+        "HMAC usage deriveBits: SyntaxError 12 Unsupported key usage for HMAC key",
+        "HMAC length 0: DataError 0 HmacImportParams.length cannot be 0",
+        "HMAC length 384: DataError 0 Invalid key length",
+        "HMAC SHA-256 jwk alg: HS256",
+        "HMAC jwk alg HS384: DataError 0 JWK \"alg\" does not match the requested algorithm",
+        "HMAC jwk without alg: ok 256",
+        "HMAC SHA3-256 jwk alg: undefined",
+    ];
+    assert_eq!(lines, expected);
+    Ok(())
+}

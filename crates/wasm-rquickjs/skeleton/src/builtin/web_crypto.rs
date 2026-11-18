@@ -4978,7 +4978,8 @@ fn dh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, St
     if other_pub.is_zero() || other_pub.is_one() {
         return Err("Supplied key is too small".to_string());
     }
-    if other_pub >= state.p {
+    // DH_check_pub_key: a valid peer key lies in [2, p - 2].
+    if other_pub >= &state.p - BigUint::one() {
         return Err("Supplied key is too large".to_string());
     }
     let priv_key = state.priv_key.as_ref().ok_or("No private key set")?;
