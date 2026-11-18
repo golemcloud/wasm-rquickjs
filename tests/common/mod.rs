@@ -2921,7 +2921,7 @@ fn is_unevaluated_node_compat_reason(reason: &str) -> bool {
     r == "newly discovered, not yet evaluated" || r.starts_with("inherited: newly discovered")
 }
 
-fn node_compat_category_from_entry(
+pub fn node_compat_category_from_entry(
     path: &str,
     entry: &serde_json::Value,
     inherited: Option<NodeCompatCategory>,
