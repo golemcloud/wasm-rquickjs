@@ -7,6 +7,8 @@ mod diagnostics_tests;
 mod p3_build;
 #[path = "optimize/preinit.rs"]
 mod preinit_tests;
+#[path = "optimize/source_input.rs"]
+mod source_input_tests;
 
 // Initialization mutates the last byte, so verifying the optimized component
 // checks that snapshot extraction retained memory, not just that Wizer returned.
@@ -347,8 +349,25 @@ fn build_preinit_template(
     target: wasm_rquickjs::GenerationTarget,
     tier: &str,
 ) -> anyhow::Result<camino::Utf8PathBuf> {
+    build_preinit_template_with_modules(
+        root,
+        target,
+        tier,
+        &[wasm_rquickjs::JsModuleSpec {
+            name: "module".into(),
+            mode: wasm_rquickjs::EmbeddingMode::BinarySlot,
+        }],
+    )
+}
+
+fn build_preinit_template_with_modules(
+    root: &Utf8Path,
+    target: wasm_rquickjs::GenerationTarget,
+    tier: &str,
+    modules: &[wasm_rquickjs::JsModuleSpec],
+) -> anyhow::Result<camino::Utf8PathBuf> {
     use std::process::Command;
-    use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+    use wasm_rquickjs::GenerationTarget;
     std::fs::create_dir_all(root.join("wit"))?;
     let async_keyword = if target == GenerationTarget::WasiP3 {
         "async "
@@ -363,10 +382,7 @@ fn build_preinit_template(
     )?;
     wasm_rquickjs::generate_wrapper_crate_with_target(
         &root.join("wit"),
-        &[JsModuleSpec {
-            name: "module".into(),
-            mode: EmbeddingMode::BinarySlot,
-        }],
+        modules,
         &root.join("out"),
         None,
         target,
@@ -577,6 +593,7 @@ async fn optimizer_copy_budget_controls_snapshot_extraction() -> anyhow::Result<
                 "wizer-initialize",
                 &OptimizeOptions {
                     hostcall_fuel: fuel,
+                    ..Default::default()
                 },
             )
             .await
@@ -595,6 +612,7 @@ async fn optimizer_copy_budget_controls_snapshot_extraction() -> anyhow::Result<
         "wizer-initialize",
         &OptimizeOptions {
             hostcall_fuel: Some(512 * 1024 * 1024),
+            ..Default::default()
         },
     )
     .await?;
@@ -612,6 +630,7 @@ async fn optimizer_rejects_unsupported_copy_budget_before_io() {
             "wizer-initialize",
             &OptimizeOptions {
                 hostcall_fuel: Some(fuel),
+                ..Default::default()
             },
         )
         .await
