@@ -83,6 +83,9 @@ struct MigrationReport {
     /// Accepted decisions that changed the classification of a formerly runnable or known-gap
     /// subtest, with the obligation that keeps it accounted for.
     obligations: Vec<Value>,
+    /// Newly discovered subtests whose entry an accepted decision set because it moved its
+    /// assertions there, with the evidence and the exact previous case they came from.
+    labelled_targets: Vec<Value>,
     /// Subtests without a previous entry.
     new_subtests: Vec<Value>,
     /// Subtests that are gone, with their previous metadata. Needs a mapping.
@@ -464,7 +467,7 @@ fn new_subtest_value(meta: &Map<String, Value>) -> Value {
 }
 
 /// Keys of a positional decision.
-const DECISION_KEYS: [&str; 11] = [
+const DECISION_KEYS: [&str; 12] = [
     "file",
     "subtest",
     "previousBlake3",
@@ -475,6 +478,7 @@ const DECISION_KEYS: [&str; 11] = [
     "note",
     "obligation",
     "movedTo",
+    "movedToEntries",
     "evidence",
 ];
 /// What a decision says about the assertions of the previous subtest.
@@ -565,6 +569,7 @@ fn load_decisions(
         .as_array()
         .ok_or_else(|| anyhow!("the decisions lack a positionDecisions array"))?;
     let mut decisions = Decisions::new();
+    let mut labelled = BTreeSet::new();
     for row in rows {
         let row = row
             .as_object()
@@ -618,6 +623,54 @@ fn load_decisions(
                 bail!("the movedTo of the decision for {at} must list file or file#subtest targets")
             }
             _ => {}
+        }
+        // A move may label the newly discovered subtests of the same file it moved to; the
+        // evidence must name the exact previous case, so the label says what it was checked on.
+        if let Some(labels) = row.get("movedToEntries") {
+            let targets: Vec<&str> = row
+                .get("movedTo")
+                .and_then(Value::as_array)
+                .into_iter()
+                .flatten()
+                .filter_map(Value::as_str)
+                .collect();
+            let labels = labels.as_object().filter(|l| !l.is_empty()).ok_or_else(|| {
+                anyhow!("the movedToEntries of the decision for {at} must map movedTo targets to an entry and evidence")
+            })?;
+            let old = format!("{from} {at}");
+            for (target, label) in labels {
+                if !targets.contains(&target.as_str()) {
+                    bail!(
+                        "the decision for {at} labels {target}, which is not one of its movedTo targets"
+                    );
+                }
+                if target.split_once('#').map(|(f, _)| f) != Some(file) {
+                    bail!(
+                        "the decision for {at} labels {target}, but it can label only a subtest of {file}"
+                    );
+                }
+                let label = label
+                    .as_object()
+                    .filter(|l| {
+                        l.keys().all(|k| k == "entry" || k == "evidence")
+                            && l.get("entry").is_some_and(Value::is_object)
+                    })
+                    .ok_or_else(|| {
+                        anyhow!("the label of {target} in the decision for {at} needs an entry object and evidence")
+                    })?;
+                if !label
+                    .get("evidence")
+                    .and_then(Value::as_str)
+                    .is_some_and(|e| e.contains(&old))
+                {
+                    bail!(
+                        "the evidence for {target} in the decision for {at} must name the exact old case \"{old}\""
+                    );
+                }
+                if !labelled.insert(target.clone()) {
+                    bail!("{target} is labelled by more than one decision");
+                }
+            }
         }
         let target_change = obligation == Some("target-change");
         if target_change && text("evidence").is_none() {
@@ -799,10 +852,53 @@ fn migrate(
                     o["subtest"].as_str().unwrap_or_default()
                 )
             })
+            .chain(
+                // A labelled known gap that carries a formerly runnable case is its baseline gap.
+                migration
+                    .report
+                    .labelled_targets
+                    .iter()
+                    .filter(|l| {
+                        l["previous"] == "runnable"
+                            && l["entry"]["category"] == "known-gap"
+                            && l["entry"]["reason"]
+                                .as_str()
+                                .is_some_and(|r| !r.trim().is_empty())
+                    })
+                    .map(|l| {
+                        format!(
+                            "{}#{}",
+                            l["file"].as_str().unwrap_or_default(),
+                            l["subtest"].as_str().unwrap_or_default()
+                        )
+                    }),
+            )
+            .collect();
+        let labelled: BTreeSet<String> = migration
+            .report
+            .labelled_targets
+            .iter()
+            .map(|l| {
+                format!(
+                    "{}#{}",
+                    l["file"].as_str().unwrap_or_default(),
+                    l["subtest"].as_str().unwrap_or_default()
+                )
+            })
             .collect();
         let mut newly = BTreeMap::new();
         for (key, targets) in moves {
+            let labels = decisions
+                .as_ref()
+                .and_then(|d| d.get(&key))
+                .and_then(|d| d.get("movedToEntries"))
+                .and_then(Value::as_object);
             let problem = targets.iter().find_map(|target| {
+                if labels.is_some_and(|l| l.contains_key(target)) && !labelled.contains(target) {
+                    return Some(format!(
+                        "obligationViolation: movedTo target {target} is labelled by this decision but is not a newly discovered subtest"
+                    ));
+                }
                 match target_category(&migrated_tests, target, suite_root) {
                     Ok(NodeCompatCategory::Runnable) => None,
                     Ok(_) if baseline_gaps.contains(target) => None,
@@ -946,6 +1042,8 @@ fn migrate_once(
                 // the entry itself needs no rewrite, and keeps its previous metadata only until
                 // a decision accepts it or another value.
                 let mut decided: BTreeMap<&String, Value> = BTreeMap::new();
+                // Entries accepted decisions give the newly discovered subtests they moved to.
+                let mut labels: BTreeMap<String, (Value, Value)> = BTreeMap::new();
                 for name in &names {
                     if origin.get(name).is_some_and(|(old, _)| old == name)
                         && subtest_description(name).is_none()
@@ -989,6 +1087,29 @@ fn migrate_once(
                                         .collect();
                                     moves.push((key, targets));
                                 }
+                                let labelled = decision
+                                    .get("movedToEntries")
+                                    .and_then(Value::as_object)
+                                    .into_iter()
+                                    .flatten();
+                                for (target, label) in labelled {
+                                    let (_, subtest) = target.split_once('#').unwrap_or_default();
+                                    labels.insert(
+                                        subtest.to_string(),
+                                        (
+                                            label["entry"].clone(),
+                                            json!({
+                                                "file": path,
+                                                "subtest": subtest,
+                                                "entry": label["entry"],
+                                                "evidence": label["evidence"],
+                                                "movedFrom": format!("{path}#{name}"),
+                                                "previous": pending["previous"]["effective"]["category"],
+                                                "previousBlake3": pending["previousBlake3"],
+                                            }),
+                                        ),
+                                    );
+                                }
                                 report.obligations.extend(obligation);
                                 decided.insert(name, entry);
                             }
@@ -1022,7 +1143,13 @@ fn migrate_once(
                             report
                                 .new_subtests
                                 .push(json!({ "file": path, "subtest": name }));
-                            new_subtest_value(&meta)
+                            match labels.remove(name) {
+                                Some((entry, labelled)) => {
+                                    report.labelled_targets.push(labelled);
+                                    entry
+                                }
+                                None => new_subtest_value(&meta),
+                            }
                         }
                     };
                     subtests.push((name.clone(), value));
@@ -2094,6 +2221,161 @@ mod contract {
                 "{target}"
             );
         }
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn a_move_may_label_its_newly_discovered_destination() {
+        // Upstream inserts a block, so the formerly runnable block_01 now holds other content and
+        // its slightly rewritten assertions sit in the newly discovered block_02.
+        let fixture = Fixture::new();
+        fixture
+            .previous("parallel/test-a.js", "{ first(); }\n{ moved(1); }\n")
+            .source(
+                "parallel/test-a.js",
+                "{ first(); }\n{ inserted(); }\n{ moved(2); }\n",
+            );
+        let input = config(
+            r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": {}, "block_01_block_01": {} } }"#,
+        );
+        let proposal = fixture.migrate_with(&input, None).unwrap();
+        let target = "parallel/test-a.js#block_02_block_02";
+        let old = "22.14.0 parallel/test-a.js#block_01_block_01";
+        let moved = |target: &str, labels: Option<Value>| {
+            let mut extra =
+                json!({ "assertions": "moved", "obligation": "moved", "movedTo": [target] });
+            if let Some(labels) = labels {
+                extra["movedToEntries"] = labels;
+            }
+            decision(
+                &proposal,
+                "block_01_block_01",
+                json!({ "category": "known-gap", "reason": "the inserted block needs X" }),
+                extra,
+            )
+        };
+        let label = |entry: Value| json!({ target: { "entry": entry, "evidence": format!("holds {old}; passes") } });
+        let run = |row: Value| {
+            fixture
+                .migrate_with(&input, Some(&record(&proposal, vec![row])))
+                .unwrap()
+        };
+        let destination = |m: &Migration| {
+            entries(m)["parallel/test-a.js"]["subtests"]["block_02_block_02"].clone()
+        };
+        let unevaluated = json!({ "category": "unevaluated", "reason": NEW_SUBTEST_REASON });
+
+        // Accepted: a runnable label, and a known gap with a reason that carries the old case.
+        for entry in [
+            json!({ "category": "runnable" }),
+            json!({ "category": "known-gap", "reason": "Node 26.13.1 baseline gap: X; carries 22.14.0 subtest block_01_block_01" }),
+        ] {
+            let accepted = run(moved(target, Some(label(entry.clone()))));
+            assert_eq!(
+                accepted.report.needs_review(),
+                0,
+                "{entry}: {:#?}",
+                accepted.report
+            );
+            assert_eq!(destination(&accepted), entry);
+            let labelled = &accepted.report.labelled_targets;
+            assert_eq!(labelled.len(), 1, "{entry}");
+            assert_eq!(
+                labelled[0]["movedFrom"],
+                "parallel/test-a.js#block_01_block_01"
+            );
+            assert_eq!(
+                labelled[0]["previousBlake3"],
+                pending(&proposal, "block_01_block_01")["previousBlake3"]
+            );
+        }
+        // Rejected, leaving the destination unevaluated: no label, a label that does not keep the
+        // assertions running, and a label on a subtest that is not newly discovered.
+        for (row, labelled) in [
+            (moved(target, None), false),
+            (moved(target, Some(label(unevaluated.clone()))), false),
+            (
+                moved(
+                    target,
+                    Some(label(
+                        json!({ "category": "node-internals", "reason": "internal" }),
+                    )),
+                ),
+                false,
+            ),
+            (
+                moved(
+                    target,
+                    Some(label(json!({ "category": "known-gap", "reason": " " }))),
+                ),
+                false,
+            ),
+            (
+                moved(
+                    "parallel/test-a.js#block_00_block_00",
+                    Some(
+                        json!({ "parallel/test-a.js#block_00_block_00": { "entry": { "category": "runnable" }, "evidence": format!("holds {old}") } }),
+                    ),
+                ),
+                true,
+            ),
+        ] {
+            let rejected = run(row.clone());
+            let problem = pending(&rejected, "block_01_block_01")["problem"]
+                .as_str()
+                .unwrap()
+                .to_string();
+            assert!(
+                problem.starts_with("obligationViolation"),
+                "{row:#}: {problem}"
+            );
+            assert_eq!(destination(&rejected), unevaluated, "{row:#}");
+            assert!(rejected.report.labelled_targets.is_empty(), "{row:#}");
+            assert_eq!(
+                problem.contains("not a newly discovered subtest"),
+                labelled,
+                "{problem}"
+            );
+        }
+        // A label of a decision rejected for another reason is not applied.
+        let mut stale = moved(target, Some(label(json!({ "category": "runnable" }))));
+        stale["currentBlake3"] = json!(blake3::hash(b"another source").to_hex().to_string());
+        let rejected = run(stale);
+        assert!(
+            pending(&rejected, "block_01_block_01")["problem"]
+                .as_str()
+                .unwrap()
+                .starts_with("stale")
+        );
+        assert_eq!(destination(&rejected), unevaluated);
+
+        // Malformed labels fail the run: evidence that does not name the exact old case, a label
+        // for a target that is not moved to, a label in another file, two labels for one target.
+        let error = |rows: Vec<Value>| {
+            fixture
+                .migrate_with(&input, Some(&record(&proposal, rows)))
+                .err()
+                .unwrap_or_else(|| panic!("accepted"))
+                .to_string()
+        };
+        let vague = json!({ target: { "entry": { "category": "runnable" }, "evidence": "holds the old block_01" } });
+        assert!(error(vec![moved(target, Some(vague))]).contains("exact old case"));
+        let other = json!({ "parallel/test-a.js#block_00_block_00": { "entry": { "category": "runnable" }, "evidence": format!("holds {old}") } });
+        assert!(error(vec![moved(target, Some(other))]).contains("not one of its movedTo targets"));
+        let elsewhere = "parallel/test-b.js#block_00_block_00";
+        let foreign = json!({ elsewhere: { "entry": { "category": "runnable" }, "evidence": format!("holds {old}") } });
+        assert!(error(vec![moved(elsewhere, Some(foreign))]).contains("only a subtest of"));
+        let mut twice = moved(target, Some(label(json!({ "category": "runnable" }))));
+        twice["subtest"] = json!("block_00_block_00");
+        twice["movedToEntries"][target]["evidence"] =
+            json!("holds 22.14.0 parallel/test-a.js#block_00_block_00");
+        assert!(
+            error(vec![
+                moved(target, Some(label(json!({ "category": "runnable" })))),
+                twice
+            ])
+            .contains("more than one decision")
+        );
     }
 
     #[test]

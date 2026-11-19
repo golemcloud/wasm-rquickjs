@@ -141,6 +141,16 @@ with `NODE_COMPAT_MIGRATION_DECISIONS=/path/to/decisions.json`:
   under an unsplit file is rejected. The report lists these under `obligations` for
   review; the tool checks their shape, not whether the old assertions really are
   kept.
+- When upstream inserted blocks, the old assertions can sit in a newly discovered
+  subtest, which the migration writes as `unevaluated`, so a move to it is rejected.
+  A move decision may then label that subtest in `movedToEntries`, keyed by its
+  `movedTo` target, with the `entry` to write and `evidence` naming the exact old
+  case as `<from> <file>#<subtest>`, for example
+  `"evidence": "holds 22.14.0 parallel/test-a.js#block_02_block_02 byte for byte; passes twice"`.
+  Only a newly discovered subtest of the decision's own file can be labelled, by one
+  decision. The label is checked like any target: it must be `runnable`, or a
+  `known-gap` with a reason when the old case was runnable (its baseline gap). The
+  report lists the labels under `labelledTargets`, with the old case and file hash.
 - Duplicate or malformed decisions fail the run; a decision that matches no
   pending subtest is listed under `unusedDecisions` and fails it. A decision for
   an excluded subtest is required too.
