@@ -509,7 +509,7 @@ fn build_deferred_import_bridge(
             // pure component-model tasks, so they keep running correctly after the import returns.
             #(#arg_bindings)*
             let (__result_tx, __result_rx) = futures::channel::oneshot::channel();
-            wit_bindgen_p3::rt::async_support::spawn_local(crate::internal::custom_invocation_context::scoped(async move {
+            crate::internal::spawn_local(crate::internal::custom_invocation_context::scoped(async move {
                 let __result: #result_ty = #bindgen_path(#(#arg_exprs),*).await;
                 // The receiver is dropped if the originating JavaScript runtime shuts down.
                 let _ = __result_tx.send(__result);

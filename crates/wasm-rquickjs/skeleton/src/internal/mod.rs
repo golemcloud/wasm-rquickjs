@@ -7,14 +7,17 @@
 
 pub mod custom_invocation_context;
 pub(crate) mod error_formatting;
+pub mod invocation;
 pub(crate) mod module_loading;
 pub(crate) mod preinit;
+pub(crate) mod promise_hook;
 pub(crate) mod runtime_services;
 #[cfg(feature = "typescript-runtime")]
 pub(crate) mod typescript;
 pub use error_formatting::{
     format_caught_error, format_js_exception, try_format_js_error, try_format_tagged_error,
 };
+pub use invocation::{invocation, spawn_local, sync_invocation};
 pub(crate) use module_loading::{
     mark_node_package_deprecation_warning_seen, node_package_deprecation_warning_seen,
 };

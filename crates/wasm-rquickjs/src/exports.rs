@@ -531,13 +531,13 @@ fn generate_exported_function_impl(
         return if matches!(function.kind, FunctionKind::Freestanding) {
             Ok(quote! {
                 fn #func_name(#(#func_arg_list),*) -> #reader_type {
-                    crate::internal::run_sync(async move { #body })
+                    crate::internal::run_sync(crate::internal::sync_invocation(async move { #body }))
                 }
             })
         } else {
             Ok(quote! {
                 async fn #func_name(#(#func_arg_list),*) -> #reader_type {
-                    #body
+                    crate::internal::invocation(async move { #body }).await
                 }
             })
         };
@@ -568,13 +568,13 @@ fn generate_exported_function_impl(
     let func_impl = if is_async {
         quote! {
            async fn #func_name(#(#func_arg_list),*) -> #original_result {
-               #body
+               crate::internal::invocation(async move { #body }).await
             }
         }
     } else {
         quote! {
            fn #func_name(#(#func_arg_list),*) -> #original_result {
-               crate::internal::run_sync(async move { #body })
+               crate::internal::run_sync(crate::internal::sync_invocation(async move { #body }))
            }
         }
     };
@@ -745,7 +745,7 @@ fn generate_exported_resource_function_impl(
             };
             quote! {
               fn #func_name_ident(#(#func_arg_list),*) -> Self {
-                  crate::internal::run_sync(async move { #body })
+                  crate::internal::run_sync(crate::internal::sync_invocation(async move { #body }))
               }
             }
         }
@@ -779,13 +779,13 @@ fn generate_exported_resource_function_impl(
             if is_async {
                 quote! {
                    async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       #body
+                       crate::internal::invocation(async move { #body }).await
                    }
                 }
             } else {
                 quote! {
                    fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       crate::internal::run_sync(async move { #body })
+                       crate::internal::run_sync(crate::internal::sync_invocation(async move { #body }))
                    }
                 }
             }
@@ -817,13 +817,13 @@ fn generate_exported_resource_function_impl(
             if is_async {
                 quote! {
                    async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       #body
+                       crate::internal::invocation(async move { #body }).await
                    }
                 }
             } else {
                 quote! {
                    fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       crate::internal::run_sync(async move { #body })
+                       crate::internal::run_sync(crate::internal::sync_invocation(async move { #body }))
                    }
                 }
             }

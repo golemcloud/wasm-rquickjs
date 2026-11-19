@@ -8,8 +8,9 @@
 //! * Every open scope except the current one holds the host snapshot that reinstalls it. The
 //!   current scope holds none, because the host has it installed.
 //! * Promise reactions (including native `await`) run in the scope that registered them, through
-//!   the QuickJS promise hook. It is installed when the first scope opens, so a runtime that never
-//!   opens a scope pays nothing for it.
+//!   the runtime's shared promise hook ([`super::promise_hook`]). This module registers as its
+//!   consumer when the first scope opens, so a runtime that never opens a scope pays nothing for
+//!   it.
 //! * Async import bridges capture the scope when JavaScript calls them, and install it around every
 //!   poll and the drop of the import future ([`scoped`]).
 //! * Timers, `setImmediate`, `process.nextTick` and `queueMicrotask` capture the scope when they are
@@ -344,26 +345,22 @@ pub struct Token {
     scope: Rc<ScopeInfo>,
 }
 
-/// Per-runtime state: the token objects of open scopes and the scopes the promise hook recorded.
+/// Per-runtime state: the token objects of open scopes.
 #[derive(JsLifetime)]
 pub(crate) struct RuntimeTokens<'js> {
     tokens: RefCell<HashMap<u64, Class<'js, Token>>>,
     cached_root: Cell<u64>,
-    hook_installed: Cell<bool>,
 }
 
+/// A runtime created after the first scope opened (an execution job) gets the promise hook from
+/// its start through [`super::promise_hook::initialize`], because its promises can be created
+/// inside a scope.
 pub(crate) fn initialize(ctx: &Ctx<'_>) -> rquickjs::Result<()> {
     ctx.store_userdata(RuntimeTokens {
         tokens: RefCell::new(HashMap::new()),
         cached_root: Cell::new(0),
-        hook_installed: Cell::new(false),
     })
     .expect("Failed to initialize custom invocation context state");
-    // A runtime created after the first scope opened (an execution job) needs the hook from its
-    // start, because its promises can be created inside a scope.
-    if HOOK_INSTALLED.get() {
-        install_promise_hook(ctx);
-    }
     Ok(())
 }
 
@@ -576,18 +573,7 @@ pub(crate) fn close<'js>(ctx: &Ctx<'js>, token: Class<'js, Token>) -> rquickjs::
 
 fn install_promise_hook(ctx: &Ctx<'_>) {
     HOOK_INSTALLED.set(true);
-    let runtime = ctx
-        .userdata::<RuntimeTokens>()
-        .expect("custom invocation context state not initialized");
-    if runtime.hook_installed.replace(true) {
-        return;
-    }
-    // The hook is installed through the C API because the safe rquickjs setter needs the runtime
-    // lock, which the calling JavaScript already holds. It is the runtime's only promise hook.
-    unsafe {
-        let rt = qjs::JS_GetRuntime(ctx.as_raw().as_ptr());
-        qjs::JS_SetPromiseHook(rt, Some(promise_hook), std::ptr::null_mut());
-    }
+    super::promise_hook::register(ctx, promise_hook);
 }
 
 /// Runs `f` on the recorded promise scopes of the running root with the address of `promise`.
@@ -606,13 +592,7 @@ fn with_promise_scopes<R>(
     })
 }
 
-unsafe extern "C" fn promise_hook(
-    _ctx: *mut qjs::JSContext,
-    hook_type: qjs::JSPromiseHookType,
-    promise: qjs::JSValue,
-    _parent: qjs::JSValue,
-    _opaque: *mut std::ffi::c_void,
-) {
+fn promise_hook(hook_type: qjs::JSPromiseHookType, promise: qjs::JSValue, _parent: qjs::JSValue) {
     match hook_type {
         qjs::JSPromiseHookType_JS_PROMISE_HOOK_INIT => {
             let scope = STATE.with_borrow(|state| {
