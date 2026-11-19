@@ -225,6 +225,34 @@ initialization must become quiescent before the snapshot and cannot leave timers
 Runtime arguments and environment variables are restored before the first export runs; modules
 must not capture their values or immutable aliases during top-level initialization.
 
+**Source input without changing the template:** templates generated with `@slot`
+also export `wizer-initialize-with-source: async func(sources: list<string>)`.
+Pass one source per binary slot, in the same order as `inject-js`, including slots
+for modules imported only later. Embedded modules do not consume source entries.
+
+```sh
+wasm-rquickjs optimize --input template.wasm --output app.wasm --js bundle.js
+```
+
+This runs application initialization on every build and writes a self-contained
+snapshot. It does not deploy external source files or reuse initialized JavaScript
+state. The same template still supports `inject-js` without Wizer for quick builds.
+Source strings move into the template's existing lazy module storage. A wrong
+source count or a second source-initializer call traps.
+Before instrumentation, the optimizer re-encodes the unchanged template to
+compact padded instruction encodings, as slot injection does. Source text is
+not part of those instrumented bytes or their native compilation cache key.
+
+Library callers can set `OptimizeOptions.sources`, supply their shared Wasmtime
+configuration in `engine_config`, and opt into native compilation caching through
+`cache_config`. The returned `OptimizeResult.compilation_cache` reports per-build
+hits and misses, including when parallel builds share a directory. Wasmtime owns
+cache keys, validation, atomic writes and eviction. Callers choose the cache
+directory and size policy; Wasmtime's size limits are asynchronous soft limits,
+not a hard disk quota. Only native compilation is shared; each operation creates
+a fresh engine, store, instance and WASI context. Use `init_func = "wizer-initialize"`
+with source input; custom initializers remain available without source input.
+
 **External I/O during pre-initialization is rejected.** Top-level filesystem
 probes (including `existsSync` and module/package lookup), socket/DNS/HTTP/WebSocket
 acquisition, SQLite opens (including `:memory:`), execution-job creation, and

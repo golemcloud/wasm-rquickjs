@@ -106,6 +106,11 @@ pub enum Command {
         /// Initialization function name
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
+
+        /// Source file(s) for binary slots in slot order. Pass an unmodified
+        /// template as input; sources are supplied during initialization.
+        #[arg(long)]
+        js: Vec<Utf8PathBuf>,
     },
     /// Inject JavaScript source into a compiled WASM component template
     InjectJs {

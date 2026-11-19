@@ -62,14 +62,28 @@ fn main() {
             input,
             output,
             init_func,
+            js,
         } => {
+            let sources: Vec<String> = js
+                .iter()
+                .map(|path| {
+                    std::fs::read_to_string(path.as_std_path()).unwrap_or_else(|err| {
+                        eprintln!("Error reading JS file {path}: {err:#}");
+                        std::process::exit(1);
+                    })
+                })
+                .collect();
+            let options = wasm_rquickjs::OptimizeOptions {
+                sources: (!js.is_empty()).then_some(sources.as_slice()),
+                ..Default::default()
+            };
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("Failed to create tokio runtime");
-            if let Err(err) =
-                rt.block_on(wasm_rquickjs::optimize_component(input, output, init_func))
-            {
+            if let Err(err) = rt.block_on(wasm_rquickjs::optimize_component_with_options(
+                input, output, init_func, &options,
+            )) {
                 eprintln!("Error optimizing component: {err:#}");
                 std::process::exit(1);
             }
