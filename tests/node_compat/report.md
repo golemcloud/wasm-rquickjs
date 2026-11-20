@@ -1364,7 +1364,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_12_block_12 | 1 | `parallel/test-crypto-key-objects.js#block_13_block_13` |
 | Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_15_block_15 | 1 | `parallel/test-crypto-key-objects.js#block_16_block_16` |
 | Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_17_block_17 | 1 | `parallel/test-crypto-sign-verify.js#block_15_block_15` |
-| Node 26.13.1 baseline gap: Missing expected exception.; carries 22.14.0 subtest block_02_guarantee_dot_left_numbers_are_ignored | 1 | `parallel/test-util-getcallsites.js#block_02_framecount_must_be_an_integer` |
 | Node 26.13.1 baseline gap: Missing expected exception.; the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests | 1 | `parallel/test-url-parse-invalid-input.js` |
 | Node 26.13.1 baseline gap: Only --eval/-e, --input-type, and script files are supported in WASM child emulation; carries 22.14.0 subtest test_00_disabled_without_experimental_webstorage | 1 | `parallel/test-webstorage.js#test_08_disabled_with_no_webstorage` |
 | Node 26.13.1 baseline gap: The argument 'format' must be a valid string format. Received "grey" | 1 | `parallel/test-util-styletext.js` |
@@ -1374,7 +1373,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected "actual" to be strict | 1 | `parallel/test-stream-readable-to-web-termination.js#block_01_block_01` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception (Ty | 1 | `parallel/test-vm-module-errors.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab | 1 | `parallel/test-fs-promises-file-handle-append-file.js` |
-| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab; carries 22.14.0 parallel/test-fs-promises-writefile-typedarray.js (upstream 3ac95f2d0c); parallel/test-fs-promises-writefile-with-fd.js (upstream 3ac95f2d0c) | 1 | `parallel/test-fs-promises-appendfile.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab; carries 22.14.0 parallel/test-fs-promises-writefile-typedarray.js (upstream 3ac95f2d0c) | 1 | `parallel/test-fs-promises-appendfile.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): Error: Module status must not be unlinked or l | 1 | `parallel/test-vm-module-synthetic.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: Error converting from js 'string' i | 1 | `parallel/test-fs-promises-file-handle-read.js` |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: The "original" argument must be of  | 1 | `parallel/test-zlib-empty-buffer.js` |
@@ -1742,6 +1741,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | uses child_process spawn path (spawnPromisified) | 1 | `parallel/test-find-package-json.js#test_07_should_be_able_to_resolve_both_root_and_closest_package_json` |
 | util.MIMEType parsing API is not implemented | 1 | `parallel/test-mime-whatwg.js` |
 | util.debuglog formatting/callback behavior is not fully Node-compatible | 1 | `sequential/test-util-debug.js` |
+| util.getCallSites() accepts a fractional frameCount; Node 26.13.1 requires an integer and throws ERR_OUT_OF_RANGE | 1 | `parallel/test-util-getcallsites.js#block_02_framecount_must_be_an_integer` |
 | util.getSystemErrorName is not implemented | 1 | `parallel/test-child-process-execfile.js#block_01_block_01` |
 | v8.setFlagsFromString argument validation error fidelity is incomplete | 1 | `parallel/test-v8-flag-type-check.js` |
 | valid EC key vectors fail to import | 1 | `parallel/test-webcrypto-export-import-ec.js#block_00_block_00` |

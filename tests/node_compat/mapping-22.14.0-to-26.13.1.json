@@ -8,17 +8,18 @@
   "byDisposition": {
    "same": 2835,
    "newly-split": 16,
-   "renamed": 299,
+   "renamed": 298,
    "target-change-eol": 48,
    "moved": 26,
-   "target-change-removed-upstream": 7,
+   "target-change-removed-upstream": 8,
    "moved-to-top-level": 10,
    "unsplit": 8,
    "unmapped-moved-to-unvendored-dir": 11
   },
   "byDispositionAndStatus": {
-   "moved / failed": 5,
+   "moved / failed": 4,
    "moved / failed,passed": 21,
+   "moved / passed": 1,
    "moved-to-top-level / failed": 1,
    "moved-to-top-level / failed,skipped": 4,
    "moved-to-top-level / passed": 3,
@@ -26,7 +27,7 @@
    "newly-split / failed": 7,
    "newly-split / failed,passed": 5,
    "newly-split / passed": 4,
-   "renamed / failed": 106,
+   "renamed / failed": 105,
    "renamed / passed": 189,
    "renamed / skipped": 4,
    "same / failed": 167,
@@ -34,12 +35,11 @@
    "same / skipped": 35,
    "target-change-eol / -": 38,
    "target-change-eol / skipped": 10,
-   "target-change-removed-upstream / -": 7,
+   "target-change-removed-upstream / -": 8,
    "unmapped-moved-to-unvendored-dir / -": 11,
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
-  "baselineGapCases": 343,
   "nowNodeInternalsCases": 45
  },
  "missingSources": [
@@ -296,7 +296,8 @@
     "es-module/test-require-module-tla-unresolved.js"
    ],
    "unvendoredReplacementDirs": null,
-   "disposition": "moved"
+   "disposition": "moved",
+   "note": "split into the six test-require-module-tla-* files with the improved ERR_REQUIRE_ASYNC_MODULE message; the --experimental-print-required-tla case now asserts the required module and source line instead of 'I am executed'"
   },
   {
    "file": "es-module/test-typescript-transform.mjs",
@@ -527,10 +528,11 @@
     "doc,test: widen fsPromises.appendFile()'s data type, add missing tests"
    ],
    "replacements": [
-    "parallel/test-fs-promises-appendfile.js"
+    "parallel/test-fs-promises-file-handle-writeFile.js"
    ],
    "unvendoredReplacementDirs": null,
-   "disposition": "moved"
+   "disposition": "moved",
+   "note": "source-read correction: the same commit moved the write-at-position check (bytesWritten 5, then 'HelloWorld') into test-fs-promises-file-handle-writeFile.js, not into test-fs-promises-appendfile.js"
   },
   {
    "file": "parallel/test-fs-rmdir-recursive-sync-warns-not-found.js",
@@ -2160,7 +2162,7 @@
     "assert(result.equals(plain));"
    ],
    "disposition": "renamed",
-   "note": "rewritten as a superset: testAllOrders also covers ChaCha20-Poly1305 and AAD ordering"
+   "note": "rewritten as a superset over aes-256-gcm/ocb and chacha20-poly1305 (all tag/AAD/update orders); the 22.14.0 aes-128 key size is no longer used"
   },
   {
    "file": "parallel/test-crypto-authenticated.js",
@@ -2176,7 +2178,7 @@
    },
    "assertionLinesMissing": [],
    "disposition": "renamed",
-   "note": "same issue 38035 check, now skipped when aes-128-ccm is unavailable and compared with a control tag"
+   "note": "same issue 38035 check, now skipped when aes-128-ccm is unavailable; final() without update() may now either throw (ERR_OSSL_TAG_NOT_SET / Unsupported state, as before) or return an empty buffer with the control tag (openssl/openssl#32427)"
   },
   {
    "file": "parallel/test-crypto-authenticated.js",
@@ -2301,7 +2303,8 @@
    "assertionLinesMissing": [
     "assert.throws(() => createPrivateKey(privateDsa), hasOpenSSL3 ? {"
    ],
-   "disposition": "renamed"
+   "disposition": "renamed",
+   "note": "changed upstream: hasOpenSSL3 became hasOpenSSL(3), the bad-decrypt message also accepts BAD_DECRYPT, and the passphrase-protected DSA key is re-exported as aes-256-cbc PKCS#8 before createPrivateKey; type and asymmetricKeyType assertions kept"
   },
   {
    "file": "parallel/test-crypto-key-objects.js",
@@ -2375,7 +2378,8 @@
    "replacedValue": {
     "category": "unevaluated",
     "reason": "newly discovered subtest, not yet evaluated"
-   }
+   },
+   "note": "changed upstream: the second key pair is x25519 instead of ed448; the KeyObject.equals() inequality assertions are kept"
   },
   {
    "file": "parallel/test-crypto-keygen.js",
@@ -2525,7 +2529,8 @@
     "block_02_test_handling_of_exceptional_conditions": 4
    },
    "assertionLinesMissing": [],
-   "disposition": "renamed"
+   "disposition": "renamed",
+   "note": "expected message changed upstream from 'The \"key.key\" property' to 'The \"privateKey.key\" property'"
   },
   {
    "file": "parallel/test-crypto-sign-verify.js",
@@ -2824,7 +2829,7 @@
    },
    "assertionLinesMissing": [],
    "disposition": "renamed",
-   "note": "the math-functions check is now one case of the build-time SQL API suite"
+   "note": "the math-functions check is now one case of the build-time SQL API suite; DatabaseSync is renamed Database (upstream f2b698f1cf)"
   },
   {
    "file": "parallel/test-stream-finished.js",
@@ -3019,7 +3024,13 @@
     "block_01_block_01": 1
    },
    "assertionLinesMissing": [],
-   "disposition": "renamed"
+   "disposition": "target-change-removed-upstream",
+   "commit": [
+    "74c36584653346fa4940194380b2ab5201942dd0",
+    "2026-01-28",
+    "build: enable -DV8_ENABLE_CHECKS flag"
+   ],
+   "note": "the 22.14.0 block asserted that getCallSites(3.6) returns 3 call sites; this commit made frameCount validateInteger and rewrote the block to expect ERR_OUT_OF_RANGE, so the old assertion is reversed, not carried. The 26.13.1 block_02_framecount_must_be_an_integer is an ordinary known gap."
   },
   {
    "file": "parallel/test-util-getcallsites.js",
@@ -3034,7 +3045,8 @@
     "block_02_framecount_must_be_an_integer": 10
    },
    "assertionLinesMissing": [],
-   "disposition": "renamed"
+   "disposition": "renamed",
+   "note": "kept; upstream d4e9ae57d4 adds getCallSites(0.5) -> ERR_OUT_OF_RANGE"
   },
   {
    "file": "parallel/test-util-getcallsites.js",
@@ -3147,7 +3159,8 @@
     "assert.throws(() => util.inspect(x), /TypeError: Converting circular structure to JSON/);"
    ],
    "disposition": "renamed",
-   "replacedValue": {}
+   "replacedValue": {},
+   "note": "expectations changed upstream: symbol keys print without brackets, a throwing Symbol.toStringTag getter no longer makes inspect() throw ('ThrowingClass {}'), and the circular getter case is formatted instead of throwing"
   },
   {
    "file": "parallel/test-util-inspect.js",
@@ -3166,7 +3179,8 @@
    },
    "assertionLinesMissing": [],
    "disposition": "renamed",
-   "replacedValue": {}
+   "replacedValue": {},
+   "note": "kept with a scoped-package path (@namespace/bar), mustCallAtLeast and RegExp.escape"
   },
   {
    "file": "parallel/test-util-inspect.js",
@@ -3239,7 +3253,8 @@
    },
    "assertionLinesMissing": [],
    "disposition": "renamed",
-   "replacedValue": {}
+   "replacedValue": {},
+   "note": "expected output changed upstream: ArrayBuffer byteLength prints as [byteLength]"
   },
   {
    "file": "parallel/test-util-inspect.js",
@@ -3257,7 +3272,8 @@
    },
    "assertionLinesMissing": [],
    "disposition": "renamed",
-   "replacedValue": {}
+   "replacedValue": {},
+   "note": "expected output changed upstream: an error whose stack is an array of symbols prints as '[Error\\n    [\\n      Symbol(foo)\\n    ]]'"
   },
   {
    "file": "parallel/test-webcrypto-constructors.js",
@@ -3362,7 +3378,8 @@
    "replacedValue": {
     "category": "unevaluated",
     "reason": "newly discovered subtest, not yet evaluated"
-   }
+   },
+   "note": "target change: Web Storage is enabled by default in 26.13.1, so the case now disables it with --no-webstorage; the assertion that the APIs are absent when disabled is kept"
   },
   {
    "file": "parallel/test-webstorage.js",
@@ -6223,15 +6240,6 @@
      "category": "unevaluated"
     },
     "error": "ERR_INVALID_FILE_URL_PATH has no err.input URL; the historical code assertion passes"
-   },
-   {
-    "file": "parallel/test-util-getcallsites.js",
-    "subtest": "block_02_framecount_must_be_an_integer",
-    "baseline": true,
-    "previous": {
-     "category": "unevaluated"
-    },
-    "error": "Missing expected exception."
    },
    {
     "file": "parallel/test-util-inspect.js",
