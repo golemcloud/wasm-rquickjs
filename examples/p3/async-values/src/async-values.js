@@ -9,6 +9,15 @@ export async function runFuture() {
   return 42;
 }
 
+export async function runOptionalFuture(mode) {
+  await Promise.resolve();
+  return mode === 0 ? 23 : undefined;
+}
+
+export async function runNestedOptionalFuture(mode) {
+  return { value: runOptionalFuture(mode) };
+}
+
 const checkpointReason = new Error('raw future checkpoint');
 let checkpointCount = 0;
 process.on('unhandledRejection', (reason) => {
@@ -150,6 +159,24 @@ export async function runNestedError() {
 export async function takeFuture(f) {
   const v = await f;
   return v + 1;
+}
+
+let retainedUnobservedFuture;
+
+export function inspectFuture(mode, f) {
+  if (mode === 0) {
+    retainedUnobservedFuture = f;
+    return 42;
+  }
+  if (mode === 1) return f;
+  return (async () => {
+    const first = await f.then(value => value + 1);
+    const [second, third] = await Promise.all([f, f]);
+    let finallyCalls = 0;
+    const fourth = await f.finally(() => { finallyCalls++; });
+    const fifth = await f.catch(() => 999);
+    return first + 2 * second + 3 * third + 4 * fourth + 5 * fifth + finallyCalls;
+  })();
 }
 
 // Receives a component `stream<u8>` from the host, exposed to JS as an async-iterable.

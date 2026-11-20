@@ -1,17 +1,17 @@
 //! Minimal WASI Preview 3 runtime spine for the generated rquickjs component.
 //!
-//! Unlike the Preview 2 skeleton this module does NOT depend on `wstd`, `wasip2`,
-//! pollables, or `block_on`. Exported WIT functions are generated as `async fn`s
+//! This module does NOT depend on `wstd`, `wasip2` pollables, or `block_on`. Exported WIT functions are generated as `async fn`s
 //! that `.await` directly on the component-model async executor, and the single
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
 
+use super::{format_caught_error, format_js_exception};
 use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::{Args, Constructor, IntoArgs, This};
 use rquickjs::promise::Promised;
 use rquickjs::{
-    AsyncContext, AsyncRuntime, CatchResultExt, CaughtError, Ctx, Error, Exception, Filter, FromJs,
-    Function, IntoJs, Module, Object, Persistent, Promise, Value,
+    AsyncContext, AsyncRuntime, CatchResultExt, Ctx, Error, Exception, Filter, FromJs, Function,
+    IntoJs, Module, Object, Persistent, Promise, Value,
 };
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
@@ -30,13 +30,13 @@ use super::runtime_services::{
 
 /// Global key under which the `Symbol.dispose` value is published. Resource classes generated
 /// for imported WIT resources read this global to wire `[Symbol.dispose]` onto their prototype,
-/// so it must match the constant the Preview 2 path uses (`internal/p2.rs`).
+/// so it must match the constant the generated resource code uses.
 pub const DISPOSE_SYMBOL: &str = "__wasm_rquickjs_symbol_dispose";
 
 /// Global object holding live *exported* resource instances, keyed by the stringified
 /// monotonic resource id. Generated exported-resource code stores each constructed JS instance
 /// here so the host-facing resource handle (which only carries the numeric id) can be mapped back
-/// to the JS object. Mirrors the Preview 2 path (`internal/p2.rs`).
+/// to the JS object.
 pub const RESOURCE_TABLE_NAME: &str = "__wasm_rquickjs_resources";
 /// WeakMap from exported JavaScript resource objects to their current native resource ids.
 /// Keeping identity outside the resource object allows frozen and sealed instances.
@@ -115,7 +115,7 @@ impl JsState {
             .unwrap_or_else(|error| panic!("{error}"));
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        // `idle()` from ever returning.
         drain_and_idle(self).await;
     }
 
@@ -311,7 +311,7 @@ impl JsState {
         .await;
         // Use the sentinel-backed drain (not a plain `idle()`): a user module may schedule an
         // unref'd timer at top level (e.g. `setInterval(...).unref()`), which would keep a plain
-        // `idle()` from ever returning. Mirrors the Preview 2 init path.
+        // `idle()` from ever returning.
         drain_and_idle(self).await;
     }
 
@@ -381,10 +381,6 @@ enum InitState {
 static mut STATE: Option<JsState> = None;
 static mut INIT: InitState = InitState::NotStarted;
 
-/// True while `wizer_initialize` is running. Builtins use this to avoid snapshotting
-/// wasi-libc caches populated from Wizer's empty filesystem and environment.
-static WIZER_ACTIVE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
-
 /// Cooperative yield: returns `Pending` exactly once (re-waking immediately) so
 /// that another concurrent task can make progress. Used to wait for an in-flight
 /// initialization without busy-spinning the host.
@@ -417,6 +413,7 @@ pub async fn ensure_initialized() -> &'static JsState {
                 unsafe {
                     INIT = InitState::InProgress;
                 }
+                super::refresh_component_cwd();
                 let state = JsState::new_base().await;
                 unsafe {
                     STATE = Some(state);
@@ -450,11 +447,6 @@ pub async fn ensure_initialized() -> &'static JsState {
             }
         }
     }
-}
-
-#[inline]
-pub fn is_wizer_active() -> bool {
-    WIZER_ACTIVE.load(std::sync::atomic::Ordering::Relaxed)
 }
 
 /// Returns the already-initialized shared state. Only valid to call after
@@ -692,8 +684,7 @@ async fn spawn_drive_guard(rt: &AsyncRuntime, ctx: &AsyncContext) -> DriveGuard 
 /// After the export produces its result (a direct value or an awaited Promise) the P3 wrapper would
 /// otherwise return immediately and drop its [`DriveGuard`], so any work the export merely
 /// *scheduled* — `setTimeout`/`setInterval`/`setImmediate` callbacks, `queueMicrotask`/Promise jobs,
-/// `future<T>`/`stream<T>` writer tasks — would never run. This mirrors the Preview 2 `drain_and_idle`:
-/// it waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
+/// `future<T>`/`stream<T>` writer tasks — would never run. It waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
 /// event loop exits once only unref'd timers are left) so [`AsyncRuntime::idle`] can complete.
 ///
 /// `idle()` drives the runtime on its own (exactly as the plain `idle()` calls during
@@ -848,11 +839,13 @@ where
     .await
 }
 
-/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported resource static
-/// method. It is driven to completion by [`run_sync`] (`block_on`) from a synchronous Guest trait
-/// method, so it must never suspend: if the JavaScript static returns a `Promise`, it traps with
-/// an actionable message instead of awaiting it (which could deadlock the whole instance). Declare
-/// the static as `async func` in WIT to get the awaiting behavior.
+/// Synchronous variant of [`call_js_export`], used for a *synchronous* exported function or
+/// resource static method. It is driven to completion by [`run_sync`] (`block_on`) from a
+/// synchronous Guest trait method. If the JavaScript function returns a `Promise`, it is awaited
+/// inside that `block_on`, which runs QuickJS jobs and scheduler tasks. A synchronous
+/// component-model task cannot block on the host, so a promise that waits on timers or host I/O
+/// traps ("cannot block a synchronous task before returning"); declare such functions as
+/// `async func` in WIT.
 pub async fn call_js_export_sync<A, R>(
     wit_package: &'static str,
     function_path: &'static [&'static str],
@@ -911,10 +904,11 @@ where
     // (which live as scheduler tasks) make progress even while this call is parked awaiting the JS
     // result promise. Dropped (aborted) when this call returns.
     //
-    // The synchronous path (`allow_async == false`, used for synchronous exported resource statics
-    // driven by `block_on`) never awaits a JS promise and never spawns scheduler tasks, so it must
-    // NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned inside a `block_on`
-    // would prevent it from returning.
+    // The synchronous path (`allow_async == false`, used for synchronous exports driven by
+    // `block_on`) must NOT create a `DriveGuard`: a never-completing `rt.drive()` task spawned
+    // inside a `block_on` would prevent it from returning. A returned promise is awaited inside
+    // `with_component_context`, whose `async_with!` future drives the scheduler and pending jobs
+    // itself.
     let drive_guard = if allow_async {
         Some(spawn_drive_guard(&js_state.rt, &js_state.ctx).await)
     } else {
@@ -922,6 +916,7 @@ where
     };
 
     let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
@@ -944,14 +939,6 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
-                    if !allow_async {
-                        panic!(
-                            "The synchronous exported function {fun} returned a Promise. Synchronous \
-                             exported functions must return a value directly on the WASI Preview 3 \
-                             path; declare it as `async func` in WIT to return a Promise.",
-                            fun = function_path.join(".")
-                        );
-                    }
                     let promise: Promise = value.into_promise().unwrap();
                     let promise_future = promise.into_future::<Value>();
 
@@ -980,6 +967,7 @@ where
         };
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"));
+        super::custom_invocation_context::restore_root();
         let created_writer =
             !allow_async && js_state.writer_lease.writer_generation() != writer_generation;
         (result, created_writer)
@@ -1006,10 +994,10 @@ where
 // trait methods for them are ordinary `fn`s. They still need to enter the shared async QuickJS
 // runtime, which is only reachable through `async_with!` (an `async` operation). The generated sync
 // methods therefore drive the corresponding `async fn` helper below to completion with
-// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). To keep `block_on` from ever blocking
-// the whole component instance, the synchronous helpers never spawn a scheduler driver and never
-// await a JS promise — a sync-declared op whose JavaScript returns a `Promise` traps with an
-// actionable message telling the author to declare it `async func`.
+// [`run_sync`] (`wit_bindgen`'s self-contained `block_on`). The synchronous helpers never spawn a
+// persistent scheduler driver, which would keep `block_on` from returning. A sync-declared op
+// whose JavaScript returns a `Promise` awaits it within that `block_on` (see
+// [`call_js_export_sync`]).
 //
 // `async` WIT resource methods/statics are generated as `async fn`s that `.await` the async
 // helpers directly (with a `DriveGuard`), exactly like freestanding async exports.
@@ -1026,7 +1014,7 @@ pub fn run_sync<T: 'static>(future: impl Future<Output = T>) -> T {
 /// Fully initializes the P3 QuickJS runtime and leaves it quiescent for Wizer to snapshot.
 #[allow(static_mut_refs)]
 pub async fn wizer_initialize() {
-    WIZER_ACTIVE.store(true, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::begin();
 
     unsafe {
         INIT = InitState::InProgress;
@@ -1059,7 +1047,7 @@ pub async fn wizer_initialize() {
         INIT = InitState::WizerPreInitialized;
     }
 
-    WIZER_ACTIVE.store(false, std::sync::atomic::Ordering::Relaxed);
+    super::preinit::complete();
 }
 
 pub fn acquire_js_resource<'js>(ctx: &Ctx<'js>, resource: Object<'js>) -> rquickjs::Result<usize> {
@@ -1121,6 +1109,7 @@ where
     let js_state = ensure_initialized().await;
 
     let (resource_id, created_writer) = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let module: Object = ctx.globals().get("userModule").expect("Failed to get userModule");
@@ -1168,6 +1157,7 @@ where
         };
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"));
+        super::custom_invocation_context::restore_root();
         let created_writer =
             created_writer || js_state.writer_lease.writer_generation() != writer_generation;
         if created_writer && resource_id != 0 {
@@ -1250,8 +1240,8 @@ where
 }
 
 /// Synchronous variant of [`call_js_resource_method`], used for a *synchronous* exported resource
-/// method and driven by [`run_sync`]. It never awaits a JS promise: if the method returns one it
-/// traps with an actionable message (declare the method `async func` in WIT).
+/// method and driven by [`run_sync`]. A returned promise is awaited as described on
+/// [`call_js_export_sync`].
 pub async fn call_js_resource_method_sync<A, R>(
     wit_package: &'static str,
     resource_path: &'static [&'static str],
@@ -1334,6 +1324,7 @@ where
     };
 
     let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let resource_table: Object = ctx.globals().get(RESOURCE_TABLE_NAME)
@@ -1377,14 +1368,6 @@ where
             }
             Ok(value) => {
                 if value.is_promise() {
-                    if !allow_async {
-                        panic!(
-                            "The synchronous exported method {name} of {path} returned a Promise. \
-                             Synchronous exported resource methods must return a value directly on the \
-                             WASI Preview 3 path; declare it as `async func` in WIT to return a Promise.",
-                            path = resource_path.join(".")
-                        );
-                    }
                     let promise: Promise = value.into_promise().unwrap();
                     match promise.into_future::<Value>().await {
                         Ok(value) => {
@@ -1411,6 +1394,7 @@ where
         };
         run_process_turn_checkpoint(&ctx)
             .unwrap_or_else(|error| panic!("failed to run process turn checkpoint: {error}"));
+        super::custom_invocation_context::restore_root();
         let created_writer =
             !allow_async && js_state.writer_lease.writer_generation() != writer_generation;
         (result, created_writer)
@@ -1598,90 +1582,36 @@ fn dump_cannot_find_export(
     }
     keys.sort();
     panic_message.push_str(&format!("  {}\n", keys.join(", ")));
-    panic_message
-}
 
-pub fn format_js_exception(exc: &Value) -> String {
-    try_format_js_error(exc)
-        .or_else(|| try_format_tagged_error(exc))
-        .unwrap_or_else(|| {
-            let formatted_exc = pretty_stringify_or_debug_print(exc);
-            if formatted_exc.contains('\n') {
-                format!("JavaScript exception:\n{formatted_exc}")
-            } else {
-                format!("JavaScript exception: {formatted_exc}")
-            }
-        })
-}
-
-pub fn try_format_js_error(err: &Value) -> Option<String> {
-    let error_ctor: Object = err.ctx().globals().get("Error").ok()?;
-    let obj = err.as_object()?;
-
-    if !obj.is_instance_of(error_ctor) {
-        return None;
-    }
-
-    let message: Option<String> = obj.get("message").ok();
-    let stack: Option<String> = obj.get("stack").ok();
-
-    match (message, stack) {
-        (Some(msg), Some(st)) => Some(format!("JavaScript error: {msg}\nStack:\n{st}")),
-        (Some(msg), None) => Some(format!("JavaScript error: {msg}")),
-        (None, Some(st)) => Some(format!("JavaScript error: <no message>\nStack:\n{st}")),
-        _ => None,
-    }
-}
-
-pub fn try_format_tagged_error(err: &Value) -> Option<String> {
-    let obj = err.as_object()?;
-    let tag: Option<String> = obj.get("tag").ok();
-    let val: Option<Value> = obj.get("val").ok();
-    let val = val.and_then(|v| (!v.is_undefined()).then_some(v));
-
-    match (tag, val) {
-        (Some(tag), Some(val)) => {
-            let formatted_val = pretty_stringify_or_debug_print(&val);
-            if formatted_val.contains('\n') {
-                Some(format!("Error: {tag}:\n{formatted_val}"))
-            } else {
-                Some(format!("Error: {tag}: {formatted_val}"))
+    if let [name] = path {
+        panic_message.push_str(&format!(
+            "\nTry adding an export `export const {name} = ...`\n"
+        ));
+    } else {
+        let mut current_object = module.clone();
+        for (i, segment) in path.iter().enumerate() {
+            match current_object.get::<&str, Object>(*segment) {
+                Ok(child) => current_object = child,
+                Err(_) => {
+                    if i == 0 {
+                        panic_message.push_str(&format!(
+                            "\nTry adding an export `export const {segment} = {{ ... }}`\n"
+                        ));
+                    } else {
+                        let parent = path[..i].join(".");
+                        panic_message.push_str(&format!("\nKeys in {parent}:\n"));
+                        let mut keys: Vec<String> = current_object.keys().flatten().collect();
+                        keys.sort();
+                        panic_message.push_str(&format!("  {}\n", keys.join(", ")));
+                        panic_message
+                            .push_str(&format!("\nTry adding a field `{segment}` to {parent}\n"));
+                    }
+                    break;
+                }
             }
         }
-        (Some(tag), None) => Some(format!("Error: {tag}")),
-        _ => None,
     }
-}
-
-fn pretty_stringify_or_debug_print(val: &Value) -> String {
-    if let Some(formatted) = try_pretty_stringify(val) {
-        formatted
-    } else {
-        format!("{val:#?}")
-    }
-}
-
-fn try_pretty_stringify(val: &Value) -> Option<String> {
-    if val.is_undefined() {
-        return Some("undefined".to_string());
-    }
-
-    if let Some(str) = val.as_string() {
-        return str.to_string().ok();
-    }
-
-    let json: Object = val.ctx().globals().get("JSON").ok()?;
-    let stringify: Function = json.get("stringify").ok()?;
-    let res: Result<String, Error> = stringify.call((val, rquickjs::Undefined, 2));
-    res.ok()
-}
-
-pub fn format_caught_error(caught: CaughtError) -> String {
-    match caught {
-        CaughtError::Error(e) => format!("Host error: {e:?}"),
-        CaughtError::Exception(exc) => format_js_exception(&exc.into_value()),
-        CaughtError::Value(val) => format_js_exception(&val),
-    }
+    panic_message
 }
 
 // ---------------------------------------------------------------------------
@@ -1695,12 +1625,27 @@ pub fn format_caught_error(caught: CaughtError) -> String {
 // task keeps running on the component-model async executor after the initiating call returns.
 // ---------------------------------------------------------------------------
 
+fn normalize_js_promise<'js>(ctx: &Ctx<'js>, value: Value<'js>) -> rquickjs::Result<Value<'js>> {
+    if value.is_promise() {
+        return Ok(value);
+    }
+    match value.as_object() {
+        Some(object) if object.get::<_, Value>("then")?.is_function() => {
+            let resolve: Function = ctx.eval("(value) => Promise.resolve(value)")?;
+            resolve.call((value,))
+        }
+        _ => Ok(value),
+    }
+}
+
 /// Awaits a JavaScript value, transparently resolving it if it is a promise, and converts the
 /// result to `R` without trapping so callers can perform required cleanup first.
 async fn try_resolve_js_value<'js, R>(ctx: &Ctx<'js>, value: Value<'js>) -> Result<R, String>
 where
     R: FromJs<'js>,
 {
+    let value = normalize_js_promise(ctx, value)
+        .map_err(|error| format!("Failed to resolve a JavaScript async value: {error:?}"))?;
     if value.is_promise() {
         let promise: Promise = value
             .into_promise()
@@ -1758,12 +1703,14 @@ where
     let _drive_guard = spawn_drive_guard(&js_state.rt, &js_state.ctx).await;
 
     let result = super::runtime_services::with_component_context(&js_state.ctx, async |ctx| {
+        super::custom_invocation_context::begin_root();
         drain_pending_resource_drops(&ctx);
 
         let (user_function, parent) =
             get_cached_js_export(js_state, &ctx, wit_package, function_path, args.num_args());
 
         let result: Result<Value, Error> = call_with_this(ctx.clone(), user_function, parent, args);
+        super::custom_invocation_context::restore_root();
 
         match result {
             Ok(value) => Persistent::save(&ctx, value),
@@ -1826,7 +1773,9 @@ pub fn spawn_future_writer<T, R, F>(
     R: for<'js> FromJs<'js> + 'static,
     F: FnOnce(R) -> T + 'static,
 {
-    spawn_local(future_writer_task(js_value, writer, convert));
+    spawn_local(super::custom_invocation_context::scoped(
+        future_writer_task(js_value, writer, convert),
+    ));
 }
 
 async fn try_close_js_stream_iterator(iterator: Persistent<Object<'static>>) -> Result<(), String> {
@@ -1972,7 +1921,9 @@ pub fn spawn_stream_writer<T, R, F>(
     R: for<'js> FromJs<'js> + 'static,
     F: Fn(R) -> T + 'static,
 {
-    spawn_local(stream_writer_task(js_value, writer, convert));
+    spawn_local(super::custom_invocation_context::scoped(
+        stream_writer_task(js_value, writer, convert),
+    ));
 }
 
 /// Whether a settled deferred promise should be fulfilled or rejected, and with what JS value.
@@ -2061,6 +2012,7 @@ where
         }
     });
 
+    let value = normalize_js_promise(ctx, value)?;
     if value.is_promise() {
         let promise = value
             .into_promise()
@@ -2357,8 +2309,8 @@ where
     Ok(iterable)
 }
 
-/// Awaits a component future reader and converts its payload to a JS value via `wrap`. Exposed to
-/// JavaScript as a `Promise` (through rquickjs' `Promised`).
+/// Converts a component future reader to a promise-compatible thenable. Reading starts only
+/// when the guest observes the future, so an unused future cannot keep the export alive.
 pub fn future_reader_to_js<'js, T, R, F>(
     ctx: &Ctx<'js>,
     reader: FutureReader<T>,
@@ -2369,16 +2321,32 @@ where
     R: for<'a> IntoJs<'a> + 'static,
     F: FnOnce(T) -> R + 'static,
 {
-    Promised(async move {
-        let payload: T = reader.await;
-        wrap(payload)
-    })
-    .into_js(ctx)
+    let pending = RefCell::new(Some((reader, wrap)));
+    let start = Function::new(ctx.clone(), move || {
+        let (reader, wrap) = pending.borrow_mut().take().expect("future already started");
+        Promised(async move {
+            let payload: T = reader.await;
+            wrap(payload)
+        })
+    })?;
+    let make: Function = ctx.eval(
+        r#"(start) => {
+            let promise;
+            const observe = () => promise ??= start();
+            return {
+                then(resolve, reject) { return observe().then(resolve, reject); },
+                catch(reject) { return observe().catch(reject); },
+                finally(callback) { return observe().finally(callback); },
+                [Symbol.toStringTag]: 'Promise',
+            };
+        }"#,
+    )?;
+    make.call((start,))
 }
 
-/// An `IntoJs` wrapper around a component future reader, so the backing `Promise` is created
-/// lazily inside the QuickJS context (where a `Ctx` is available), e.g. when passed as an
-/// exported function argument or returned from an imported-function bridge.
+/// An `IntoJs` wrapper that creates a promise-compatible thenable inside the QuickJS context,
+/// e.g. when passed as an exported function argument or returned from an imported-function
+/// bridge. The backing read starts when JavaScript observes the thenable.
 pub struct FutureReaderIntoJs<T: 'static, F> {
     reader: FutureReader<T>,
     wrap: F,

@@ -1,3 +1,6 @@
+import { markAsUntransferable, registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
+import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { cloneBlobBacking } from '__wasm_rquickjs_builtin/http_blob';
 /*!
  * The buffer module from node.js.
  * Based on https://github.com/feross/buffer (MIT license).
@@ -37,7 +40,7 @@ export const INSPECT_MAX_BYTES = 50
 
 const K_MAX_LENGTH = 0x7fffffff
 export const kMaxLength = K_MAX_LENGTH
-const K_UNTRANSFERABLE_ARRAYBUFFER = Symbol.for('__wasm_rquickjs.untransferable')
+
 
 let allocationPool
 let allocationPoolOffset = 0
@@ -135,22 +138,8 @@ function createBuffer (length) {
     return new FastBuffer(length)
 }
 
-function markArrayBufferAsUntransferable (arrayBuffer) {
-    if (arrayBuffer == null || (typeof arrayBuffer !== 'object' && typeof arrayBuffer !== 'function')) {
-        return
-    }
-
-    try {
-        Object.defineProperty(arrayBuffer, K_UNTRANSFERABLE_ARRAYBUFFER, {
-            value: true,
-            enumerable: false,
-            configurable: false,
-            writable: false,
-        })
-    } catch {
-        // Ignore non-extensible buffers.
-    }
-}
+// Buffer pools and the public worker API share one invisible, frozen-safe mark.
+const markArrayBufferAsUntransferable = markAsUntransferable
 
 function alignPoolOffset () {
     if ((allocationPoolOffset & 0x7) !== 0) {
@@ -2432,12 +2421,15 @@ function validateBufferSource (source) {
 // Node.js-compatible Blob wrapper
 // Wraps the fetch-blob polyfill with Node.js error codes and API compatibility
 
-const _blobBrand = Symbol('blobBrand')
+const blobBacking = createPrivateWeakMap()
+const wrapperCloneAdapter = {__proto__: null,
+    kind: 'Blob',
+    clone(value) { return new _Blob(_innerKey, cloneBlobBacking(blobBacking.get(value))) },
+    cloneBacking(value, memo) { return cloneBlobBacking(blobBacking.get(value), memo) },
+}
 
 function _validateBlobThis(self) {
-    if (!self || !self[_blobBrand]) {
-        throw new ERR_INVALID_THIS('Blob')
-    }
+    if (!blobBacking.has(self)) throw new ERR_INVALID_THIS('Blob')
 }
 
 const _innerKey = Symbol('blobInner')
@@ -2446,8 +2438,8 @@ const _Blob = class Blob {
     constructor(sources = [], options = {}) {
         // Sentinel for _fromInner
         if (sources === _innerKey) {
-            this[_innerKey] = options
-            Object.defineProperty(this, _blobBrand, { value: true, enumerable: false, writable: false, configurable: false })
+            blobBacking.set(this, options)
+            registerCloneAdapter(this, wrapperCloneAdapter)
             return
         }
 
@@ -2476,44 +2468,44 @@ const _Blob = class Blob {
             const lowered = String(rawType).toLowerCase()
             effectiveOptions = { __proto__: null, type: lowered, endings: effectiveOptions.endings }
         }
-        this[_innerKey] = new _BlobImport(sources === undefined ? [] : sources, effectiveOptions)
-        Object.defineProperty(this, _blobBrand, { value: true, enumerable: false, writable: false, configurable: false })
+        blobBacking.set(this, new _BlobImport(sources === undefined ? [] : sources, effectiveOptions))
+        registerCloneAdapter(this, wrapperCloneAdapter)
     }
 
     get size() {
         _validateBlobThis(this)
-        return this[_innerKey].size
+        return blobBacking.get(this).size
     }
 
     get type() {
         _validateBlobThis(this)
-        return this[_innerKey].type
+        return blobBacking.get(this).type
     }
 
     async text() {
         _validateBlobThis(this)
-        return this[_innerKey].text()
+        return blobBacking.get(this).text()
     }
 
     async arrayBuffer() {
         _validateBlobThis(this)
-        return this[_innerKey].arrayBuffer()
+        return blobBacking.get(this).arrayBuffer()
     }
 
     async bytes() {
         _validateBlobThis(this)
-        const ab = await this[_innerKey].arrayBuffer()
+        const ab = await blobBacking.get(this).arrayBuffer()
         return new Uint8Array(ab)
     }
 
     stream() {
         _validateBlobThis(this)
-        return this[_innerKey].stream()
+        return blobBacking.get(this).stream()
     }
 
     slice(start, end, type) {
         _validateBlobThis(this)
-        const sliced = this[_innerKey].slice(start, end, type)
+        const sliced = blobBacking.get(this).slice(start, end, type)
         return new Blob(_innerKey, sliced)
     }
 }

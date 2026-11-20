@@ -1,14 +1,14 @@
 declare module 'errors' {
-  export function fun1(name: string): Promise<string>;
-  export function fun3(): Promise<string>;
-  export function fun4(a: number, b: number): Promise<string>;
-  export function fun5(a: number, b: string): Promise<string>;
-  export function fun6(): Promise<number>;
+  export function fun1(name: string): string;
+  export function fun3(): string;
+  export function fun4(a: number, b: number): string;
+  export function fun5(a: number, b: string): string;
+  export function fun6(): number;
   export namespace api {
-    export function fun2(name: string): Promise<string>;
+    export function fun2(name: string): string;
   }
   export namespace api2 {
-    export function fun7(): Promise<string>;
+    export function fun7(): string;
   }
   export namespace api3 {
     export class Res1 {
@@ -19,9 +19,9 @@ declare module 'errors' {
     }
     export class Res3 {
       constructor();
-      m1(): Promise<string>;
-      m2(a: number, b: number): Promise<string>;
-      m3(): Promise<number>;
+      m1(): string;
+      m2(a: number, b: number): string;
+      m3(): number;
     }
   }
 }

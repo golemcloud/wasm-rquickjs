@@ -83,10 +83,6 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn hrtime_ns(ctx: Ctx<'_>) -> rquickjs::Result<BigInt<'_>> {
-        #[cfg(feature = "p2")]
-        let nanos = wasip2::clocks::monotonic_clock::now();
-
-        #[cfg(feature = "p3")]
         let nanos = wasip3::clocks::monotonic_clock::now();
 
         BigInt::from_u64(ctx, nanos)

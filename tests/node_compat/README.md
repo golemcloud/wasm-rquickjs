@@ -44,6 +44,15 @@ fail when the suite is absent, a source required for implicit classification is
 missing, or the vendored version differs from `config.jsonc`; this prevents
 missing classification inputs from silently changing the compatibility totals.
 
+## Target Selection
+
+The harness is pinned to Node.js 22.14.0. NJ-01 selected Node.js 26.13.1 (npm 11.20.0) as the
+next target, measured against Node.js 24.22.3; NJ-02 performs the switch. See
+[`target-selection.md`](target-selection.md) for pin provenance, measured suite, API and
+npm 10.9.2-to-11.20.0 differences, required harness changes and switching instructions, and
+[`target-mapping-22.14.0.json`](target-mapping-22.14.0.json) for the mapping of every 22.14.0
+passing case that does not pass unchanged on both candidates.
+
 ## Config Format
 
 `config.jsonc` is an allowlist of tests expected to pass. Only listed tests

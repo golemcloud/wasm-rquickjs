@@ -1,6 +1,7 @@
 package quickjs:structured-clone;
 
 world structured-clone {
+  export test-policy-case: func(index: u8) -> string;
   export test-primitives: func() -> string;
   export test-objects: func() -> string;
   export test-arrays: func() -> string;

@@ -1,3 +1,4 @@
+use crate::internal::custom_invocation_context::{FutureScope, scoped_in};
 use crate::internal::{
     format_caught_error,
     runtime_services::{RuntimeServices, TimerServices, run_process_turn_checkpoint},
@@ -12,9 +13,10 @@ use std::task::{Context, Poll};
 // Native functions for the timeout implementation
 #[rquickjs::module]
 pub mod native_module {
+    use crate::internal::custom_invocation_context::{Token, future_scope_of};
     use crate::internal::runtime_services::RuntimeServices;
     use futures::future::abortable;
-    use rquickjs::{Ctx, Persistent, Value};
+    use rquickjs::{Class, Ctx, Persistent, Value};
     use std::sync::atomic::Ordering;
 
     #[rquickjs::function]
@@ -24,6 +26,7 @@ pub mod native_module {
         delay: u32,
         periodic: bool,
         args: Persistent<Vec<Value<'static>>>,
+        scope: Option<Class<'_, Token>>,
     ) -> usize {
         let services = ctx
             .userdata::<RuntimeServices>()
@@ -35,9 +38,34 @@ pub mod native_module {
 
         let timers = services.timers.clone();
         drop(services);
+        // `scope` is the token the timer captured at registration. Its sleeps run in it, so the
+        // host attributes their clock calls to that scope, like the callback.
+        let scope = future_scope_of(scope);
+        if let Some(owner) = timers
+            .child_owner
+            .borrow()
+            .as_ref()
+            .and_then(std::rc::Weak::upgrade)
+        {
+            let (handle, registration) = futures::future::AbortHandle::new_pair();
+            timers.abort_handles.borrow_mut().insert(key, handle);
+            owner.schedule(
+                super::super::child_timers::ChildTimer {
+                    key,
+                    delay,
+                    periodic,
+                    callback: code_or_fn,
+                    args,
+                    scope,
+                },
+                registration,
+            );
+            timers.changed();
+            return key;
+        }
         if timers.component_owned.get() {
             let (task, handle) = abortable(super::scheduled_component_task(
-                code_or_fn, delay, periodic, args, key,
+                code_or_fn, delay, periodic, args, key, scope,
             ));
             timers.abort_handles.borrow_mut().insert(key, handle);
             timers.active_tasks.borrow_mut().insert(key);
@@ -63,6 +91,7 @@ pub mod native_module {
                 periodic,
                 args,
                 key,
+                scope,
             ));
             timers.abort_handles.borrow_mut().insert(key, handle);
             let task_timers = timers.clone();
@@ -187,13 +216,15 @@ impl<F> Drop for ComponentTimerTask<F> {
 async fn scheduled_loop<F: Future<Output = bool>>(
     delay: u32,
     periodic: bool,
+    scope: FutureScope,
     mut callback: impl FnMut() -> F,
 ) {
     loop {
-        #[cfg(feature = "p2")]
-        wstd::task::sleep(wstd::time::Duration::from_millis(delay as u64)).await;
-        #[cfg(feature = "p3")]
-        wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)).await;
+        scoped_in(
+            scope.clone(),
+            wasip3::clocks::monotonic_clock::wait_for((delay as u64).saturating_mul(1_000_000)),
+        )
+        .await;
         let active = callback().await;
         if !periodic || !active {
             break;
@@ -208,8 +239,9 @@ async fn scheduled_task(
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
     timer_key: usize,
+    scope: FutureScope,
 ) {
-    scheduled_loop(delay, periodic, || {
+    scheduled_loop(delay, periodic, scope, || {
         let ctx = ctx.clone();
         let code_or_fn = code_or_fn.clone();
         let args = args.clone();
@@ -224,8 +256,9 @@ async fn scheduled_component_task(
     periodic: bool,
     args: Persistent<Vec<Value<'static>>>,
     timer_key: usize,
+    scope: FutureScope,
 ) {
-    scheduled_loop(delay, periodic, || {
+    scheduled_loop(delay, periodic, scope, || {
         let code_or_fn = code_or_fn.clone();
         let args = args.clone();
         async move {
@@ -246,7 +279,7 @@ async fn scheduled_component_task(
     .await;
 }
 
-fn invoke_scheduled_task(
+pub(crate) fn invoke_scheduled_task(
     ctx: Ctx<'_>,
     code_or_fn: Persistent<Value<'static>>,
     args: Persistent<Vec<Value<'static>>>,
@@ -255,10 +288,14 @@ fn invoke_scheduled_task(
     run_scheduled_task(ctx.clone(), code_or_fn, args, timer_key)
         .catch(&ctx)
         .unwrap_or_else(|e| {
-            eprintln!(
-                "Timer callback error escaped JS uncaught handler: {}",
+            let output = ctx
+                .userdata::<RuntimeServices>()
+                .expect("runtime services not initialized")
+                .output_sink();
+            output.write_stderr(&format!(
+                "Timer callback error escaped JS uncaught handler: {}\n",
                 format_caught_error(e)
-            );
+            ));
         });
     ctx.userdata::<RuntimeServices>()
         .expect("runtime services not initialized")
@@ -303,7 +340,13 @@ fn run_scheduled_task(
     } else if let Some(code) = restored_code_or_fn.as_string() {
         ctx.eval(code.to_string()?)
     } else {
-        eprintln!("Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}");
+        let output = ctx
+            .userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .output_sink();
+        output.write_stderr(&format!(
+            "Unsupported value passed to setTimeout or setInterval: {restored_code_or_fn:?}\n"
+        ));
         Ok(())
     };
 

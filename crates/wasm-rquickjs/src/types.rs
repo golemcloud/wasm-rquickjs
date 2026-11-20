@@ -244,7 +244,7 @@ pub fn ident_in_imported_interface(
     );
 
     // Check if this interface belongs to a WASI package remapped to the WASI runtime crate
-    // (`wasip2::` for Preview 2, `wasip3::` for Preview 3).
+    // (`wasip3::`).
     if let Some(package_id) = interface.package
         && context.is_wasi_remapped_package(package_id)
     {
@@ -446,12 +446,6 @@ pub fn get_wrapped_type_internal(
                     get_wrapped_type_borrow_handle(ctx, resource_type_id)
                 }
                 TypeDefKind::Future(_) | TypeDefKind::Stream(_) => {
-                    if !context.target.is_p3() {
-                        return Err(anyhow!(
-                            "future<T> and stream<T> types are only supported by the WASI Preview 3 generation path"
-                        ));
-                    }
-
                     let bridge = crate::async_values::payload_bridge_ident(*type_id);
                     let wrapper = match &typ.kind {
                         TypeDefKind::Future(_) => {

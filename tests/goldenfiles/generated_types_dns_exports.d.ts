@@ -1,3 +1,3 @@
 declare module 'dns' {
-  export function test(): Promise<string>;
+  export function test(): string;
 }

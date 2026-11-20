@@ -1,34 +1,41 @@
 // Native functions for the console implementation
 #[rquickjs::module(rename_vars = "camelCase")]
 pub mod native_module {
+    use crate::internal::runtime_services::RuntimeServices;
+    use rquickjs::Ctx;
+
     #[rquickjs::function]
-    pub fn println(line: String) {
-        println!("{line}");
+    pub fn println(ctx: Ctx<'_>, line: String) {
+        let output = ctx
+            .userdata::<RuntimeServices>()
+            .expect("runtime services not initialized")
+            .output_sink();
+        output.write_stdout(&format!("{line}\n"));
     }
 
     #[rquickjs::function]
-    pub fn trace(line: String) {
-        log_line(LogLevel::Trace, &line);
+    pub fn trace(ctx: Ctx<'_>, line: String) {
+        log_line(ctx, LogLevel::Trace, &line);
     }
 
     #[rquickjs::function]
-    pub fn debug(line: String) {
-        log_line(LogLevel::Debug, &line);
+    pub fn debug(ctx: Ctx<'_>, line: String) {
+        log_line(ctx, LogLevel::Debug, &line);
     }
 
     #[rquickjs::function]
-    pub fn info(line: String) {
-        log_line(LogLevel::Info, &line);
+    pub fn info(ctx: Ctx<'_>, line: String) {
+        log_line(ctx, LogLevel::Info, &line);
     }
 
     #[rquickjs::function]
-    pub fn warn(line: String) {
-        log_line(LogLevel::Warn, &line);
+    pub fn warn(ctx: Ctx<'_>, line: String) {
+        log_line(ctx, LogLevel::Warn, &line);
     }
 
     #[rquickjs::function]
-    pub fn error(line: String) {
-        log_line(LogLevel::Error, &line);
+    pub fn error(ctx: Ctx<'_>, line: String) {
+        log_line(ctx, LogLevel::Error, &line);
     }
 
     enum LogLevel {
@@ -40,7 +47,7 @@ pub mod native_module {
     }
 
     #[cfg(not(feature = "logging"))]
-    fn log_line(level: LogLevel, line: &str) {
+    fn log_line(ctx: Ctx<'_>, level: LogLevel, line: &str) {
         let prefix = match level {
             LogLevel::Trace => "TRACE",
             LogLevel::Debug => "DEBUG",
@@ -48,11 +55,11 @@ pub mod native_module {
             LogLevel::Warn => "WARN",
             LogLevel::Error => "ERROR",
         };
-        println!("{prefix}: {line}");
+        println(ctx, format!("{prefix}: {line}"));
     }
 
     #[cfg(feature = "logging")]
-    fn log_line(level: LogLevel, line: &str) {
+    fn log_line(_ctx: Ctx<'_>, level: LogLevel, line: &str) {
         let wasi_level = match level {
             LogLevel::Trace => wasi_logging::Level::Trace,
             LogLevel::Debug => wasi_logging::Level::Debug,
@@ -85,8 +92,12 @@ pub mod native_module {
 
 // JS functions for the console implementation
 pub const CONSOLE_JS: &str = include_str!("console.js");
-pub const PUBLIC_IMPLEMENTATION_JS: &str = r#"export * from '__wasm_rquickjs_builtin/console'; export { default } from '__wasm_rquickjs_builtin/console';"#;
-pub const REEXPORT_JS: &str = r#"export * from 'node:console'; import { Console } from 'node:console'; const c = globalThis.console; c.Console = Console; export default c;"#;
+// Named-export metadata comes from CONSOLE_JS. Lookup only returns the actual
+// object; property getters/deletions are observed by the public facade later.
+pub const PUBLIC_IMPLEMENTATION_JS: &str =
+    r#"export { default } from '__wasm_rquickjs_builtin/console';"#;
+pub const REEXPORT_JS: &str =
+    r#"export * from 'node:console'; export { default } from 'node:console';"#;
 
 // JS code wiring the console module into the global context
 pub const WIRE_JS: &str = "import { default as __console } from '__wasm_rquickjs_builtin/console'; globalThis.console = __console;";

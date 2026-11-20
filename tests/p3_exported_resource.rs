@@ -31,8 +31,7 @@ use wasm_rquickjs::{
 use wasmtime::component::{Component, Linker, ResourceTable, bindgen};
 use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::{WasiCtxBuilder, WasiCtxView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 bindgen!({
     world: "exported-res",
@@ -71,7 +70,7 @@ impl WasiHttpView for Host {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: wasmtime_wasi_http::default_hooks(),
         }
     }
 }

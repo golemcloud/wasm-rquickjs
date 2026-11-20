@@ -1,4 +1,4 @@
 declare module 'example1' {
-  export function hello(name: string): Promise<string>;
-  export function asyncHello(name: string): Promise<string>;
+  export function hello(name: string): string;
+  export function asyncHello(name: string): string;
 }

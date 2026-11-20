@@ -9,7 +9,7 @@ iterations=${AGENTIC_TS_ITERATIONS:-5}
 if [ "${1:-}" = "--check" ]; then
     cd "$repo_root"
     tools/performance-report-currentness.sh check agentic-ts -- \
-        tools/dev-test.sh p2 standard agentic_ts ""
+        tools/dev-test.sh fork standard agentic_ts ""
     exit 0
 fi
 
@@ -22,7 +22,7 @@ if [ "${1:-}" = "--check-current" ]; then
 
     cd "$repo_root"
     tools/performance-report-currentness.sh check agentic-ts "$@" -- \
-        tools/dev-test.sh p2 standard agentic_ts ""
+        tools/dev-test.sh fork standard agentic_ts ""
     exit 0
 fi
 
@@ -78,28 +78,23 @@ fi
 
 mkdir -p "$results_dir"
 measurement_date=$(date +%Y-%m-%d)
-generated_reports=""
-for target in p2 p3; do
-    report="$results_dir/${measurement_date}${report_label}-$target-$platform-$arch.json"
-    (
-        cd "$repo_root"
-        if [ "$release_baseline" = true ]; then
-            export AGENTIC_TS_RELEASE_BASELINE=1
-        fi
-        AGENTIC_TS_ITERATIONS="$iterations" \
-        AGENTIC_TS_REPORT="$report" \
-        AGENTIC_TS_SOURCE_ROOT="$repo_root" \
-        tools/dev-test.sh "$target" "$measurement_profile" agentic_ts ""
-    )
-    generated_reports="${generated_reports}${report}\n"
-done
-
-reports_to_check=$(printf '%b' "$generated_reports")
+target=p3
+report="$results_dir/${measurement_date}${report_label}-$target-$platform-$arch.json"
+(
+    cd "$repo_root"
+    if [ "$release_baseline" = true ]; then
+        export AGENTIC_TS_RELEASE_BASELINE=1
+    fi
+    AGENTIC_TS_ITERATIONS="$iterations" \
+    AGENTIC_TS_REPORT="$report" \
+    AGENTIC_TS_SOURCE_ROOT="$repo_root" \
+    tools/dev-test.sh stock "$measurement_profile" agentic_ts ""
+)
 (
     cd "$repo_root"
     AGENTIC_TS_VALIDATE_REPORTS=1 \
     AGENTIC_TS_ALLOW_UNTRACKED_REPORTS=1 \
-    AGENTIC_TS_REPORTS_TO_CHECK="$reports_to_check" \
+    AGENTIC_TS_REPORTS_TO_CHECK="$report" \
     AGENTIC_TS_SOURCE_ROOT="$repo_root" \
-    tools/dev-test.sh p2 standard agentic_ts ""
+    tools/dev-test.sh fork standard agentic_ts ""
 )

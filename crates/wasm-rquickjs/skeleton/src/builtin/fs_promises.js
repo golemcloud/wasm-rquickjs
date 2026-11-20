@@ -1,3 +1,4 @@
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     aggregateTwoErrors,
@@ -20,6 +21,8 @@ import {
     validateMkdtempPrefix as _validateMkdtempPrefix,
     makeAbortError,
 } from '__wasm_rquickjs_builtin/internal/fs/shared';
+
+const fileHandleCloneAdapter = {__proto__: null, kind: 'FileHandle', requiresTransfer: true};
 
 const MKDIR_MODE_MASK = 0o7777;
 const kIoMaxLength = 2 ** 31 - 1;
@@ -275,6 +278,7 @@ function ensureFileHandleProto() {
 
 export class FileHandle {
     constructor(fd, path) {
+        registerCloneAdapter(this, fileHandleCloneAdapter);
         // Ensure prototype chain is set up before constructing
         ensureFileHandleProto();
         // Manually apply EventEmitter constructor

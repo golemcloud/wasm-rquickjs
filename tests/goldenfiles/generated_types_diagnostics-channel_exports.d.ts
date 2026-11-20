@@ -1,3 +1,3 @@
 declare module 'diagnostics-channel' {
-  export function test(): Promise<string>;
+  export function test(): string;
 }

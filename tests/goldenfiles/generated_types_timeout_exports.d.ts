@@ -1,6 +1,6 @@
 declare module 'timeout' {
-  export function run(): Promise<void>;
-  export function parallel(): Promise<void>;
-  export function useNextTick(): Promise<void>;
-  export function awaitRuntimeIdle(): Promise<void>;
+  export function run(): void;
+  export function parallel(): void;
+  export function useNextTick(): void;
+  export function awaitRuntimeIdle(): void;
 }

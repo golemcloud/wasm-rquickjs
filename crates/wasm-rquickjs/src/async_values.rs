@@ -23,7 +23,6 @@
 use crate::GeneratorContext;
 use crate::rust_bindgen::{RustType, TypeOwnershipStyle, type_mode_for};
 use crate::types::{TokenStreamWrapper, get_wrapped_type, to_type_ref};
-use anyhow::anyhow;
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::quote;
 use std::collections::BTreeSet;
@@ -182,19 +181,6 @@ pub fn top_level_result_error_contains(
     }
 }
 
-/// Ensures future/stream values are only used on the Preview 3 target, which is the only target
-/// with a Component Model async ABI.
-fn ensure_p3(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
-    if context.target.is_p3() {
-        Ok(())
-    } else {
-        Err(anyhow!(
-            "future<T> and stream<T> types are only supported by the WASI Preview 3 generation \
-             path"
-        ))
-    }
-}
-
 /// The concrete wit-bindgen reader type for this async value, dealiased to the canonical
 /// `FutureReader<P>` / `StreamReader<P>`. Using the dealiased concrete type (rather than a WIT
 /// alias name) is always valid in the generated `Guest` impl because Rust type aliases are
@@ -273,7 +259,6 @@ pub fn reader_to_js_expr(
     async_value: &AsyncValue,
     reader_expr: TokenStream,
 ) -> anyhow::Result<TokenStream> {
-    ensure_p3(context)?;
     let bridge = payload_bridge(context, async_value)?;
     let original = &bridge.original_ref;
     let wrap_body = bridge.wrap.run(quote! { __payload });
@@ -297,14 +282,14 @@ pub fn js_to_reader_expr(
     async_value: &AsyncValue,
     persisted_expr: TokenStream,
 ) -> anyhow::Result<TokenStream> {
-    ensure_p3(context)?;
     let bridge = payload_bridge(context, async_value)?;
     let original = &bridge.original_ref;
     let wrapped = &bridge.wrapped_ref;
     let unwrap_body = bridge.unwrap.run(quote! { __wrapped });
+    let default = future_default(context, async_value, original)?;
     let (new_call, spawn_fn) = match async_value.kind {
         AsyncValueKind::Future => (
-            quote! { crate::bindings::wit_future::new(crate::internal::async_value_default::<#original>) },
+            quote! { crate::bindings::wit_future::new(#default) },
             quote! { crate::internal::spawn_future_writer },
         ),
         AsyncValueKind::Stream => (
@@ -343,14 +328,14 @@ pub fn js_to_reader_pure_expr(
     ctx_expr: TokenStream,
     value_expr: TokenStream,
 ) -> anyhow::Result<TokenStream> {
-    ensure_p3(context)?;
     let bridge = payload_bridge(context, async_value)?;
     let original = &bridge.original_ref;
     let wrapped = &bridge.wrapped_ref;
     let unwrap_body = bridge.unwrap.run(quote! { __wrapped });
+    let default = future_default(context, async_value, original)?;
     let (new_call, from_js_fn) = match async_value.kind {
         AsyncValueKind::Future => (
-            quote! { crate::bindings::wit_future::new(crate::internal::async_value_default::<#original>) },
+            quote! { crate::bindings::wit_future::new(#default) },
             quote! { crate::internal::future_writer_from_js },
         ),
         AsyncValueKind::Stream => (
@@ -370,4 +355,20 @@ pub fn js_to_reader_pure_expr(
             __reader
         }
     })
+}
+
+pub(crate) fn future_default(
+    context: &GeneratorContext<'_>,
+    async_value: &AsyncValue,
+    original: &TokenStream,
+) -> anyhow::Result<TokenStream> {
+    let mut payload = async_value.payload;
+    while let Some(Type::Id(id)) = payload {
+        match &context.typ(id)?.kind {
+            TypeDefKind::Option(_) => return Ok(quote! { || None }),
+            TypeDefKind::Type(inner) => payload = Some(*inner),
+            _ => break,
+        }
+    }
+    Ok(quote! { crate::internal::async_value_default::<#original> })
 }

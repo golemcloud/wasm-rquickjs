@@ -3,7 +3,7 @@ set -euo pipefail
 
 WASI_SDK_VERSION=25
 NODE_VERSION="$(tr -d '[:space:]' < .nvmrc)"
-WASMTIME_VERSION=46.0.1
+WASMTIME_VERSION=50.0.1
 CARGO_COMPONENT_VERSION=0.21.1
 CARGO_COMPONENT_SHA256=706b989270457ea6a5d69474b21a9a448b0a63ba9b6b2fdc3a35586b09677267
 
@@ -80,7 +80,7 @@ step_done
 step "Node.js"
 node_dir="/opt/node-v${NODE_VERSION}-linux-x64"
 if [[ ! -x "$node_dir/bin/node" ]] || \
-  [[ "$($node_dir/bin/node --version 2>/dev/null)" != "v${NODE_VERSION}" ]]; then
+  [[ "$("$node_dir/bin/node" --version 2>/dev/null)" != "v${NODE_VERSION}" ]]; then
   archive="$(mktemp --suffix=.tar.xz)"
   curl -sSfL "https://nodejs.org/dist/v${NODE_VERSION}/node-v${NODE_VERSION}-linux-x64.tar.xz" -o "$archive"
   sudo rm -rf "$node_dir"

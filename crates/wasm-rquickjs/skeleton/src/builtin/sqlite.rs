@@ -610,6 +610,7 @@ fn open_database_impl<'js>(
     enable_dqs: bool,
     timeout: u32,
 ) -> rquickjs::Result<u32> {
+    crate::internal::preinit::check("SQLite database open", &path);
     let conn = if path == ":memory:" {
         rusqlite::Connection::open_in_memory().map_err(|e| sqlite_error(&ctx, &e))?
     } else {
@@ -1889,6 +1890,7 @@ fn restore_database_impl<'js>(
     conn_id: u32,
     bytes: rquickjs::TypedArray<'js, u8>,
 ) -> rquickjs::Result<()> {
+    crate::internal::preinit::check("SQLite database restore", "in-memory database");
     let mut table = lock_conn_table(&ctx)?;
     let conn = table
         .connections
@@ -1946,6 +1948,7 @@ fn native_backup_impl<'js>(
     target_db: String,
     rate: i32,
 ) -> rquickjs::Result<i32> {
+    crate::internal::preinit::check("SQLite database backup", &path);
     let table = lock_conn_table(&ctx)?;
     let src_conn = table
         .connections

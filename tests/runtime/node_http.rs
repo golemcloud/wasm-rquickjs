@@ -52,6 +52,102 @@ async fn response_cancellation(compiled: &CompiledTest, test_case: u8) -> anyhow
 }
 
 #[test]
+async fn net_read_callback_turns(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    read_callback_turns(compiled, 0).await
+}
+
+#[test]
+async fn net_read_callback_pause_resume(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    read_callback_turns(compiled, 1).await
+}
+
+#[test]
+async fn net_read_callback_destroy(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    read_callback_turns(compiled, 2).await
+}
+
+async fn read_callback_turns(compiled: &CompiledTest, test_case: u8) -> anyhow::Result<()> {
+    let (result, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "net-read-callback-turns",
+        &[Val::U8(test_case)],
+    )
+    .await;
+    let Some(Val::String(trace)) = result? else {
+        anyhow::bail!("missing read trace: {output}");
+    };
+    let trace: serde_json::Value = serde_json::from_str(&trace)?;
+    if test_case == 2 {
+        assert_eq!(trace["response"], "", "{trace} {output}");
+        assert!(trace["bytes"].as_u64().unwrap() > 0, "{trace}");
+    } else {
+        assert_eq!(trace["response"], "ok", "{trace} {output}");
+        assert_eq!(trace["bytes"], 48 * 1024, "{trace} {output}");
+    }
+    let mut pending_tick = false;
+    let mut destroyed = false;
+    let mut closes = 0;
+    for event in trace["events"].as_array().unwrap() {
+        let Some(name) = event.as_str() else {
+            assert!(test_case == 2 && event[0] == "client-error", "{trace}");
+            continue;
+        };
+        match name {
+            "data" => {
+                assert!(!destroyed, "late read after destruction: {trace}");
+                assert!(!pending_tick, "read callback overtook nextTick: {trace}");
+                pending_tick = true;
+            }
+            "tick" => pending_tick = false,
+            "end" => {
+                assert!(!destroyed, "late EOF after destruction: {trace}");
+                assert!(!pending_tick, "EOF overtook nextTick: {trace}");
+            }
+            "destroy" => destroyed = true,
+            "server-close" => closes += 1,
+            other => anyhow::bail!("unexpected {other}: {trace}"),
+        }
+    }
+    assert_eq!(closes, 1, "{trace}");
+    Ok(())
+}
+
+#[test]
+async fn node_http_buffered_request_fin(
+    #[tagged_as("node_http")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    for test_case in 0..4 {
+        let (result, output) = invoke_and_capture_output(
+            compiled.wasm_path(),
+            None,
+            "http-buffered-request-fin",
+            &[Val::U8(test_case)],
+        )
+        .await;
+        let Some(Val::String(trace)) = result? else {
+            anyhow::bail!("missing FIN trace: {output}");
+        };
+        let trace: serde_json::Value = serde_json::from_str(&trace)?;
+        assert_eq!(
+            trace["response"],
+            concat!(
+                "HTTP/1.1 200 OK\r\ncontent-type: text/plain\r\nconnection: close\r\n",
+                "date: now\r\nTransfer-Encoding: chunked\r\n\r\n3\r\nbye\r\n0\r\n\r\n"
+            ),
+            "case {test_case}: {trace} {output}"
+        );
+    }
+    Ok(())
+}
+
+#[test]
 async fn node_http_response_cancellation_destroy(
     #[tagged_as("node_http")] compiled: &CompiledTest,
 ) -> anyhow::Result<()> {

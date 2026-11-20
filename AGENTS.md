@@ -41,17 +41,18 @@ initializes submodules, and persists the pinned Node.js, Wasmtime, Cargo, and WA
 SDK paths for non-interactive login shells. `.agents/resume` performs only fast
 validation when an existing orb wakes. Keep both scripts idempotent and executable.
 
-The orb root disk is limited to 64 GiB, while a complete P2 run can retain roughly
-47 GiB in `target/` and `tmp/`. Do not retain P2 and P3 build artifacts together
+The orb root disk is limited to 64 GiB, while a complete runtime and node-compat
+run retains tens of GiB in `target/` and `tmp/` (the removed fork-hosted P2 lanes
+retained roughly 47 GiB). Do not retain fork and stock build artifacts together
 when reproducing the full CI workflow. Use separate worktrees so
-`enable-wasmtime-fork.sh` cannot affect stock-P3 tests, then run the lanes in this
-order:
+`enable-wasmtime-fork.sh` cannot affect stock-Wasmtime tests, then run the lanes in
+this order:
 
-1. Run fork-enabled P2 build, test-other, runtime, and node-compat lanes.
-2. Preserve test logs/results outside the P2 worktree, then remove that worktree's
-   generated `target/`, `tmp/`, and `tests/node_compat/suite/` directories.
-3. Run stock-P3 runtime and node-compat lanes.
-4. Remove the P3 worktree's generated `tmp/` directory before running the dedicated
+1. Run the fork-enabled build and test-other lanes.
+2. Preserve test logs/results outside the fork worktree, then remove that worktree's
+   generated `target/` and `tmp/` directories.
+3. Run the stock-Wasmtime runtime and node-compat lanes.
+4. Remove the stock worktree's generated `tmp/` directory before running the dedicated
    `p3_generation`, `p3_exported_resource`, and `p3_async_values` tests. Those tests
    build isolated crates concurrently under `/tmp` and need substantial transient
    free space.
@@ -75,7 +76,7 @@ clean-state-preserving caches explicitly:
 ```bash
 WASM_RQUICKJS_TEST_ARTIFACT_CACHE=1 \
 WASM_RQUICKJS_TEST_WASMTIME_CACHE=1 \
-cargo test --test runtime --features use-golem-wasmtime -- module_resolution --report-time
+cargo test --test runtime -- module_resolution --report-time
 ```
 
 - `WASM_RQUICKJS_TEST_WASMTIME_CACHE=1` uses Wasmtime's filesystem compilation cache.
@@ -94,23 +95,25 @@ For skeleton work, prefer the measured local workflow wrapper:
 
 ```bash
 # Minimize latency to the first result after an edit.
-tools/dev-test.sh p2 fast-start runtime <exact_test_filter>
+tools/dev-test.sh stock fast-start runtime <exact_test_filter>
 
 # Precompile a changed component once before parallel workers start.
-tools/dev-test.sh p2 fast-run node_compat <test_filter>
+tools/dev-test.sh stock fast-run node_compat <test_filter>
 
 # Override the fast-run default when another worker count suits the machine or filter.
-tools/dev-test.sh p2 fast-run node_compat <test_filter> --test-threads 4
+tools/dev-test.sh stock fast-run node_compat <test_filter> --test-threads 4
 
 # Use the embedded skeleton and default test semantics.
-tools/dev-test.sh p3 standard runtime ':tag:group3'
+tools/dev-test.sh stock standard runtime ':tag:group3'
 ```
 
-Use `p3` instead of `p2` for Preview 3. The P2 command keeps the Golem Wasmtime
-patch and its lockfile in an ignored shadow workspace, so the real manifests stay
-clean. The accelerated profiles use locked Cargo builds; missing packages can still
-be downloaded. Root manifest or lockfile changes rebuild the P2 shadow dependency
-state automatically. Intentional Golem Wasmtime branch updates remain explicit
+Every lane generates WASI Preview 3 components; the first argument selects the host
+Wasmtime. `stock` uses the crates.io Wasmtime of the real manifest, like the CI
+runtime and node-compat lanes. `fork` keeps the Golem Wasmtime patch and its lockfile
+in an ignored shadow workspace, so the real manifests stay clean, and adds
+`use-golem-wasmtime`, like the CI build and test-other lanes. The accelerated
+profiles use locked Cargo builds; missing packages can still be downloaded. Root
+manifest or lockfile changes rebuild the fork shadow dependency state automatically. Intentional Golem Wasmtime branch updates remain explicit
 dependency maintenance.
 
 `fast-run` defaults to eight workers, while `fast-start` defaults to one. An explicit
@@ -176,8 +179,8 @@ To fix common issues automatically:
 cargo clippy --fix -- -Dwarnings
 ```
 
-The embedded skeleton is a separate Cargo project. Run its complete P2/P3 and
-default/maximal feature matrix with the failure-safe repository helper:
+The embedded skeleton is a separate Cargo project. Run its complete default/maximal
+feature matrix with the failure-safe repository helper:
 
 ```bash
 tools/check-skeleton-clippy.sh
@@ -258,7 +261,7 @@ Important rules:
 - Node modules app tests run `npm ci --install-links --ignore-scripts --no-audit --no-fund`, verify the raw test with host Node.js, then run it through wasm-rquickjs from `/app`.
 - Keep this suite focused on real `node_modules` module loading, CJS/ESM interop, package maps, filesystem-backed package behavior, and high-value smoke tests. Do not use it for native `.node`, WASM artifact loading, subprocess-heavy, or live-network scenarios.
 - CI runs node modules app and in-component npm compatibility tests as runtime `group9`; regular runtime tests use `group1` through `group8`.
-- Before running group9 after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime --features use-golem-wasmtime -- --test-threads 4 ':tag:group9'` for the CI-like group, `cargo test --test runtime --features use-golem-wasmtime -- node_modules_app --nocapture` for the node modules app suite, `cargo test --test runtime --features use-golem-wasmtime -- npm_compat --nocapture` for the npm compatibility suite, or a narrower filter.
+- Before running group9 after skeleton changes, run `./cleanup-skeleton.sh`, then use `cargo test --test runtime -- --test-threads 4 ':tag:group9'` for the CI-like group, `cargo test --test runtime -- node_modules_app --nocapture` for the node modules app suite, `cargo test --test runtime -- npm_compat --nocapture` for the npm compatibility suite, or a narrower filter.
 
 ## Agentic TypeScript Suite
 
@@ -303,9 +306,9 @@ If a vendored node_compat test fails because it relies on HTTP features that `wa
 
 The generated crates support feature flags:
 - `logging` - Enable `wasi:logging` for JavaScript console API
-- `http` - Enable `wasi:http` for JavaScript fetch API
+- `p3` - Required; enables the `wit-bindgen-p3` bindings dependency
 
-Both features are enabled by default in generated crates.
+The default `normal-p3` tier includes `p3` and `logging`; `fetch` always uses `wasi:http`.
 
 ## Dependencies
 

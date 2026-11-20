@@ -230,9 +230,9 @@ For each bundled test file:
   --output tmp/lib-test-<package-name>-01
 
 # 2. Patch Cargo.toml features — disable "logging" (wasmtime CLI doesn't provide
-#    wasi:logging). The generated default is ["normal"] which transitively includes
-#    "logging". Replace it with "full-no-logging" which has everything except logging.
-sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
+#    wasi:logging). The generated default is ["p3", "normal-p3"], which includes
+#    "logging". Replace it with "full-no-logging-p3", which has everything except logging.
+sed -i '' 's/default = \["p3", "normal-p3"\]/default = ["full-no-logging-p3"]/' \
   tmp/lib-test-<package-name>-01/Cargo.toml
 
 # 3. Compile to WASM
@@ -242,12 +242,12 @@ cd ../..
 
 # 4. Run with wasmtime
 #    - --invoke 'run()' — parentheses are REQUIRED
-#    - -S cli -S http -S inherit-network — provide WASI imports
+#    - -S cli -S p3 -S http -S inherit-network — provide WASI (Preview 3) imports
 #    - --dir creates a temp directory preopened at "/" so node:fs operations work
 #    - --invoke must come BEFORE the wasm path
 TEST_TMPDIR=$(mktemp -d)
-wasmtime run --wasm component-model \
-  -S cli -S http -S inherit-network \
+wasmtime run --wasm component-model --wasm component-model-async \
+  -S cli -S p3 -S http -S inherit-network \
   --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-01/target/wasm32-wasip1/debug/lib_test_<package_name>_01.wasm
@@ -399,7 +399,7 @@ node run-node.mjs ./dist/test-integration-02-crud.bundle.js
   --wit tests/libraries/<package-name>/wit \
   --output tmp/lib-test-<package-name>-int-01
 
-sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
+sed -i '' 's/default = \["p3", "normal-p3"\]/default = ["full-no-logging-p3"]/' \
   tmp/lib-test-<package-name>-int-01/Cargo.toml
 
 cd tmp/lib-test-<package-name>-int-01
@@ -407,8 +407,8 @@ cargo-component build
 cd ../..
 
 TEST_TMPDIR=$(mktemp -d)
-wasmtime run --wasm component-model \
-  -S cli -S http -S inherit-network \
+wasmtime run --wasm component-model --wasm component-model-async \
+  -S cli -S p3 -S http -S inherit-network \
   --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-int-01/target/wasm32-wasip1/debug/lib_test_<package_name>_int_01.wasm
@@ -618,7 +618,7 @@ node run-node.mjs ./dist/test-integration-03-error-handling.bundle.js
   --wit tests/libraries/<package-name>/wit \
   --output tmp/lib-test-<package-name>-int-01
 
-sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
+sed -i '' 's/default = \["p3", "normal-p3"\]/default = ["full-no-logging-p3"]/' \
   tmp/lib-test-<package-name>-int-01/Cargo.toml
 
 cd tmp/lib-test-<package-name>-int-01
@@ -626,8 +626,8 @@ cargo-component build
 cd ../..
 
 TEST_TMPDIR=$(mktemp -d)
-wasmtime run --wasm component-model \
-  -S cli -S http -S inherit-network \
+wasmtime run --wasm component-model --wasm component-model-async \
+  -S cli -S p3 -S http -S inherit-network \
   --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-int-01/target/wasm32-wasip1/debug/lib_test_<package_name>_int_01.wasm
@@ -768,7 +768,7 @@ node run-node.mjs ./dist/test-live-01-completion.bundle.js
   --wit tests/libraries/<package-name>/wit \
   --output tmp/lib-test-<package-name>-live-01
 
-sed -i '' 's/default = \["normal"\]/default = ["full-no-logging"]/' \
+sed -i '' 's/default = \["p3", "normal-p3"\]/default = ["full-no-logging-p3"]/' \
   tmp/lib-test-<package-name>-live-01/Cargo.toml
 
 cd tmp/lib-test-<package-name>-live-01
@@ -777,8 +777,8 @@ cd ../..
 
 # Pass the env var through to wasmtime
 TEST_TMPDIR=$(mktemp -d)
-OPENAI_API_KEY="$OPENAI_API_KEY" wasmtime run --wasm component-model \
-  -S cli -S http -S inherit-network \
+OPENAI_API_KEY="$OPENAI_API_KEY" wasmtime run --wasm component-model --wasm component-model-async \
+  -S cli -S p3 -S http -S inherit-network \
   --dir "$TEST_TMPDIR::/" \
   --invoke 'run()' \
   tmp/lib-test-<package-name>-live-01/target/wasm32-wasip1/debug/lib_test_<package_name>_live_01.wasm

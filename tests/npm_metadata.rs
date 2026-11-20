@@ -9,8 +9,7 @@ use axum::{
 };
 use camino::{Utf8Path, Utf8PathBuf};
 use common::{
-    CompiledTest, FeatureCombination, PreparedComponent, TestInstance, TestTarget,
-    copy_dir_recursive, test_target,
+    CompiledTest, FeatureCombination, PreparedComponent, TestInstance, copy_dir_recursive,
 };
 use serde_json::{Value, json};
 use std::{
@@ -64,10 +63,7 @@ const MEDIUM_DIRECT_DEPENDENCIES: &[&str] = &[
 ];
 
 fn target_name() -> &'static str {
-    match test_target() {
-        TestTarget::P2 => "p2",
-        TestTarget::P3 => "p3",
-    }
+    "p3"
 }
 
 fn command(command: &mut Command) -> anyhow::Result<String> {
@@ -2260,7 +2256,7 @@ fn release_environment(
         "harnessCargoProfile": if cfg!(debug_assertions) { "dev" } else { "release" },
         "lockedBuilds": std::env::var("WASM_RQUICKJS_TEST_LOCKED_BUILDS").ok(),
         "hostDependencyGraph": {
-            "kind": if test_target() == TestTarget::P2 { "p2-shadow" } else { "workspace" },
+            "kind": if cfg!(feature = "use-golem-wasmtime") { "fork-shadow" } else { "workspace" },
             "lockBlake3": host_lock_blake3,
         },
         "iterations": iterations,
@@ -2781,10 +2777,12 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
             && filename.ends_with(&format!("-{target}-{os}-{arch}.json")),
         "{path} filename does not identify a release target and host"
     );
-    let expected_lock_kind = if target == "p2" {
-        "p2-shadow"
+    // Historical P2 reports used the shadow lock; P3 reports use the workspace lock, or the
+    // fork shadow lock when measured with `tools/dev-test.sh fork`.
+    let expected_lock_kinds: &[&str] = if target == "p2" {
+        &["p2-shadow"]
     } else {
-        "workspace"
+        &["workspace", "fork-shadow"]
     };
     ensure!(
         report["environment"]["node"] == "22.14.0"
@@ -2795,7 +2793,9 @@ fn validate_release_metadata(path: &Utf8Path, report: &Value) -> anyhow::Result<
             && report["environment"]["wasmtimeCache"].is_null()
             && report["environment"]["preparedComponentCache"].is_null()
             && report["environment"]["unoptimized"].is_null()
-            && report["environment"]["hostDependencyGraph"]["kind"] == expected_lock_kind
+            && report["environment"]["hostDependencyGraph"]["kind"]
+                .as_str()
+                .is_some_and(|kind| expected_lock_kinds.contains(&kind))
             && report["inputs"]["algorithm"] == INPUT_HASH_ALGORITHM
             && is_blake3_value(&report["environment"]["hostDependencyGraph"]["lockBlake3"])
             && is_blake3_value(&report["inputs"]["buildHash"])
@@ -3078,7 +3078,8 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
         current_manifest_reports.is_empty(),
         "current npm release reports were not found: {current_manifest_reports:?}"
     );
-    let mut paired = 0;
+    // P2 generation was removed; retained P2 reports are historical and must keep their
+    // P3 companion. Current measurements are P3-only.
     for (filename, p2) in reports
         .iter()
         .filter(|(filename, _)| filename.contains("-p2-"))
@@ -3086,7 +3087,7 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
         let p3_filename = filename.replacen("-p2-", "-p3-", 1);
         let p3 = reports
             .get(&p3_filename)
-            .with_context(|| format!("missing P3 companion for {filename}"))?;
+            .with_context(|| format!("missing P3 companion for historical P2 report {filename}"))?;
         validate_release_pair(filename, &p3_filename, p2, p3)?;
         let mut duplicate = p3.clone();
         duplicate["component"]["blake3"] = p2["component"]["blake3"].clone();
@@ -3094,12 +3095,7 @@ fn validate_checked_release_reports(directory: Utf8PathBuf) -> anyhow::Result<()
             validate_release_pair(filename, &p3_filename, p2, &duplicate).is_err(),
             "npm pair validator accepted identical component digests"
         );
-        paired += 2;
     }
-    ensure!(
-        paired == reports.len(),
-        "every checked npm release report must belong to a P2/P3 pair"
-    );
     Ok(())
 }
 

@@ -1,3 +1,4 @@
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
 import { DOMException } from '__wasm_rquickjs_builtin/abort_controller'
@@ -20,7 +21,57 @@ import { inspect } from '__wasm_rquickjs_builtin/internal/util/inspect'
 import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections'
 import { kMaxLength } from 'buffer'
 
-const structuredCloneSymbol = Symbol.for('__wasm_rquickjs.structuredClone')
+const keyObjectStates = createPrivateWeakMap();
+const cryptoKeyStates = createPrivateWeakMap();
+const defineOpaqueProperty = Object.defineProperty;
+const opaqueStateKeys = Object.keys;
+const kCloneKeyObject = {};
+
+// These accessors are the actual backing used by existing crypto operations,
+// not a second clone-only snapshot. Applications cannot replace them with hooks.
+function initializeKeyState(value, registry, state, adapter) {
+    registry.set(value, state);
+    const names = opaqueStateKeys(state);
+    for (let i = 0; i < names.length; i++) {
+        const name = names[i];
+        defineOpaqueProperty(value, name, {
+            __proto__: null,
+            get() { return state[name]; },
+            enumerable: true,
+        });
+    }
+    registerCloneAdapter(value, adapter);
+}
+const keyObjectCloneAdapter = {__proto__: null,
+    kind: 'KeyObject', ignoreUncloneable: true,
+    clone(value) {
+        const state = keyObjectStates.get(value);
+        return new KeyObject(kCloneKeyObject, state);
+    },
+};
+const cryptoKeyCloneAdapter = {__proto__: null,
+    kind: 'CryptoKey',
+    prepareClone(value) {
+        const state = cryptoKeyStates.get(value);
+        const target = new CryptoKey(kInternal, state._type, undefined, state._extractable, undefined, undefined);
+        const targetState = cryptoKeyStates.get(target);
+        let keyObject, algorithm, usages;
+        return {__proto__: null, target,
+            serialize(pair) {
+                // Snapshot host fields together at the deferred host phase.
+                const { _keyObject, _algorithm, _usages } = state;
+                keyObject = pair(_keyObject);
+                algorithm = pair(_algorithm);
+                usages = pair(_usages);
+            },
+            finish(unpair) {
+                targetState._keyObject = unpair(keyObject);
+                targetState._algorithm = unpair(algorithm);
+                targetState._usages = unpair(usages);
+            },
+        };
+    },
+};
 
 const HASH_ALIASES = {
     'md5': 'md5',
@@ -2808,11 +2859,16 @@ function createInvalidKeyObjectTypeError(type_) {
 
 class KeyObject {
     constructor(typeOrHandle, handleOrType, customData) {
+        if (typeOrHandle === kCloneKeyObject) {
+            const state = handleOrType;
+            initializeKeyState(this, keyObjectStates,
+                {_handle: state._handle, _type: state._type, _customData: state._customData}, keyObjectCloneAdapter);
+            return;
+        }
         // Internal construction path used by builtin wrappers.
         if (typeof handleOrType === 'string' && KEY_OBJECT_TYPES.has(handleOrType)) {
-            this._handle = typeOrHandle;
-            this._type = handleOrType;
-            this._customData = customData || null;
+            initializeKeyState(this, keyObjectStates,
+                {_handle: typeOrHandle, _type: handleOrType, _customData: customData || null}, keyObjectCloneAdapter);
             return;
         }
 
@@ -2826,9 +2882,8 @@ class KeyObject {
             throw new ERR_INVALID_ARG_TYPE('handle', 'object', handle);
         }
 
-        this._handle = handle;
-        this._type = type_;
-        this._customData = null;
+        initializeKeyState(this, keyObjectStates,
+            {_handle: handle, _type: type_, _customData: null}, keyObjectCloneAdapter);
     }
 
     get type() {
@@ -3171,9 +3226,6 @@ class KeyObject {
         throw new ERR_INVALID_ARG_TYPE('key', 'CryptoKey', value);
     }
 
-    [structuredCloneSymbol]() {
-        return new KeyObject(this._handle, this._type, this._customData);
-    }
 }
 
 Object.defineProperty(KeyObject.prototype, Symbol.toStringTag, {
@@ -8574,11 +8626,9 @@ class CryptoKey {
     constructor(token, type_, algorithm, extractable, usages, keyObject) {
         if (token !== kInternal) throw new ERR_ILLEGAL_CONSTRUCTOR();
         cryptoKeyBrand.add(this);
-        this._type = type_;
-        this._algorithm = algorithm;
-        this._extractable = extractable;
-        this._usages = usages;
-        this._keyObject = keyObject;
+        initializeKeyState(this, cryptoKeyStates,
+            {_type: type_, _algorithm: algorithm, _extractable: extractable, _usages: usages, _keyObject: keyObject},
+            cryptoKeyCloneAdapter);
     }
 
     get type() { return this._type; }
@@ -8590,19 +8640,7 @@ class CryptoKey {
         return this._keyObject.export(options);
     }
 
-    [structuredCloneSymbol]() {
-        const keyObject = this._keyObject && typeof this._keyObject[structuredCloneSymbol] === 'function'
-            ? this._keyObject[structuredCloneSymbol]()
-            : this._keyObject;
-        return new CryptoKey(
-            kInternal,
-            this._type,
-            this._algorithm,
-            this._extractable,
-            this._usages.slice(),
-            keyObject,
-        );
-    }
+
 }
 
 Object.defineProperty(CryptoKey.prototype, Symbol.toStringTag, {

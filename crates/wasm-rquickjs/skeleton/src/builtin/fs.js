@@ -1,3 +1,4 @@
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import * as native from '__wasm_rquickjs_builtin/fs_native';
 import {
     ERR_DIR_CLOSED,
@@ -2356,21 +2357,24 @@ export let realpath = function realpath(path, optionsOrCallback, callback) {
     const cb = callback;
     validateCallback(cb);
     if (globalThis.__wasm_rquickjs_sync_callbacks) {
+        let result;
         try {
-            const result = realpathSync(path, opts);
-            cb(null, result);
+            result = realpathSync(path, opts);
         } catch (err) {
-            if (err && err.__isProcessExit) throw err;
             cb(err);
+            return;
         }
+        cb(null, result);
     } else {
         queueMicrotask(() => {
+            let result;
             try {
-                const result = realpathSync(path, opts);
-                cb(null, result);
+                result = realpathSync(path, opts);
             } catch (err) {
                 cb(err);
+                return;
             }
+            cb(null, result);
         });
     }
 };
@@ -2386,12 +2390,14 @@ function realpathNative(path, optionsOrCallback, callback) {
     const cb = callback;
     validateCallback(cb);
     queueMicrotask(() => {
+        let result;
         try {
-            const result = realpathSyncNative(path, opts);
-            cb(null, result);
+            result = realpathSyncNative(path, opts);
         } catch (err) {
             cb(err);
+            return;
         }
+        cb(null, result);
     });
 }
 
@@ -3875,6 +3881,14 @@ Object.defineProperty(exists, kCustomPromisifiedSymbol, {
 // --- openAsBlob ---
 
 const _kFileBackedBlob = Symbol.for('kFileBackedBlob');
+const fileBlobCloneAdapter = {__proto__: null,
+    kind: 'file-backed Blob',
+    reject() {
+        const error = new Error('Invalid state: File-backed Blobs are not cloneable');
+        error.code = 'ERR_INVALID_STATE';
+        throw error;
+    },
+};
 
 function _createFileBackedStream(readFn, validateFn, chunkSize) {
     let data = null;
@@ -3919,6 +3933,7 @@ class FileBackedBlob {
         this._size = size;
         this._mtimeMs = mtimeMs;
         this[_kFileBackedBlob] = true;
+        registerCloneAdapter(this, fileBlobCloneAdapter);
     }
 
     _validate() {
@@ -3982,6 +3997,7 @@ class FileBackedBlobSlice {
         this._offset = offset;
         this._size = length;
         this[_kFileBackedBlob] = true;
+        registerCloneAdapter(this, fileBlobCloneAdapter);
     }
 
     get size() {

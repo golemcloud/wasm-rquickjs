@@ -1,12 +1,12 @@
 declare module 'sqlite' {
-  export function testChangesetInputDetachedInCallback(): Promise<boolean>;
-  export function testMemoryRoundtrip(): Promise<boolean>;
-  export function testFileRoundtrip(): Promise<boolean>;
-  export function testUdfSurvivesRestore(): Promise<boolean>;
-  export function testConstructorOverwritten(): Promise<boolean>;
-  export function testOpenTransactionDetected(): Promise<boolean>;
-  export function testReadOnlyRejected(): Promise<boolean>;
-  export function testWalModeSnapshot(): Promise<boolean>;
-  export function testAutocommitTracking(): Promise<boolean>;
-  export function testTypeValidation(): Promise<boolean>;
+  export function testChangesetInputDetachedInCallback(): boolean;
+  export function testMemoryRoundtrip(): boolean;
+  export function testFileRoundtrip(): boolean;
+  export function testUdfSurvivesRestore(): boolean;
+  export function testConstructorOverwritten(): boolean;
+  export function testOpenTransactionDetected(): boolean;
+  export function testReadOnlyRejected(): boolean;
+  export function testWalModeSnapshot(): boolean;
+  export function testAutocommitTracking(): boolean;
+  export function testTypeValidation(): boolean;
 }

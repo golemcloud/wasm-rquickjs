@@ -11,10 +11,15 @@ import {
     typescript_runtime_mode,
     await_runtime_idle
 } from '__wasm_rquickjs_builtin/process_native';
+import { capture_for_callback as __captureScope, enter_callback as __enterScope, leave_callback as __leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
 
 import EventEmitter from 'node:events';
+import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import { createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 import { time_origin } from '__wasm_rquickjs_builtin/perf_hooks_native';
+import { validateString } from '__wasm_rquickjs_builtin/internal/validators';
+
+const builtinModuleGlobalThis = globalThis;
 
 function _invalidArgTypeHelper(value) {
     if (value == null) return ' Received ' + String(value);
@@ -62,6 +67,13 @@ function _makeError(code, message) {
 
 var process = new EventEmitter();
 
+process.getBuiltinModule = function getBuiltinModule(id) {
+    validateString(id, 'id');
+    // node:module owns public IDs, lazy loading and runtime-local identity.
+    // Its immutable bridge is installed after bootstrap, without a module cycle.
+    return builtinModuleGlobalThis.__wasm_rquickjs_get_builtin_module(id);
+};
+
 Object.defineProperty(process, '_awaitRuntimeIdle', {
     value: await_runtime_idle,
     writable: false,
@@ -89,8 +101,10 @@ Object.defineProperty(process, 'argv0', {
     configurable: true,
 });
 
+const envCloneAdapter = { __proto__: null, kind: 'process.env', ordinary: true };
+
 function _createEnv(values) {
-    return new Proxy(values, {
+    const environment = new Proxy(values, {
         get: function(target, key) {
             if (typeof key === 'symbol') return undefined;
             if (key === '') return undefined;
@@ -143,6 +157,8 @@ function _createEnv(values) {
             return true;
         }
     });
+    registerCloneAdapter(environment, envCloneAdapter);
+    return environment;
 }
 
 export var env = _createEnv(_env);
@@ -155,6 +171,10 @@ Object.defineProperty(process, 'env', {
 
 Object.defineProperty(process, Symbol.for('__wasm_rquickjs_refresh_process_state'), {
     value: function(nextArgv, nextEnv) {
+        // Refresh before argv/env operations can invoke application callbacks.
+        // Native relative I/O and captured cwd functions must agree throughout.
+        _cwd = get_cwd();
+
         let argvRefreshed = false;
         const currentArgv = argv;
         if (Array.isArray(currentArgv)) {
@@ -599,6 +619,10 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
         return;
     }
 
+    if (typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
+        globalThis.__wasm_rquickjs_child_uncaught(err);
+        return;
+    }
     if (typeof console !== 'undefined') {
         console.error(err);
     }
@@ -612,6 +636,7 @@ function __drainNextTickQueue() {
     while (__nextTickQueue.length > 0) {
         const entry = __nextTickQueue.shift();
         drained += 1;
+        const previousScope = __enterScope(entry.scope);
         try {
             if (entry.domain) {
                 entry.domain.enter();
@@ -625,6 +650,8 @@ function __drainNextTickQueue() {
                 entry.domain.exit();
             }
             __wasm_rquickjs_handleUncaughtError(e, entry.domain);
+        } finally {
+            __leaveScope(previousScope);
         }
     }
     return drained;
@@ -655,7 +682,7 @@ process.nextTick = function processNextTick(callback, ...args) {
             'The "callback" argument must be of type function.' + _invalidArgTypeHelper(callback));
     }
     const domain = process.domain || null;
-    __nextTickQueue.push({ callback, args, domain });
+    __nextTickQueue.push({ callback, args, domain, scope: __captureScope() });
     __requestNextTickWakeup();
 };
 
@@ -1123,7 +1150,12 @@ globalThis.__wasm_rquickjs_unhandled_rejection_checkpoint = function() {
             _emittedUnhandledRejections.add(promise);
             emitted += 1;
             try {
-                process.emit('unhandledRejection', entry.reason, promise);
+                if (process.listenerCount('unhandledRejection') === 0 &&
+                    typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
+                    __wasm_rquickjs_handleUncaughtError(entry.reason);
+                } else {
+                    process.emit('unhandledRejection', entry.reason, promise);
+                }
             } catch (error) {
                 __wasm_rquickjs_handleUncaughtError(error);
             }
@@ -1209,6 +1241,7 @@ export var kill = process.kill;
 export var emitWarning = process.emitWarning;
 export var allowedNodeEnvironmentFlags = process.allowedNodeEnvironmentFlags;
 export var features = process.features;
+export var getBuiltinModule = process.getBuiltinModule;
 export var title = process.title;
 export var ppid = process.ppid;
 export var umask = process.umask;

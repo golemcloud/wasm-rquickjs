@@ -1,13 +1,13 @@
 declare module 'domain' {
-  export function testEventEmitterConstructorIdentity(): Promise<boolean>;
-  export function testCreate(): Promise<boolean>;
-  export function testRun(): Promise<boolean>;
-  export function testBind(): Promise<boolean>;
-  export function testIntercept(): Promise<boolean>;
-  export function testAddRemove(): Promise<boolean>;
-  export function testEnterExit(): Promise<boolean>;
-  export function testEmitterErrorRouting(): Promise<boolean>;
-  export function testErrorDecoration(): Promise<boolean>;
-  export function testDispose(): Promise<boolean>;
-  export function testNested(): Promise<boolean>;
+  export function testEventEmitterConstructorIdentity(): boolean;
+  export function testCreate(): boolean;
+  export function testRun(): boolean;
+  export function testBind(): boolean;
+  export function testIntercept(): boolean;
+  export function testAddRemove(): boolean;
+  export function testEnterExit(): boolean;
+  export function testEmitterErrorRouting(): boolean;
+  export function testErrorDecoration(): boolean;
+  export function testDispose(): boolean;
+  export function testNested(): boolean;
 }

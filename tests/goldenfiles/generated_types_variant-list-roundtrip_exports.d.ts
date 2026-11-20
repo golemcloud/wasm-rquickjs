@@ -1,12 +1,12 @@
 declare module 'variant-list-roundtrip' {
   export namespace api {
-    export function roundtripItems(items: Item[]): Promise<Item[]>;
-    export function roundtripPayload(payload: Payload): Promise<Payload>;
-    export function roundtripEnvelope(envelope: Envelope): Promise<Envelope>;
-    export function roundtripNumber(value: number): Promise<number>;
-    export function roundtripResults(items: Result<number, string>[]): Promise<Result<number, string>[]>;
-    export function roundtripOptions(items: number | undefined[]): Promise<number | undefined[]>;
-    export function roundtripColors(items: Color[]): Promise<Color[]>;
+    export function roundtripItems(items: Item[]): Item[];
+    export function roundtripPayload(payload: Payload): Payload;
+    export function roundtripEnvelope(envelope: Envelope): Envelope;
+    export function roundtripNumber(value: number): number;
+    export function roundtripResults(items: Result<number, string>[]): Result<number, string>[];
+    export function roundtripOptions(items: number | undefined[]): number | undefined[];
+    export function roundtripColors(items: Color[]): Color[];
     export type Item =
     {
       tag: 'empty'

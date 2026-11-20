@@ -1,20 +1,20 @@
 declare module 'v8-stack-trace' {
-  export function benchmarkErrorStack(path: string, iterations: number): Promise<number>;
-  export function testCaptureStackTraceExists(): Promise<boolean>;
-  export function testCaptureStackTraceBasic(): Promise<boolean>;
-  export function testPrepareStackTrace(): Promise<boolean>;
-  export function testCallSiteMethods(): Promise<boolean>;
-  export function testLatePrepareStackTrace(): Promise<boolean>;
-  export function testDefaultErrorStackHeaders(): Promise<boolean>;
-  export function testErrorInspectUsesCurrentName(): Promise<boolean>;
-  export function testAssertionListenerStackFrame(): Promise<string>;
-  export function testCjsCallSiteLineOffset(): Promise<string>;
-  export function testPrepareStackTraceDescriptors(): Promise<boolean>;
-  export function testProxyStackHolderEngineBoundary(): Promise<boolean>;
-  export function testConstructorOpt(): Promise<boolean>;
-  export function testStackTraceLimit(): Promise<boolean>;
-  export function testDepdPattern(): Promise<boolean>;
-  export function testPreparedStackCacheDoesNotRetainErrors(): Promise<boolean>;
-  export function testPreparedStackCacheDoesNotRetainCustomCycles(): Promise<boolean>;
-  export function testPrivateWeakCollectionsBypassPublicPrototypes(): Promise<boolean>;
+  export function benchmarkErrorStack(path: string, iterations: number): number;
+  export function testCaptureStackTraceExists(): boolean;
+  export function testCaptureStackTraceBasic(): boolean;
+  export function testPrepareStackTrace(): boolean;
+  export function testCallSiteMethods(): boolean;
+  export function testLatePrepareStackTrace(): boolean;
+  export function testDefaultErrorStackHeaders(): boolean;
+  export function testErrorInspectUsesCurrentName(): boolean;
+  export function testAssertionListenerStackFrame(): string;
+  export function testCjsCallSiteLineOffset(): string;
+  export function testPrepareStackTraceDescriptors(): boolean;
+  export function testProxyStackHolderEngineBoundary(): boolean;
+  export function testConstructorOpt(): boolean;
+  export function testStackTraceLimit(): boolean;
+  export function testDepdPattern(): boolean;
+  export function testPreparedStackCacheDoesNotRetainErrors(): boolean;
+  export function testPreparedStackCacheDoesNotRetainCustomCycles(): boolean;
+  export function testPrivateWeakCollectionsBypassPublicPrototypes(): boolean;
 }

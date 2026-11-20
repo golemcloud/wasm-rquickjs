@@ -17,14 +17,14 @@ cd tests/agentic_ts
 npm ci --ignore-scripts --no-audit --no-fund
 ```
 
-Run both targets from the repository root:
+Run the P3 measurement from the repository root:
 
 ```sh
 tests/agentic_ts/run.sh
 ```
 
 The default command intentionally reproduces the historical development-profile
-reports. For production-oriented host/P2/P3 comparisons, compile both the test
+reports. For production-oriented host/Wasm comparisons, compile both the test
 host and generated guest component with their real Cargo release profiles:
 
 ```sh
@@ -49,16 +49,14 @@ During profiler development, validate only the shared controlled workload and
 the feature-gated execution-job profile with:
 
 ```sh
-AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
-AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+AGENTIC_TS_PROFILE_SMOKE=1 tools/dev-test.sh stock fast-start agentic_ts ""
 ```
 
 Measure the identical emitted JavaScript module graph in five fresh execution
 jobs without running the rest of the manual suite with:
 
 ```sh
-AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
-AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+AGENTIC_TS_MODULE_RESOLUTION_SMOKE=1 tools/dev-test.sh stock fast-start agentic_ts ""
 ```
 
 Set `AGENTIC_TS_MODULE_RESOLUTION_SMOKE_REPORT` to preserve the JSON result for
@@ -68,8 +66,7 @@ Measure the existing Ajv CommonJS package graph in five fresh paired executions,
 alternating which probe-session variant runs first, with:
 
 ```sh
-AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p2 fast-start agentic_ts ""
-AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh p3 fast-start agentic_ts ""
+AGENTIC_TS_CJS_GRAPH_SMOKE=1 tools/dev-test.sh stock fast-start agentic_ts ""
 ```
 
 Set `AGENTIC_TS_CJS_GRAPH_SMOKE_REPORT` to preserve the JSON result. The smoke
@@ -77,14 +74,14 @@ installs the locked fixture into the test's temporary workspace; it does not
 write `node_modules` into the source tree.
 
 Validate every checked-in report's schema, pinned settings, workload outcomes,
-tracker reference, and P2/P3 input-hash pairing without installing Node or
-rerunning the workloads:
+tracker reference, and the input-hash pairing of historical P2/P3 captures
+without installing Node or rerunning the workloads:
 
 ```sh
 tests/agentic_ts/run.sh --check
 ```
 
-Validate the manifest-designated current pair against its recorded source hint
+Validate the manifest-designated current reports against its recorded source hint
 and composite BLAKE3 input hashes. The shared typed helper also uses a temporary
 pristine worktree to recompute those hashes when the measured source remains
 available locally:
@@ -152,8 +149,9 @@ reserved by an earlier workload. A successful job after every exceptional
 series verifies that execution capacity was reclaimed.
 
 The initial reports use dev-profile guest components and mirror the repository's
-canonical runtime profiles: P2 with Golem's Wasmtime fork and P3 with stock
-Wasmtime. Treat each profile as its own compatibility and local-regression
+canonical runtime profiles at the time: P2 with Golem's Wasmtime fork and P3 with
+stock Wasmtime. Treat each profile as its own compatibility and local-regression
 baseline. A cross-profile comparison does not isolate either the WASI preview
 level or the Wasmtime distribution and is not a production performance
-comparison.
+comparison. P2 generation has since been removed; `run.sh` now writes one P3
+report on stock Wasmtime, and the checked-in P2 reports remain historical.

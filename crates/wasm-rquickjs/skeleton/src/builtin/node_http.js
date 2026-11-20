@@ -2083,9 +2083,8 @@ export class ClientRequest extends OutgoingMessage {
 
             // Flush pending writes and start the native request.
             // We call _flushLoop() directly instead of chaining via
-            // _flushPromise.then() to avoid an extra microtask hop that
-            // can cause the wstd reactor to exit prematurely when no WASI
-            // pollables are registered yet. We first wait for any in-flight
+            // _flushPromise.then() to avoid an extra microtask hop before
+            // the native request starts. We first wait for any in-flight
             // flush from a prior write() to complete.
             await this._flushPromise;
             if (!this._nativeStarted || this._pendingWrites.length > 0) {

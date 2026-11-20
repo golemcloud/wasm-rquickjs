@@ -6,64 +6,136 @@ use camino_tempfile::Utf8TempDir;
 use std::process::Command;
 use test_r::core::{DynamicTestRegistration, TestProperties};
 use test_r::{add_test, test, test_gen};
-use wasm_rquickjs::{
-    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate,
-    generate_wrapper_crate_with_target,
-};
+use wasm_rquickjs::{EmbeddingMode, JsModuleSpec, generate_wrapper_crate};
 
 #[allow(dead_code)]
 mod common;
 
+/// The default library entry point (`generate_wrapper_crate`, used by Golem's generic
+/// `generateQuickjsCrate`) emits a WASI Preview 3 crate that resolves from its lockfile.
 #[test]
-fn local_websocket_bridge_supports_locked_resolution() -> anyhow::Result<()> {
-    for target in [GenerationTarget::WasiP2, GenerationTarget::WasiP3] {
-        let temp = Utf8TempDir::new()?;
-        let wit = temp.path().join("wit");
-        std::fs::create_dir(&wit)?;
-        std::fs::write(
-            wit.join("test.wit"),
-            "package test:locked-bridge; world test { export run: func(); }",
-        )?;
-        let js = temp.path().join("module.js");
-        std::fs::write(&js, "export function run() {}")?;
-        let output = temp.path().join("out");
-        generate_wrapper_crate_with_target(
-            &wit,
-            &[JsModuleSpec {
-                name: "module".to_string(),
-                mode: EmbeddingMode::EmbedFile(js),
-            }],
-            &output,
-            None,
-            target,
-        )?;
-        use_local_golem_websocket(&output)?;
-        let fetch = Command::new("cargo")
-            .args(["fetch", "--locked"])
-            .current_dir(&output)
-            .status()?;
+fn default_generation_emits_locked_p3_crate() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let wit = temp.path().join("wit");
+    std::fs::create_dir(&wit)?;
+    std::fs::write(
+        wit.join("test.wit"),
+        "package test:locked-bridge; world test { export run: func(); }",
+    )?;
+    let js = temp.path().join("module.js");
+    std::fs::write(&js, "export function run() {}")?;
+    let output = temp.path().join("out");
+    generate_wrapper_crate(
+        &wit,
+        &[JsModuleSpec {
+            name: "module".to_string(),
+            mode: EmbeddingMode::EmbedFile(js),
+        }],
+        &output,
+        None,
+    )?;
+
+    let manifest = std::fs::read_to_string(output.join("Cargo.toml"))?;
+    assert!(
+        manifest.contains("default = [\"p3\", \"normal-p3\"]"),
+        "default generation must select the P3 feature tier:\n{manifest}"
+    );
+    assert!(manifest.contains("wit-bindgen-p3 = "), "{manifest}");
+    let lib = std::fs::read_to_string(output.join("src/lib.rs"))?;
+    assert!(
+        lib.contains("async fn wizer_initialize()"),
+        "default generation must emit the async P3 Wizer export:\n{lib}"
+    );
+
+    use_local_golem_websocket(&output)?;
+    let fetch = Command::new("cargo")
+        .args(["fetch", "--locked"])
+        .current_dir(&output)
+        .status()?;
+    assert!(fetch.success(), "failed to fetch locked dependencies");
+    let metadata = Command::new("cargo")
+        .args([
+            "metadata",
+            "--locked",
+            "--offline",
+            "--format-version",
+            "1",
+            "--features",
+            "websocket",
+        ])
+        .current_dir(&output)
+        .output()?;
+    assert!(
+        metadata.status.success(),
+        "{}",
+        String::from_utf8_lossy(&metadata.stderr)
+    );
+    let metadata: serde_json::Value = serde_json::from_slice(&metadata.stdout)?;
+    let packages = metadata["packages"]
+        .as_array()
+        .expect("cargo metadata lists packages")
+        .iter()
+        .filter_map(|package| package["name"].as_str())
+        .collect::<Vec<_>>();
+    assert!(packages.contains(&"wasip3"), "{packages:?}");
+    for removed in ["wstd", "golem-wasi-http"] {
         assert!(
-            fetch.success(),
-            "{target:?}: failed to fetch locked dependencies"
-        );
-        let metadata = Command::new("cargo")
-            .args([
-                "metadata",
-                "--locked",
-                "--offline",
-                "--format-version",
-                "1",
-                "--features",
-                "websocket",
-            ])
-            .current_dir(&output)
-            .output()?;
-        assert!(
-            metadata.status.success(),
-            "{target:?}: {}",
-            String::from_utf8_lossy(&metadata.stderr)
+            !packages.contains(&removed),
+            "removed Preview 2 runtime crate {removed} is still locked: {packages:?}"
         );
     }
+    Ok(())
+}
+
+/// Golem's SDK template scripts pass `--target wasi-p3` explicitly; the CLI keeps accepting it and
+/// rejects the removed `wasi-p2` target instead of silently generating something else.
+#[test]
+fn cli_generation_accepts_explicit_wasi_p3() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let wit = temp.path().join("wit");
+    std::fs::create_dir(&wit)?;
+    std::fs::write(
+        wit.join("test.wit"),
+        "package test:cli-target; world test { export run: func(); }",
+    )?;
+    let js = temp.path().join("module.js");
+    std::fs::write(&js, "export function run() {}")?;
+
+    let generate = |target: &str, output: &Utf8Path| {
+        Command::new(env!("CARGO_BIN_EXE_wasm-rquickjs"))
+            .args(["generate-wrapper-crate", "--target", target, "--js"])
+            .arg(js.as_str())
+            .args(["--wit", wit.as_str(), "--output", output.as_str()])
+            .output()
+    };
+
+    let output = temp.path().join("p3");
+    let result = generate("wasi-p3", &output)?;
+    assert!(
+        result.status.success(),
+        "{}",
+        String::from_utf8_lossy(&result.stderr)
+    );
+    let manifest = std::fs::read_to_string(output.join("Cargo.toml"))?;
+    assert!(
+        manifest.contains("default = [\"p3\", \"normal-p3\"]"),
+        "{manifest}"
+    );
+    let lib = std::fs::read_to_string(output.join("src/lib.rs"))?;
+    assert!(lib.contains("async fn wizer_initialize()"), "{lib}");
+
+    let removed = temp.path().join("p2");
+    let result = generate("wasi-p2", &removed)?;
+    assert!(
+        !result.status.success(),
+        "the removed wasi-p2 target was accepted"
+    );
+    let stderr = String::from_utf8_lossy(&result.stderr);
+    assert!(
+        stderr.contains("invalid value 'wasi-p2'"),
+        "unexpected rejection: {stderr}"
+    );
+    assert!(!removed.join("Cargo.toml").exists());
     Ok(())
 }
 

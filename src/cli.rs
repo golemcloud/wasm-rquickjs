@@ -1,16 +1,15 @@
 use camino::{Utf8Path, Utf8PathBuf};
 use clap::{Parser, Subcommand, ValueEnum};
 use std::str::FromStr;
-use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+use wasm_rquickjs::{
+    DependencySpec, EmbeddingMode, GenerationTarget, JsModuleSpec, NativeModuleSpec,
+};
 
 /// The WASI generation target selectable on the command line.
 #[derive(ValueEnum, Debug, Clone, Copy, Default, PartialEq, Eq)]
 pub enum WasiTarget {
-    /// WASI Preview 2 (default): synchronous exports, full Node.js builtins.
+    /// WASI Preview 3 (default and only target): component-model async exports and imports.
     #[default]
-    #[value(name = "wasi-p2")]
-    WasiP2,
-    /// WASI Preview 3 (opt-in): component-model async support and the Preview 3 runtime spine.
     #[value(name = "wasi-p3")]
     WasiP3,
 }
@@ -18,7 +17,6 @@ pub enum WasiTarget {
 impl From<WasiTarget> for GenerationTarget {
     fn from(value: WasiTarget) -> Self {
         match value {
-            WasiTarget::WasiP2 => GenerationTarget::WasiP2,
             WasiTarget::WasiP3 => GenerationTarget::WasiP3,
         }
     }
@@ -58,10 +56,23 @@ pub enum Command {
         #[arg(long)]
         world: Option<String>,
 
-        /// The WASI generation target. `wasi-p2` (default) generates the historical
-        /// synchronous Preview 2 wrapper; `wasi-p3` generates the opt-in Preview 3 wrapper.
-        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        /// The WASI generation target. `wasi-p3` is the default and only target; the option is
+        /// kept so existing invocations that pass it explicitly keep working.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP3)]
         target: WasiTarget,
+
+        /// A Rust module JavaScript can import, as `name=rust::path::Type`, where the type
+        /// implements `rquickjs::module::ModuleDef`. Add its crate with `--dependency`. It takes
+        /// precedence over a schemeless builtin alias with the same name, such as `fs`
+        #[arg(long)]
+        native_module: Vec<NativeModuleSpecArg>,
+
+        /// A `[dependencies]` entry of the generated crate, as `key=<TOML value>`, for example
+        /// `my-crate={ path = "../my-crate" }`. It replaces an entry with the same key. A
+        /// relative `path` is resolved against the current directory. With any dependency, the
+        /// skeleton's `Cargo.lock` is not copied; a lock already in the output directory is kept
+        #[arg(long)]
+        dependency: Vec<DependencySpecArg>,
     },
     /// Generate TypeScript module definitions
     GenerateDTS {
@@ -77,8 +88,9 @@ pub enum Command {
         #[arg(long)]
         world: Option<String>,
 
-        /// The WASI generation target whose JavaScript export contract is described.
-        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP2)]
+        /// The WASI generation target whose JavaScript export contract is described. `wasi-p3`
+        /// is the default and only target.
+        #[arg(long, value_enum, default_value_t = WasiTarget::WasiP3)]
         target: WasiTarget,
     },
     /// Pre-initialize a WebAssembly component using Wizer to speed up startup
@@ -111,6 +123,40 @@ pub enum Command {
         #[arg(long, required = true)]
         js: Vec<Utf8PathBuf>,
     },
+}
+
+#[derive(Debug, Clone)]
+pub struct NativeModuleSpecArg(pub NativeModuleSpec);
+
+impl FromStr for NativeModuleSpecArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (name, module_def) = s
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid native module spec: {s}"))?;
+        Ok(NativeModuleSpecArg(NativeModuleSpec {
+            name: name.to_string(),
+            module_def: module_def.to_string(),
+        }))
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct DependencySpecArg(pub DependencySpec);
+
+impl FromStr for DependencySpecArg {
+    type Err = String;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let (key, value) = s
+            .split_once('=')
+            .ok_or_else(|| format!("Invalid dependency spec: {s}"))?;
+        Ok(DependencySpecArg(DependencySpec {
+            key: key.trim().to_string(),
+            value: value.trim().to_string(),
+        }))
+    }
 }
 
 #[derive(Debug, Clone)]

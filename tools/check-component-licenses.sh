@@ -81,15 +81,10 @@ generate() {
 
 # Audit both public TypeScript features independently, then retain a notice for their union. This
 # keeps both lanes protected and complete if a future backend makes their dependency graphs differ.
-generate p2-typescript-runtime "normal typescript-runtime" json "$work_dir/p2-runtime.json"
-generate p2-typescript-transform-runtime \
-    "normal typescript-transform-runtime" json "$work_dir/p2-transform.json"
 generate p3-typescript-runtime "normal-p3 typescript-runtime" json "$work_dir/p3-runtime.json"
 generate p3-typescript-transform-runtime \
     "normal-p3 typescript-transform-runtime" json "$work_dir/p3-transform.json"
 
-generate p2-notice \
-    "normal typescript-runtime typescript-transform-runtime" handlebars "$work_dir/p2.txt" "$template"
 generate p3-notice \
     "normal-p3 typescript-runtime typescript-transform-runtime" handlebars "$work_dir/p3.txt" "$template"
 
@@ -216,9 +211,7 @@ replace_rquickjs_fallback() {
     ' "$source" > "$output"
 }
 
-replace_swc_sourcemap_fallback "$work_dir/p2.txt" "$work_dir/p2-swc-attributed.txt"
 replace_swc_sourcemap_fallback "$work_dir/p3.txt" "$work_dir/p3-swc-attributed.txt"
-replace_rquickjs_fallback "$work_dir/p2-swc-attributed.txt" "$work_dir/p2-attributed.txt"
 replace_rquickjs_fallback "$work_dir/p3-swc-attributed.txt" "$work_dir/p3-attributed.txt"
 
 prepend_target() {
@@ -236,8 +229,6 @@ prepend_target() {
     ' > "$output"
 }
 
-prepend_target "WASI Preview 2 / normal / TypeScript runtime + transform" \
-    "$work_dir/p2-attributed.txt" "$work_dir/p2-final.txt"
 prepend_target "WASI Preview 3 / normal-p3 / TypeScript runtime + transform" \
     "$work_dir/p3-attributed.txt" "$work_dir/p3-final.txt"
 
@@ -249,7 +240,6 @@ reject_placeholder_attribution() {
     fi
 }
 
-reject_placeholder_attribution "$work_dir/p2-final.txt"
 reject_placeholder_attribution "$work_dir/p3-final.txt"
 
 check_or_write() {
@@ -265,6 +255,5 @@ check_or_write() {
 }
 
 status=0
-check_or_write "$work_dir/p2-final.txt" "$license_dir/THIRD_PARTY_COMPONENT_LICENSES_P2.txt" || status=1
 check_or_write "$work_dir/p3-final.txt" "$license_dir/THIRD_PARTY_COMPONENT_LICENSES_P3.txt" || status=1
 exit "$status"

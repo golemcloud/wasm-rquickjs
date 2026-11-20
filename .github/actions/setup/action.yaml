@@ -40,9 +40,7 @@ runs:
       with:
         path: |
           tmp/rt-target
-          tmp/rt-target-p3
           tmp/rt-target-internal-test-execution
-          tmp/rt-target-p3-internal-test-execution
           target/p3-component-build
         # An immutable dependency baseline; Cargo rebuilds changed source.
         # Exact keys avoid relying on cross-commit prefix restoration.

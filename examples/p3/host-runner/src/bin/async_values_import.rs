@@ -18,8 +18,7 @@ use wasmtime::component::{
 };
 use wasmtime::{Config, Engine, Store};
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
-use wasmtime_wasi_http::WasiHttpCtx;
-use wasmtime_wasi_http::p3::{WasiHttpCtxView, WasiHttpView};
+use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
 bindgen!({
     world: "async-values-import",
@@ -54,7 +53,7 @@ impl WasiHttpView for Host {
         WasiHttpCtxView {
             ctx: &mut self.http,
             table: &mut self.table,
-            hooks: wasmtime_wasi_http::p3::default_hooks(),
+            hooks: wasmtime_wasi_http::default_hooks(),
         }
     }
 }
@@ -63,22 +62,26 @@ impl test::async_values_import::host::Host for Host {
     fn cleanup_complete(&mut self) {}
 }
 
-impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
-    fn make_future<T>(mut host: Access<T, Self>, x: u32) -> FutureReader<u32> {
+impl<T> test::async_values_import::host::HostWithStore<T> for HasSelf<Host> {
+    async fn echo_bytes(_: &Accessor<T, Self>, bytes: Vec<u8>) -> Vec<u8> {
+        bytes
+    }
+
+    fn make_future(mut host: Access<T, Self>, x: u32) -> FutureReader<u32> {
         // Construct a component `future<u32>` whose value is `x`, resolved immediately.
         let (tx, rx) = oneshot::channel();
         let _ = tx.send(x);
         FutureReader::new(&mut host, OneshotProducer::new(rx)).expect("failed to create future")
     }
 
-    fn make_stream<T>(mut host: Access<T, Self>, n: u32) -> StreamReader<u8> {
+    fn make_stream(mut host: Access<T, Self>, n: u32) -> StreamReader<u8> {
         // Construct a component `stream<u8>` yielding `1, 2, ..., n`.
         let items: Vec<u8> = (1..=n).map(|i| i as u8).collect();
         StreamReader::new(&mut host, PipeProducer::new(futures::stream::iter(items)))
             .expect("failed to create stream")
     }
 
-    async fn consume_future<T: Send>(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
+    async fn consume_future(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
         let (tx, rx) = oneshot::channel();
         accessor
             .with(|access| f.pipe(access, OneshotConsumer::new(tx)))
@@ -86,7 +89,7 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
         rx.await.expect("host future did not resolve")
     }
 
-    async fn check_future<T: Send>(
+    async fn check_future(
         accessor: &Accessor<T, Self>,
         f: FutureReader<u32>,
     ) -> Result<u32, String> {
@@ -98,13 +101,13 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
         }
     }
 
-    async fn delayed_future<T: Send>(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
+    async fn delayed_future(accessor: &Accessor<T, Self>, f: FutureReader<u32>) -> u32 {
         let value = Self::consume_future(accessor, f).await;
         tokio::time::sleep(std::time::Duration::from_millis(100)).await;
         value
     }
 
-    async fn consume_stream<T: Send>(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u32 {
+    async fn consume_stream(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u32 {
         let (tx, rx) = mpsc::channel::<u8>(16);
         accessor
             .with(|access| s.pipe(access, PipeConsumer::new(tx)))
@@ -114,10 +117,7 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
             .await
     }
 
-    async fn consume_stream_prefix<T: Send>(
-        accessor: &Accessor<T, Self>,
-        s: StreamReader<u8>,
-    ) -> u8 {
+    async fn consume_stream_prefix(accessor: &Accessor<T, Self>, s: StreamReader<u8>) -> u8 {
         let (tx, rx) = oneshot::channel();
         accessor
             .with(|access| s.pipe(access, PrefixConsumer::new(tx)))
@@ -125,16 +125,13 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
         rx.await.expect("prefix stream did not yield an item")
     }
 
-    async fn consume_stream_with_backpressure<T: Send>(
-        accessor: &Accessor<T, Self>,
-        s: StreamReader<u8>,
-    ) {
+    async fn consume_stream_with_backpressure(accessor: &Accessor<T, Self>, s: StreamReader<u8>) {
         accessor
             .with(|access| s.pipe(access, BackpressureDropConsumer::default()))
             .expect("failed to pipe backpressure stream");
     }
 
-    async fn store_future<T: Send>(accessor: &Accessor<T, Self>, f: FutureReader<u32>) {
+    async fn store_future(accessor: &Accessor<T, Self>, f: FutureReader<u32>) {
         let (tx, rx) = oneshot::channel();
         accessor
             .with(|mut access| {
@@ -144,7 +141,7 @@ impl test::async_values_import::host::HostWithStore for HasSelf<Host> {
             .expect("failed to pipe stored host future");
     }
 
-    async fn read_stored_future<T: Send>(accessor: &Accessor<T, Self>) -> u32 {
+    async fn read_stored_future(accessor: &Accessor<T, Self>) -> u32 {
         let rx = accessor
             .with(|mut access| access.get().stored_future.take())
             .expect("stored future was not set");

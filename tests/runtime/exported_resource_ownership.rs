@@ -1,10 +1,20 @@
-use crate::common::{CompiledTest, TestInstance, TestTarget, test_target};
+use crate::common::{CompiledTest, TestInstance};
 use camino::Utf8Path;
 use std::time::Duration;
-use test_r::test;
+use test_r::{test, test_dep};
 use wasmtime::component::{ResourceAny, Val};
 
-const INTERFACE: &str = "quickjs:p2-exported-resource/api";
+const INTERFACE: &str = "quickjs:exported-resource-ownership/api";
+
+#[test_dep(tagged_as = "exported_resource_ownership", scope = Cloneable)]
+async fn compiled_exported_resource_ownership() -> CompiledTest {
+    CompiledTest::new(
+        Utf8Path::new("examples/runtime/exported-resource-ownership"),
+        true,
+    )
+    .await
+    .expect("Failed to compile exported_resource_ownership")
+}
 
 async fn construct_counter(instance: &mut TestInstance, value: u32) -> anyhow::Result<ResourceAny> {
     let (result, _) = instance
@@ -45,8 +55,8 @@ async fn counter_value(instance: &mut TestInstance, resource: ResourceAny) -> an
 }
 
 async fn resource_count(instance: &mut TestInstance) -> anyhow::Result<u32> {
-    // P2 host drops are consumed by a concurrent dropper after a JS entry completes. The first
-    // diagnostic call provides that entry; the second observes the settled resource table.
+    // Host drops are consumed after a JS entry completes. The first diagnostic call provides that
+    // entry; the second observes the settled resource table.
     let _ = instance
         .invoke_and_capture_output(Some(INTERFACE), "[static]counter.resource-count", &[])
         .await
@@ -61,13 +71,9 @@ async fn resource_count(instance: &mut TestInstance) -> anyhow::Result<u32> {
 }
 
 #[test]
-async fn p2_promise_resource_ownership() -> anyhow::Result<()> {
-    if test_target() != TestTarget::P2 {
-        return Ok(());
-    }
-
-    let compiled =
-        CompiledTest::new(Utf8Path::new("examples/runtime/p2-exported-resource"), true).await?;
+async fn promise_resource_ownership(
+    #[tagged_as("exported_resource_ownership")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     let mut instance = TestInstance::new(compiled.wasm_path()).await?;
     let baseline = resource_count(&mut instance).await?;
 
@@ -115,13 +121,9 @@ async fn p2_promise_resource_ownership() -> anyhow::Result<()> {
 }
 
 #[test]
-async fn p2_queued_drop_preserves_awaited_unref_timer() -> anyhow::Result<()> {
-    if test_target() != TestTarget::P2 {
-        return Ok(());
-    }
-
-    let compiled =
-        CompiledTest::new(Utf8Path::new("examples/runtime/p2-exported-resource"), true).await?;
+async fn queued_drop_preserves_awaited_unref_timer(
+    #[tagged_as("exported_resource_ownership")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
     for queued_drop in [false, true] {
         let mut instance = TestInstance::new(compiled.wasm_path()).await?;
         let baseline = resource_count(&mut instance).await?;

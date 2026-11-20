@@ -12,13 +12,7 @@ struct ClockOrigin {
 static CLOCK_ORIGIN: Mutex<Option<ClockOrigin>> = Mutex::new(None);
 
 fn monotonic_time_ns() -> u64 {
-    #[cfg(feature = "p2")]
-    let now = wasip2::clocks::monotonic_clock::now();
-
-    #[cfg(feature = "p3")]
-    let now = wasip3::clocks::monotonic_clock::now();
-
-    now
+    wasip3::clocks::monotonic_clock::now()
 }
 
 fn clock_origin() -> ClockOrigin {

@@ -1,3 +1,3 @@
 declare module 'module-name-collisions' {
-  export function testModuleNameCollisions(): Promise<boolean>;
+  export function testModuleNameCollisions(): boolean;
 }

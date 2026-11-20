@@ -9,7 +9,7 @@
 mod common;
 
 use camino::Utf8Path;
-use common::{CompiledTest, FeatureCombination, TestInstance, test_target};
+use common::{CompiledTest, FeatureCombination, TestInstance};
 use serde_json::{Value, json};
 use std::fs;
 use std::io::Read as _;
@@ -94,7 +94,7 @@ async fn main() -> anyhow::Result<()> {
             "runtimeHash": runtime_hash()?,
             "benchmarkHash": benchmark_hash()?,
         },
-        "target": format!("{:?}", test_target()).to_lowercase(),
+        "target": "p3",
         "mode": mode,
         "iterations": iterations,
         "sizesBytes": sizes,
@@ -226,18 +226,19 @@ fn validate_checked_reports() -> anyhow::Result<()> {
             path.display()
         );
     }
+    // P2 generation was removed. A historical capture keeps its complete P2/P3 matrix;
+    // current captures contain only the P3 strip/transform pair.
+    let matrix = |targets: &[&str]| {
+        targets
+            .iter()
+            .flat_map(|target| {
+                ["strip", "transform"].map(|mode| (target.to_string(), mode.to_string()))
+            })
+            .collect::<std::collections::BTreeSet<_>>()
+    };
     anyhow::ensure!(
-        profiles
-            == [
-                ("p2", "strip"),
-                ("p2", "transform"),
-                ("p3", "strip"),
-                ("p3", "transform")
-            ]
-            .into_iter()
-            .map(|(target, mode)| (target.to_string(), mode.to_string()))
-            .collect(),
-        "checked reports must contain exactly one complete P2/P3 by strip/transform matrix"
+        profiles == matrix(&["p3"]) || profiles == matrix(&["p2", "p3"]),
+        "checked reports must contain exactly one P3 strip/transform pair, plus its P2 companions for a historical capture"
     );
     Ok(())
 }

@@ -1,3 +1,3 @@
 declare module 'execution' {
-  export function run(): Promise<string>;
+  export function run(): string;
 }

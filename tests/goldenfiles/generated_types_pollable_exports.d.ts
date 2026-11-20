@@ -1,7 +1,7 @@
 declare module 'pollable' {
-  export function test(): Promise<bigint>;
-  export function testAbortableAlreadyAborted(): Promise<void>;
-  export function testAbortableNotAborted(): Promise<void>;
-  export function testAbortableMidWait(): Promise<void>;
-  export function testAbortableRace(): Promise<void>;
+  export function test(): bigint;
+  export function testAbortableAlreadyAborted(): void;
+  export function testAbortableNotAborted(): void;
+  export function testAbortableMidWait(): void;
+  export function testAbortableRace(): void;
 }

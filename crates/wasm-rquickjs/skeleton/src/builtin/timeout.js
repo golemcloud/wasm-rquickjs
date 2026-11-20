@@ -1,5 +1,6 @@
 import * as timeoutNative from '__wasm_rquickjs_builtin/timeout_native'
 import { _captureContext, _restoreContext } from 'node:async_hooks'
+import { capture_for_callback as captureScope, enter_callback as enterScope, leave_callback as leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native'
 
 class Timeout {
     constructor(id, callback, delay, args, isInterval) {
@@ -58,7 +59,7 @@ class Timeout {
             timeoutNative.clear_schedule(this._id);
             const bound = this._bound || this._callback.bind(this);
             this._bound = bound;
-            this._id = timeoutNative.schedule(bound, this._delay, this._isInterval, this._args);
+            this._id = timeoutNative.schedule(bound, this._delay, this._isInterval, this._args, this._scope);
         }
         return this;
     }
@@ -106,8 +107,10 @@ function normalizeTimerDelay(time) {
 
 function scheduleTimeout(callback, time, args, isInterval) {
     const snapshot = _captureContext();
+    const scope = captureScope();
     const wrapped = function(...a) {
         const currentId = this._id;
+        const previousScope = enterScope(scope);
         try {
             return _restoreContext(snapshot, callback, this, a);
         } catch (e) {
@@ -117,9 +120,10 @@ function scheduleTimeout(callback, time, args, isInterval) {
                 console.error(e);
             }
         } finally {
+            leaveScope(previousScope);
             // Support converting setTimeout to interval via _repeat
             if (!this._destroyed && this._id === currentId && !isInterval && this._repeat > 0) {
-                const nextId = timeoutNative.schedule(this._bound, this._repeat, false, args);
+                const nextId = timeoutNative.schedule(this._bound, this._repeat, false, args, scope);
                 this._id = nextId;
                 if (!this._refed) {
                     timeoutNative.unref_schedule(nextId);
@@ -129,7 +133,8 @@ function scheduleTimeout(callback, time, args, isInterval) {
     };
     const timeout = new Timeout(0, wrapped, time, args, isInterval);
     const bound = wrapped.bind(timeout);
-    const id = timeoutNative.schedule(bound, time, isInterval, args);
+    const id = timeoutNative.schedule(bound, time, isInterval, args, scope);
+    timeout._scope = scope;
     timeout._id = id;
     timeout._bound = bound;
     return timeout;

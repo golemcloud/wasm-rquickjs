@@ -1,6 +1,6 @@
 declare module 'websocket' {
-  export function testBinarySend(): Promise<boolean>;
-  export function testWebsocketStreamSend(): Promise<boolean>;
-  export function testSendSnapshotAndCloseOrder(): Promise<boolean>;
-  export function testReceiveCloseReentrancy(): Promise<boolean>;
+  export function testBinarySend(): boolean;
+  export function testWebsocketStreamSend(): boolean;
+  export function testSendSnapshotAndCloseOrder(): boolean;
+  export function testReceiveCloseReentrancy(): boolean;
 }

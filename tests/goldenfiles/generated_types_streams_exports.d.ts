@@ -1,13 +1,13 @@
 declare module 'streams' {
-  export function test1(): Promise<void>;
-  export function testNodeStream1(): Promise<string>;
-  export function testConsumersText(): Promise<string>;
-  export function testConsumersJson(): Promise<string>;
-  export function testConsumersBuffer(): Promise<number>;
-  export function testConsumersArraybuffer(): Promise<number>;
-  export function testReadableFromWeb(): Promise<string>;
-  export function testReadableToWeb(): Promise<string>;
-  export function testWritableFromWeb(): Promise<string>;
-  export function testWritableToWeb(): Promise<string>;
-  export function testDuplexFromWeb(): Promise<string>;
+  export function test1(): void;
+  export function testNodeStream1(): string;
+  export function testConsumersText(): string;
+  export function testConsumersJson(): string;
+  export function testConsumersBuffer(): number;
+  export function testConsumersArraybuffer(): number;
+  export function testReadableFromWeb(): string;
+  export function testReadableToWeb(): string;
+  export function testWritableFromWeb(): string;
+  export function testWritableToWeb(): string;
+  export function testDuplexFromWeb(): string;
 }

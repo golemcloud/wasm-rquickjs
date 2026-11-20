@@ -1,5 +1,9 @@
+import { createPrivateWeakMap, NativeWeakRef, nativeWeakRefDeref } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { registerCloneAdapter, markTransferableSignal } from '__wasm_rquickjs_builtin/internal/clone_policy';
+
 // DOMException implementation for AbortError
 const DOM_EXCEPTION_CODES = {
+    __proto__: null,
     'IndexSizeError': 1,
     'HierarchyRequestError': 3,
     'WrongDocumentError': 4,
@@ -22,22 +26,91 @@ const DOM_EXCEPTION_CODES = {
     'DataCloneError': 25,
 };
 
+const ordinaryCloneAdapter = {__proto__: null, kind: 'DOMException', ordinary: true};
+const defineProperty = Object.defineProperty;
+const createObject = Object.create;
+
 class DOMException extends Error {
     constructor(message = '', name = 'Error') {
         super(message);
-        this.name = name;
-        this.code = DOM_EXCEPTION_CODES[name] || 0;
+        defineProperty(this, 'name', {__proto__: null, value: name, writable: true, configurable: true});
+        defineProperty(this, 'code', {__proto__: null, value: DOM_EXCEPTION_CODES[name] || 0, writable: true, configurable: true});
+        registerCloneAdapter(this, ordinaryCloneAdapter);
     }
 }
 
 // We need access to the Event _eventTrusted WeakMap to mark events as trusted.
 // Import the _eventTrusted symbol from events module.
-import { _eventTrusted } from 'node:events';
+import { _eventTrusted, Event } from 'node:events';
+const NativeEvent = Event;
 
-// Use a Symbol for private state instead of WeakMap.
-// QuickJS's WeakMap implementation prevents keys from being garbage collected,
-// so we store signal/controller state as non-enumerable Symbol properties.
-const _signalState = Symbol('AbortSignal.state');
+// Signal state is authoritative and weak; engine 0.14 supports ephemerons.
+const signalStates = createPrivateWeakMap();
+const NativeSet = Set;
+const setAdd = Function.prototype.call.bind(Set.prototype.add);
+const setDelete = Function.prototype.call.bind(Set.prototype.delete);
+const setForEach = Function.prototype.call.bind(Set.prototype.forEach);
+const registerFinalizer = Function.prototype.call.bind(FinalizationRegistry.prototype.register);
+const unregisterFinalizer = Function.prototype.call.bind(FinalizationRegistry.prototype.unregister);
+const transferCleanup = new FinalizationRegistry(({source, deliver}) => {
+    const original = nativeWeakRefDeref(source);
+    if (original) setDelete(signalStates.get(original).transferObservers, deliver);
+});
+
+function createSignalForwarder(target, clone, enqueue) {
+    const weakTarget = new NativeWeakRef(target);
+    function deliver(reason) {
+        const live = nativeWeakRefDeref(weakTarget);
+        try {
+            if (!live) return;
+            const copy = clone(reason);
+            enqueue(() => abortSignal(live, copy));
+        } catch (error) {
+            // Reuse the process error owner after synchronous source dispatch.
+            enqueue(() => globalThis.__wasm_rquickjs_handleUncaughtError(error));
+        } finally {
+            unregisterFinalizer(transferCleanup, deliver);
+            if (live) signalStates.get(live).upstream = undefined;
+        }
+    }
+    return deliver;
+}
+
+const signalCloneAdapter = {__proto__: null,
+    kind: 'AbortSignal', ordinary: true,
+    prepare(source) {
+        const target = new AbortSignal(INTERNAL_TOKEN);
+        markTransferableSignal(target);
+        const state = signalStates.get(source);
+        if (!state.aborted) signalStates.get(target).upstream = source;
+        return {
+            __proto__: null,
+            serialized: false,
+            target,
+            snapshot: () => state,
+            initialize(reason) {
+                const targetState = signalStates.get(target);
+                targetState.aborted = true;
+                targetState.reason = reason;
+                targetState.upstream = undefined;
+            },
+            forward: (clone, enqueue) => createSignalForwarder(target, clone, enqueue),
+            subscribe(deliver) {
+                setAdd(state.transferObservers, deliver);
+                try {
+                    registerFinalizer(transferCleanup, target, {source: new NativeWeakRef(source), deliver}, deliver);
+                } catch (error) {
+                    setDelete(state.transferObservers, deliver);
+                    throw error;
+                }
+                return () => {
+                    setDelete(state.transferObservers, deliver);
+                    unregisterFinalizer(transferCleanup, deliver);
+                };
+            },
+        };
+    },
+};
 const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
 
 // Strong reference set: keeps timeout signals alive as long as they have
@@ -46,7 +119,7 @@ const INTERNAL_TOKEN = Symbol('AbortSignal.internal');
 const timeoutSignalStrongRefs = new Set();
 
 function getSignalState(signal) {
-    const state = signal[_signalState];
+    const state = signalStates.get(signal);
     if (!state) {
         throw new TypeError('Illegal invocation');
     }
@@ -69,7 +142,8 @@ function setupTimeoutTimer(weakSignal, milliseconds) {
 function _preGcCleanup() {
     for (const signal of timeoutSignalStrongRefs) {
         const hasListeners = Object.values(signal._listeners).some(arr => arr.length > 0);
-        if (!hasListeners) {
+        const hasTransfers = signalStates.get(signal).transferObservers.size > 0;
+        if (!hasListeners && !hasTransfers) {
             timeoutSignalStrongRefs.delete(signal);
         }
     }
@@ -80,11 +154,15 @@ globalThis.__wasm_rquickjs_pre_gc = _preGcCleanup;
 
 // Abort a signal: mark as aborted, set reason, dispatch trusted abort event.
 function abortSignal(signal, reason) {
-    const state = signal[_signalState];
+    const state = signalStates.get(signal);
     if (!state || state.aborted) return;
     state.aborted = true;
     state.reason = reason;
-    const event = new Event('abort');
+    state.upstream = undefined;
+    const observers = state.transferObservers;
+    state.transferObservers = new NativeSet();
+    setForEach(observers, deliver => deliver(reason));
+    const event = new NativeEvent('abort');
     _eventTrusted.set(event, true);
     signal.dispatchEvent(event);
 }
@@ -97,17 +175,15 @@ class AbortSignal {
             err.code = 'ERR_ILLEGAL_CONSTRUCTOR';
             throw err;
         }
-        this._listeners = Object.create(null);
-        Object.defineProperty(this, _signalState, {
-            value: {
-                aborted: false,
-                reason: undefined,
-                onabort: null,
-            },
-            writable: false,
-            enumerable: false,
-            configurable: false,
+        defineProperty(this, '_listeners', {__proto__: null, value: createObject(null), writable: true, configurable: true});
+        signalStates.set(this, {
+            aborted: false,
+            reason: undefined,
+            onabort: null,
+            transferObservers: new NativeSet(),
+            upstream: undefined,
         });
+        registerCloneAdapter(this, signalCloneAdapter);
     }
 
     get aborted() {
@@ -128,7 +204,7 @@ class AbortSignal {
 
     static abort(reason) {
         const signal = new AbortSignal(INTERNAL_TOKEN);
-        const state = signal[_signalState];
+        const state = signalStates.get(signal);
         state.aborted = true;
         state.reason = reason !== undefined
             ? reason
@@ -138,7 +214,7 @@ class AbortSignal {
 
     static timeout(milliseconds) {
         const signal = new AbortSignal(INTERNAL_TOKEN);
-        signal[_signalState].isTimeout = true;
+        signalStates.get(signal).isTimeout = true;
         // Add to strong refs set so the signal survives QuickJS's ref-counting.
         // The pre-GC hook will release it if it has no active listeners.
         timeoutSignalStrongRefs.add(signal);
@@ -151,7 +227,7 @@ class AbortSignal {
             throw new TypeError('signals must be an iterable');
         }
         const signal = new AbortSignal(INTERNAL_TOKEN);
-        const state = signal[_signalState];
+        const state = signalStates.get(signal);
         for (const s of signals) {
             if (s.aborted) {
                 state.aborted = true;
@@ -162,9 +238,7 @@ class AbortSignal {
         for (const s of signals) {
             s.addEventListener('abort', function() {
                 if (!state.aborted) {
-                    state.aborted = true;
-                    state.reason = s.reason;
-                    signal.dispatchEvent(new Event('abort'));
+                    abortSignal(signal, s.reason);
                 }
             }, { once: true });
         }
@@ -278,7 +352,7 @@ const customInspect = Symbol.for('nodejs.util.inspect.custom');
 
 AbortSignal.prototype[customInspect] = function(depth, opts) {
     if (depth < 0) return 'AbortSignal';
-    const state = this[_signalState];
+    const state = signalStates.get(this);
     if (!state) return 'AbortSignal';
     if (depth === 0) {
         return `[AbortSignal]`;

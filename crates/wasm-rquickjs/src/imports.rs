@@ -4,7 +4,7 @@ use crate::types::{
     get_function_name, get_return_type, ident_in_imported_interface_or_global, process_parameter,
     to_unwrapped_param_refs, to_wrapped_func_arg_list,
 };
-use crate::{GeneratorContext, ImportedInterface};
+use crate::{GeneratorContext, ImportedInterface, NativeModuleSpec};
 use anyhow::{Context, anyhow};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span, TokenStream};
@@ -16,16 +16,42 @@ use wit_parser::{Function, FunctionKind, TypeDefKind, WorldItem, WorldKey};
 /// Generates the `mod.rs` and one file per imported interface in the `<output>/src/modules`
 /// directory.
 /// Each Rust module contains a rquicks `NativeModule` exposing the WIT bindings for the
-/// imported WIT interfaces as JavaScript modules.
-pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result<()> {
+/// imported WIT interfaces as JavaScript modules. `mod.rs` also registers the caller's
+/// `native_modules`, which are defined in the crate's dependencies.
+///
+/// Functions imported directly into the world are exposed as a JavaScript module named after the
+/// world, unless a JavaScript or native module already has that name.
+pub fn generate_import_modules(
+    context: &GeneratorContext<'_>,
+    js_module_names: &[&str],
+    native_modules: &[NativeModuleSpec],
+) -> anyhow::Result<()> {
     let (global, interfaces) = collect_imported_interfaces(context)?;
+    let world_module_name = context.world_name.as_str();
+    let global_module_name = (!global.functions.is_empty()
+        && !js_module_names.contains(&world_module_name)
+        && !native_modules
+            .iter()
+            .any(|module| module.name == world_module_name))
+    .then_some(world_module_name);
+
+    for module in native_modules {
+        for interface in &interfaces {
+            if interface.fully_qualified_interface_name() == module.name {
+                anyhow::bail!(
+                    "native module name `{}` is also an imported WIT interface",
+                    module.name
+                );
+            }
+        }
+    }
 
     for interface in &interfaces {
         let module_name = interface.module_name()?;
         let file_name = format!("{module_name}.rs");
 
         let module_path = context.output.join("src").join("modules").join(&file_name);
-        let module_tokens = generate_import_module(context, interface, &interfaces)?;
+        let module_tokens = generate_import_module(context, interface, &interfaces, &[], None)?;
 
         let module_ast: syn::File = syn::parse2(module_tokens)
             .context(format!("failed to parse generated {file_name} tokens"))?;
@@ -36,7 +62,13 @@ pub fn generate_import_modules(context: &GeneratorContext<'_>) -> anyhow::Result
     }
 
     let global_module_path = context.output.join("src").join("modules").join("mod.rs");
-    let global_module_tokens = generate_import_module(context, &global, &interfaces)?;
+    let global_module_tokens = generate_import_module(
+        context,
+        &global,
+        &interfaces,
+        native_modules,
+        global_module_name,
+    )?;
 
     let global_module_ast: syn::File =
         syn::parse2(global_module_tokens).context("failed to parse generated mod.rs tokens")?;
@@ -99,12 +131,12 @@ struct FreestandingImportBridge {
 
 /// Builds the rquickjs bridge for a freestanding imported WIT function.
 ///
-/// `is_async` selects between a synchronous bridge (`fn ...`, used by the Preview 2 target and
-/// for synchronous Preview 3 imports) and an async bridge (`async fn ... .await`, used for
-/// async Preview 3 imports). The async variant relies on rquickjs' `#[function]` macro support
-/// for `async fn`s: the macro wraps the body in a `Promised` future, so the JavaScript side
-/// receives a function that returns a promise, and the host async import is awaited on the
-/// component-model async executor. For the `result<_, _>` case the bridge throws on the error
+/// `is_async` selects between a synchronous bridge (used for synchronous imports) and an async
+/// bridge (used for async imports). The async variant is a synchronous function that builds the
+/// import future during the JavaScript call and returns it as a `Promised` value, so the
+/// JavaScript side receives a promise, the host async import is awaited on the component-model
+/// async executor, and the import runs in the caller's custom invocation context. For the
+/// `result<_, _>` case the bridge throws on the error
 /// arm, which `Promised` turns into a rejected promise.
 fn build_freestanding_import_bridge(
     context: &GeneratorContext<'_>,
@@ -214,26 +246,42 @@ fn build_freestanding_import_bridge(
         }
     }
 
-    let maybe_async = if is_async {
-        quote! { async }
-    } else {
-        quote! {}
-    };
+    // An async bridge is a synchronous JS function that returns a promise. It builds the import
+    // future during the JS call, so the import runs in the caller's custom invocation context
+    // (see `crate::internal::custom_invocation_context::scoped_import`).
     let maybe_await = if is_async {
         quote! { .await }
     } else {
         quote! {}
+    };
+    let returns = |ty: TokenStream| {
+        if is_async {
+            quote! { crate::internal::custom_invocation_context::ScopedImport<'js, #ty> }
+        } else {
+            ty
+        }
+    };
+    let body = |body: TokenStream| {
+        if is_async {
+            quote! { crate::internal::custom_invocation_context::scoped_import(async move { #body }) }
+        } else {
+            body
+        }
     };
 
     let bridge_fn = if let Some(async_value) = async_return {
         let reader_type = crate::async_values::reader_type(context, &async_value)?;
         let reader_to_js =
             crate::async_values::reader_to_js_expr(context, &async_value, quote! { result })?;
+        let ret = returns(quote! { rquickjs::Result<rquickjs::Value<'js>> });
+        let body = body(quote! {
+            let result: #reader_type = #bindgen_path(#(#param_refs),*) #maybe_await;
+            rquickjs::IntoJs::into_js(#reader_to_js, &ctx)
+        });
         quote! {
             #[rquickjs::function]
-            #maybe_async fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<rquickjs::Value<'js>> {
-                let result: #reader_type = #bindgen_path(#(#param_refs),*) #maybe_await;
-                rquickjs::IntoJs::into_js(#reader_to_js, &ctx)
+            fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> #ret {
+                #body
             }
         }
     } else {
@@ -246,35 +294,51 @@ fn build_freestanding_import_bridge(
         if let Some(exception) = &return_types.expected_exception {
             let wrapped_exception = &exception.wrapped_type_ref;
             let wrap_exception = exception.wrap.run(quote! { error });
+            let ret = returns(quote! { rquickjs::Result<#wrapped_result> });
+            let body = body(quote! {
+                let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                match result {
+                    Ok(result) => Ok(#wrap_result),
+                    Err(error) => {
+                        let error: #wrapped_exception = #wrap_exception;
+                        let value = rquickjs::IntoJs::into_js(error, &ctx)?;
+                        Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
+                    }
+                }
+            });
 
             quote! {
                 #[rquickjs::function]
-                #maybe_async fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
-                    let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
-                    match result {
-                        Ok(result) => Ok(#wrap_result),
-                        Err(error) => {
-                            let error: #wrapped_exception = #wrap_exception;
-                            let value = rquickjs::IntoJs::into_js(error, &ctx)?;
-                            Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
-                        }
-                    }
-                }
-            }
-        } else if needs_ctx {
-            quote! {
-                #[rquickjs::function]
-                #maybe_async fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> #wrapped_result {
-                    let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
-                    #wrap_result
+                fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> #ret {
+                    #body
                 }
             }
         } else {
-            quote! {
-                #[rquickjs::function]
-                #maybe_async fn #rust_function_ident(#(#param_list),*) -> #wrapped_result {
-                    let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
-                    #wrap_result
+            let ret = returns(quote! { #wrapped_result });
+            let body = body(quote! {
+                let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
+                #wrap_result
+            });
+            if needs_ctx {
+                quote! {
+                    #[rquickjs::function]
+                    fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> #ret {
+                        #body
+                    }
+                }
+            } else if is_async {
+                quote! {
+                    #[rquickjs::function]
+                    fn #rust_function_ident<'js>(#(#param_list),*) -> #ret {
+                        #body
+                    }
+                }
+            } else {
+                quote! {
+                    #[rquickjs::function]
+                    fn #rust_function_ident(#(#param_list),*) -> #ret {
+                        #body
+                    }
                 }
             }
         }
@@ -445,11 +509,11 @@ fn build_deferred_import_bridge(
             // pure component-model tasks, so they keep running correctly after the import returns.
             #(#arg_bindings)*
             let (__result_tx, __result_rx) = futures::channel::oneshot::channel();
-            wit_bindgen_p3::rt::async_support::spawn_local(async move {
+            wit_bindgen_p3::rt::async_support::spawn_local(crate::internal::custom_invocation_context::scoped(async move {
                 let __result: #result_ty = #bindgen_path(#(#arg_exprs),*).await;
                 // The receiver is dropped if the originating JavaScript runtime shuts down.
                 let _ = __result_tx.send(__result);
-            });
+            }));
             let __settle_ctx = ctx.clone();
             ctx.spawn(async move {
                 let __result = __result_rx.await
@@ -466,10 +530,75 @@ fn build_deferred_import_bridge(
     })
 }
 
+/// Generates `CUSTOM_INVOCATION_CONTEXT_HOST`, which connects the runtime's custom invocation
+/// context (`crate::internal::custom_invocation_context`) to
+/// `golem:durability/durability@1.6.0.{exchange-custom-invocation-context}`. It is `None` when the
+/// world does not import that function, and the runtime then never opens a scope.
+/// The imported `golem:durability/durability@1.6.0` interface when it provides
+/// `exchange-custom-invocation-context`, which enables `wasm-rquickjs:custom-invocation-context`.
+pub fn custom_invocation_context_interface<'a, 'b>(
+    all_imported_interfaces: &'b [ImportedInterface<'a>],
+) -> Option<&'b ImportedInterface<'a>> {
+    all_imported_interfaces.iter().find(|interface| {
+        interface.name == "durability"
+            && interface.package_name.is_some_and(|package| {
+                package.namespace == "golem"
+                    && package.name == "durability"
+                    && package.version.as_ref().map(|version| version.to_string())
+                        == Some("1.6.0".to_string())
+            })
+            && interface
+                .functions
+                .iter()
+                .any(|(name, _)| *name == "exchange-custom-invocation-context")
+    })
+}
+
+fn custom_invocation_context_host(
+    context: &GeneratorContext<'_>,
+    all_imported_interfaces: &[ImportedInterface<'_>],
+) -> TokenStream {
+    let Some(durability) = custom_invocation_context_interface(all_imported_interfaces) else {
+        return quote! {
+            pub static CUSTOM_INVOCATION_CONTEXT_HOST: Option<crate::internal::custom_invocation_context::Host> = None;
+        };
+    };
+    let exchange = ident_in_imported_interface_or_global(
+        context,
+        Ident::new("exchange_custom_invocation_context", Span::call_site()),
+        durability.name_and_interface(),
+    );
+    let snapshot = ident_in_imported_interface_or_global(
+        context,
+        Ident::new("CustomInvocationContext", Span::call_site()),
+        durability.name_and_interface(),
+    );
+    quote! {
+        fn __custom_invocation_context_exchange(next: Option<u32>) -> u32 {
+            // SAFETY: the runtime passes only handles it received from this function and owns.
+            let next = next.map(|handle| unsafe { #snapshot::from_handle(handle) });
+            #exchange(next).take_handle()
+        }
+
+        fn __custom_invocation_context_drop(handle: u32) {
+            // SAFETY: the runtime passes only handles it received from the exchange and owns.
+            drop(unsafe { #snapshot::from_handle(handle) });
+        }
+
+        pub static CUSTOM_INVOCATION_CONTEXT_HOST: Option<crate::internal::custom_invocation_context::Host> =
+            Some(crate::internal::custom_invocation_context::Host {
+                exchange: __custom_invocation_context_exchange,
+                drop_snapshot: __custom_invocation_context_drop,
+            });
+    }
+}
+
 fn generate_import_module(
     context: &GeneratorContext<'_>,
     import: &ImportedInterface<'_>,
     all_imported_interfaces: &[ImportedInterface<'_>],
+    native_modules: &[NativeModuleSpec],
+    global_module_name: Option<&str>,
 ) -> anyhow::Result<TokenStream> {
     let mut submodules = Vec::new();
     let mut loader_init = quote! {};
@@ -492,8 +621,39 @@ fn generate_import_module(
             loader_chain.push(quote! { with_module(#fully_qualified_interface_lit, crate::modules::#module_ident::#rust_module_struct_ident) });
         }
 
-        if all_imported_interfaces.is_empty() {
+        if let Some(name) = global_module_name {
+            let name_lit = LitStr::new(name, Span::call_site());
+            let module_struct = import.rust_interface_name();
+            resolver_chain.push(quote! { with_module(#name_lit) });
+            loader_chain.push(quote! { with_module(#name_lit, crate::modules::#module_struct) });
+        }
+
+        let native_names = native_modules
+            .iter()
+            .map(|module| LitStr::new(&module.name, Span::call_site()))
+            .collect::<Vec<_>>();
+        for module in native_modules {
+            let name_lit = LitStr::new(&module.name, Span::call_site());
+            let module_def: syn::Path = syn::parse_str(&module.module_def).with_context(|| {
+                format!("invalid Rust path for native module `{}`", module.name)
+            })?;
+            resolver_chain.push(quote! { with_module(#name_lit) });
+            loader_chain.push(quote! { with_module(#name_lit, #module_def) });
+        }
+
+        let custom_invocation_context_host =
+            custom_invocation_context_host(context, all_imported_interfaces);
+        let native_names = quote! {
+            /// Native modules resolve before schemeless builtin aliases, as embedded
+            /// JavaScript modules do.
+            pub const NATIVE_MODULE_NAMES: &[&str] = &[#(#native_names),*];
+
+            #custom_invocation_context_host
+        };
+        if resolver_chain.is_empty() {
             loader_init = quote! {
+                #native_names
+
                 pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
                     resolver
                 }
@@ -504,6 +664,8 @@ fn generate_import_module(
             };
         } else {
             loader_init = quote! {
+                #native_names
+
                 pub fn add_native_module_resolvers(resolver: rquickjs::loader::BuiltinResolver) -> rquickjs::loader::BuiltinResolver {
                     resolver.#(#resolver_chain).*
                 }
@@ -542,8 +704,7 @@ fn generate_import_module(
         match &function.kind {
             FunctionKind::Freestanding => {
                 // A synchronous imported function. Generates a synchronous rquickjs bridge that
-                // calls the wit-bindgen import directly. Valid for both the Preview 2 and
-                // Preview 3 targets.
+                // calls the wit-bindgen import directly.
                 let bridge = build_freestanding_import_bridge(
                     context, import, name, function, /* is_async */ false,
                 )?;
@@ -552,12 +713,9 @@ fn generate_import_module(
                 bridge_functions.push(bridge.bridge_fn);
             }
             FunctionKind::AsyncFreestanding => {
-                // An async imported function. Only the Preview 3 target supports these: the bridge
-                // is an `async fn` that `.await`s the component-model async import; the rquickjs
-                // `#[function]` macro turns it into a JS function returning a promise.
-                if !context.target.is_p3() {
-                    return Err(anyhow!("Async imported functions are not supported yet"));
-                }
+                // An async imported function: the bridge is an `async fn` that `.await`s the
+                // component-model async import; the rquickjs `#[function]` macro turns it into a
+                // JS function returning a promise.
                 let bridge = build_freestanding_import_bridge(
                     context, import, name, function, /* is_async */ true,
                 )?;
@@ -566,13 +724,8 @@ fn generate_import_module(
                 bridge_functions.push(bridge.bridge_fn);
             }
             FunctionKind::AsyncMethod(type_id) | FunctionKind::AsyncStatic(type_id) => {
-                // Async imported resource methods/statics are only supported on the Preview 3
-                // target: the bridge is an `async fn` awaiting the component-model async import.
-                if !context.target.is_p3() {
-                    return Err(anyhow!(
-                        "Async imported resource methods are not supported by the WASI Preview 2 generation path"
-                    ));
-                }
+                // Async imported resource methods/statics: the bridge is an `async fn` awaiting
+                // the component-model async import.
                 resource_functions
                     .entry(*type_id)
                     .or_insert_with(Vec::new)
@@ -697,15 +850,62 @@ fn generate_import_module(
             let wrap = &return_types.func_ret.wrap;
             let wrap_result = wrap.run(quote! { result });
 
-            // Async imported resource methods/statics (Preview 3 only; the dispatch loop above
-            // rejects them for Preview 2) generate `async fn` bridges awaiting the
+            // Async imported resource methods/statics generate `async fn` bridges awaiting the
             // component-model async import; rquickjs turns them into promise-returning JS
             // methods.
-            let (maybe_async, maybe_await) = match &function.kind {
-                FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_) => {
-                    (quote! { async }, quote! { .await })
+            //
+            // An async bridge builds the import future during the JavaScript call, so the import
+            // runs in the caller's custom invocation context. A method clones the resource's `Rc`
+            // so the future does not borrow the JavaScript object.
+            let is_async = matches!(
+                &function.kind,
+                FunctionKind::AsyncMethod(_) | FunctionKind::AsyncStatic(_)
+            );
+            let maybe_await = if is_async {
+                quote! { .await }
+            } else {
+                quote! {}
+            };
+            let returns = |ty: TokenStream| {
+                if is_async {
+                    quote! { crate::internal::custom_invocation_context::ScopedImport<'js, #ty> }
+                } else {
+                    ty
                 }
-                _ => (quote! {}, quote! {}),
+            };
+            let body = |prelude: TokenStream, body: TokenStream| {
+                if is_async {
+                    quote! {
+                        #prelude
+                        crate::internal::custom_invocation_context::scoped_import(async move { #body })
+                    }
+                } else {
+                    quote! { #prelude #body }
+                }
+            };
+            let inner = quote! {
+                self
+                    .inner
+                    .as_ref()
+                    .expect("Resource has already been disposed")
+            };
+            let (method_prelude, method_target) = if is_async {
+                (
+                    quote! { let inner = std::rc::Rc::clone(#inner); },
+                    quote! { inner },
+                )
+            } else {
+                (quote! {}, quote! { #inner.deref() })
+            };
+            let lifetime = if is_async {
+                quote! { <'js> }
+            } else {
+                quote! {}
+            };
+            let ctx_type = if is_async {
+                quote! { rquickjs::Ctx<'js> }
+            } else {
+                quote! { rquickjs::Ctx<'_> }
             };
 
             match &function.kind {
@@ -716,15 +916,13 @@ fn generate_import_module(
                         let wrapped_exception = &exception.wrapped_type_ref;
                         let wrap_exception = exception.wrap.run(quote! { error });
 
-                        methods.push(quote! {
-                            pub #maybe_async fn #rust_method_name_ident(&self, ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
-                                let result: #original_result = self
-                                      .inner
-                                      .as_ref()
-                                      .expect("Resource has already been disposed")
-                                      .deref()
-                                      .#rust_method_name_ident(#(#param_refs),*)
-                                      #maybe_await;
+                        let ret = returns(quote! { rquickjs::Result<#wrapped_result> });
+                        let body = body(
+                            method_prelude,
+                            quote! {
+                                let result: #original_result = #method_target
+                                    .#rust_method_name_ident(#(#param_refs),*)
+                                    #maybe_await;
                                 match result {
                                     Ok(result) => Ok(#wrap_result),
                                     Err(error) => {
@@ -733,19 +931,27 @@ fn generate_import_module(
                                         Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
                                     }
                                 }
+                            },
+                        );
+                        methods.push(quote! {
+                            pub fn #rust_method_name_ident #lifetime (&self, ctx: #ctx_type, #(#param_list),*) -> #ret {
+                                #body
                             }
                         });
                     } else {
-                        methods.push(quote! {
-                           pub #maybe_async fn #rust_method_name_ident(&self, #(#param_list),*) -> #wrapped_result {
-                                let result: #original_result = self
-                                  .inner
-                                  .as_ref()
-                                  .expect("Resource has already been disposed")
-                                  .deref()
-                                  .#rust_method_name_ident(#(#param_refs),*)
-                                  #maybe_await;
+                        let ret = returns(quote! { #wrapped_result });
+                        let body = body(
+                            method_prelude,
+                            quote! {
+                                let result: #original_result = #method_target
+                                    .#rust_method_name_ident(#(#param_refs),*)
+                                    #maybe_await;
                                 #wrap_result
+                            },
+                        );
+                        methods.push(quote! {
+                           pub fn #rust_method_name_ident #lifetime (&self, #(#param_list),*) -> #ret {
+                                #body
                             }
                         });
                     }
@@ -755,9 +961,10 @@ fn generate_import_module(
                         let wrapped_exception = &exception.wrapped_type_ref;
                         let wrap_exception = exception.wrap.run(quote! { error });
 
-                        methods.push(quote! {
-                            #[qjs(static)]
-                            pub #maybe_async fn #rust_method_name_ident(ctx: rquickjs::Ctx<'_>, #(#param_list),*) -> rquickjs::Result<#wrapped_result> {
+                        let ret = returns(quote! { rquickjs::Result<#wrapped_result> });
+                        let body = body(
+                            quote! {},
+                            quote! {
                                 let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*) #maybe_await;
                                 match result {
                                     Ok(result) => Ok(#wrap_result),
@@ -767,14 +974,27 @@ fn generate_import_module(
                                         Err(ctx.throw(crate::wrappers::with_error_display(&ctx, value)?))
                                     }
                                 }
+                            },
+                        );
+                        methods.push(quote! {
+                            #[qjs(static)]
+                            pub fn #rust_method_name_ident #lifetime (ctx: #ctx_type, #(#param_list),*) -> #ret {
+                                #body
                             }
                         });
                     } else {
-                        methods.push(quote! {
-                           #[qjs(static)]
-                           pub #maybe_async fn #rust_method_name_ident(#(#param_list),*) -> #wrapped_result {
+                        let ret = returns(quote! { #wrapped_result });
+                        let body = body(
+                            quote! {},
+                            quote! {
                                 let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*) #maybe_await;
                                 #wrap_result
+                            },
+                        );
+                        methods.push(quote! {
+                           #[qjs(static)]
+                           pub fn #rust_method_name_ident #lifetime (#(#param_list),*) -> #ret {
+                                #body
                            }
                         });
                     }
@@ -788,12 +1008,9 @@ fn generate_import_module(
         let mut special_methods = Vec::new();
         // The `wasi:io/poll.pollable` async helpers (`promise` / `abortable_promise`).
         //
-        // On the Preview 2 path they are driven by P2 pollables (`wasip2::io::poll` +
-        // `wstd::runtime::AsyncPollable`). On the Preview 3 path those deps are not compiled
-        // (P2 pollables are not waitables in the component-model async ABI), so the helpers
-        // instead poll `ready()` in a loop interleaved with short `wasip3` monotonic-clock
-        // async sleeps — this keeps the P3 executor running (JS timers, abort callbacks)
-        // while waiting.
+        // P2 pollables are not waitables in the component-model async ABI, so the helpers poll
+        // `ready()` in a loop interleaved with short `wasip3` monotonic-clock async sleeps —
+        // this keeps the executor running (JS timers, abort callbacks) while waiting.
         if resource_name == "pollable"
             && &import.name == "poll"
             && import
@@ -802,31 +1019,16 @@ fn generate_import_module(
                 .map(|p| format!("{}:{}", p.namespace, p.name))
                 == Some("wasi:io".to_string())
         {
-            // The future the helpers await on: how a single pollable is asynchronously waited
-            // for differs between the two targets, everything else is shared.
-            let (wait_future, take_pollable) = if context.target.is_p3() {
-                (
-                    quote! {
-                        async move {
-                            while !pollable.ready() {
-                                wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
-                            }
-                        }
-                    },
-                    quote! {
-                        let pollable = self.inner.take().expect("Resource has already been disposed");
-                    },
-                )
-            } else {
-                (
-                    quote! {
-                        wstd::runtime::AsyncPollable::new(pollable).wait_for()
-                    },
-                    quote! {
-                        let pollable = self.inner.take().expect("Resource has already been disposed");
-                        let pollable: wasip2::io::poll::Pollable = unsafe { wasip2::io::poll::Pollable::from_handle(pollable.take_handle()) };
-                    },
-                )
+            // The future the helpers await on.
+            let wait_future = quote! {
+                async move {
+                    while !pollable.ready() {
+                        wasip3::clocks::monotonic_clock::wait_for(1_000_000).await;
+                    }
+                }
+            };
+            let take_pollable = quote! {
+                let pollable = self.inner.take().expect("Resource has already been disposed");
             };
 
             special_methods.push(quote! {
@@ -913,7 +1115,7 @@ fn generate_import_module(
             generate_rquickjs_class_module(resource_name, &resource_name_ident, &resource_name_lit);
 
         // For WASI-remapped resources, skip the IntoJs/FromJs impls on the foreign
-        // bindgen type (they're from wasip2:: and would violate the orphan rule).
+        // bindgen type (they're from wasip3:: and would violate the orphan rule).
         // The BorrowWrapper is always generated since it's a local type.
         let foreign_type_impls = if context.is_wasi_remapped_type(resource_type_id) {
             quote! {

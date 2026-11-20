@@ -1,7 +1,8 @@
 use crate::cli::{Args, Command};
 use clap::Parser;
 use wasm_rquickjs::{
-    EmbeddingMode, JsModuleSpec, generate_dts_with_target, generate_wrapper_crate_with_target,
+    EmbeddingMode, JsModuleSpec, WrapperCrateOptions, generate_dts_with_target,
+    generate_wrapper_crate_with_options,
 };
 
 mod cli;
@@ -16,6 +17,8 @@ fn main() {
             output,
             world,
             target,
+            native_module,
+            dependency,
         } => {
             let modules = if let Some(js) = maybe_js {
                 vec![JsModuleSpec {
@@ -26,12 +29,17 @@ fn main() {
                 js_modules.iter().cloned().map(JsModuleSpec::from).collect()
             };
 
-            if let Err(err) = generate_wrapper_crate_with_target(
+            let options = WrapperCrateOptions {
+                native_modules: native_module.iter().map(|arg| arg.0.clone()).collect(),
+                dependencies: dependency.iter().map(|arg| arg.0.clone()).collect(),
+            };
+            if let Err(err) = generate_wrapper_crate_with_options(
                 wit,
                 &modules,
                 output,
                 world.as_deref(),
                 (*target).into(),
+                &options,
             ) {
                 eprintln!("Error generating wrapper crate: {err:#}");
                 std::process::exit(1);
