@@ -5390,20 +5390,6 @@
     "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected \"actual\" to be strict"
    },
    {
-    "file": "parallel/test-stream-typedarray.js",
-    "subtest": "block_03_block_03",
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly deep-equal:"
-   },
-   {
-    "file": "parallel/test-stream-uint8array.js",
-    "subtest": "block_03_block_03",
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly deep-equal:"
-   },
-   {
     "file": "parallel/test-stream-writable-write-error.js",
     "subtest": null,
     "baseline": true,
