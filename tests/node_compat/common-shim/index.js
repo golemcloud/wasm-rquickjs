@@ -775,6 +775,79 @@ var common = {
     // Inside directory with unusual characters
     get isInsideDirWithUnusualChars() { return false; },
 
+    // Helpers that upstream test/common added after 22.14.0. common.skip() counts as a pass, so
+    // each capability flag reports what this component actually provides rather than build
+    // metadata it does not set, and never skips a test whose module is available.
+    hasInspector: Boolean(process.features && process.features.inspector),
+    get hasSQLite() { return hasSQLite(); },
+    hasFFI: false,
+    hasPerfetto: false,
+    hasDtls: false,
+    get hasLocalStorage() {
+        var desc = Object.getOwnPropertyDescriptor(globalThis, 'localStorage');
+        return hasSQLite() && desc !== undefined && desc.enumerable === true;
+    },
+    hasTemporal: typeof globalThis.Temporal !== 'undefined',
+    get hasFullICU() {
+        try {
+            return new Intl.DateTimeFormat('es', { month: 'long' }).format(new Date(9e8)) === 'enero';
+        } catch (_) {
+            return false;
+        }
+    },
+    hasV8Sandbox: false,
+    isRiscv64: process.arch === 'riscv64',
+    usesSharedLibrary: false,
+    skipIfSQLiteMissing: function() {
+        if (!hasSQLite()) {
+            common.skip('missing SQLite');
+        }
+    },
+    skipIfFFIMissing: function() {
+        common.skip('missing FFI');
+    },
+    skipIfPerfettoEnabled: noop,
+    skipIfPerfettoDisabled: function() {
+        common.skip('Perfetto is disabled');
+    },
+    expectRequireStack: function(output, expected) {
+        var assert = require('assert');
+        var lines = output.replace(/\r/g, '').split('\n');
+        var start = lines.indexOf('Require stack:');
+        if (start === -1) {
+            assert.deepStrictEqual([], expected);
+            return;
+        }
+        var stack = [];
+        for (var i = start + 1; i < lines.length && lines[i].startsWith('- '); i++) {
+            stack.push(lines[i].slice(2));
+        }
+        assert.deepStrictEqual(stack, expected);
+    },
+    expectRequiredTLAError: function(err, stack) {
+        var assert = require('assert');
+        var message = /require\(\) cannot be used on an ESM graph with top-level await/;
+        if (typeof err === 'string') {
+            assert.match(err, /ERR_REQUIRE_ASYNC_MODULE/);
+            assert.match(err, message);
+            if (stack) {
+                common.expectRequireStack(err, stack);
+            }
+        } else {
+            assert.strictEqual(err.code, 'ERR_REQUIRE_ASYNC_MODULE');
+            assert.match(err.message, message);
+            if (stack) {
+                assert.deepStrictEqual(err.requireStack, stack);
+            }
+        }
+    },
+    sleepSync: function(ms) {
+        var end = Date.now() + ms;
+        while (Date.now() < end) {
+            // Busy-wait: upstream uses Atomics.wait, but QuickJS is built without Atomics for WASI.
+        }
+    },
+
     // mustCall verification
     _checkMustCalls: function() {
         var errors = [];
@@ -810,6 +883,23 @@ var common = {
         return true;
     },
 };
+
+// Upstream derives hasSQLite from process.versions.sqlite. Probe node:sqlite instead: a build
+// without the sqlite feature still loads the module, but its constructor throws. Node 26 renamed
+// DatabaseSync to Database and keeps DatabaseSync as a deprecated alias.
+var _hasSQLite;
+function hasSQLite() {
+    if (_hasSQLite === undefined) {
+        try {
+            var sqlite = require('node:sqlite');
+            new (sqlite.Database || sqlite.DatabaseSync)(':memory:').close();
+            _hasSQLite = true;
+        } catch (_) {
+            _hasSQLite = false;
+        }
+    }
+    return _hasSQLite;
+}
 
 function applyNetFlagsAndDefaults() {
     var net;

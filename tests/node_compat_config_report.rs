@@ -32,6 +32,7 @@ use test_r::test;
 const CONFIG_PATH: &str = "tests/node_compat/config.jsonc";
 const REPORT_PATH: &str = "tests/node_compat/report.md";
 const SUITE_ROOT: &str = "tests/node_compat/suite";
+const TARGET_MAPPING_RECORD_PATH: &str = "tests/node_compat/mapping-22.14.0-to-26.13.1.json";
 
 #[derive(Debug, Clone)]
 struct InventoryItem {
@@ -199,11 +200,26 @@ fn node_compat_config_requires_source_for_implicit_classification() -> anyhow::R
     fixture.write_suite_version("22.14.0")?;
     let error = fixture.load().unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("cannot classify node-compat entry"),
+        error.to_string().contains("no vendored source"),
         "{error:#}"
     );
+    Ok(())
+}
+
+#[test]
+#[test_r::tag(report_contract)]
+fn node_compat_config_requires_source_for_classified_entries() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::with_tests(
+        r#"{"parallel/test-internal.js": {"category": "known-gap", "reason": "gap"}}"#,
+    )?;
+    fixture.write_suite_version("22.14.0")?;
+    let error = fixture.load().unwrap_err();
+    assert!(
+        error.to_string().contains("parallel/test-internal.js"),
+        "{error:#}"
+    );
+    fixture.write_source("'use strict';\n")?;
+    assert_eq!(fixture.load()?[0].category, NodeCompatCategory::KnownGap);
     Ok(())
 }
 
@@ -235,14 +251,17 @@ impl NodeCompatConfigFixture {
     }
 
     fn create(with_implicit_entry: bool) -> anyhow::Result<Self> {
-        let temp = Utf8TempDir::new()?;
-        let config_path = temp.path().join("config.jsonc");
-        let suite_root = temp.path().join("suite");
-        let tests = if with_implicit_entry {
+        Self::with_tests(if with_implicit_entry {
             r#"{"parallel/test-internal.js": {}}"#
         } else {
             "{}"
-        };
+        })
+    }
+
+    fn with_tests(tests: &str) -> anyhow::Result<Self> {
+        let temp = Utf8TempDir::new()?;
+        let config_path = temp.path().join("config.jsonc");
+        let suite_root = temp.path().join("suite");
         fs::write(
             &config_path,
             format!(r#"{{"nodeVersion": "22.14.0", "tests": {tests}}}"#),
@@ -301,6 +320,7 @@ fn module_related_node_compat_entries_are_configured() -> anyhow::Result<()> {
 fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
     let entries = load_node_compat_config(CONFIG_PATH)?;
     let module_entrypoints = collect_module_related_entrypoints()?;
+    let recorded_baseline_gaps = recorded_target_baseline_gaps()?;
     let items = expand_entries(&entries);
 
     let unexpected: Vec<_> = items
@@ -309,6 +329,7 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
             (module_entrypoints.contains(&item.file_path) || is_module_adjacent_known_gap(item))
                 && item.category == NodeCompatCategory::KnownGap
                 && !is_accepted_module_known_gap_reason(item.reason.as_deref())
+                && !is_recorded_target_baseline_gap(item, &recorded_baseline_gaps)
         })
         .map(|item| {
             format!(
@@ -323,6 +344,32 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
         unexpected.is_empty(),
         "module-related known-gap entries need an accepted deferral reason:\n{}",
         unexpected.join("\n")
+    );
+
+    Ok(())
+}
+
+#[test]
+#[test_r::tag(report_contract)]
+fn target_baseline_gaps_match_the_mapping_record() -> anyhow::Result<()> {
+    let recorded = recorded_target_baseline_gaps()?;
+    let labelled: BTreeSet<String> = expand_entries(&load_node_compat_config(CONFIG_PATH)?)
+        .into_iter()
+        .filter(|item| {
+            item.category == NodeCompatCategory::KnownGap
+                && item
+                    .reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.starts_with(TARGET_BASELINE_GAP_REASON_PREFIX))
+        })
+        .map(|item| item.key)
+        .collect();
+
+    let unrecorded: Vec<_> = labelled.difference(&recorded).collect();
+    let unlabelled: Vec<_> = recorded.difference(&labelled).collect();
+    assert!(
+        unrecorded.is_empty() && unlabelled.is_empty(),
+        "baseline-gap entries in {CONFIG_PATH} and baselineGaps.cases in {TARGET_MAPPING_RECORD_PATH} differ\nlabelled but not recorded:\n{unrecorded:#?}\nrecorded but not a labelled known gap:\n{unlabelled:#?}"
     );
 
     Ok(())
@@ -411,6 +458,38 @@ fn is_accepted_module_known_gap_reason(reason: Option<&str>) -> bool {
     ];
 
     reason.is_some_and(|reason| ACCEPTED_REASONS.contains(&reason))
+}
+
+const TARGET_BASELINE_GAP_REASON_PREFIX: &str = "Node 26.13.1 baseline gap: ";
+
+/// Outstanding target-switch regressions are not accepted deferrals, but each one is
+/// listed in the target mapping record for a per-module repair draft. Only those exact
+/// entries may carry the baseline-gap reason.
+fn recorded_target_baseline_gaps() -> anyhow::Result<BTreeSet<String>> {
+    let record: serde_json::Value =
+        serde_json::from_str(&fs::read_to_string(TARGET_MAPPING_RECORD_PATH)?)?;
+    let cases = record["baselineGaps"]["cases"]
+        .as_array()
+        .ok_or_else(|| anyhow::anyhow!("{TARGET_MAPPING_RECORD_PATH} lacks baselineGaps.cases"))?;
+    cases
+        .iter()
+        .map(|case| {
+            let file = case["file"]
+                .as_str()
+                .ok_or_else(|| anyhow::anyhow!("baseline gap without file: {case}"))?;
+            Ok(match case["subtest"].as_str() {
+                Some(subtest) => format!("{file}#{subtest}"),
+                None => file.to_string(),
+            })
+        })
+        .collect()
+}
+
+fn is_recorded_target_baseline_gap(item: &InventoryItem, recorded: &BTreeSet<String>) -> bool {
+    item.reason
+        .as_deref()
+        .is_some_and(|reason| reason.starts_with(TARGET_BASELINE_GAP_REASON_PREFIX))
+        && recorded.contains(&item.key)
 }
 
 fn collect_module_related_entrypoints() -> anyhow::Result<BTreeSet<String>> {

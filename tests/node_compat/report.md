@@ -1,4 +1,4 @@
-# Node.js v22.14.0 Compatibility Inventory
+# Node.js v26.13.1 Compatibility Inventory
 
 Source: `tests/node_compat/config.jsonc` | Engine: wasm-rquickjs (QuickJS)
 
@@ -8,142 +8,163 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3260/4451 (73.2%)
+**Primary compatibility (CI-enforced):** 2881/4467 (64.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3260 | 73.2% | 56.1% | 47.2% |
-| 🧩 known gap | 1191 | 26.8% | 20.5% | 17.2% |
-| 🚫 WASI-impossible (excluded) | 1192 | — | 20.5% | 17.2% |
-| ⚙️ engine difference (excluded) | 167 | — | 2.9% | 2.4% |
-| ❔ unevaluated (excluded) | 0 | — | 0.0% | 0.0% |
-| 🔒 Node.js internals (excluded) | 1101 | — | — | 15.9% |
-| **Total** | **6911** |  |  | **100.0%** |
+| ✅ passing (runnable) | 2881 | 64.5% | 29.9% | 26.7% |
+| 🧩 known gap | 1586 | 35.5% | 16.5% | 14.7% |
+| 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
+| ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
+| ❔ unevaluated (excluded) | 3842 | — | 39.9% | 35.6% |
+| 🔒 Node.js internals (excluded) | 1180 | — | — | 10.9% |
+| **Total** | **10804** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3260/5810 (56.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2881/9624 (29.9%)**.
 
 ## Inventory by Module
 
 | Module | Total | Passing | Gap | WASI-impossible | Engine diff | Unevaluated | Internals | Primary % | Public compatibility % |
 |--------|-------|----------|-----|-----------------|-------------|-------------|-----------|-----------|--------------------|
-| abort | 28 | 26 | 1 | 0 | 0 | 0 | 1 | 96.3% | 96.3% |
-| assert | 95 | 95 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| async_hooks | 38 | 4 | 28 | 4 | 0 | 0 | 2 | 12.5% | 11.1% |
-| blob | 43 | 38 | 2 | 0 | 0 | 0 | 3 | 95.0% | 95.0% |
-| buffer | 180 | 172 | 0 | 1 | 1 | 0 | 6 | 100.0% | 98.9% |
-| child_process | 208 | 40 | 64 | 89 | 0 | 0 | 15 | 38.5% | 20.7% |
-| cli | 32 | 9 | 21 | 0 | 0 | 0 | 2 | 30.0% | 30.0% |
-| cluster | 87 | 0 | 0 | 85 | 0 | 0 | 2 | 0.0% | 0.0% |
-| common | 9 | 1 | 8 | 0 | 0 | 0 | 0 | 11.1% | 11.1% |
-| compile | 15 | 0 | 0 | 0 | 15 | 0 | 0 | 0.0% | 0.0% |
-| console | 31 | 29 | 1 | 0 | 0 | 0 | 1 | 96.7% | 96.7% |
-| crypto | 239 | 204 | 11 | 8 | 0 | 0 | 16 | 94.9% | 91.5% |
-| dgram | 118 | 23 | 74 | 7 | 0 | 0 | 14 | 23.7% | 22.1% |
-| diagnostics_channel | 33 | 24 | 6 | 1 | 2 | 0 | 0 | 80.0% | 72.7% |
-| dns | 42 | 2 | 27 | 0 | 0 | 0 | 13 | 6.9% | 6.9% |
-| domain | 61 | 28 | 20 | 12 | 0 | 0 | 1 | 58.3% | 46.7% |
+| abort | 29 | 26 | 1 | 0 | 0 | 0 | 2 | 96.3% | 96.3% |
+| assert | 109 | 66 | 13 | 0 | 0 | 30 | 0 | 83.5% | 60.6% |
+| async_hooks | 58 | 4 | 28 | 4 | 0 | 20 | 2 | 12.5% | 7.1% |
+| blob | 47 | 37 | 3 | 0 | 0 | 4 | 3 | 92.5% | 84.1% |
+| buffer | 278 | 167 | 5 | 4 | 1 | 95 | 6 | 97.1% | 61.4% |
+| child_process | 217 | 40 | 64 | 88 | 0 | 10 | 15 | 38.5% | 19.8% |
+| cli | 37 | 9 | 21 | 0 | 0 | 5 | 2 | 30.0% | 25.7% |
+| cluster | 88 | 0 | 0 | 85 | 0 | 1 | 2 | 0.0% | 0.0% |
+| common | 16 | 1 | 8 | 0 | 0 | 7 | 0 | 11.1% | 6.2% |
+| compile | 29 | 0 | 0 | 0 | 15 | 14 | 0 | 0.0% | 0.0% |
+| console | 32 | 28 | 2 | 0 | 0 | 1 | 1 | 93.3% | 90.3% |
+| crypto | 398 | 138 | 77 | 7 | 0 | 169 | 7 | 64.2% | 35.3% |
+| dgram | 141 | 22 | 74 | 7 | 0 | 24 | 14 | 22.9% | 17.3% |
+| diagnostics_channel | 102 | 23 | 7 | 1 | 2 | 69 | 0 | 76.7% | 22.5% |
+| dns | 54 | 2 | 29 | 0 | 0 | 9 | 14 | 6.5% | 5.0% |
+| domain | 61 | 27 | 21 | 12 | 0 | 0 | 1 | 56.2% | 45.0% |
 | encoding | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
 | errors | 49 | 2 | 0 | 2 | 0 | 0 | 45 | 100.0% | 50.0% |
-| eslint | 24 | 0 | 0 | 0 | 0 | 0 | 24 | 0.0% | 0.0% |
-| events | 93 | 59 | 2 | 0 | 0 | 0 | 32 | 96.7% | 96.7% |
+| eslint | 31 | 0 | 0 | 0 | 0 | 7 | 24 | 0.0% | 0.0% |
+| events | 96 | 59 | 2 | 0 | 0 | 3 | 32 | 96.7% | 92.2% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| fs | 482 | 339 | 46 | 21 | 5 | 0 | 71 | 88.1% | 82.5% |
-| global | 11 | 4 | 5 | 0 | 0 | 0 | 2 | 44.4% | 44.4% |
-| heap | 22 | 0 | 0 | 15 | 7 | 0 | 0 | 0.0% | 0.0% |
-| http | 898 | 240 | 275 | 301 | 2 | 0 | 80 | 46.6% | 29.3% |
-| inspector | 95 | 1 | 0 | 93 | 0 | 0 | 1 | 100.0% | 1.1% |
-| internal | 53 | 1 | 0 | 0 | 0 | 0 | 52 | 100.0% | 100.0% |
-| module | 174 | 123 | 31 | 7 | 1 | 0 | 12 | 79.9% | 75.9% |
-| net | 223 | 150 | 36 | 19 | 1 | 0 | 17 | 80.6% | 72.8% |
+| fs | 558 | 294 | 78 | 21 | 5 | 86 | 74 | 79.0% | 60.7% |
+| global | 9 | 4 | 3 | 0 | 0 | 0 | 2 | 57.1% | 57.1% |
+| heap | 26 | 0 | 0 | 15 | 8 | 3 | 0 | 0.0% | 0.0% |
+| http | 1019 | 231 | 280 | 301 | 2 | 129 | 76 | 45.2% | 24.5% |
+| inspector | 164 | 1 | 0 | 93 | 0 | 69 | 1 | 100.0% | 0.6% |
+| internal | 112 | 1 | 0 | 0 | 0 | 56 | 55 | 100.0% | 1.8% |
+| module | 193 | 111 | 44 | 7 | 1 | 18 | 12 | 71.6% | 61.3% |
+| net | 261 | 147 | 38 | 18 | 1 | 40 | 17 | 79.5% | 60.2% |
 | node | 8 | 0 | 0 | 1 | 0 | 0 | 7 | 0.0% | 0.0% |
-| os | 6 | 5 | 0 | 0 | 0 | 0 | 1 | 100.0% | 100.0% |
-| other | 630 | 201 | 148 | 85 | 12 | 0 | 184 | 57.6% | 45.1% |
-| path | 16 | 16 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| perf_hooks | 41 | 4 | 33 | 2 | 0 | 0 | 2 | 10.8% | 10.3% |
-| permission | 55 | 4 | 38 | 9 | 2 | 0 | 2 | 9.5% | 7.5% |
-| process | 93 | 45 | 34 | 4 | 0 | 0 | 10 | 57.0% | 54.2% |
-| promises | 23 | 4 | 12 | 0 | 7 | 0 | 0 | 25.0% | 17.4% |
-| querystring | 14 | 14 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| readline | 101 | 0 | 22 | 0 | 0 | 0 | 79 | 0.0% | 0.0% |
-| repl | 85 | 1 | 2 | 72 | 0 | 0 | 10 | 33.3% | 1.3% |
+| os | 8 | 5 | 0 | 0 | 0 | 2 | 1 | 100.0% | 71.4% |
+| other | 2402 | 184 | 232 | 58 | 11 | 1733 | 184 | 44.2% | 8.3% |
+| path | 17 | 12 | 4 | 0 | 0 | 1 | 0 | 75.0% | 70.6% |
+| perf_hooks | 123 | 4 | 28 | 1 | 0 | 88 | 2 | 12.5% | 3.3% |
+| permission | 162 | 4 | 40 | 9 | 2 | 105 | 2 | 9.1% | 2.5% |
+| process | 118 | 42 | 34 | 4 | 0 | 26 | 12 | 55.3% | 39.6% |
+| promises | 24 | 4 | 11 | 0 | 7 | 2 | 0 | 26.7% | 16.7% |
+| querystring | 15 | 14 | 0 | 0 | 0 | 1 | 0 | 100.0% | 93.3% |
+| readline | 102 | 0 | 22 | 0 | 0 | 1 | 79 | 0.0% | 0.0% |
+| repl | 127 | 1 | 2 | 68 | 0 | 46 | 10 | 33.3% | 0.9% |
 | shadow_realm | 11 | 0 | 0 | 0 | 11 | 0 | 0 | 0.0% | 0.0% |
 | signal | 5 | 1 | 0 | 3 | 0 | 0 | 1 | 100.0% | 25.0% |
-| snapshot | 57 | 0 | 0 | 0 | 57 | 0 | 0 | 0.0% | 0.0% |
-| sqlite | 39 | 36 | 3 | 0 | 0 | 0 | 0 | 92.3% | 92.3% |
+| snapshot | 61 | 0 | 0 | 0 | 57 | 4 | 0 | 0.0% | 0.0% |
+| sqlite | 117 | 2 | 57 | 0 | 0 | 58 | 0 | 3.4% | 1.7% |
 | stdio | 23 | 12 | 7 | 3 | 0 | 0 | 1 | 63.2% | 54.5% |
-| stream | 753 | 713 | 31 | 2 | 0 | 0 | 7 | 95.8% | 95.6% |
-| string_decoder | 3 | 3 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| test_runner | 157 | 93 | 34 | 21 | 1 | 0 | 8 | 73.2% | 62.4% |
-| timers | 97 | 48 | 3 | 0 | 0 | 0 | 46 | 94.1% | 94.1% |
-| tls | 207 | 4 | 7 | 185 | 0 | 0 | 11 | 36.4% | 2.0% |
-| trace_events | 35 | 12 | 10 | 9 | 0 | 0 | 4 | 54.5% | 38.7% |
+| stream | 872 | 677 | 39 | 2 | 0 | 113 | 41 | 94.6% | 81.5% |
+| string_decoder | 5 | 3 | 0 | 0 | 0 | 2 | 0 | 100.0% | 60.0% |
+| test_runner | 344 | 84 | 41 | 21 | 1 | 188 | 9 | 67.2% | 25.1% |
+| timers | 112 | 45 | 6 | 0 | 0 | 20 | 41 | 88.2% | 63.4% |
+| tls | 264 | 4 | 7 | 177 | 0 | 65 | 11 | 36.4% | 1.6% |
+| trace_events | 35 | 12 | 7 | 5 | 0 | 8 | 3 | 63.2% | 37.5% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
-| url | 29 | 19 | 9 | 0 | 0 | 0 | 1 | 67.9% | 67.9% |
-| util | 174 | 93 | 9 | 0 | 0 | 0 | 72 | 91.2% | 91.2% |
-| v8 | 45 | 14 | 1 | 0 | 30 | 0 | 0 | 93.3% | 31.1% |
-| vm | 128 | 73 | 39 | 3 | 13 | 0 | 0 | 65.2% | 57.0% |
-| webcrypto | 107 | 43 | 21 | 1 | 0 | 0 | 42 | 67.2% | 66.2% |
-| webstreams | 68 | 66 | 1 | 0 | 0 | 0 | 1 | 98.5% | 98.5% |
-| whatwg | 261 | 43 | 32 | 0 | 0 | 0 | 186 | 57.3% | 57.3% |
-| worker_threads | 189 | 25 | 29 | 127 | 0 | 0 | 8 | 46.3% | 13.8% |
-| zlib | 61 | 52 | 5 | 0 | 0 | 0 | 4 | 91.2% | 91.2% |
+| url | 51 | 16 | 13 | 0 | 0 | 21 | 1 | 55.2% | 32.0% |
+| util | 235 | 27 | 70 | 0 | 0 | 20 | 118 | 27.8% | 23.1% |
+| v8 | 57 | 14 | 1 | 0 | 30 | 12 | 0 | 93.3% | 24.6% |
+| vm | 173 | 68 | 44 | 3 | 13 | 45 | 0 | 60.7% | 39.3% |
+| webcrypto | 175 | 29 | 36 | 1 | 0 | 62 | 47 | 44.6% | 22.7% |
+| webstreams | 89 | 65 | 2 | 0 | 0 | 21 | 1 | 97.0% | 73.9% |
+| whatwg | 322 | 41 | 37 | 0 | 0 | 56 | 188 | 52.6% | 30.6% |
+| worker_threads | 202 | 25 | 29 | 127 | 0 | 13 | 8 | 46.3% | 12.9% |
+| zlib | 324 | 44 | 16 | 0 | 0 | 260 | 4 | 73.3% | 13.8% |
 
 ## Split Test Summary
 
 | File | Subtests | Passing | Gap | WASI-impossible | Engine diff | Unevaluated | Internals |
 |------|----------|----------|-----|-----------------|-------------|-------------|-----------|
+| `test-esm-detect-ambiguous.mjs` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `test-esm-dynamic-import-attribute.mjs` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-esm-extensionless-esm-and-wasm.mjs` | 10 | 3 | 7 | 0 | 0 | 0 | 0 |
-| `test-esm-json.mjs` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
+| `test-esm-import-meta-main-eval.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-esm-import-meta-resolve.mjs` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
+| `test-esm-json.mjs` | 4 | 2 | 1 | 0 | 0 | 1 | 0 |
 | `test-esm-loader-modulemap.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
-| `test-esm-type-flag-loose-files.mjs` | 7 | 2 | 5 | 0 | 0 | 0 | 0 |
-| `test-esm-type-flag-package-scopes.mjs` | 16 | 6 | 10 | 0 | 0 | 0 | 0 |
+| `test-esm-loader-spawn-promisified.mjs` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-require-module-conditional-exports.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-cjs-esm-esm.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-cjs-esm.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-esm-cjs-esm-esm.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-require-module-cycle-esm-esm-cjs-esm.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-require-module-defined-esmodule.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-require-module-tla.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-require-module-with-detection.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-require-module.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-require-module.js` | 6 | 5 | 1 | 0 | 0 | 0 | 0 |
+| `test-typescript-commonjs.mjs` | 14 | 0 | 14 | 0 | 0 | 0 | 0 |
+| `test-typescript-eval.mjs` | 24 | 0 | 24 | 0 | 0 | 0 | 0 |
+| `test-typescript-module.mjs` | 10 | 0 | 10 | 0 | 0 | 0 | 0 |
+| `test-typescript.mjs` | 30 | 0 | 30 | 0 | 0 | 0 | 0 |
+| `test-abortcontroller-internal.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-abortcontroller.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
 | `test-aborted-util.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
 | `test-abortsignal-cloneable.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-abortsignal-drop-settled-signals.mjs` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-accessor-properties.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-assert-async.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-assert-calltracker-calls.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
-| `test-assert-calltracker-getCalls.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-assert-class-destructuring.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-assert-class.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
 | `test-assert-deep-with-error.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-assert-deep.js` | 39 | 39 | 0 | 0 | 0 | 0 | 0 |
-| `test-assert-fail-deprecation.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-assert-deep.js` | 54 | 30 | 9 | 0 | 0 | 15 | 0 |
 | `test-assert-fail.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-assert-if-error.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-assert-typedarray-deepequal.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-assert.js` | 18 | 18 | 0 | 0 | 0 | 0 | 0 |
-| `test-blob.js` | 41 | 36 | 2 | 0 | 0 | 0 | 3 |
-| `test-blocklist.js` | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
+| `test-assert-typedarray-deepequal.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
+| `test-assert.js` | 23 | 16 | 2 | 0 | 0 | 5 | 0 |
+| `test-async-local-storage-isolation.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-async-local-storage-run-scope.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
+| `test-bench-cli-backpressure.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-bench-cli-lifecycle.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-bench-cli-reporters.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-bench-cli.js` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
+| `test-bench-run-exit-code.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-blob.js` | 44 | 35 | 3 | 0 | 0 | 3 | 3 |
+| `test-blocklist.js` | 63 | 17 | 0 | 0 | 0 | 46 | 0 |
 | `test-broadcastchannel-custom-inspect.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
+| `test-buffer-alloc-alignment.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-buffer-alloc.js` | 53 | 53 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-arraybuffer.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-badhex.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-buffer-copy.js` | 14 | 14 | 0 | 0 | 0 | 0 | 0 |
+| `test-buffer-copy-immutable.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-buffer-copy.js` | 20 | 14 | 0 | 0 | 0 | 6 | 0 |
 | `test-buffer-fill.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
-| `test-buffer-from.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-buffer-indexof.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
+| `test-buffer-from.js` | 8 | 3 | 0 | 0 | 0 | 5 | 0 |
+| `test-buffer-generic-methods.js` | 60 | 0 | 0 | 0 | 0 | 60 | 0 |
+| `test-buffer-indexof.js` | 11 | 7 | 0 | 0 | 0 | 4 | 0 |
+| `test-buffer-islatin1.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-buffer-prototype-inspect.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-readint.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-readuint.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-slice.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-buffer-stringlength.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-buffer-swap.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-tojson.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-buffer-tostring-range.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-buffer-write.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-writeint.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-buffer-writeuint.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-child-process-bad-stdio.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-child-process-constructor.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-child-process-cwd.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-child-process-default-env.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-child-process-exec-abortcontroller-promisified.js` | 8 | 0 | 0 | 8 | 0 | 0 | 0 |
 | `test-child-process-exec-maxbuf.js` | 11 | 9 | 0 | 2 | 0 | 0 | 0 |
 | `test-child-process-execFile-promisified-abortController.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
@@ -165,37 +186,60 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-child-process-validate-stdio.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-child-process-windows-hide.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-cli-eval.js` | 5 | 2 | 3 | 0 | 0 | 0 | 0 |
+| `test-cli-node-print-help-style.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-cli-permission-deny-fs.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-cli-permission-multiple-allow.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-common-gc.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-common-must-not-mutate-object-deep.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-common.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `test-compile-cache-api-portable.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-compile-cache-typescript-commonjs.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-compile-cache-typescript-esm.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-compression-decompression-stream.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
+| `test-config-file.js` | 43 | 0 | 0 | 0 | 0 | 43 | 0 |
 | `test-console-group.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-console-instance.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-authenticated.js` | 20 | 20 | 0 | 0 | 0 | 0 | 0 |
+| `test-crypto-argon2.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-crypto-async-sign-verify.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
+| `test-crypto-authenticated.js` | 17 | 0 | 16 | 0 | 0 | 1 | 0 |
 | `test-crypto-certificate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-cipheriv-decipheriv.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-crypto-cipheriv-decipheriv.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-crypto-dh-constructor.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-crypto-dh-stateless.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-crypto-dh.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-crypto-ecb.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-encoding-validation-error.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-crypto-encoding-validation-error.js` | 4 | 2 | 2 | 0 | 0 | 0 | 0 |
 | `test-crypto-gcm-explicit-short-tag.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-hash.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-hmac.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-key-objects-to-crypto-key.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-key-objects.js` | 18 | 17 | 1 | 0 | 0 | 0 | 0 |
-| `test-crypto-keygen.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-prime.js` | 10 | 0 | 0 | 1 | 0 | 0 | 9 |
-| `test-crypto-random.js` | 22 | 22 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-rsa-dsa.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-scrypt.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `test-crypto-hash.js` | 4 | 3 | 0 | 0 | 0 | 1 | 0 |
+| `test-crypto-hmac.js` | 10 | 8 | 0 | 0 | 0 | 2 | 0 |
+| `test-crypto-job-error-parity.js` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| `test-crypto-key-objects-raw.js` | 18 | 0 | 0 | 0 | 0 | 18 | 0 |
+| `test-crypto-key-objects.js` | 20 | 0 | 17 | 0 | 0 | 3 | 0 |
+| `test-crypto-key-store.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
+| `test-crypto-keygen-raw.js` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
+| `test-crypto-keygen.js` | 10 | 9 | 1 | 0 | 0 | 0 | 0 |
+| `test-crypto-keyobject-hidden-slots.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-crypto-negative-zero.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-crypto-pbkdf2.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-crypto-pkcs12.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-crypto-prepare-asymmetric-key.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-crypto-prime.js` | 10 | 9 | 0 | 1 | 0 | 0 | 0 |
+| `test-crypto-random.js` | 27 | 22 | 0 | 0 | 0 | 5 | 0 |
+| `test-crypto-randomuuidv7.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-crypto-rsa-dsa.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-crypto-rsa-oaep-mgf1.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-crypto-scrypt.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-crypto-secret-keygen.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-crypto-sign-verify.js` | 19 | 16 | 2 | 1 | 0 | 0 | 0 |
-| `test-crypto-x509.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
+| `test-crypto-sign-verify.js` | 18 | 0 | 16 | 0 | 0 | 2 | 0 |
+| `test-crypto-subtle-cross-realm.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-crypto-x509.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
+| `test-debugger-invalid-json.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-dgram-address.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-dgram-bind-fd-error.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
+| `test-dgram-bind-sync.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `test-dgram-blocklist.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-dgram-close-signal.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-dgram-connect-sync.js` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
 | `test-dgram-create-socket-handle-fd.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-dgram-create-socket-handle.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-dgram-createSocket-type.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -206,14 +250,54 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-dgram-setBroadcast.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-dgram-socket-buffer-size.js` | 6 | 1 | 5 | 0 | 0 | 0 | 0 |
 | `test-dgram-unref.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-diagnostics-channel-bounded-channel-run.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-diagnostics-channel-bounded-channel-scope-error.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-diagnostics-channel-bounded-channel-scope-nested.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-diagnostics-channel-bounded-channel-scope.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-diagnostics-channel-bounded-channel.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-diagnostics-channel-run-stores-scope.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
 | `test-diagnostics-channel-tracing-channel-has-subscribers.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-dns-lookup.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
-| `test-dns-setlocaladdress.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-dns-lookup.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
+| `test-dns-resolvesrv-econnrefused.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dns-setlocaladdress.js` | 3 | 1 | 1 | 0 | 0 | 1 | 0 |
 | `test-dns-setservers-type-check.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-dns.js` | 12 | 0 | 12 | 0 | 0 | 0 | 0 |
+| `test-dns.js` | 14 | 0 | 14 | 0 | 0 | 0 | 0 |
 | `test-domain-intercept.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-domain-promise.js` | 10 | 4 | 6 | 0 | 0 | 0 | 0 |
 | `test-domexception-cause.js` | 4 | 1 | 3 | 0 | 0 | 0 | 0 |
+| `test-dtls-alpn-validation.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-alpn.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dtls-authorized-before-handshake.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-authorized.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-ciphers.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-client-cert.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-close.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dtls-destroy-in-callback.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-handshake-timeout.mjs` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-dtls-ipv6.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-ipv6only.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dtls-keylog.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-max-sessions.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-mtu.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-opened-settles.mjs` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-dtls-options.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-passphrase.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dtls-peer-x509-certificate.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-psk.mjs` | 18 | 0 | 0 | 0 | 0 | 18 | 0 |
+| `test-dtls-reject-unauthorized.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-resumption-reject-unauthorized.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dtls-secure-context.mjs` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-dtls-send.mjs` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-dtls-server-handshake-error.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-servername-validation.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-session-id-context.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-dtls-session-resumption.mjs` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-dtls-session-table-cleanup.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-sni-binding.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-sni.mjs` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
+| `test-dtls-socket-options.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-dtls-stats.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-dtls-verify-identity.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-error-aggregateTwoErrors.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
 | `test-error-prepare-stack-trace.js` | 4 | 2 | 0 | 1 | 0 | 0 | 1 |
 | `test-errors-aborterror.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
@@ -223,42 +307,65 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-event-emitter-check-listener-leaks.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-event-emitter-listeners.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-event-emitter-remove-all-listeners.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
-| `test-event-emitter-remove-listeners.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
+| `test-event-emitter-remove-listeners.js` | 12 | 10 | 0 | 0 | 0 | 2 | 0 |
 | `test-events-customevent.js` | 26 | 0 | 0 | 0 | 0 | 0 | 26 |
-| `test-events-getmaxlisteners.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-events-getmaxlisteners.js` | 3 | 2 | 0 | 0 | 0 | 1 | 0 |
 | `test-events-static-geteventlisteners.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `test-eventtarget-memoryleakwarning.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
-| `test-eventtarget.js` | 61 | 0 | 0 | 0 | 0 | 0 | 61 |
-| `test-file.js` | 16 | 16 | 0 | 0 | 0 | 0 | 0 |
-| `test-find-package-json.js` | 10 | 7 | 3 | 0 | 0 | 0 | 0 |
+| `test-eventtarget.js` | 63 | 0 | 0 | 0 | 0 | 0 | 63 |
+| `test-fastutf8stream-destroy.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-fastutf8stream-flush-sync.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-fastutf8stream-flush.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-fastutf8stream-fsync.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fastutf8stream-minlength.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fastutf8stream-retry.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-fastutf8stream-sync.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-fastutf8stream-write.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-ffi-missing-build.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-file.js` | 16 | 0 | 16 | 0 | 0 | 0 | 0 |
+| `test-filehandle-autoclose.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-find-package-json.js` | 11 | 7 | 3 | 0 | 0 | 1 | 0 |
 | `test-fixed-queue.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-freeze-intrinsics.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-fs-access.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-fs-append-file-flush.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-append-file.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-chown-negative-one.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-fs-copyfile-respect-permissions.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
+| `test-fs-cp-async-special-files-in-tree.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fs-cp-sync-dereference-nested-symlink.mjs` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
 | `test-fs-error-messages.js` | 31 | 0 | 0 | 0 | 0 | 0 | 31 |
+| `test-fs-existssync-memleak-longpath.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fs-fchown-negative-one.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fs-glob.mjs` | 23 | 0 | 0 | 0 | 0 | 23 | 0 |
+| `test-fs-lchown-negative-one.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-fs-mkdir-recursive-eaccess.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-fs-mkdir.js` | 21 | 21 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-mkdtemp.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-opendir.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-mkdtempDisposableSync.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fs-opendir.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
 | `test-fs-options-immutable.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
-| `test-fs-promises.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-fs-promises.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-fs-promisified.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-read-position-validation.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fs-read-promises-position-validation.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-fs-read-stream-double-close.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-read-stream-inherit.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-read-stream.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-readSync-position-validation.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-fs-readdir-recursive-tree.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-fs-readfile-flags.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-readfile.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-readv-sync.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-readv.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-rm.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
-| `test-fs-rmdir-recursive-throws-not-found.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-rmdir-recursive-throws-on-file.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-rmdir-recursive.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
+| `test-fs-realpath-namespaced-drive-win.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-fs-rm.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
+| `test-fs-rmdir-throws-not-found.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-fs-rmdir-throws-on-file.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-fs-stat-abort-test.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
 | `test-fs-stat-bigint.js` | 9 | 0 | 9 | 0 | 0 | 0 | 0 |
-| `test-fs-stat.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-statfs.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-fs-stat.js` | 4 | 3 | 0 | 0 | 0 | 1 | 0 |
+| `test-fs-statfs.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-fs-stream-construct-compat-graceful-fs.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-stream-construct-compat-old-node.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-stream-destroy-emit-error.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
@@ -267,11 +374,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-fs-truncate-clear-file-zero.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-truncate.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-util-validateoffsetlength.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
-| `test-fs-utils-get-dirents.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
+| `test-fs-utils-get-dirents.js` | 10 | 0 | 0 | 0 | 0 | 0 | 10 |
 | `test-fs-utimes.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-watch-abort-signal.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-fs-watch-encoding.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-fs-watch-enoent.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
+| `test-fs-watch-enoent.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
 | `test-fs-write-buffer.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-write-file-flush.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-write-file-sync.js` | 6 | 5 | 1 | 0 | 0 | 0 | 0 |
@@ -287,45 +394,56 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-fs-writev.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-handle-wrap-hasref.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
 | `test-heap-prof-invalid-args.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
+| `test-heapdump-fs-mkdir-recursive.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-http-1.0.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-aborted.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-http-agent-free-socket-pending-read.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-http-agent-keep-alive-timeout-buffer.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-http-agent-timeout.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-chunk-extensions-limit.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-http-client-abort-destroy.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-client-abort-destroy.js` | 6 | 4 | 2 | 0 | 0 | 0 | 0 |
 | `test-http-client-abort3.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-http-client-aborted-event.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-http-client-defaults.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-client-res-destroyed.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-dummy-characters-smuggling.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-http-early-hints-invalid-argument.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-http-early-hints.js` | 6 | 2 | 4 | 0 | 0 | 0 | 0 |
 | `test-http-generic-streams.js` | 5 | 0 | 0 | 5 | 0 | 0 | 0 |
 | `test-http-head-throw-on-response-body-write.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-header-value-relaxed.js` | 18 | 0 | 0 | 0 | 0 | 18 | 0 |
 | `test-http-insecure-parser-per-stream.js` | 5 | 1 | 2 | 2 | 0 | 0 | 0 |
+| `test-http-is-valid-header.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-http-max-header-size-per-stream.js` | 4 | 0 | 2 | 2 | 0 | 0 | 0 |
 | `test-http-missing-header-separator-cr.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-http-missing-header-separator-lf.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-http-outgoing-destroyed.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
-| `test-http-outgoing-internal-headernames-getter.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-http-outgoing-internal-headers.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
+| `test-http-odd-hex-write.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-http-outgoing-destroyed.js` | 5 | 1 | 1 | 0 | 0 | 3 | 0 |
 | `test-http-outgoing-message-capture-rejection.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-http-outgoing-properties.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
 | `test-http-outgoing-proto.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-outgoing-renderHeaders.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `test-http-outgoing-settimeout.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-outgoing-writableFinished.js` | 4 | 1 | 3 | 0 | 0 | 0 | 0 |
+| `test-http-parser-max-header-pairs-cache.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-http-parser.js` | 12 | 12 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-req-res-close.js` | 3 | 1 | 0 | 0 | 0 | 0 | 2 |
+| `test-http-request-connect-path.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-http-request-host-header.js` | 2 | 1 | 0 | 1 | 0 | 0 | 0 |
 | `test-http-request-join-authorization-headers.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-request-signal.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
 | `test-http-response-close.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-response-multi-content-length.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-http-response-setheaders.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-server-capture-rejections.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-http-server-connection-list-when-close.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-http-server-non-utf8-header.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-server-options-highwatermark.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-http-server-timeouts-validation.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
 | `test-http-transfer-encoding-smuggling.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-websocket-mask-immutable.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-http-websocket-mask.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
 | `test-http-write-head-2.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-http-write-information.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-http2-alpn.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-http2-capture-rejection.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-http2-client-destroy.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
@@ -336,6 +454,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-http2-compat-serverresponse-write.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
 | `test-http2-compat-serverresponse-writehead-array.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
 | `test-http2-compat-write-early-hints.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
+| `test-http2-compat-write-information.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-http2-connect.js` | 7 | 0 | 0 | 7 | 0 | 0 | 0 |
 | `test-http2-create-client-connect.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-http2-getpackedsettings.js` | 11 | 0 | 0 | 11 | 0 | 0 | 0 |
@@ -343,6 +462,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-http2-invalidheaderfield.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-http2-origin.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-http2-perform-server-handshake.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-http2-sensitive-headers.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-http2-server-errors.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-http2-server-settimeout-no-callback.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-http2-server-startup.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
@@ -355,25 +475,42 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-https-max-header-size-per-stream.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
 | `test-icu-data-dir.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-icu-transcode.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
+| `test-inspector-network-data-received.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-inspector-network-data-sent.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-internal-error-original-names.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-internal-errors.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
 | `test-internal-fs-syncwritestream.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
 | `test-internal-fs.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-internal-socket-list-receive.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `test-internal-socket-list-send.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
+| `test-internal-util-helpers.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-internal-util-objects.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-internal-validators-validateoneof.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
+| `test-internal-webidl-buffer-source.js` | 25 | 0 | 0 | 0 | 0 | 25 | 0 |
+| `test-internal-webidl-converttoint.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
+| `test-internal-webidl.js` | 24 | 0 | 0 | 0 | 0 | 24 | 0 |
+| `test-mark-promise-handled.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-mime-api.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-module-builtin-policies.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-module-create-require-multibyte.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-module-multi-extensions.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
+| `test-module-print-timing.mjs` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
+| `test-module-relative-resolve-cache.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-module-setsourcemapssupport.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-module-strip-types.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
+| `test-module-strip-types.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-navigator.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-net-allow-half-open.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-autoselectfamily-default.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-autoselectfamily.js` | 4 | 3 | 1 | 0 | 0 | 0 | 0 |
 | `test-net-better-error-messages-path.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-blocklist.js` | 4 | 3 | 1 | 0 | 0 | 0 | 0 |
+| `test-net-boundsocket.js` | 17 | 0 | 0 | 0 | 0 | 17 | 0 |
 | `test-net-bytes-written-large.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-net-connect-custom-lookup-non-string-address.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-net-connect-options-invalid.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
 | `test-net-connect-options-port.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `test-net-keepalive-interval-count.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-net-negative-zero.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-net-normalize-args.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-net-perf_hooks.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-net-server-call-listen-multiple-times.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -381,78 +518,191 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-net-server-listen-options-signal.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-net-server-listen-options.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
 | `test-net-server-listen-path.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-net-socket-unref-timer-parent-chain.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-net-socket-write-after-close.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-net-transfer-guards.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-nodeeventtarget.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `test-perf-hooks-histogram.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
+| `test-parse-args.mjs` | 95 | 0 | 0 | 0 | 0 | 95 | 0 |
+| `test-perf-hooks-histogram-analysis.js` | 15 | 0 | 0 | 0 | 0 | 15 | 0 |
+| `test-perf-hooks-histogram-diff.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-perf-hooks-histogram-import.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-perf-hooks-histogram-record-zero.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-perf-hooks-histogram-snapshot.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-perf-hooks-histogram-stats.js` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| `test-perf-hooks-histogram.js` | 7 | 0 | 7 | 0 | 0 | 0 | 0 |
+| `test-perf-hooks-monitor-event-loop-delay-options.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-perf-hooks-resourcetiming-attributes.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-perf-hooks-resourcetiming.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
+| `test-perf-hooks-sliding-window-histogram.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-perf-hooks-usertiming.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-performance-function.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-performance-gc.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-performanceobserver-observer-counts.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-performanceobserver.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
+| `test-permission-allow-addons-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-allow-child-process-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-allow-wasi-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-allow-worker-cli.js` | 2 | 0 | 1 | 1 | 0 | 0 | 0 |
+| `test-permission-audit-addons-does-not-deny.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-permission-audit-child-process-inherit-flags.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-permission-audit-fs-does-not-deny.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-permission-audit-net-does-not-deny.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-permission-child-process-cli.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-permission-fs-read.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
+| `test-permission-child-process-inherit-flags-substring.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-permission-child-process-inherit-flags.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-permission-dlopen-binary.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-permission-drop-child-process.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-permission-drop-errors.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-permission-drop-fs-all.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-permission-drop-fs-granted-path.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-permission-drop-fs-read.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-permission-drop-fs-scope.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-permission-drop-fs-write.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-permission-drop-net.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-permission-drop-worker.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-permission-fs-read.js` | 4 | 2 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-require.js` | 4 | 2 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-symlink-target-write.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-symlink.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-traversal-path.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-permission-fs-wildcard.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-permission-fs-wildcard.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-permission-fs-windows-path.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
-| `test-permission-fs-write-report.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-permission-fs-write-v8.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
-| `test-permission-has.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-permission-fs-write-report.js` | 5 | 0 | 2 | 0 | 0 | 3 | 0 |
+| `test-permission-fs-write-v8.js` | 4 | 0 | 0 | 0 | 2 | 2 | 0 |
+| `test-permission-has.js` | 3 | 0 | 2 | 0 | 0 | 1 | 0 |
 | `test-permission-inspector-brk.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-permission-inspector.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
-| `test-primordials-apply.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
+| `test-permission-net-dns.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-permission-net-dtls.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-permission-net-quic.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-permission-net-socket-fd.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-permission-net-uds.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-permission-openssl-store.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-primordials-apply.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
 | `test-primordials-promise.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-primordials-regexp.js` | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
 | `test-priority-queue.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
 | `test-process-env-allowed-flags.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
 | `test-process-env-windows-error-reset.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-process-env.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-process-finalization.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-process-getactiveresources-track-timer-lifetime.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-process-timeout-blocked.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-process-timeout.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
 | `test-process-uncaught-exception-monitor.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-querystring.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
+| `test-querystring.js` | 12 | 11 | 0 | 0 | 0 | 1 | 0 |
 | `test-queue-microtask.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-quic-blocklist.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-callback-error-onerror.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-callback-error-stream-onerror.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-datagram-edge-cases.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-datagram-sources.mjs` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-quic-draining-period.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-quic-early-selection-order.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-endpoint-idle-timeout.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-endpoint-onsession-throws.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-endpoint-reuse.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-endpoint-state-transitions.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-error-class.mjs` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-quic-error-destroy-rejects-promises.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-flow-control-large-constrained.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-callback-errors.mjs` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-quic-h3-datagram.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-error-codes.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-header-validation.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-origin.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-priority.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-qpack-settings.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-h3-settings.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-h3-stream-idle-timeout.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-h3-stream-without-onstream.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-h3-zero-rtt-rejected-settings.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-internal-endpoint-stats-state.mjs` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-quic-keepalive.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-list-endpoints.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-max-window.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-reject-unauthorized.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-session-close-error-code.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-quic-session-close-graceful.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-session-close.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-session-destroy-reentrant.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-session-destroy.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-session-opened-early-destroy.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-quic-sni-multi-entry.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-sni-setcontexts.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-stateless-reset.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-stream-body-filehandle.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-stream-body-promise.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-stream-body-readable-stream.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-stream-body-sources.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-quic-stream-body-state.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-stream-body-string-shorthand.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-stream-idle-timeout.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-stream-priority.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-stream-setbody-errors.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-stream-truncated-reads-destroy.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-quic-stream-truncated-reads-timeout.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-stream-truncated-reads.mjs` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-quic-stream-writer-api.mjs` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-quic-stream-writer-fail-error-code.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-tls-crl.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quic-tls-options.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-quic-tls-verify-client.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-quotaexceedederror.js` | 16 | 0 | 0 | 0 | 0 | 16 | 0 |
 | `test-readline-emit-keypress-events.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-readline-interface.js` | 42 | 0 | 0 | 0 | 0 | 0 | 42 |
+| `test-readline-promises-csi.mjs` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
 | `test-readline-promises-interface.js` | 33 | 0 | 0 | 0 | 0 | 0 | 33 |
 | `test-readline-tab-complete.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-readline.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-release-changelog.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-repl-context.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-repl-multiline-navigation-while-adding.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-repl-multiline-navigation.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-repl-require.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-repl-tab-complete-custom-completer.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-repl-tab-complete-import.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
-| `test-repl-tab-complete.js` | 5 | 0 | 0 | 5 | 0 | 0 | 0 |
+| `test-repl-tab-complete-on-editor-mode.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-repl-tab-complete-require.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-require-cache.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-node-prefix.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-resolve-opts-paths-relative.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-require-resolve.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-runner-assert.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
+| `test-runner-aftereach-runtime-skip.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-runner-assert.js` | 7 | 0 | 2 | 0 | 0 | 5 | 0 |
 | `test-runner-cli-concurrency.js` | 5 | 0 | 0 | 5 | 0 | 0 | 0 |
 | `test-runner-cli-timeout.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
-| `test-runner-cli.js` | 11 | 0 | 0 | 11 | 0 | 0 | 0 |
+| `test-runner-cli.js` | 13 | 0 | 0 | 11 | 0 | 2 | 0 |
 | `test-runner-concurrency.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
-| `test-runner-coverage.js` | 12 | 12 | 0 | 0 | 0 | 0 | 0 |
-| `test-runner-custom-assertions.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-runner-coverage.js` | 16 | 12 | 0 | 0 | 0 | 4 | 0 |
+| `test-runner-custom-assertions.js` | 5 | 1 | 4 | 0 | 0 | 0 | 0 |
+| `test-runner-diagnostics-channel.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
 | `test-runner-error-reporter.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-runner-extraneous-async-activity.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-runner-force-exit-flush.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-runner-mocking.js` | 43 | 42 | 0 | 0 | 1 | 0 | 0 |
-| `test-runner-module-mocking.js` | 19 | 15 | 4 | 0 | 0 | 0 | 0 |
-| `test-runner-no-isolation-filtering.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-runner-get-test-context.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-runner-inspect.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-runner-log.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-runner-mocking.js` | 54 | 41 | 1 | 0 | 1 | 11 | 0 |
+| `test-runner-module-mocking.js` | 23 | 14 | 3 | 0 | 0 | 6 | 0 |
+| `test-runner-no-isolation-filtering.js` | 5 | 0 | 3 | 0 | 0 | 2 | 0 |
+| `test-runner-no-isolation-hooks.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-runner-plan.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-runner-run.mjs` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-runner-snapshot-file-tests.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-runner-snapshot-tests.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
+| `test-runner-snapshot-tests.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
+| `test-runner-tag-filter-cli.mjs` | 15 | 0 | 0 | 0 | 0 | 15 | 0 |
+| `test-runner-tag-filter-parser.mjs` | 28 | 0 | 0 | 0 | 0 | 28 | 0 |
+| `test-runner-tags-experimental-warning.mjs` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-runner-tags-inheritance.mjs` | 14 | 0 | 0 | 0 | 0 | 14 | 0 |
+| `test-runner-tags-validation.mjs` | 16 | 0 | 0 | 0 | 0 | 16 | 0 |
 | `test-runner-test-filepath.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-runner-test-fullname.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-runner-test-fullname.js` | 3 | 0 | 2 | 0 | 0 | 1 | 0 |
+| `test-runner-test-rerun-failures.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
 | `test-runner-wait-for.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
+| `test-runner-worker-id.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
 | `test-set-http-max-http-headers.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
 | `test-set-incoming-message-header.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
 | `test-shadow-realm-prepare-stack-trace.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
-| `test-single-executable-blob-config-errors.js` | 11 | 0 | 0 | 11 | 0 | 0 | 0 |
-| `test-single-executable-blob-config.js` | 5 | 0 | 0 | 5 | 0 | 0 | 0 |
 | `test-snapshot-api.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-argv1.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-basic.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
@@ -470,6 +720,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-snapshot-eval.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
 | `test-snapshot-gzip.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-incompatible.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
+| `test-snapshot-invalid-blob.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-snapshot-net.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-stack-trace-limit.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-snapshot-typescript.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
@@ -477,46 +728,58 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-snapshot-warning.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
 | `test-source-map-api.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-source-map-enable.js` | 23 | 23 | 0 | 0 | 0 | 0 | 0 |
-| `test-sqlite-database-sync.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-sqlite-session.js` | 14 | 13 | 1 | 0 | 0 | 0 | 0 |
-| `test-sqlite-statement-sync.js` | 9 | 8 | 1 | 0 | 0 | 0 | 0 |
-| `test-sqlite.js` | 6 | 5 | 1 | 0 | 0 | 0 | 0 |
+| `test-sqlite-aggregate-function.mjs` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-sqlite-authz.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-sqlite-backup.mjs` | 15 | 0 | 0 | 0 | 0 | 15 | 0 |
+| `test-sqlite-config.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-sqlite-database.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
+| `test-sqlite-named-parameters.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-sqlite-options-getter-reentry.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-sqlite-serialize.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-sqlite-session.js` | 28 | 0 | 14 | 0 | 0 | 14 | 0 |
+| `test-sqlite-statement.js` | 22 | 1 | 21 | 0 | 0 | 0 | 0 |
+| `test-sqlite-template-tag.js` | 18 | 0 | 0 | 0 | 0 | 18 | 0 |
+| `test-sqlite-timeout.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-sqlite-typed-array-and-data-view.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-sqlite.js` | 9 | 1 | 5 | 0 | 0 | 3 | 0 |
 | `test-startup-empty-regexp-statics.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
-| `test-startup-large-pages.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
 | `test-stream-add-abort-signal.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-stream-auto-destroy.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-catch-rejections.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-compose-operator.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-compose.js` | 22 | 21 | 1 | 0 | 0 | 0 | 0 |
+| `test-stream-compose.js` | 23 | 20 | 2 | 0 | 0 | 1 | 0 |
 | `test-stream-construct.js` | 12 | 12 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-consumers.js` | 16 | 16 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-destroy.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-consumers.js` | 18 | 16 | 0 | 0 | 0 | 2 | 0 |
+| `test-stream-destroy.js` | 7 | 6 | 0 | 0 | 0 | 1 | 0 |
 | `test-stream-drop-take.js` | 6 | 5 | 1 | 0 | 0 | 0 | 0 |
 | `test-stream-duplex-destroy.js` | 16 | 16 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-duplex-end.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-duplex-from.js` | 23 | 22 | 1 | 0 | 0 | 0 | 0 |
+| `test-stream-duplex-from.js` | 25 | 22 | 1 | 0 | 0 | 2 | 0 |
 | `test-stream-duplex-props.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-duplex-readable-writable.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
 | `test-stream-duplex-writable-finished.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-duplex.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-duplex.js` | 4 | 3 | 0 | 0 | 0 | 1 | 0 |
 | `test-stream-duplexpair.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-error-once.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-event-names.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-filter.js` | 12 | 12 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-finished.js` | 42 | 35 | 7 | 0 | 0 | 0 | 0 |
+| `test-stream-finished.js` | 43 | 0 | 8 | 0 | 0 | 1 | 34 |
 | `test-stream-flatMap.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-forEach.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-iter-validation.js` | 19 | 0 | 0 | 0 | 0 | 19 | 0 |
+| `test-stream-iterator-helpers-test262-tests.mjs` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-stream-map.js` | 17 | 15 | 2 | 0 | 0 | 0 | 0 |
 | `test-stream-objectmode-undefined.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-once-readable-pipe.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-pipe-error-handling.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-pipe-flow.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-pipe-objectmode-to-non-objectmode.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-stream-pipe-same-destination-twice.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-pipe-unpipe-streams.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-pipeline.js` | 80 | 78 | 1 | 1 | 0 | 0 | 0 |
+| `test-stream-pipeline.js` | 84 | 78 | 1 | 1 | 0 | 4 | 0 |
 | `test-stream-promises.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-readable-aborted.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-readable-async-iterators.js` | 7 | 0 | 7 | 0 | 0 | 0 | 0 |
+| `test-stream-readable-async-iterators.js` | 17 | 0 | 7 | 0 | 0 | 10 | 0 |
+| `test-stream-readable-compose.js` | 10 | 9 | 1 | 0 | 0 | 0 | 0 |
 | `test-stream-readable-default-encoding.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-readable-destroy.js` | 23 | 23 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-readable-didRead.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
@@ -529,18 +792,22 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-stream-readable-readable.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-readable-reading-readingMore.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-readable-resumeScheduled.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-readable-setEncoding-existing-buffers.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-readable-setEncoding-existing-buffers.js` | 5 | 3 | 0 | 0 | 0 | 2 | 0 |
 | `test-stream-readable-strategy-option.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-readable-to-web-termination.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
+| `test-stream-readable-unobserved-eof-readable.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-stream-readable-unshift.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-reduce.js` | 8 | 7 | 1 | 0 | 0 | 0 | 0 |
+| `test-stream-some-find-every.mjs` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
 | `test-stream-toArray.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-transform-destroy.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-transform-split-highwatermark.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-typedarray.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-uint8array.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-typedarray.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
+| `test-stream-uint8array.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
 | `test-stream-unpipe-event.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-wrap-encoding.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-stream-writable-aborted.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-writable-decoded-encoding.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-writable-destroy.js` | 28 | 28 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-writable-end-cb-error.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-writable-finish-destroyed.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -559,11 +826,18 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-stream2-transform.js` | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream2-writable.js` | 24 | 24 | 0 | 0 | 0 | 0 | 0 |
 | `test-streams-highwatermark.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-string-decoder-utf8-large.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-stringbytes-external.js` | 3 | 0 | 0 | 0 | 3 | 0 | 0 |
-| `test-structuredClone-global.js` | 13 | 11 | 1 | 0 | 0 | 0 | 1 |
+| `test-structuredClone-domexception.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-structuredClone-global.js` | 22 | 8 | 4 | 0 | 0 | 9 | 1 |
 | `test-tick-processor-version-check.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
+| `test-timers-async-store-leak.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
 | `test-timers-immediate-promisified.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
 | `test-timers-interval-promisified.js` | 12 | 0 | 0 | 0 | 0 | 0 | 12 |
+| `test-timers-max-duration-warning.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-timers-nan-duration-emit-once-per-process.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-timers-negative-duration-warning-emit-once-per-process.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-timers-not-emit-duration-zero.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-timers-refresh.js` | 6 | 0 | 0 | 0 | 0 | 0 | 6 |
 | `test-timers-timeout-promisified.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
 | `test-timers-to-primitive.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -571,77 +845,178 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-timers-unref.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-timers-user-call.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-timers-zero-timeout.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-tls-alpn-protocols-validation.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-tls-basic-validations.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
 | `test-tls-connect-allow-half-open-option.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-tls-external-accessor.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-tls-connect-keepalive-nodelay.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-tls-server-parent-constructor-options.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-tls-set-ciphers-error.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-tls-set-default-ca-certificates-mixed-types.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-tls-socket-allow-half-open-option.js` | 4 | 0 | 0 | 4 | 0 | 0 | 0 |
+| `test-tls-spki-blocklist.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-tls-translate-peer-certificate.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
-| `test-url-fileurltopath.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
-| `test-url-format-whatwg.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
+| `test-url-fileurltopath.js` | 7 | 7 | 0 | 0 | 0 | 0 | 0 |
+| `test-url-format-whatwg.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-url-parse-format.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-url-pathtofileurl.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-url-pathtofileurl.js` | 8 | 5 | 0 | 0 | 0 | 3 | 0 |
+| `test-urlpattern-types.js` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
+| `test-urlpattern.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-util-callbackify.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
-| `test-util-deprecate.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
-| `test-util-format.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
-| `test-util-getcallsites.js` | 13 | 12 | 1 | 0 | 0 | 0 | 0 |
+| `test-util-convert-signal-to-exit-code.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-util-deprecate.js` | 4 | 0 | 0 | 0 | 0 | 1 | 3 |
+| `test-util-exception-with-host-port.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-util-format.js` | 9 | 0 | 9 | 0 | 0 | 0 | 0 |
+| `test-util-getcallsites-sourcemap.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-util-getcallsites.js` | 10 | 8 | 1 | 0 | 0 | 1 | 0 |
 | `test-util-inspect-getters-accessing-this.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-util-inspect.js` | 99 | 53 | 2 | 0 | 0 | 0 | 44 |
-| `test-util-isDeepStrictEqual.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-util-inspect-proxy.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
+| `test-util-inspect.js` | 116 | 0 | 55 | 0 | 0 | 0 | 61 |
+| `test-util-isPartialDeepStrictEqual.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-util-promisify.js` | 19 | 0 | 0 | 0 | 0 | 0 | 19 |
-| `test-util-types.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
+| `test-util-text-decoder.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-util-types.js` | 28 | 0 | 0 | 0 | 0 | 0 | 28 |
 | `test-uv-unmapped-exception.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-v8-collect-gc-profile-exit-before-stop.js` | 2 | 0 | 0 | 0 | 2 | 0 | 0 |
+| `test-v8-collect-gc-profile-using.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-v8-coverage.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
+| `test-v8-cpu-profile.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-v8-heap-profile.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-v8-query-objects.js` | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | `test-v8-serdes.js` | 14 | 0 | 0 | 0 | 14 | 0 | 0 |
+| `test-v8-string-is-one-byte-representation.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-validators.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
+| `test-vfs-copyfile-mode.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-create.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-vfs-ctime-update.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-destructuring.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vfs-dir-handle.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-fd.js` | 22 | 0 | 0 | 0 | 0 | 22 | 0 |
+| `test-vfs-flag.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-fs-callback-error-paths.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vfs-fs-createReadStream.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-fs-createWriteStream.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-fs-matches-real-fs.js` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
+| `test-vfs-fs-mkdir-callback.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-fs-mkdtempSync.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-fs-open-callback.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-fs-openSync.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-vfs-fs-opendir-callback.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-fs-readFile-callback.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vfs-fs-readFileSync.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-fs-readdirSync.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-fs-rename-callback.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-fs-stat-callback.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-fs-statSync.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-fs-writeFile-callback.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-fs-writeFileSync.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-import.mjs` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-vfs-invalid-package-json.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-link.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-load.js` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| `test-vfs-memory-provider-dynamic.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-memory-provider.js` | 23 | 0 | 0 | 0 | 0 | 23 | 0 |
+| `test-vfs-mkdir.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-vfs-mkdtemp.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-module-hooks-cleanup.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vfs-module-hooks.mjs` | 29 | 0 | 0 | 0 | 0 | 29 | 0 |
+| `test-vfs-module-paths.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vfs-mount-errors.js` | 8 | 0 | 0 | 0 | 0 | 8 | 0 |
+| `test-vfs-mount-point-url.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-mount.js` | 15 | 0 | 0 | 0 | 0 | 15 | 0 |
+| `test-vfs-package-json.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vfs-promises.js` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
+| `test-vfs-readdir-symlink-recursive.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vfs-readfile-flag.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-real-provider-watch.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-real-provider.js` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
+| `test-vfs-rename.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
+| `test-vfs-require.js` | 23 | 0 | 0 | 0 | 0 | 23 | 0 |
+| `test-vfs-reserved-root.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vfs-rm-edge-cases.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vfs-stats-bigint.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-stats-helpers.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vfs-stream-errors.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vfs-stream-properties.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-streams.js` | 16 | 0 | 0 | 0 | 0 | 16 | 0 |
+| `test-vfs-symlinks.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vfs-virtual-file-handle.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-virtual-provider.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vfs-watchfile.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vfs-write-options.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vfs-zip-provider-commit.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
 | `test-vm-basic.js` | 10 | 8 | 2 | 0 | 0 | 0 | 0 |
 | `test-vm-codegen.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-vm-context-dont-contextify.js` | 8 | 0 | 8 | 0 | 0 | 0 | 0 |
 | `test-vm-measure-memory-lazy.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
-| `test-vm-module-basic.js` | 13 | 10 | 3 | 0 | 0 | 0 | 0 |
+| `test-vm-module-basic.js` | 13 | 8 | 5 | 0 | 0 | 0 | 0 |
+| `test-vm-module-evaluate-source-text-module.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-vm-module-evaluate-synthethic-module.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-vm-module-evaluate-while-evaluating.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vm-module-hasasyncgraph.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vm-module-hastoplevelawait.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vm-module-instantiate.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-vm-module-linkmodulerequests-circular.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-vm-module-linkmodulerequests.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-vm-module-modulerequests.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-vm-new-script-new-context.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-constructors.js` | 19 | 19 | 0 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-derivebits.js` | 4 | 0 | 2 | 0 | 0 | 0 | 2 |
-| `test-webcrypto-derivekey.js` | 6 | 0 | 3 | 0 | 0 | 0 | 3 |
-| `test-webcrypto-encrypt-decrypt-aes.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-encrypt-decrypt.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-webapi-sharedarraybuffer-rejection.js` | 14 | 0 | 0 | 0 | 0 | 14 | 0 |
+| `test-webcrypto-constructors.js` | 21 | 19 | 0 | 0 | 0 | 2 | 0 |
+| `test-webcrypto-deduplicate-usages.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-webcrypto-derivebits.js` | 5 | 0 | 2 | 0 | 0 | 1 | 2 |
+| `test-webcrypto-derivekey.js` | 6 | 3 | 3 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-encrypt-decrypt-aes.js` | 4 | 1 | 3 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-encrypt-decrypt-chacha20-poly1305.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-webcrypto-encrypt-decrypt.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-webcrypto-export-import-ec.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-export-import.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-keygen.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
-| `test-webcrypto-random.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-sign-verify.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
-| `test-webcrypto-webidl.js` | 28 | 0 | 0 | 0 | 0 | 0 | 28 |
-| `test-webstorage.js` | 8 | 1 | 7 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-export-import.js` | 7 | 0 | 5 | 0 | 0 | 2 | 0 |
+| `test-webcrypto-keygen.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
+| `test-webcrypto-prototype-pollution.mjs` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
+| `test-webcrypto-random.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-sign-verify.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-webcrypto-util.js` | 5 | 0 | 0 | 0 | 0 | 0 | 5 |
+| `test-webcrypto-webidl.js` | 31 | 0 | 0 | 0 | 0 | 0 | 31 |
+| `test-webstorage.js` | 11 | 0 | 6 | 0 | 0 | 5 | 0 |
 | `test-webstreams-abort-controller.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
+| `test-webstreams-adapters-sync-write-error.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-webstreams-adapters-writable-buffer-sources.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-webstreams-compose.js` | 20 | 20 | 0 | 0 | 0 | 0 | 0 |
+| `test-webstreams-compression-buffer-source.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-webstreams-duplex-fromweb-writev-unhandled-rejection.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-webstreams-finished.js` | 20 | 20 | 0 | 0 | 0 | 0 | 0 |
 | `test-webstreams-pipeline.js` | 17 | 17 | 0 | 0 | 0 | 0 | 0 |
+| `test-webstreams-pipeto-write-request.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-webworker-postmessage-lifecycle.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-whatwg-encoding-custom-fatal-streaming.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-whatwg-encoding-custom-interop.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
 | `test-whatwg-encoding-custom-textdecoder.js` | 12 | 0 | 12 | 0 | 0 | 0 | 0 |
+| `test-whatwg-encoding-singlebyte.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-whatwg-events-add-event-listener-options-passive.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-add-event-listener-options-signal.js` | 10 | 10 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-events-customevent.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-whatwg-headers.js` | 19 | 0 | 0 | 0 | 0 | 19 | 0 |
+| `test-whatwg-readablebytestream-bad-buffers-and-views.js` | 4 | 0 | 4 | 0 | 0 | 0 | 0 |
 | `test-whatwg-readablebytestream.js` | 11 | 0 | 0 | 0 | 0 | 0 | 11 |
-| `test-whatwg-readablestream.js` | 82 | 0 | 0 | 0 | 0 | 0 | 82 |
+| `test-whatwg-readablestream.js` | 83 | 0 | 0 | 0 | 0 | 0 | 83 |
+| `test-whatwg-readablestream.mjs` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-whatwg-transformstream-parked-write-error.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-whatwg-transformstream.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
-| `test-whatwg-url-custom-searchparams-constructor.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-whatwg-url-custom-searchparams-constructor.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
 | `test-whatwg-url-custom-searchparams-delete.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-url-custom-searchparams-stringifier.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-whatwg-url-custom-setters.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-whatwg-url-parse-fast-path.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
 | `test-whatwg-url-properties.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-whatwg-url-searchparams-fast-path.js` | 14 | 0 | 0 | 0 | 0 | 14 | 0 |
 | `test-whatwg-webstreams-adapters-streambase.js` | 4 | 0 | 0 | 0 | 0 | 0 | 4 |
-| `test-whatwg-webstreams-adapters-to-readablestream.js` | 8 | 0 | 0 | 0 | 0 | 0 | 8 |
-| `test-whatwg-webstreams-adapters-to-readablewritablepair.js` | 12 | 0 | 0 | 0 | 0 | 0 | 12 |
+| `test-whatwg-webstreams-adapters-to-readablestream.js` | 10 | 0 | 0 | 0 | 0 | 2 | 8 |
+| `test-whatwg-webstreams-adapters-to-readablewritablepair.js` | 13 | 0 | 0 | 0 | 0 | 1 | 12 |
 | `test-whatwg-webstreams-adapters-to-streamduplex.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
 | `test-whatwg-webstreams-adapters-to-streamreadable.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
 | `test-whatwg-webstreams-adapters-to-streamwritable.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
-| `test-whatwg-webstreams-adapters-to-writablestream.js` | 9 | 0 | 0 | 0 | 0 | 0 | 9 |
+| `test-whatwg-webstreams-adapters-to-writablestream.js` | 12 | 0 | 0 | 0 | 0 | 3 | 9 |
 | `test-whatwg-webstreams-encoding.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-whatwg-webstreams-transfer.js` | 13 | 0 | 0 | 0 | 0 | 0 | 13 |
-| `test-whatwg-writablestream.js` | 7 | 0 | 0 | 0 | 0 | 0 | 7 |
+| `test-whatwg-writablestream.js` | 9 | 0 | 0 | 0 | 0 | 1 | 8 |
 | `test-worker-broadcastchannel-wpt.js` | 6 | 0 | 0 | 6 | 0 | 0 | 0 |
 | `test-worker-broadcastchannel.js` | 9 | 0 | 0 | 9 | 0 | 0 | 0 |
 | `test-worker-eval-typescript.js` | 7 | 0 | 0 | 7 | 0 | 0 | 0 |
@@ -655,103 +1030,157 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-worker-message-port-wasm-threads.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-worker-message-port.js` | 9 | 5 | 4 | 0 | 0 | 0 | 0 |
 | `test-worker-message-transfer-port-mark-as-untransferable.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
+| `test-worker-spec-differences.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-worker-unsupported-path.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
 | `test-worker-workerdata-messageport.js` | 5 | 0 | 2 | 3 | 0 | 0 | 0 |
 | `test-wrap-js-stream-destroy.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
 | `test-wrap-js-stream-duplex.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-x509-escaping.js` | 8 | 0 | 5 | 3 | 0 | 0 | 0 |
+| `test-zlib-brotli-dictionary.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-zlib-brotli-reset.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-zlib-brotli.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-create-raw.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-destroy.js` | 2 | 1 | 0 | 0 | 0 | 0 | 1 |
 | `test-zlib-dictionary-fail.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-failed-init.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-zlib-invalid-input.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-zlib-reject-garbage-after-end.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-zlib-reset-incomplete-output.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
+| `test-zlib-truncated.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-zlib-type-error.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-zlib-zero-windowBits.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
+| `test-zlib-zip-coverage.js` | 65 | 0 | 0 | 0 | 0 | 65 | 0 |
+| `test-zlib-zip-edgecases.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
+| `test-zlib-zip-encoding.js` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| `test-zlib-zip-experimental-warning.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-zlib-zip-file-lifecycle.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-zlib-zip-files.js` | 10 | 0 | 0 | 0 | 0 | 10 | 0 |
+| `test-zlib-zip-hardening.js` | 30 | 0 | 0 | 0 | 0 | 30 | 0 |
+| `test-zlib-zip-internals.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
+| `test-zlib-zip-interop.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-zlib-zip-metadata.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-zlib-zip-property.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-zlib-zip-security-hardening.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-zlib-zip-security.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
+| `test-zlib-zip-sync.js` | 12 | 0 | 0 | 0 | 0 | 12 | 0 |
+| `test-zlib-zip-vfs.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-zlib-zip-writable.js` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
+| `test-zlib-zip-zip64.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
+| `test-zlib-zip.js` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
+| `test-zlib-zstd-reset-incomplete-frame.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
+| `test-zlib-zstd-reset.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-zlib-zstd.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
+| `test-zlib.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-async-wrap-getasyncid.js` | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
+| `test-benchmark-node-bench-tools.js` | 16 | 0 | 0 | 0 | 0 | 16 | 0 |
 | `test-child-process-execsync.js` | 7 | 0 | 0 | 7 | 0 | 0 | 0 |
 | `test-cpu-prof-invalid-options.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
-| `test-crypto-timing-safe-equal.js` | 3 | 0 | 0 | 0 | 0 | 0 | 3 |
+| `test-cpu-prof-name.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-crypto-timing-safe-equal.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-diagnostic-dir-cpu-prof.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-diagnostic-dir-heap-prof.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 | `test-error-serdes.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-fs-opendir-recursive.js` | 7 | 0 | 7 | 0 | 0 | 0 | 0 |
 | `test-fs-readdir-recursive.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-fs-watch.js` | 6 | 3 | 3 | 0 | 0 | 0 | 0 |
-| `test-heapdump.js` | 4 | 0 | 0 | 0 | 4 | 0 | 0 |
+| `test-heapdump.js` | 5 | 0 | 0 | 0 | 5 | 0 | 0 |
 | `test-init.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-inspector-network-resource.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
 | `test-net-server-address.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-net-server-bind.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-perf-hooks.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-performance-eventloopdelay.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
-| `test-single-executable-application-assets.js` | 3 | 0 | 0 | 3 | 0 | 0 | 0 |
-| `test-single-executable-application-snapshot.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `test-performance-eventloopdelay.js` | 6 | 0 | 3 | 0 | 0 | 3 | 0 |
 | `test-tls-connect.js` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
 
 ## Classified Non-Runnable Tests
 
-### known gap (1191)
+### known gap (1586)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
-| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 29 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs`, `es-module/test-esm-experimental-warnings.mjs`, ... (+26) |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal: | 64 | `es-module/test-require-module-twice.js`, `es-module/test-require-module.js#block_02_test_esm_that_import_cjs`, `parallel/test-console.js`, ... (+61) |
+| requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 30 | `es-module/test-typescript.mjs#test_00_expect_process_features_typescript_to_be_false_when_no_exper`, `es-module/test-typescript.mjs#test_01_execute_a_typescript_file`, `es-module/test-typescript.mjs#test_02_execute_a_typescript_file_with_imports`, ... (+27) |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly | 29 | `es-module/test-esm-import-attributes-errors.js`, `es-module/test-require-module-cached-tla.js`, `es-module/test-require-module-dynamic-import-1.js`, ... (+26) |
+| requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 29 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs#test_00_module_syntax_detection`, `es-module/test-esm-detect-ambiguous.mjs#test_01_wrapping_a_require_of_an_es_module_while_using_abort_on_unca`, ... (+26) |
+| Node 26.13.1 baseline gap: Failed to export key | 26 | `parallel/test-crypto-key-objects.js#block_00_block_00`, `parallel/test-crypto-key-objects.js#block_01_block_01`, `parallel/test-crypto-key-objects.js#block_02_block_02`, ... (+23) |
+| Node 26.13.1 baseline gap: not a function | 25 | `parallel/test-sqlite-session.js#test_00_creating_and_applying_a_changeset`, `parallel/test-sqlite-session.js#test_01_database_createsession_closed_database_results_in_exception`, `parallel/test-sqlite-session.js#test_02_session_changeset_closed_database_results_in_exception`, ... (+22) |
+| requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 24 | `es-module/test-typescript-eval.mjs#test_00_eval_typescript_esm_syntax`, `es-module/test-typescript-eval.mjs#test_01_eval_typescript_esm_syntax_with_input_type_module`, `es-module/test-typescript-eval.mjs#test_02_eval_typescript_commonjs_syntax`, ... (+21) |
+| requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 24 | `es-module/test-typescript-commonjs.mjs#test_00_require_a_ts_file_with_explicit_extension_succeeds`, `es-module/test-typescript-commonjs.mjs#test_01_eval_require_a_ts_file_with_implicit_extension_fails`, `es-module/test-typescript-commonjs.mjs#test_02_eval_require_a_cts_file_with_implicit_extension_fails`, ... (+21) |
+| Node 26.13.1 baseline gap: Expected values to be strictly deep-equal: | 23 | `es-module/test-esm-import-attributes-errors.mjs`, `es-module/test-esm-import-meta.mjs`, `es-module/test-require-module-error-catching.js`, ... (+20) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
-| process.permission and --permission CLI semantics are incomplete in execPath emulation | 18 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+15) |
+| Node 26.13.1 baseline gap: mustCall verification failed: | 19 | `parallel/test-domain-with-abort-on-uncaught-exception.js`, `parallel/test-fs-watch-recursive-watch-file.js`, `parallel/test-http-outgoing-writableFinished.js#block_01_finish_the_end_callback_receives_the_write_error_instead`, ... (+16) |
+| process.permission and --permission CLI semantics are incomplete in execPath emulation | 19 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+16) |
+| Node 26.13.1 baseline gap: Missing expected exception. | 16 | `parallel/test-assert-deep.js#test_02_date`, `parallel/test-assert-deep.js#test_03_regexp`, `parallel/test-assert-deep.js#test_07_gh_14441_circular_structures_should_be_consistent`, ... (+13) |
+| Node 26.13.1 baseline gap: Missing expected exception (TypeError). | 14 | `parallel/test-buffer-pool-untransferable.js`, `parallel/test-crypto-dh-stateless.js#block_00_block_00`, `parallel/test-crypto-dh-stateless.js#block_01_block_01`, ... (+11) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
+| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input: | 13 | `parallel/test-crypto-authenticated.js#block_00_non_authenticating_mode`, `parallel/test-crypto-authenticated.js#block_01_throw`, `parallel/test-crypto-authenticated.js#block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1`, ... (+10) |
 | domain module depends on async_hooks, not fully working | 13 | `parallel/test-domain-promise.js#block_00_block_00`, `parallel/test-domain-promise.js#block_01_block_01`, `parallel/test-domain-promise.js#block_03_block_03`, ... (+10) |
 | the shared fixture creates rooted symlink targets that cannot be resolved inside a WASI preopen | 13 | `sequential/test-fs-opendir-recursive.js#block_00_block_00`, `sequential/test-fs-opendir-recursive.js#block_01_block_01`, `sequential/test-fs-opendir-recursive.js#block_02_block_02`, ... (+10) |
-| inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 12 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+9) |
+| inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 12 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+9) |
 | node:readline module is not yet supported in WebAssembly environment | 12 | `parallel/test-readline-keys.js`, `parallel/test-readline-position.js`, `parallel/test-readline-reopen.js`, ... (+9) |
-| inherited: process.permission and --permission CLI semantics are incomplete in execPath emulation | 11 | `parallel/test-permission-allow-child-process-cli.js#block_00_guarantee_the_initial_state`, `parallel/test-permission-allow-child-process-cli.js#block_01_to_spawn_unless_allow_child_process_is_sent`, `parallel/test-permission-allow-wasi-cli.js#block_00_guarantee_the_initial_state`, ... (+8) |
+| inherited: dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 11 | `parallel/test-dns.js#block_00_verify_that_setservers_handles_arrays_with_holes_and_other_o`, `parallel/test-dns.js#block_01_block_01`, `parallel/test-dns.js#block_02_block_02`, ... (+8) |
 | inherited: the shared fixture assumes common.hasIntl=false means fatal TextDecoder construction throws ERR_NO_ICU, but this runtime supports fatal decoding without claiming full Intl/ICU compatibility | 11 | `parallel/test-whatwg-encoding-custom-textdecoder.js#block_00_test_textdecoder_utf_8_fatal_false_ignorebom_false`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_01_test_textdecoder_utf_8_fatal_false_ignorebom_true`, `parallel/test-whatwg-encoding-custom-textdecoder.js#block_02_invalid_encoders`, ... (+8) |
 | remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stderr cycle diagnostics; direct node modules app same-process module graph coverage lives in tests/node_modules_apps | 11 | `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_00_a_mjs_b_cjs_c_mjs_a_mjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_01_b_cjs_c_mjs_a_mjs_b_cjs`, `es-module/test-require-module-cycle-esm-cjs-esm-esm.js#block_02_c_mjs_a_mjs_b_cjs_c_mjs`, ... (+8) |
 | rooted symlink targets cannot be resolved inside a WASI preopen; the adapter rejects them at creation, while persistent relative symlinks are covered by runtime tests | 11 | `es-module/test-esm-preserve-symlinks-main.js`, `es-module/test-esm-preserve-symlinks.js`, `es-module/test-esm-symlink-main.js`, ... (+8) |
 | wasi:sockets UDP implementation hangs in wasmtime | 11 | `parallel/test-dgram-implicit-bind.js`, `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`, `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`, ... (+8) |
+| Node 26.13.1 baseline gap: 2 test(s) failed | 10 | `parallel/test-sqlite-database.js#test_02_database_prototype_close`, `parallel/test-sqlite-database.js#test_07_database_prototype_symbol_dispose`, `parallel/test-sqlite-statement.js#test_05_statement_prototype_sourcesql`, ... (+7) |
 | dgram multicast membership APIs are not implemented (ENOSYS) | 10 | `parallel/test-dgram-membership.js#block_02_addmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_03_dropmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_04_addmembership_with_invalid_multicast_address_should_throw`, ... (+7) |
 | async_hooks not fully implemented | 9 | `parallel/test-async-hooks-destroy-on-gc.js`, `parallel/test-async-hooks-disable-during-promise.js`, `parallel/test-async-hooks-disable-gc-tracking.js`, ... (+6) |
 | net.js TCP implementation incomplete - needs event handling and API fixes | 9 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+6) |
 | spawn() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 9 | `parallel/test-child-process-spawn-controller.js#block_00_block_00`, `parallel/test-child-process-spawn-controller.js#block_01_block_01`, `parallel/test-child-process-spawn-controller.js#block_02_block_02`, ... (+6) |
 | spawnSync() returns ENOSYS for non-execPath commands; Node expects ENOENT after option validation | 9 | `parallel/test-child-process-spawnsync-validation-errors.js#block_00_block_00`, `parallel/test-child-process-spawnsync-validation-errors.js#block_01_block_01`, `parallel/test-child-process-spawnsync-validation-errors.js#block_02_block_02`, ... (+6) |
 | the split fixture creates rooted symlink targets before the isolated stat subtests; those targets cannot be resolved inside a WASI preopen | 9 | `parallel/test-fs-stat-bigint.js#block_00_block_00`, `parallel/test-fs-stat-bigint.js#block_01_block_01`, `parallel/test-fs-stat-bigint.js#block_02_block_02`, ... (+6) |
+| util.format output formatting differences | 9 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+6) |
+| Readable.prototype.drop.length is 2 instead of Node's 1; later iterator-helper assertions are not reached | 8 | `parallel/test-stream-iterator-helpers-test262-tests.mjs#block_00_that_happen_before_stream_conversion_were_not_ported`, `parallel/test-stream-iterator-helpers-test262-tests.mjs#block_01_block_01`, `parallel/test-stream-iterator-helpers-test262-tests.mjs#block_02_block_02`, ... (+5) |
 | vm.constants.DONT_CONTEXTIFY and vanilla-context behavior are not implemented | 8 | `parallel/test-vm-context-dont-contextify.js#block_00_block_00`, `parallel/test-vm-context-dont-contextify.js#block_01_block_01`, `parallel/test-vm-context-dont-contextify.js#block_02_block_02`, ... (+5) |
-| WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source | 7 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_04_should_be_importable`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_05_should_be_importable_from_a_module_scope_under_node_modules`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_09_should_run_on_import`, ... (+4) |
-| common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 7 | `parallel/test-webstorage.js#test_01_emits_a_warning_when_used`, `parallel/test-webstorage.js#test_02_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_03_sessionstorage_is_not_persisted`, ... (+4) |
-| requires spawned process.execPath entry-point execution with --experimental-default-type=module | 7 | `es-module/test-esm-type-flag-loose-files.mjs#test_00_should_run_as_esm_a_js_file_that_is_outside_of_any_package_s`, `es-module/test-esm-type-flag-loose-files.mjs#test_01_should_run_as_esm_an_extensionless_javascript_file_that_is_o`, `es-module/test-esm-type-flag-package-scopes.mjs#test_00_should_run_as_esm_an_extensionless_javascript_file_within_a_`, ... (+4) |
+| Node 26.13.1 baseline gap: 4 test(s) failed | 6 | `parallel/test-sqlite-named-parameters.js#test_00_named_parameters`, `parallel/test-sqlite-statement.js#test_15_options_readbigints`, `parallel/test-sqlite-statement.js#test_17_options_allowbarenamedparameters`, ... (+3) |
+| Node 26.13.1 baseline gap: Test timed out after 120s | 6 | `parallel/test-fs-promises-watch.js`, `parallel/test-http-client-abort-destroy.js#block_03_block_03`, `parallel/test-http-client-abort-destroy.js#block_04_block_04`, ... (+3) |
 | WebAssembly global is missing in current runtime | 6 | `es-module/test-wasm-memory-out-of-bound.js`, `es-module/test-wasm-simple.js`, `es-module/test-wasm-web-api.js`, ... (+3) |
+| all assertions are gated by common.hasIntl; URL-only IDNA formatting is covered by focused runtime tests while the broader Intl API remains unavailable | 6 | `parallel/test-url-format-whatwg.js#test_00_should_format`, `parallel/test-url-format-whatwg.js#test_01_handle_invalid_arguments`, `parallel/test-url-format-whatwg.js#test_02_any_falsy_value_other_than_undefined_will_be_treated_as_fals`, ... (+3) |
 | fork() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 6 | `parallel/test-child-process-fork-abort-signal.js#block_00_block_00`, `parallel/test-child-process-fork-abort-signal.js#block_01_block_01`, `parallel/test-child-process-fork-abort-signal.js#block_02_block_02`, ... (+3) |
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |
 | inherited: perf_hooks createHistogram/monitorEventLoopDelay are not implemented | 6 | `parallel/test-perf-hooks-histogram.js#block_00_block_00`, `parallel/test-perf-hooks-histogram.js#block_01_block_01`, `parallel/test-perf-hooks-histogram.js#block_02_block_02`, ... (+3) |
-| inherited: performance.timerify function entries are not implemented | 6 | `parallel/test-performance-function.js#block_00_block_00`, `parallel/test-performance-function.js#block_01_block_01`, `parallel/test-performance-function.js#block_02_block_02`, ... (+3) |
+| same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 6 | `es-module/test-esm-import-meta-resolve.mjs#block_00_block_00`, `es-module/test-esm-import-meta-resolve.mjs#block_01_block_01`, `es-module/test-esm-import-meta-resolve.mjs#block_02_block_02`, ... (+3) |
 | the test's meaningful body requires rooted symlink targets; common.canCreateSymLink skips it under the supported relative-only WASI boundary | 6 | `parallel/test-fs-options-immutable.js#block_00_block_00`, `parallel/test-fs-options-immutable.js#block_01_block_01`, `parallel/test-fs-options-immutable.js#block_02_block_02`, ... (+3) |
-| IPv6 sockets are not available in this runtime (common.hasIPv6=false) | 5 | `parallel/test-dgram-ipv6only.js`, `parallel/test-dgram-udp6-link-local-address.js`, `parallel/test-dgram-udp6-send-default-host.js`, ... (+2) |
-| all assertions are gated by common.hasIntl; URL-only IDNA formatting is covered by focused runtime tests while the broader Intl API remains unavailable | 5 | `parallel/test-url-format-whatwg.js#test_00_should_format`, `parallel/test-url-format-whatwg.js#test_01_handle_invalid_arguments`, `parallel/test-url-format-whatwg.js#test_02_any_falsy_value_other_than_undefined_will_be_treated_as_fals`, ... (+2) |
+| Node 26.13.1 baseline gap: 5 test(s) failed | 5 | `parallel/test-sqlite-database.js#test_03_database_prototype_prepare`, `parallel/test-sqlite-database.js#test_04_database_prototype_exec`, `parallel/test-sqlite-database.js#test_06_database_prototype_location`, ... (+2) |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da | 5 | `parallel/test-webcrypto-export-import.js#block_00_block_00`, `parallel/test-webcrypto-export-import.js#block_02_import_export_hmac_secret_key`, `parallel/test-webcrypto-export-import.js#block_03_import_export_aes_secret_key`, ... (+2) |
+| common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 5 | `parallel/test-webstorage.js#test_00_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_02_sessionstorage_is_not_persisted`, `parallel/test-webstorage.js#test_05_localstorage_is_not_persisted_if_it_is_unused`, ... (+2) |
 | inherited: buffer.transcode and ICU transcoding are not implemented | 5 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+2) |
 | inherited: perf_hooks PerformanceResourceTiming/markResourceTiming behavior is incomplete | 5 | `parallel/test-perf-hooks-resourcetiming.js#block_00_performanceresourcetiming_should_not_be_initialized_external`, `parallel/test-perf-hooks-resourcetiming.js#block_01_using_performance_getentries`, `parallel/test-perf-hooks-resourcetiming.js#block_02_default_values`, ... (+2) |
 | node:readline createInterface/async iterator API is not implemented | 5 | `parallel/test-readline-async-iterators-backpressure.js`, `parallel/test-readline-async-iterators-destroy.js`, `parallel/test-readline-async-iterators.js`, ... (+2) |
 | node_compat common shim is missing ../common/wpt harness | 5 | `parallel/test-whatwg-events-event-constructors.js`, `parallel/test-whatwg-events-eventtarget-this-of-listener.js`, `parallel/test-whatwg-url-custom-searchparams-sort.js`, ... (+2) |
 | process.getActiveResourcesInfo() is not implemented | 5 | `parallel/test-process-getactiveresources-track-active-handles.js`, `parallel/test-process-getactiveresources-track-active-requests.js`, `parallel/test-process-getactiveresources-track-interval-lifetime.js`, ... (+2) |
-| util.format output formatting differences | 5 | `parallel/test-util-format.js#block_00_block_00`, `parallel/test-util-format.js#block_01_string_format_specifier_including_tostring_properties_on_the`, `parallel/test-util-format.js#block_02_symbol_toprimitive_handling_for_string_format_specifier`, ... (+2) |
+| requires simulated process.execPath / Node CLI module_timer and trace-event support | 5 | `parallel/test-module-print-timing.mjs#test_00_should_print_the_timing_information_for_cjs`, `parallel/test-module-print-timing.mjs#test_01_should_write_tracing_information_for_cjs`, `parallel/test-module-print-timing.mjs#test_02_should_write_tracing_print_logs_for_cjs`, ... (+2) |
 | util.getSystemErrorName is unavailable | 5 | `parallel/test-child-process-execfilesync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, `parallel/test-child-process-execfilesync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024`, `parallel/test-child-process-spawnsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed`, ... (+2) |
+| IPv6 sockets are not available in this runtime (common.hasIPv6=false) | 4 | `parallel/test-dgram-ipv6only.js`, `parallel/test-dgram-udp6-link-local-address.js`, `parallel/test-dgram-udp6-send-default-host.js`, ... (+1) |
+| Node 26.13.1 baseline gap: 3 test(s) failed | 4 | `parallel/test-sqlite-database.js#test_01_database_prototype_open`, `parallel/test-sqlite-database.js#test_05_database_prototype_istransaction`, `parallel/test-sqlite-named-parameters.js#test_01_statement_prototype_setallowunknownnamedparameters`, ... (+1) |
+| Node 26.13.1 baseline gap: 7 test(s) failed | 4 | `parallel/test-sqlite-data-types.js`, `parallel/test-sqlite-statement.js#test_01_statement_prototype_get`, `parallel/test-sqlite-statement.js#test_04_statement_prototype_run`, ... (+1) |
+| Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09) | 4 | `es-module/test-require-module-tla-nested.js`, `es-module/test-require-module-tla-rejected.js`, `es-module/test-require-module-tla-resolved.js`, ... (+1) |
+| Node 26.13.1 baseline gap: The error is expected to be an instance of "TypeError". Received "DOMException" | 4 | `parallel/test-webcrypto-random.js#block_00_block_00`, `parallel/test-webcrypto-random.js#block_01_block_01`, `parallel/test-webcrypto-random.js#block_02_block_02`, ... (+1) |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception. | 4 | `parallel/test-fs-opendir.js#block_01_check_that_passing_a_positive_integer_as_buffersize_works`, `parallel/test-fs-opendir.js#block_02_check_read_throw_exceptions_on_invalid_callback`, `parallel/test-fs-opendir.js#block_03_check_if_directory_already_closed_the_callback_should_pass_a`, ... (+1) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
-| crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 4 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |
 | inherited: common-shim mustCall()/mustCallAtLeast() argument validation differs from Node's test harness | 4 | `parallel/test-common.js#block_00_test_for_leaked_global_detection`, `parallel/test-common.js#block_01_test_for_disabling_leaked_global_detection`, `parallel/test-common.js#block_02_test_tmpdir`, ... (+1) |
 | inherited: net.connect option validation/coercion for port and hints is not Node-compatible | 4 | `parallel/test-net-connect-options-port.js#block_00_test_wrong_type_of_ports`, `parallel/test-net-connect-options-port.js#block_01_test_out_of_range_ports`, `parallel/test-net-connect-options-port.js#block_02_test_invalid_hints`, ... (+1) |
 | process unhandledRejection/rejectionHandled/warning mode behavior is incomplete | 4 | `parallel/test-promise-unhandled-warn-no-hook.js`, `parallel/test-promise-unhandled-warn.js`, `parallel/test-promises-unhandled-symbol-rejections.js`, ... (+1) |
 | promisified exec()/execFile() contract is incomplete (promise.child is not a ChildProcess instance) | 4 | `parallel/test-child-process-promisified.js#block_00_block_00`, `parallel/test-child-process-promisified.js#block_01_block_01`, `parallel/test-child-process-promisified.js#block_02_block_02`, ... (+1) |
 | remaining failures run through spawnSync(process.execPath, ...) and assert exact child-process status/stdout/stderr diagnostics; one TLA/dynamic-import sequencing case can still hit a QuickJS linker assert through process.execPath emulation, but direct same-process node modules app coverage passes | 4 | `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_00_a_mjs_b_mjs_c_mjs_d_mjs_c_mjs`, `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_01_b_mjs_c_mjs_d_mjs_c_mjs`, `es-module/test-require-module-cycle-esm-esm-cjs-esm.js#block_02_c_mjs_d_mjs_c_mjs`, ... (+1) |
-| requires spawned process.execPath entry-point execution plus WebAssembly module loading support | 4 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_03_should_run_as_the_entry_point`, `es-module/test-esm-type-flag-loose-files.mjs#test_02_should_run_as_wasm_an_extensionless_wasm_file_that_is_outsid`, `es-module/test-esm-type-flag-package-scopes.mjs#test_03_should_run_as_wasm_an_extensionless_wasm_file_within_a_type_`, ... (+1) |
 | timeout enforcement with microtaskMode='afterEvaluate' is incomplete | 4 | `parallel/test-vm-timeout-escape-promise-2.js`, `parallel/test-vm-timeout-escape-promise-module.js`, `parallel/test-vm-timeout-escape-promise.js`, ... (+1) |
 | unhandled-rejection mode and uncaughtException bridging semantics are incomplete | 4 | `parallel/test-promise-unhandled-default.js`, `parallel/test-promise-unhandled-error.js`, `parallel/test-promise-unhandled-throw-handler.js`, ... (+1) |
 | wasi:http client does not surface 103 Early Hints as 'information' events | 4 | `parallel/test-http-early-hints.js#block_00_block_00`, `parallel/test-http-early-hints.js#block_01_block_01`, `parallel/test-http-early-hints.js#block_03_block_03`, ... (+1) |
 | DOMException options bag ({ name, cause }) is not implemented | 3 | `parallel/test-domexception-cause.js#block_01_block_01`, `parallel/test-domexception-cause.js#block_02_block_02`, `parallel/test-domexception-cause.js#block_03_block_03` |
-| WASM child emulation does not support Node.js --test TAP filtering behavior | 3 | `parallel/test-runner-no-isolation-filtering.js#test_00_works_with_test_only`, `parallel/test-runner-no-isolation-filtering.js#test_01_works_with_test_name_pattern`, `parallel/test-runner-no-isolation-filtering.js#test_02_works_with_test_skip_pattern` |
+| WASM child emulation does not support Node.js --test TAP filtering behavior | 3 | `parallel/test-runner-no-isolation-filtering.js#test_00_works_with_test_only`, `parallel/test-runner-no-isolation-filtering.js#test_02_works_with_test_name_pattern`, `parallel/test-runner-no-isolation-filtering.js#test_04_works_with_test_skip_pattern` |
 | WASM child emulation does not support Node.js --test reporter destination flushing | 3 | `parallel/test-runner-force-exit-flush.js#test_00_junit_reporter`, `parallel/test-runner-force-exit-flush.js#test_01_spec_reporter`, `parallel/test-runner-force-exit-flush.js#test_02_tap_reporter` |
+| WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source | 3 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_04_should_be_importable`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_05_should_be_importable_from_a_module_scope_under_node_modules`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_09_should_run_on_import` |
 | child_process spawn() stdio stream compatibility (e.g. pipe) is incomplete in execPath emulation | 3 | `parallel/test-cwd-enoent-preload.js`, `parallel/test-cwd-enoent.js`, `parallel/test-preload.js` |
 | child_process.spawn pipe mode does not provide functional child.stdin | 3 | `parallel/test-stdin-pipe-large.js`, `parallel/test-stdin-pipe-resume.js`, `parallel/test-stdin-script-child-option.js` |
 | common/gc async_hooks-based GC tracking is not implemented in the WASM test shim | 3 | `sequential/test-gc-http-client-onerror.js`, `sequential/test-gc-http-client-timeout.js`, `sequential/test-gc-http-client.js` |
 | crypto.X509Certificate API is not implemented | 3 | `parallel/test-x509-escaping.js#block_01_test_escaping_rules_for_subject_alternative_names`, `parallel/test-x509-escaping.js#block_02_test_escaping_rules_for_authority_info_access`, `parallel/test-x509-escaping.js#block_03_test_escaping_rules_for_the_subject_field` |
+| crypto.scrypt/scryptSync support is missing (test reports 'no scrypt support') | 3 | `parallel/test-crypto-scrypt.js#block_00_block_00`, `parallel/test-crypto-scrypt.js#block_01_block_01`, `parallel/test-crypto-scrypt.js#block_02_0_which_differs_by_openssl_build` |
 | dgram send() callback overload path has JS/native argument conversion bugs | 3 | `parallel/test-dgram-send-callback-buffer-length-empty-address.js`, `parallel/test-dgram-send-callback-buffer-length.js`, `parallel/test-dgram-send-callback-buffer.js` |
 | dgram socket buffer size APIs may hang | 3 | `parallel/test-dgram-socket-buffer-size.js#block_02_block_02`, `parallel/test-dgram-socket-buffer-size.js#block_04_block_04`, `parallel/test-dgram-socket-buffer-size.js#block_05_block_05` |
+| dns.getServers()/setServers default-server behavior and validation are not Node-compatible | 3 | `parallel/test-dns.js#block_03_block_03`, `parallel/test-dns.js#block_12_block_12`, `parallel/test-dns.js#block_13_block_13` |
 | global MessageEvent constructor/validation/inheritance semantics are not Node-compatible | 3 | `parallel/test-worker-message-event.js#block_00_block_00`, `parallel/test-worker-message-event.js#block_01_block_01`, `parallel/test-worker-message-event.js#block_02_block_02` |
 | inherited: common.canCreateSymLink shim always returns false, so traversal+symlink permission tests are skipped | 3 | `parallel/test-permission-fs-traversal-path.js#block_00_block_00`, `parallel/test-permission-fs-traversal-path.js#block_01_block_01`, `parallel/test-permission-fs-traversal-path.js#block_02_block_02` |
 | inherited: dgram AbortSignal validation and close semantics are incomplete | 3 | `parallel/test-dgram-close-signal.js#block_00_block_00`, `parallel/test-dgram-close-signal.js#block_01_block_01`, `parallel/test-dgram-close-signal.js#block_02_block_02` |
@@ -774,12 +1203,21 @@ Secondary full-public compatibility, including public tests that are currently e
 | DSA keygen currently supports only modern key sizes; legacy 512-bit variant fails | 2 | `parallel/test-crypto-keygen-async-dsa-key-object.js`, `parallel/test-crypto-keygen-async-dsa.js` |
 | HTTP keep-alive socket identity reuse across sequential requests is not implemented | 2 | `parallel/test-http-keepalive-client.js`, `parallel/test-http-keepalive-request.js` |
 | IncomingMessage 'aborted' event is not emitted when the server destroys a keep-alive response | 2 | `parallel/test-http-client-aborted-event.js#block_00_block_00`, `parallel/test-http-client-aborted-event.js#block_01_block_01` |
+| Node 26.13.1 baseline gap: - stderr did not match expectation, checker throws:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09) | 2 | `es-module/test-require-module-tla-execution.js`, `es-module/test-require-module-tla-print-execution.js` |
+| Node 26.13.1 baseline gap: 10 test(s) failed | 2 | `parallel/test-sqlite-custom-functions.js`, `parallel/test-sqlite-statement.js#test_03_statement_prototype_iterate` |
+| Node 26.13.1 baseline gap: 6 test(s) failed | 2 | `parallel/test-sqlite-statement.js#test_02_statement_prototype_all`, `parallel/test-sqlite-statement.js#test_16_options_returnarrays` |
+| Node 26.13.1 baseline gap: Cannot perform operation on a detached ArrayBuffer | 2 | `parallel/test-buffer-isascii.js`, `parallel/test-buffer-isutf8.js` |
+| Node 26.13.1 baseline gap: Expected values to be loosely deep-equal: | 2 | `parallel/test-assert-deep.js#test_19_additional_tests`, `parallel/test-assert-typedarray-deepequal.js#test_01_looseequalarraypairs` |
+| Node 26.13.1 baseline gap: The expression evaluated to a falsy value: | 2 | `parallel/test-fs-statfs.js#block_00_synchronous`, `parallel/test-fs-statfs.js#block_01_synchronous_bigint` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: Invalid module "#/foo" is not a val | 2 | `es-module/test-esm-imports-deprecations.mjs`, `es-module/test-esm-imports.mjs` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal: | 2 | `es-module/test-esm-exports-deprecations.mjs`, `es-module/test-esm-exports.mjs` |
 | TextDecoderStream invalid-encoding errors are not Node-compatible yet | 2 | `parallel/test-whatwg-webstreams-encoding.js#block_00_block_00`, `parallel/test-whatwg-webstreams-encoding.js#block_01_block_01` |
 | WASM child emulation does not support Node.js --test CLI reporter execution | 2 | `parallel/test-runner-error-reporter.js#test_00_all_tests_failures_reported_without_fail_fast_flag`, `parallel/test-runner-error-reporter.js#test_01_fail_fast_stops_test_execution_after_first_failure` |
 | async_hooks createHook callback validation is incomplete | 2 | `parallel/test-async-hooks-constructor.js`, `parallel/test-async-wrap-constructor.js` |
 | async_hooks executionAsyncResource propagation is incomplete under node:http server/client callbacks | 2 | `parallel/test-async-hooks-execution-async-resource-await.js`, `parallel/test-async-hooks-execution-async-resource.js` |
 | both vendored subtests are gated by common.hasIntl; supported legacy URL parsing is covered by focused runtime tests | 2 | `parallel/test-url-parse-format.js#test_00_should_parse_and_format`, `parallel/test-url-parse-format.js#test_01_parse_result_should_equal_new_url_url` |
 | child_process execPath emulation does not fully match spawnSync({ encoding }) behavior for --check stdin runs | 2 | `parallel/test-cli-syntax-piped-bad.js`, `parallel/test-cli-syntax-piped-good.js` |
+| child_process execPath emulation does not honor --allow-addons/node-addons resolution | 2 | `parallel/test-permission-allow-addons-cli.js#block_00_to_require_native_addons_unless_allow_addons_is_sent`, `parallel/test-permission-allow-addons-cli.js#block_01_block_01` |
 | child_process execPath emulation does not implement --trace-require-module warning output | 2 | `es-module/test-require-module-warning.js`, `es-module/test-require-node-modules-warning.js` |
 | child_process.spawn emulation does not support --interactive REPL sessions | 2 | `parallel/test-repl-array-prototype-tempering.js`, `sequential/test-repl-timeout-throw.js` |
 | common/gc.onGC is non-observing; this collection assertion cannot be validated by the current harness | 2 | `parallel/test-gc-http-client-connaborted.js`, `parallel/test-gc-net-timeout.js` |
@@ -788,7 +1226,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | dgram socket buffer size APIs do not match Node error semantics | 2 | `parallel/test-dgram-socket-buffer-size.js#block_00_block_00`, `parallel/test-dgram-socket-buffer-size.js#block_01_block_01` |
 | dns.resolveAny/Resolver.resolveAny protocol handling is not implemented | 2 | `parallel/test-dns-resolveany-bad-ancount.js`, `parallel/test-dns-resolveany.js` |
 | domain/setUncaughtExceptionCaptureCallback interaction is incomplete | 2 | `parallel/test-domain-load-after-set-uncaught-exception-capture.js`, `parallel/test-domain-set-uncaught-exception-capture-after-load.js` |
-| execPath child emulation does not yet support trace-events CLI arg parsing used by -e runs | 2 | `parallel/test-trace-events-fs-async.js`, `parallel/test-trace-events-fs-sync.js` |
 | fork() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-fork-timeout-kill-signal.js#block_01_block_01` |
 | fork()/spawn() IPC send() boolean/backpressure semantics are not implemented | 2 | `parallel/test-child-process-send-returns-boolean.js#block_00_block_00`, `parallel/test-child-process-send-returns-boolean.js#block_01_block_01` |
 | gated by common.hasIntl, which cannot be enabled until broader Intl/ICU and IDNA behavior is compatible | 2 | `parallel/test-whatwg-encoding-custom-textdecoder-fatal.js`, `parallel/test-whatwg-encoding-custom-textdecoder-utf16-surrogates.js` |
@@ -805,27 +1242,24 @@ Secondary full-public compatibility, including public tests that are currently e
 | perf_hooks resource timing buffer/full-event behavior is incomplete | 2 | `parallel/test-performance-resourcetimingbufferfull.js`, `parallel/test-performance-resourcetimingbuffersize.js` |
 | process API incomplete | 2 | `parallel/test-process-beforeexit-throw-exit.js`, `parallel/test-process-beforeexit.js` |
 | process.allowedNodeEnvironmentFlags behavior is incomplete | 2 | `parallel/test-process-env-allowed-flags.js#block_00_assert_legit_flags_are_allowed_and_bogus_flags_are_disallowe`, `parallel/test-process-env-allowed-flags.js#block_02_assert_immutability_of_process_allowednodeenvironmentflags` |
-| process.permission worker-thread restrictions are incomplete | 2 | `parallel/test-permission-dc-worker-threads.js`, `parallel/test-permission-worker-threads-cli.js` |
 | process.report.writeReport and permission-model integration are missing | 2 | `parallel/test-permission-fs-write-report.js#block_00_block_00`, `parallel/test-permission-fs-write-report.js#block_01_block_01` |
 | promisified exec()/execFile() rejection errors miss stdout/stderr fields | 2 | `parallel/test-child-process-promisified.js#block_04_block_04`, `parallel/test-child-process-promisified.js#block_05_block_05` |
-| requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_async_resolve_hook_registered` |
-| requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 2 | `es-module/test-typescript-commonjs.mjs`, `es-module/test-typescript-module.mjs` |
+| requires child process loader/eval flags | 2 | `parallel/test-find-package-json.js#test_08_should_work_within_a_loader`, `parallel/test-find-package-json.js#test_09_should_work_with_an_async_resolve_hook_registered` |
 | requires spawned process.execPath entry-point execution for extensionless ESM files | 2 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_00_should_run_as_the_entry_point`, `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_06_should_run_as_the_entry_point` |
 | spawn() timeout/killSignal behavior is not Node-compatible in WASM emulation | 2 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_00_block_00`, `parallel/test-child-process-spawn-timeout-kill-signal.js#block_01_block_01` |
 | strict assignment to non-writable vm global throws QuickJS read-only wording instead of Node's message | 2 | `parallel/test-vm-global-non-writable-properties.js`, `parallel/test-vm-strict-assign.js` |
 | tls.connect() stub throws instead of constructing a TLSSocket for allowHalfOpen option checks | 2 | `parallel/test-tls-connect-allow-half-open-option.js#block_00_block_00`, `parallel/test-tls-connect-allow-half-open-option.js#block_01_block_01` |
 | uncaughtExceptionMonitor event behavior in child_process flows is incomplete | 2 | `parallel/test-process-uncaught-exception-monitor.js#block_00_block_00`, `parallel/test-process-uncaught-exception-monitor.js#block_01_block_01` |
+| util.MIMEType/util.MIMEParams are not implemented | 2 | `parallel/test-mime-api.js#block_00_refs_https_mimesniff_spec_whatwg_org_parameter_names_are_asc`, `parallel/test-mime-api.js#block_01_block_01` |
 | vm timeout interrupt is surfaced as a wasm trap instead of ERR_SCRIPT_EXECUTION_TIMEOUT | 2 | `parallel/test-vm-timeout.js`, `sequential/test-vm-timeout-rethrow.js` |
 | wasi:http client cannot expose an early response before the request body is finished, so this bidirectional streaming fixture deadlocks | 2 | `parallel/test-http-dump-req-when-res-ends.js`, `parallel/test-http-no-read-no-dump.js` |
 | wasi:http client does not surface interim 100 Continue responses or the continue event | 2 | `parallel/test-http-expect-continue.js`, `parallel/test-http-write-callbacks.js` |
 | wasi:http client path does not surface HPE_UNEXPECTED_CONTENT_LENGTH parse errors | 2 | `parallel/test-http-response-multi-content-length.js#block_00_test_adding_an_extra_content_length_header_using_setheader`, `parallel/test-http-response-multi-content-length.js#block_01_test_adding_an_extra_content_length_header_using_writehead` |
-| wasi:http request body is not finalized/sent until end(), so write()-only request flow diverges from Node | 2 | `parallel/test-http-outgoing-destroyed.js#block_00_block_00`, `parallel/test-http-outgoing-destroyed.js#block_01_block_01` |
+| zlib invalid compressed input error event/callback behavior differs from Node | 2 | `parallel/test-zlib-invalid-input.js#block_00_block_00`, `parallel/test-zlib-invalid-input.js#block_01_block_01` |
 | --disable-proto=delete semantics differ in QuickJS (__proto__ yields null) | 1 | `parallel/test-disable-proto-delete.js` |
 | --disable-proto=throw flag semantics are not implemented | 1 | `parallel/test-disable-proto-throw.js` |
 | --disallow-code-generation-from-strings flag semantics are not implemented | 1 | `parallel/test-eval-disallow-code-generation-from-strings.js` |
 | --input-type=module eval emulation is incomplete for cwd-relative static/dynamic imports | 1 | `parallel/test-cli-eval.js#block_04_block_04` |
-| --no-experimental-global-customevent flag is not honored | 1 | `parallel/test-global-customevent-disabled.js` |
-| --no-experimental-global-webcrypto flag is not honored | 1 | `parallel/test-global-webcrypto-disbled.js` |
 | --no-experimental-websocket flag is not honored | 1 | `parallel/test-websocket-disabled.js` |
 | --trace-env diagnostics are not implemented in execPath emulation | 1 | `parallel/test-trace-env.js` |
 | --trace-env-{js,native}-stack diagnostics are not implemented in execPath emulation | 1 | `parallel/test-trace-env-stack.js` |
@@ -846,7 +1280,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | AsyncLocalStorage deep nesting/recursion handling is unstable | 1 | `parallel/test-async-local-storage-deep-stack.js` |
 | AsyncLocalStorage.bind argument validation is incomplete | 1 | `parallel/test-async-local-storage-bind.js` |
 | AsyncLocalStorage.snapshot is missing or incomplete | 1 | `parallel/test-async-local-storage-snapshot.js` |
-| Blob byte-stream BYOB final read does not settle at end of stream | 1 | `parallel/test-blob.js#block_29_statement_29` |
+| Blob byte-stream BYOB final read does not settle at end of stream | 1 | `parallel/test-blob.js#block_30_statement_30` |
 | CLI --security-revert behavior in child_process spawnSync is not fully implemented | 1 | `parallel/test-security-revert-unknown.js` |
 | CLI --title flag does not update process.title | 1 | `parallel/test-process-title-cli.js` |
 | CLI --unhandled-rejections flag parsing/validation is incomplete | 1 | `parallel/test-promise-unhandled-flag.js` |
@@ -911,6 +1345,48 @@ Secondary full-public compatibility, including public tests that are currently e
 | MessagePort util.inspect output/shape is not Node-compatible | 1 | `parallel/test-worker-message-port-inspect-during-init-hook.js` |
 | NODE_OPTIONS behavior via --env-file is incomplete in execPath child emulation | 1 | `parallel/test-dotenv-node-options.js` |
 | NODE_V8_COVERAGE warning behavior in child_process execPath emulation is incomplete | 1 | `parallel/test-coverage-with-inspector-disabled.js` |
+| Node 26.13.1 baseline gap: - process terminated with status 1, expected 0 | 1 | `parallel/test-npm-install.js` |
+| Node 26.13.1 baseline gap: 10 test(s) failed; carries 22.14.0 subtest test_05_math_functions_are_enabled | 1 | `parallel/test-sqlite.js#test_08_sql_apis_enabled_at_build_time` |
+| Node 26.13.1 baseline gap: 12 test(s) failed | 1 | `parallel/test-sqlite-typed-array-and-data-view.js#test_00_statement_with_typedarray_dataview` |
+| Node 26.13.1 baseline gap: 2 test(s) failed; carries 22.14.0 parallel/test-assert-objects.js (upstream 096b61131a) | 1 | `parallel/test-assert-partial-deep-equal.js` |
+| Node 26.13.1 baseline gap: 26 test(s) failed | 1 | `parallel/test-sqlite-database.js#test_00_database_constructor` |
+| Node 26.13.1 baseline gap: 7 test(s) failed; carries 22.14.0 parallel/test-sqlite-database-sync.js (upstream f2b698f1cf); parallel/test-sqlite-statement-sync.js (upstream f2b698f1cf) | 1 | `parallel/test-sqlite-statement-columns.js` |
+| Node 26.13.1 baseline gap: 8 test(s) failed | 1 | `parallel/test-sqlite-statement.js#test_08_statement_prototype_resetstats` |
+| Node 26.13.1 baseline gap: Cannot find module 'internal/streams/end-of-stream'; carries 22.14.0 subtest block_39_block_39 | 1 | `parallel/test-stream-finished.js#block_40_block_40` |
+| Node 26.13.1 baseline gap: Conversion from string failed: invalid utf-8 sequence of 1 bytes from index 300 | 1 | `parallel/test-buffer-bytelength.js` |
+| Node 26.13.1 baseline gap: ERR_INVALID_FILE_URL_PATH has no err.input URL; the historical code assertion passes; carries 22.14.0 parallel/test-url-fileurltopath.js subtest test_03_fileurltopath_with_invalid_path | 1 | `parallel/test-url-invalid-file-url-path-input.js` |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_23_block_23 | 1 | `parallel/test-util-inspect.js#block_25_block_25` |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_63_block_63 | 1 | `parallel/test-util-inspect.js#block_65_block_65` |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_77_block_77 | 1 | `parallel/test-util-inspect.js#block_85_block_85` |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_91_block_91 | 1 | `parallel/test-util-inspect.js#block_101_block_101` |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_95_block_95 | 1 | `parallel/test-util-inspect.js#block_106_block_106` |
+| Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_98_block_98 | 1 | `parallel/test-util-inspect.js#block_109_block_109` |
+| Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_09_block_09 | 1 | `parallel/test-crypto-key-objects.js#block_10_block_10` |
+| Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_12_block_12 | 1 | `parallel/test-crypto-key-objects.js#block_13_block_13` |
+| Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_15_block_15 | 1 | `parallel/test-crypto-key-objects.js#block_16_block_16` |
+| Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_17_block_17 | 1 | `parallel/test-crypto-sign-verify.js#block_15_block_15` |
+| Node 26.13.1 baseline gap: Missing expected exception.; the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests | 1 | `parallel/test-url-parse-invalid-input.js` |
+| Node 26.13.1 baseline gap: Only --eval/-e, --input-type, and script files are supported in WASM child emulation; carries 22.14.0 subtest test_00_disabled_without_experimental_webstorage | 1 | `parallel/test-webstorage.js#test_08_disabled_with_no_webstorage` |
+| Node 26.13.1 baseline gap: The argument 'format' must be a valid string format. Received "grey" | 1 | `parallel/test-util-styletext.js` |
+| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:; carries 22.14.0 subtest block_04_authentication_tag_length_has_been_specified | 1 | `parallel/test-crypto-authenticated.js#block_05_authentication_tag_length_has_been_specified` |
+| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:; carries 22.14.0 subtest block_05_authentication_tag_has_been_specified | 1 | `parallel/test-crypto-authenticated.js#block_06_authentication_tag_length_has_been_specified` |
+| Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input; carries 22.14.0 subtest block_12_final_in_gcm_or_ocb_mode | 1 | `parallel/test-crypto-authenticated.js#block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected "actual" to be strict | 1 | `parallel/test-stream-readable-to-web-termination.js#block_01_block_01` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception (Ty | 1 | `parallel/test-vm-module-errors.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab | 1 | `parallel/test-fs-promises-file-handle-append-file.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab; carries 22.14.0 parallel/test-fs-promises-writefile-typedarray.js (upstream 3ac95f2d0c) | 1 | `parallel/test-fs-promises-appendfile.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): Error: Module status must not be unlinked or l | 1 | `parallel/test-vm-module-synthetic.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: Error converting from js 'string' i | 1 | `parallel/test-fs-promises-file-handle-read.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: The "original" argument must be of  | 1 | `parallel/test-zlib-empty-buffer.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: not a function | 1 | `parallel/test-fs-promises-file-handle-dispose.js` |
+| Node 26.13.1 baseline gap: Unhandled promise rejection: AssertionError: 'a\rb' !== 'a\nb'; carries 22.14.0 subtest block_32_block_32 | 1 | `parallel/test-blob.js#block_33_block_33` |
+| Node 26.13.1 baseline gap: _checkInvalidHeaderChar('\x01\x02\x03\x04\x05\x06\x07\b', true) unexpectedly failed in lenient mode | 1 | `parallel/test-http-invalidheaderfield2.js` |
+| Node 26.13.1 baseline gap: error:0408006C:rsa routines::digest too big for rsa key | 1 | `parallel/test-crypto-async-sign-verify.js#block_02_block_02` |
+| Node 26.13.1 baseline gap: error:06000068:public key routines::operation not supported for this keytype | 1 | `parallel/test-crypto-async-sign-verify.js#block_01_block_01` |
+| Node 26.13.1 baseline gap: path.win32.join resolves .. through a CON: device-name segment | 1 | `parallel/test-path-join.js` |
+| Node 26.13.1 baseline gap: path.win32.resolve("\\\\.\\PHYSICALDRIVE0") | 1 | `parallel/test-path-resolve.js` |
+| Node 26.13.1 baseline gap: util.inspect prints the symbol key of a boxed String as [Symbol(foo)]; 26.13.1 expects Symbol(foo); carries 22.14.0 subtest block_90_block_90 | 1 | `parallel/test-util-inspect.js#block_100_block_100` |
+| Node 26.13.1 baseline gap: value is not iterable | 1 | `parallel/test-require-delete-array-iterator.js` |
 | OKP (Ed/X) key import/export compatibility is incomplete | 1 | `parallel/test-webcrypto-export-import-cfrg.js` |
 | OutgoingMessage implicit Content-Length/Transfer-Encoding and Connection header behavior is not Node-compatible | 1 | `parallel/test-http-content-length.js` |
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
@@ -924,8 +1400,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Readable unpipe()+resume() transform/end event flow is not fully Node-compatible | 1 | `parallel/test-stream-readable-unpipe-resume.js` |
 | Readable.from() iterator close/return() semantics are incomplete | 1 | `parallel/test-readable-from-iterator-closing.js` |
 | Readable.map()/reduce() lazy evaluation callback ordering differs from Node | 1 | `parallel/test-stream-reduce.js#block_02_block_02` |
-| Readable.prototype.drop.length is 2 instead of Node's 1; later iterator-helper assertions are not reached | 1 | `parallel/test-stream-iterator-helpers-test262-tests.mjs` |
-| Readable.toWeb() with crypto randomBytes pressure can trap in web_crypto random_bytes | 1 | `parallel/test-stream-readable-to-web.js` |
 | ReadableStream BYOB controller respond()/Buffer interaction is not fully WHATWG-compatible | 1 | `parallel/test-whatwg-readablebytestreambyob.js` |
 | Real MessagePort transfer is unsupported; genuine ports reject cloning instead of producing prototype shells | 1 | `parallel/test-worker-message-port.js#block_07_block_07` |
 | Request abort vs normal completion event ordering (aborted/error/end) is not Node-compatible | 1 | `parallel/test-http-client-spurious-aborted.js` |
@@ -947,13 +1421,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | Timeout listener bookkeeping on keep-alive sockets is not Node-compatible | 1 | `parallel/test-http-client-timeout-option-listeners.js` |
 | URL inspect output uses the URL string instead of Node's structured URL representation | 1 | `parallel/test-whatwg-url-custom-inspect.js` |
 | Usable stream transfer is not implemented; prototype-only stream clones are not supported | 1 | `parallel/test-webstreams-clone-unref.js` |
-| Usable stream transfer is not implemented; prototype-only stream shells are not supported | 1 | `parallel/test-structuredClone-global.js#block_10_transferables_or_its_subclasses_should_be_received_with_its_` |
+| Usable stream transfer is not implemented; prototype-only stream shells are not supported | 1 | `parallel/test-structuredClone-global.js#block_17_transferables_or_its_subclasses_should_be_received_with_its_` |
 | WASI UDP ping-pong over loopback does not reliably deliver datagrams in the local runtime despite Node-compatible hostname resolution | 1 | `sequential/test-dgram-pingpong.js` |
-| WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_11_node_modules_can_be_used_by_both_module_systems` |
-| WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags | 1 | `parallel/test-runner-module-mocking.js#test_16_wrong_import_syntax_should_throw_error_after_module_mocking` |
+| WASM child emulation does not support --experimental-test-module-mocks CLI flag | 1 | `parallel/test-runner-module-mocking.js#test_12_node_modules_can_be_used_by_both_module_systems` |
+| WASM child emulation does not support --experimental-test-module-mocks/--experimental-default-type flags | 1 | `parallel/test-runner-module-mocking.js#test_22_wrong_import_syntax_should_throw_error_after_module_mocking` |
 | WASM child emulation does not support --no-experimental-sqlite CLI flag | 1 | `parallel/test-sqlite.js#test_00_accessing_the_node_sqlite_module` |
-| WASM child emulation does not support --permission/--allow-worker/--experimental-test-module-mocks flags | 1 | `parallel/test-runner-module-mocking.js#test_18_should_work_when_allow_worker_is_passed_and_permission_model` |
-| WASM child emulation does not support --permission/--experimental-test-module-mocks flags | 1 | `parallel/test-runner-module-mocking.js#test_17_should_throw_err_access_denied_when_permission_model_is_enab` |
 | WASM child emulation does not support --test CLI flag | 1 | `parallel/test-runner-concurrency.js#test_03_test_multiple_files` |
 | WASM child emulation does not support --test-reporter in spawnPromisified | 1 | `parallel/test-runner-root-duration.js` |
 | WASM child emulation does not support Node.js --test CLI behavior | 1 | `parallel/test-runner-exit-code.js` |
@@ -963,7 +1435,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | WebCrypto AES-GCM short-ciphertext OperationError message does not match Node | 1 | `parallel/test-crypto-webcrypto-aes-decrypt-tag-too-small.js` |
 | WebCrypto ECDH P-521 deriveBits is not implemented | 1 | `parallel/test-webcrypto-derivebits.js#block_00_test_ecdh_bit_derivation` |
 | WebCrypto ECDH P-521 deriveKey/deriveBits is not implemented | 1 | `parallel/test-webcrypto-derivekey.js#block_00_test_ecdh_key_derivation` |
-| WebCrypto X25519/X448 deriveBits is not implemented | 1 | `parallel/test-webcrypto-derivebits.js#block_03_test_x25519_and_x448_bit_derivation` |
+| WebCrypto X25519/X448 deriveBits is not implemented | 1 | `parallel/test-webcrypto-derivebits.js#block_04_test_x25519_and_x448_bit_derivation` |
 | WebCrypto X25519/X448 deriveKey/deriveBits is not implemented | 1 | `parallel/test-webcrypto-derivekey.js#block_05_test_x25519_and_x448_key_derivation` |
 | WebCrypto wrapKey()/unwrapKey usage validation and algorithm handling are incomplete | 1 | `parallel/test-webcrypto-wrap-unwrap.js` |
 | Worker URL-scheme validation does not throw expected ERR_INVALID_URL_SCHEME | 1 | `parallel/test-worker-unsupported-path.js#block_02_block_02` |
@@ -999,9 +1471,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | captureRejections propagation from outgoing-message drain to socket/request errors is not Node-compatible | 1 | `parallel/test-http-outgoing-message-capture-rejection.js#block_00_block_00` |
 | child_process -p/process.title behavior is incomplete in WASM child emulation | 1 | `sequential/test-process-title.js` |
 | child_process exec/spawn emulation does not fully match --help process behavior | 1 | `parallel/test-cli-node-print-help.js` |
-| child_process execPath emulation does not honor --allow-addons/node-addons resolution | 1 | `parallel/test-permission-allow-addons-cli.js` |
 | child_process execPath emulation does not implement --completion-bash output | 1 | `parallel/test-bash-completion.js` |
-| child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output | 1 | `es-module/test-require-module-tla.js#block_01_block_01` |
 | child_process execPath emulation does not yet match Node CLI argument validation/exit codes | 1 | `parallel/test-cli-bad-options.js` |
 | child_process execPath emulation does not yet support this ESM/CJS fixture runner path; direct CJS named export interop is covered by test-require-module.js | 1 | `es-module/test-esm-cjs-exports.js` |
 | child_process execPath emulation does not yet support this ESM/CJS fixture runner path; same-process CJS import/require interop is covered by module-interop runtime tests | 1 | `es-module/test-esm-cjs-main.js` |
@@ -1072,12 +1542,12 @@ Secondary full-public compatibility, including public tests that are currently e
 | exceptions thrown in client response callbacks do not follow Node uncaughtException flow | 1 | `parallel/test-http-uncaught-from-request-callback.js` |
 | execFile() signal option type validation is incomplete (missing ERR_INVALID_ARG_TYPE) | 1 | `parallel/test-child-process-execfile.js#block_05_block_05` |
 | execFile/execFileSync emulation does not execute non-execPath commands like echo | 1 | `parallel/test-child-process-execfile.js#block_07_verify_the_execfile_stdout_is_the_same_as_execfilesync` |
-| execPath child emulation does not support --trace-atomics-wait CLI behavior | 1 | `parallel/test-trace-atomic-deprecation.js` |
+| execPath child emulation does not yet support trace-events CLI arg parsing used by -e runs | 1 | `parallel/test-trace-events-fs-async.js` |
 | execPath child-process emulation runs recursive async stack-overflow tests in-process, which can trap the WASM runtime instead of isolating the child stack | 1 | `parallel/test-async-wrap-pop-id-during-load.js` |
 | execSync is ENOSYS-stubbed in WASM child_process emulation | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_01_verify_that_a_maxbuffer_size_of_infinity_works` |
 | execSync is ENOSYS-stubbed; default maxBuffer behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_02_default_maxbuffer_size_is_1024_1024` |
 | execSync is ENOSYS-stubbed; maxBuffer overflow ENOBUFS behavior is unimplemented | 1 | `parallel/test-child-process-execsync-maxbuf.js#block_00_verify_that_an_error_is_returned_if_maxbuffer_is_surpassed` |
-| fetch does not resolve registered blob:nodedata URLs; requests currently require wasi:http transport | 1 | `parallel/test-blob.js#block_27_statement_27` |
+| fetch does not resolve registered blob:nodedata URLs; requests currently require wasi:http transport | 1 | `parallel/test-blob.js#block_28_statement_28` |
 | fork() IPC child.send/process.send emulation is not implemented | 1 | `parallel/test-cli-eval.js#block_03_regression_test_for_https_github_com_nodejs_node_issues_1194` |
 | fork() abort-listener lifecycle for timeout+signal is incomplete | 1 | `parallel/test-child-process-fork-timeout-kill-signal.js#block_03_block_03` |
 | fork() args/options parsing and ERR_INVALID_ARG_TYPE behavior are incomplete | 1 | `parallel/test-child-process-fork-args.js#block_01_correctly_if_args_is_undefined_or_null` |
@@ -1121,7 +1591,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | isolated P2/P3 runs take about 91-97 seconds; although a per-entry timeout is configurable, enabling this case would add excessive CI wall time, and transport profiling attributes most of the delay outside the socket path | 1 | `sequential/test-pipe.js` |
 | keep-alive free-socket lifecycle (free event + req.destroyed transitions) is not Node-compatible | 1 | `parallel/test-http-keepalive-free.js` |
 | keep-alive socket timeout/reuse race handling is not Node-compatible | 1 | `parallel/test-http-keep-alive-timeout-race-condition.js` |
-| loader hooks in this vendored file are exercised through spawned process.execPath CLI loader flags/eval, deferred to simulated Node CLI mode support | 1 | `es-module/test-esm-loader-hooks.mjs` |
 | local JavaScript children do not provide IPC stdio or process.send | 1 | `parallel/test-child-process-stdout-ipc.js` |
 | local JavaScript children do not provide an IPC stdio channel | 1 | `parallel/test-child-process-stdin-ipc.js` |
 | local Node children do not apply the argv0 option | 1 | `parallel/test-child-process-spawn-argv0.js` |
@@ -1144,8 +1613,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | node:http client socketPath transport flow is incomplete (unix-socket request hangs) | 1 | `parallel/test-http-client-pipe-end.js` |
 | node:https Agent constructor compatibility is incomplete (call without new) | 1 | `parallel/test-https-agent-constructor.js` |
 | node:https Agent#getName TLS option keying is incomplete | 1 | `parallel/test-https-agent-getname.js` |
-| node:sqlite applyChangeset conflict-resolution behavior is incomplete | 1 | `parallel/test-sqlite-session.js#test_05_conflict_resolution` |
-| node:sqlite rejects mixed named+positional parameters where Node accepts them | 1 | `parallel/test-sqlite-statement-sync.js#test_06_statementsync_prototype_expandedsql` |
+| node:sqlite applyChangeset conflict-resolution behavior is incomplete | 1 | `parallel/test-sqlite-session.js#test_06_conflict_resolution` |
 | node:test mock timers Date behavior is incomplete | 1 | `parallel/test-runner-mock-timers-date.js` |
 | node:test mock timers scheduler.wait behavior is incomplete | 1 | `parallel/test-runner-mock-timers-scheduler.js` |
 | node:test standalone runner output/cancellation summary differs in WASM child emulation | 1 | `parallel/test-runner-misc.js` |
@@ -1159,6 +1627,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | passive listener semantics are incomplete (test currently self-skips) | 1 | `parallel/test-whatwg-events-add-event-listener-options-passive.js#block_01_block_01` |
 | per-context Symbol/global binding behavior is incomplete in vm contexts | 1 | `parallel/test-vm-harmony-symbols.js` |
 | perf_hooks HTTP PerformanceEntry emission/detail fields are incomplete | 1 | `parallel/test-http-perf_hooks.js` |
+| perf_hooks createHistogram/monitorEventLoopDelay are not implemented | 1 | `parallel/test-perf-hooks-histogram.js#block_06_block_06` |
 | perf_hooks nodeTiming milestones/duration semantics are incomplete | 1 | `parallel/test-performance-nodetiming.js` |
 | perf_hooks nodeTiming.uvMetricsInfo is missing | 1 | `parallel/test-performance-nodetiming-uvmetricsinfo.js` |
 | perf_hooks performance.toJSON() does not expose nodeTiming yet | 1 | `parallel/test-tojson-perf_hooks.js` |
@@ -1166,16 +1635,15 @@ Secondary full-public compatibility, including public tests that are currently e
 | permission mode does not yet honor --allow-addons/node-addons export-condition semantics | 1 | `parallel/test-permission-no-addons.js` |
 | permission security-warning emission for --allow-* flags is incomplete | 1 | `parallel/test-permission-warning-flags.js` |
 | posting a port to its target and channel-loss warning semantics are incomplete | 1 | `parallel/test-worker-message-port-transfer-target.js` |
-| process 'multipleResolves' event semantics are not implemented | 1 | `parallel/test-promise-swallowed-event.js` |
 | process prototype chain is not fully Node-compatible (prototype is not EventEmitter-based) | 1 | `parallel/test-process-prototype.js` |
 | process uncaughtException handling inside http client callbacks is incomplete | 1 | `parallel/test-http-catch-uncaughtexception.js` |
-| process.assert() is not implemented | 1 | `parallel/test-process-assert.js` |
 | process.config ICU path and process.versions.tz metadata are not available | 1 | `parallel/test-tz-version.js` |
 | process.config reports ICU disabled and full Node Intl metadata and fidelity are not implemented | 1 | `parallel/test-intl.js` |
 | process.env defaults are incomplete (PATH is missing in VM context) | 1 | `parallel/test-vm-access-process-env.js` |
 | process.exitCode validation and coercion semantics are incomplete | 1 | `parallel/test-process-exit-code-validation.js` |
 | process.loadEnvFile() behavior is incomplete | 1 | `parallel/test-process-load-env-file.js` |
 | process.on('uncaughtException') handling during top-level module errors is incomplete | 1 | `parallel/test-exception-handler2.js` |
+| process.permission worker-thread restrictions are incomplete | 1 | `parallel/test-permission-worker-threads-cli.js` |
 | process.ppid is stubbed and not wired to parent process IDs | 1 | `parallel/test-process-ppid.js` |
 | process.ref()/process.unref() are not implemented | 1 | `parallel/test-process-ref-unref.js` |
 | process.resourceUsage() is not implemented | 1 | `parallel/test-resource-usage.js` |
@@ -1193,21 +1661,17 @@ Secondary full-public compatibility, including public tests that are currently e
 | request header population/normalization (for example Accept) is incomplete | 1 | `parallel/test-http.js` |
 | requires ERR_INVALID_ARG_TYPE validation on resolve methods (not yet implemented) | 1 | `parallel/test-dns-resolvens-typeerror.js` |
 | requires HTTP server functionality, we only support clients | 1 | `parallel/test-diagnostic-channel-http-response-created.js` |
-| requires V8 hidden-class constructor-name recovery after the prototype constructor is detached | 1 | `parallel/test-util-inspect.js#block_73_manipulate_the_prototype_in_weird_ways` |
+| requires V8 hidden-class constructor-name recovery after the prototype constructor is detached | 1 | `parallel/test-util-inspect.js#block_76_manipulate_the_prototype_in_weird_ways` |
 | requires actual TCP socket reuse with remotePort identity tracking via server; wasi:http creates new connections per request | 1 | `parallel/test-http-agent-scheduling.js` |
 | requires child_process execFileSync with copied process.execPath and Node global module path layout | 1 | `parallel/test-module-loading-globalpaths.js` |
 | requires fd option for listen | 1 | `parallel/test-net-listen-fd0.js` |
-| requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 1 | `es-module/test-typescript-eval.mjs` |
-| requires isolated process.execPath --experimental-transform-types execution and CLI source-map configuration | 1 | `es-module/test-typescript-transform.mjs` |
-| requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 1 | `es-module/test-typescript.mjs` |
 | requires net.createServer with pauseOnConnect and socket.localPort; wasi:http does not expose socket-level properties | 1 | `parallel/test-http-agent-reuse-drained-socket-only.js` |
 | requires onread option with buffer/callback | 1 | `parallel/test-net-onread-static-buffer.js` |
 | requires raw TCP response with obsolete HTTP line-folded headers; wasi:http rejects them | 1 | `parallel/test-http-multi-line-headers.js` |
 | requires remote server close detection on idle keep-alive sockets and socket hang up errors; wasi:http creates independent connections per request with no shared socket lifecycle | 1 | `parallel/test-http-agent-keepalive.js` |
 | requires simulated Node CLI flag handling for --no-experimental-require-module/--experimental-detect-module | 1 | `es-module/test-disable-require-module-with-detection.js` |
-| requires simulated process.execPath / Node CLI mode support for child-process JSON module warning assertions | 1 | `es-module/test-esm-json.mjs#test_01_should_not_print_an_experimental_warning` |
-| requires simulated process.execPath / Node CLI module_timer and trace-event support | 1 | `parallel/test-module-print-timing.mjs` |
-| requires spawned process.execPath --check execution with --experimental-default-type=module | 1 | `es-module/test-esm-type-flag-loose-files.mjs#test_06_should_check_as_esm_input_passed_via_check` |
+| requires simulated process.execPath / Node CLI mode support for child-process JSON module warning assertions | 1 | `es-module/test-esm-json.mjs#test_02_should_not_print_an_experimental_warning` |
+| requires spawned process.execPath entry-point execution plus WebAssembly module loading support | 1 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_03_should_run_as_the_entry_point` |
 | requires spawned process.execPath entry-point execution to verify extensionless .wasm classification outside module scope | 1 | `es-module/test-esm-extensionless-esm-and-wasm.mjs#test_08_should_error_as_the_entry_point` |
 | response writable state around aborted proxy close is not Node-compatible | 1 | `parallel/test-http-writable-true-after-close.js` |
 | response write + socket-error path does not preserve the expected truncated raw HTTP ending | 1 | `parallel/test-http-header-badrequest.js` |
@@ -1216,13 +1680,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | same-component node:http client->server calls via wasi:http can deadlock in this scenario | 1 | `parallel/test-http-write-head-after-set-header.js` |
 | same-process ESM invalid package config diagnostics are covered by module-resolution runtime tests; vendored fixture asserts stderr/status through spawned process.execPath ESM entry-point emulation | 1 | `es-module/test-esm-invalid-pjson.js` |
 | same-process dynamic import cache behavior is covered by runner_dynamic_import_cache_survives_removed_file; full Node test also requires spawned process.execPath --input-type=module support | 1 | `es-module/test-esm-dynamic-import-mutating-fs.mjs` |
-| same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 1 | `es-module/test-esm-import-meta-resolve.mjs` |
 | sendBlockList connect path can crash in WASI UDP implementation | 1 | `parallel/test-dgram-blocklist.js#block_00_block_00` |
 | sendBlockList send() callback path is not Node-compatible and can hang | 1 | `parallel/test-dgram-blocklist.js#block_01_block_01` |
-| sequential path is stale in vendored suite; equivalent Upgrade timeout-disabling semantics are not Node-compatible | 1 | `sequential/test-http-server-request-timeout-upgrade.js` |
-| sequential path is stale in vendored suite; equivalent maxSockets queueing/release behavior is not Node-compatible | 1 | `sequential/test-http-max-sockets.js` |
-| sequential path is stale in vendored suite; equivalent server.requestTimeout keep-alive handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeout-keepalive.js` |
-| sequential path is stale in vendored suite; equivalent server.requestTimeout pipelining handling is not Node-compatible | 1 | `sequential/test-http-server-request-timeout-pipelining.js` |
 | server listen/close race with async DNS lookup is not Node-compatible | 1 | `parallel/test-net-server-close-before-calling-lookup-callback.js` |
 | server option insecureHTTPParser:true is ignored for incoming invalid headers | 1 | `parallel/test-http-insecure-parser-per-stream.js#block_02_test_3_the_client_sends_an_invalid_header` |
 | server option maxHeaderSize is ignored for incoming oversized headers | 1 | `parallel/test-http-max-header-size-per-stream.js#block_02_test_3_the_client_sends_larger_headers_than_what_would_other` |
@@ -1249,7 +1708,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | setDefaultHeaders:false still injects/default-normalizes headers (Host/Content-Length/casing/duplicates) | 1 | `parallel/test-http-dont-set-default-headers-with-set-header.js` |
 | setImmediate queue turn semantics are unstable and can trap in the timeout scheduler | 1 | `parallel/test-timers-immediate-queue.js` |
 | setInterval scheduling incorrectly includes callback execution time | 1 | `sequential/test-timers-set-interval-excludes-callback-duration.js` |
-| simulated child_process TypeScript CLI execution does not publish its transform map to util.getCallSites | 1 | `parallel/test-util-getcallsites.js#block_10_block_10` |
 | snapshot update/read flow via node:test is incomplete in WASM child emulation | 1 | `parallel/test-runner-snapshot-file-tests.js#test_01_t_assert_filesnapshot_update_read_flow` |
 | spawn() stdio handling is incomplete: non-requested stderr stream is still created | 1 | `sequential/test-child-process-exit.js` |
 | spawn() timeout validation path hangs in WASM child emulation | 1 | `parallel/test-child-process-spawn-timeout-kill-signal.js#block_02_block_02` |
@@ -1276,20 +1734,18 @@ Secondary full-public compatibility, including public tests that are currently e
 | tls.createSecureContext() stub throws before Node-style clientCertEngine argument validation | 1 | `parallel/test-tls-clientcertengine-invalid-arg-type.js` |
 | trace_events dynamic file output for node.async_hooks is incomplete | 1 | `parallel/test-trace-events-async-hooks-dynamic.js` |
 | trace_events node.console category output is incomplete | 1 | `parallel/test-trace-events-console.js` |
-| trace_events node.environment category output is incomplete | 1 | `parallel/test-trace-events-environment.js` |
 | tracingChannel({}) argument-validation behavior differs from Node.js (message/throw shape mismatch) | 1 | `parallel/test-diagnostics-channel-tracing-channel-args-types.js` |
 | tty stdin stream/event-emitter compatibility is incomplete | 1 | `parallel/test-tty-stdin-end.js` |
 | uncaught exception handling in HTTP request callbacks does not recover/terminate like Node and hangs | 1 | `parallel/test-http-exceptions.js` |
 | uncaughtException rethrow exit-code semantics are incomplete | 1 | `parallel/test-unhandled-exception-rethrow-error.js` |
-| uses V8 native %GetUndetectable() syntax which QuickJS cannot evaluate | 1 | `parallel/test-util-inspect.js#block_83_https_github_com_nodejs_node_issues_31889` |
-| uses child_process spawn path (spawnPromisified) | 1 | `parallel/test-find-package-json.js#test_07_should_resolve_root_and_closest_package_json` |
+| uses V8 native %GetUndetectable() syntax which QuickJS cannot evaluate | 1 | `parallel/test-util-inspect.js#block_93_https_github_com_nodejs_node_issues_31889` |
+| uses child_process spawn path (spawnPromisified) | 1 | `parallel/test-find-package-json.js#test_07_should_be_able_to_resolve_both_root_and_closest_package_json` |
 | util.MIMEType parsing API is not implemented | 1 | `parallel/test-mime-whatwg.js` |
-| util.MIMEType/util.MIMEParams are not implemented | 1 | `parallel/test-mime-api.js` |
 | util.debuglog formatting/callback behavior is not fully Node-compatible | 1 | `sequential/test-util-debug.js` |
+| util.getCallSites() accepts a fractional frameCount; Node 26.13.1 requires an integer and throws ERR_OUT_OF_RANGE | 1 | `parallel/test-util-getcallsites.js#block_02_framecount_must_be_an_integer` |
 | util.getSystemErrorName is not implemented | 1 | `parallel/test-child-process-execfile.js#block_01_block_01` |
 | v8.setFlagsFromString argument validation error fidelity is incomplete | 1 | `parallel/test-v8-flag-type-check.js` |
 | valid EC key vectors fail to import | 1 | `parallel/test-webcrypto-export-import-ec.js#block_00_block_00` |
-| verify() returns non-Node error code/message for unsupported key types | 1 | `parallel/test-crypto-sign-verify.js#block_18_block_18` |
 | vm context global object identity/proxy semantics differ from Node | 1 | `parallel/test-vm-global-identity.js` |
 | vm context prototype chain and own-property lookup semantics are incomplete | 1 | `parallel/test-vm-global-property-prototype.js` |
 | vm contexts do not provide the expected per-context Proxy behavior | 1 | `parallel/test-vm-proxies.js` |
@@ -1309,6 +1765,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http client does not surface llhttp parse errors/rawPacket for malformed raw TCP responses | 1 | `parallel/test-http-client-error-rawbytes.js` |
 | wasi:http client does not surface llhttp parser errors for malformed raw TCP responses | 1 | `parallel/test-http-client-parse-error.js` |
 | wasi:http client does not translate an incomplete response after server request destruction into the expected ECONNRESET request error | 1 | `parallel/test-http-server-incomingmessage-destroy.js` |
+| wasi:http request body is not finalized/sent until end(), so write()-only request flow diverges from Node | 1 | `parallel/test-http-outgoing-destroyed.js#block_02_block_02` |
 | wasi:http response header filtering strips headers like Host/Proxy-Authorization, so duplicate-header expectations diverge | 1 | `parallel/test-http-response-multiheaders.js` |
 | wasi:http strips forbidden hop-by-hop headers like Connection, so automatic response headers differ | 1 | `parallel/test-http-automatic-headers.js` |
 | wasi:http strips hop-by-hop response headers, so 'Keep-Alive' is not visible to node:http clients | 1 | `parallel/test-http-keep-alive-timeout-custom.js` |
@@ -1321,30 +1778,27 @@ Secondary full-public compatibility, including public tests that are currently e
 | write-after-remote-close error propagation (ECONNRESET/EPIPE) and cleanup are incomplete | 1 | `parallel/test-http-destroyed-socket-write2.js` |
 | zlib decompressor handling of trailing garbage/premature end differs from Node | 1 | `parallel/test-zlib-premature-end.js` |
 | zlib flush() interaction with writable needDrain/backpressure differs from Node | 1 | `parallel/test-zlib-flush-drain-longblock.js` |
-| zlib invalid compressed input error event/callback behavior differs from Node | 1 | `parallel/test-zlib-invalid-input.js` |
-| zlib stream bytesWritten/bytesRead accounting and end/data callbacks differ from Node | 1 | `parallel/test-zlib-bytes-read.js` |
 
-### WASI-impossible (1192)
+### WASI-impossible (1148)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
-| tls/https is not supported in WebAssembly environment | 182 | `parallel/test-https-agent-create-connection.js#block_00_use_option_connect`, `parallel/test-https-agent-create-connection.js#block_01_use_port_and_option_connect`, `parallel/test-https-agent-create-connection.js#block_02_use_port_and_host_and_option_connect`, ... (+179) |
+| tls/https is not supported in WebAssembly environment | 175 | `parallel/test-https-agent-create-connection.js#block_00_use_option_connect`, `parallel/test-https-agent-create-connection.js#block_01_use_port_and_option_connect`, `parallel/test-https-agent-create-connection.js#block_02_use_port_and_host_and_option_connect`, ... (+172) |
 | inspector/debugger is not available in WASM | 104 | `parallel/test-debugger-backtrace.js`, `parallel/test-debugger-break.js`, `parallel/test-debugger-breakpoint-exists.js`, ... (+101) |
-| cluster requires process forking, not available in WASM | 96 | `parallel/test-cluster-advanced-serialization.js`, `parallel/test-cluster-basic.js`, `parallel/test-cluster-bind-privileged-port.js`, ... (+93) |
+| cluster requires process forking, not available in WASM | 95 | `parallel/test-cluster-advanced-serialization.js`, `parallel/test-cluster-basic.js`, `parallel/test-cluster-bind-privileged-port.js`, ... (+92) |
 | [manual] http2/https not implemented | 89 | `parallel/test-http2-allow-http1.js`, `parallel/test-http2-altsvc.js`, `parallel/test-http2-async-local-storage.js`, ... (+86) |
 | requires worker_threads which is not available in WASM | 68 | `parallel/test-async-hooks-worker-asyncfn-terminate-1.js`, `parallel/test-async-hooks-worker-asyncfn-terminate-2.js`, `parallel/test-async-hooks-worker-asyncfn-terminate-3.js`, ... (+65) |
 | node:http2 is a stub in WebAssembly runtime | 59 | `parallel/test-http2-compat-serverresponse-end.js#block_00_block_00`, `parallel/test-http2-compat-serverresponse-end.js#block_01_block_01`, `parallel/test-http2-compat-serverresponse-end.js#block_02_block_02`, ... (+56) |
-| requires child_process which is not available in WASM | 49 | `parallel/test-child-process-advanced-serialization-largebuffer.js`, `parallel/test-child-process-advanced-serialization-splitted-length-field.js`, `parallel/test-child-process-advanced-serialization.js`, ... (+46) |
+| requires child_process which is not available in WASM | 48 | `parallel/test-child-process-advanced-serialization-largebuffer.js`, `parallel/test-child-process-advanced-serialization-splitted-length-field.js`, `parallel/test-child-process-advanced-serialization.js`, ... (+45) |
 | worker_threads is not supported in WASM | 47 | `parallel/test-worker-broadcastchannel-wpt.js#block_00_block_00`, `parallel/test-worker-broadcastchannel-wpt.js#block_01_block_01`, `parallel/test-worker-broadcastchannel-wpt.js#block_02_block_02`, ... (+44) |
-| REPL requires interactive terminal, not available in WASM | 44 | `parallel/test-repl-clear-immediate-crash.js`, `parallel/test-repl-cli-eval.js`, `parallel/test-repl-colors.js`, ... (+41) |
+| REPL requires interactive terminal, not available in WASM | 39 | `parallel/test-repl-clear-immediate-crash.js`, `parallel/test-repl-cli-eval.js`, `parallel/test-repl-colors.js`, ... (+36) |
 | requires https.createServer/TLS server behavior, unsupported by WASI transport | 32 | `parallel/test-https-byteswritten.js`, `parallel/test-https-client-checkServerIdentity.js`, `parallel/test-https-client-get-url.js`, ... (+29) |
-| Node.js SEA packaging, not available in WASM | 28 | `parallel/test-single-executable-blob-config-errors.js#block_00_block_00`, `parallel/test-single-executable-blob-config-errors.js#block_01_block_01`, `parallel/test-single-executable-blob-config-errors.js#block_02_block_02`, ... (+25) |
-| repl is not supported in WASM | 21 | `parallel/test-repl-autolibs.js`, `parallel/test-repl-domain.js`, `parallel/test-repl-editor.js`, ... (+18) |
+| repl is not supported in WASM | 22 | `parallel/test-repl-autolibs.js`, `parallel/test-repl-domain.js`, `parallel/test-repl-editor.js`, ... (+19) |
 | inherited: requires child_process which is not available in WASM | 20 | `parallel/test-child-process-constructor.js#block_00_block_00`, `parallel/test-child-process-constructor.js#block_01_block_01`, `parallel/test-child-process-constructor.js#block_02_block_02`, ... (+17) |
-| tls is not supported in WebAssembly environment | 16 | `parallel/test-double-tls-client.js`, `parallel/test-double-tls-server.js`, `parallel/test-gc-tls-external-memory.js`, ... (+13) |
 | http2 is not supported in WebAssembly environment | 15 | `parallel/test-h2-large-header-cause-client-to-hangup.js`, `parallel/test-h2leak-destroy-session-on-socket-ended.js`, `parallel/test-http2-alpn.js#block_00_block_00`, ... (+12) |
 | requires TLS-enabled HTTP/2 server (createSecureServer), unsupported in WASI runtime | 15 | `parallel/test-http2-https-fallback-http-server-options.js`, `parallel/test-http2-https-fallback.js#block_00_http_2_http_1_1_server`, `parallel/test-http2-https-fallback.js#block_01_http_2_only_server`, ... (+12) |
-| V8 profiling, not available in WASM | 12 | `sequential/test-cpu-prof-default.js`, `sequential/test-cpu-prof-dir-absolute.js`, `sequential/test-cpu-prof-dir-and-name.js`, ... (+9) |
+| tls is not supported in WebAssembly environment | 15 | `parallel/test-double-tls-client.js`, `parallel/test-double-tls-server.js`, `parallel/test-gc-tls-external-memory.js`, ... (+12) |
+| V8 profiling, not available in WASM | 13 | `sequential/test-cpu-prof-default.js`, `sequential/test-cpu-prof-dir-absolute.js`, `sequential/test-cpu-prof-dir-and-name.js`, ... (+10) |
 | requires spawning a real Node.js CLI process with `--test` | 11 | `parallel/test-runner-cli.js#block_00_block_00`, `parallel/test-runner-cli.js#block_01_block_01`, `parallel/test-runner-cli.js#block_02_block_02`, ... (+8) |
 | inspector/heap profiler is not available in WASM | 10 | `parallel/test-heap-prof-basic.js`, `parallel/test-heap-prof-dir-absolute.js`, `parallel/test-heap-prof-dir-name.js`, ... (+7) |
 | requires --abort-on-uncaught-exception child-process abort behavior | 10 | `parallel/test-domain-no-error-handler-abort-on-uncaught-0.js`, `parallel/test-domain-no-error-handler-abort-on-uncaught-1.js`, `parallel/test-domain-no-error-handler-abort-on-uncaught-2.js`, ... (+7) |
@@ -1359,6 +1813,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | wasi:http does not support HTTP Upgrade/101 socket takeover for node:http clients | 5 | `parallel/test-http-upgrade-advertise.js`, `parallel/test-http-upgrade-agent.js`, `parallel/test-http-upgrade-binary.js`, ... (+2) |
 | inherited: Windows UNC path behavior is not applicable to the WASI runtime | 4 | `parallel/test-permission-fs-windows-path.js#block_00_block_00`, `parallel/test-permission-fs-windows-path.js#block_01_block_01`, `parallel/test-permission-fs-windows-path.js#block_02_block_02`, ... (+1) |
 | inherited: requires worker_threads.BroadcastChannel, unavailable without threads in WASM | 4 | `parallel/test-broadcastchannel-custom-inspect.js#block_00_block_00`, `parallel/test-broadcastchannel-custom-inspect.js#block_01_block_01`, `parallel/test-broadcastchannel-custom-inspect.js#block_02_block_02`, ... (+1) |
+| requires >32-bit buffer index range behavior unavailable in wasm32 | 4 | `parallel/test-buffer-tostring-range.js#block_00_test_hex_base64_base64url_partial_range_encoding_exercises_v`, `parallel/test-buffer-tostring-range.js#block_01_block_01`, `parallel/test-buffer-tostring-range.js#block_02_block_02`, ... (+1) |
 | requires http.request({ createConnection }) to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http | 4 | `parallel/test-http-insecure-parser-per-stream.js#block_00_test_1_the_server_sends_an_invalid_header`, `parallel/test-http-insecure-parser-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`, `parallel/test-http-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`, ... (+1) |
 | requires https.request({ createConnection }) with an arbitrary Duplex transport; outbound requests always use wasi:http | 4 | `parallel/test-https-insecure-parse-per-stream.js#block_00_test_1_the_server_sends_an_invalid_header`, `parallel/test-https-insecure-parse-per-stream.js#block_01_test_2_the_same_as_test_1_except_without_the_option_to_make_`, `parallel/test-https-max-header-size-per-stream.js#block_00_test_1_the_server_sends_larger_headers_than_what_would_other`, ... (+1) |
 | Requires real Worker execution; constructing an inert Worker is not supported | 3 | `parallel/test-trace-events-api-worker-disabled.js`, `parallel/test-trace-events-worker-metadata-with-name.js`, `parallel/test-trace-events-worker-metadata.js` |
@@ -1413,7 +1868,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | depends on real worker_threads exit semantics which require a separate JS context (not available in single-threaded WASM) | 1 | `parallel/test-worker-cleanexit-with-moduleload.js` |
 | depends on real worker_threads exit-event behavior across a separate JS context, which is not available in single-threaded WASM | 1 | `parallel/test-worker-on-process-exit.js` |
 | depends on real worker_threads terminate() interrupting an in-flight DNS query, which is not available in single-threaded WASM | 1 | `parallel/test-worker-dns-terminate-during-query.js` |
-| depends on worker_threads-based event loop utilization behavior | 1 | `parallel/test-performance-eventlooputil.js` |
 | host signal delivery and SIGINT interruption semantics are not available in WASI | 1 | `parallel/test-sigint-infinite-loop.js` |
 | http2 is not implemented | 1 | `parallel/test-http2-compat-client-upload-reject.js` |
 | https.createServer (TLS server) is not supported in WebAssembly environment | 1 | `sequential/test-https-connect-localport.js` |
@@ -1424,10 +1878,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | process.kill signal delivery is not supported in WASI | 1 | `parallel/test-signal-args.js` |
 | process.kill signal handling is not supported in WASI | 1 | `parallel/test-signal-handler.js` |
 | requires >32-bit address space/large allocations unavailable in wasm32 | 1 | `parallel/test-fs-write-buffer-large.js` |
-| requires >32-bit buffer index range behavior unavailable in wasm32 | 1 | `parallel/test-buffer-tostring-range.js` |
 | requires Agent.createConnection to create and configure a raw client socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-agent-keepalive-delay.js` |
 | requires Agent.createConnection to create and expose a raw client socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-agent-abort-controller.js` |
-| requires Atomics.wait tracing across worker threads | 1 | `parallel/test-trace-atomics-wait.js` |
 | requires Atomics/SharedArrayBuffer support, unavailable without threads in WASM | 1 | `parallel/test-atomics-wake.js` |
 | requires FIPS-enabled OpenSSL build | 1 | `parallel/test-dsa-fips-invalid-key.js` |
 | requires HTTP CONNECT tunnel socket data forwarding; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-connect.js` |
@@ -1436,7 +1888,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires HTTP Upgrade socket takeover plus tls.TLSSocket, unavailable in WASI | 1 | `parallel/test-http-upgrade-reconsume-stream.js` |
 | requires HTTP/0.9 raw TCP responses (no headers), which wasi:http cannot represent | 1 | `parallel/test-http-response-no-headers.js` |
 | requires HTTPS server-side SNI behavior, unsupported by WASI transport | 1 | `parallel/test-https-agent-sni.js` |
-| requires Linux abstract UNIX socket tracing | 1 | `parallel/test-trace-events-net-abstract-socket.js` |
 | requires Linux strace syscall tracing | 1 | `parallel/test-strace-openat-openssl.js` |
 | requires POSIX RLIMIT_FSIZE/SIGXFSZ behavior via /bin/sh ulimit | 1 | `parallel/test-fs-write-sigxfsz.js` |
 | requires TLS keylog/server socket behavior, unsupported by WASI transport | 1 | `parallel/test-https-agent-keylog.js` |
@@ -1469,11 +1920,10 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires custom Agent.createConnection to parse a response from an arbitrary Duplex; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-readable.js` |
 | requires custom Agent.createConnection to surface errors from a raw socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort3.js#block_01_block_01` |
 | requires execSync/ps subprocess behavior not available in WASM | 1 | `parallel/test-setproctitle.js` |
-| requires external OpenSSL CLI via child_process.exec | 1 | `parallel/test-crypto-sign-verify.js#block_13_early_if_no_openssl_binary_is_found` |
 | requires external shell pipeline and cat subprocess via child_process | 1 | `parallel/test-http-chunk-problem.js` |
 | requires external shell pipeline tooling (e.g. head), unavailable in WASM | 1 | `parallel/test-pipe-head.js` |
 | requires external touch/date commands via child_process.spawnSync | 1 | `parallel/test-fs-utimes-y2K38.js` |
-| requires full-duplex HTTP request/response streaming semantics not provided by wasi:http | 1 | `parallel/test-stream-pipeline.js#block_08_block_08` |
+| requires full-duplex HTTP request/response streaming semantics not provided by wasi:http | 1 | `parallel/test-stream-pipeline.js#block_09_block_09` |
 | requires http.get({ createConnection }) to create and abort a raw node:net socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-client-abort-no-agent.js` |
 | requires http.get({ createConnection }) to redirect requests through a custom node:net socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-host-header-ipv6-fail.js` |
 | requires http.get({ createConnection }) to replace the client transport with a raw socket; node:http outbound requests always use wasi:http | 1 | `parallel/test-http-createConnection.js` |
@@ -1485,7 +1935,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires https.createServer not supported | 1 | `parallel/test-http-request-agent.js` |
 | requires https.createServer/TLS server support, unavailable in WASI runtime | 1 | `parallel/test-http-url.parse-https.request.js` |
 | requires https.createServer/TLSSocket server support, unavailable in WebAssembly | 1 | `parallel/test-async-wrap-tlssocket-asyncreset.js` |
-| requires libuv threadpool trace categories | 1 | `parallel/test-trace-events-threadpool.js` |
 | requires macOS App Sandbox and codesign tooling outside WASI | 1 | `parallel/test-macos-app-sandbox.js` |
 | requires raw TLS handshake/protocol-mismatch behavior (HTTPS client to HTTP server), unavailable with wasi:http | 1 | `parallel/test-https-connecting-to-http.js` |
 | requires real child_process for fork/event-loop-exit semantics | 1 | `parallel/test-pipe-unref.js` |
@@ -1509,7 +1958,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires worker_threads stdout/execArgv behavior not available in WASM | 1 | `parallel/test-process-exec-argv.js` |
 | requires worker_threads to flood invalid frames; worker_threads is unavailable in WASM | 1 | `parallel/test-http2-reset-flood.js` |
 | requires worker_threads to interrupt generatePrime; worker_threads is unavailable in WASM | 1 | `parallel/test-crypto-prime.js#block_09_block_09` |
-| requires worker_threads trace propagation | 1 | `parallel/test-trace-events-async-hooks-worker.js` |
 | requires worker_threads, which are unavailable in WASM | 1 | `sequential/test-vm-break-on-sigint.js` |
 | requires worker_threads/native addon process isolation semantics, which are not available in single-threaded WASM | 1 | `es-module/test-esm-no-addons.mjs` |
 | sending host process signals is not supported in WASI | 1 | `parallel/test-process-kill-null.js` |
@@ -1539,17 +1987,17 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.measureMemory depends on V8 heap introspection APIs unavailable in QuickJS | 6 | `parallel/test-vm-measure-memory-lazy.js#block_00_or_otherwise_these_may_not_resolve`, `parallel/test-vm-measure-memory-lazy.js#block_01_block_01`, `parallel/test-vm-measure-memory-lazy.js#block_02_block_02`, ... (+3) |
 | inherited: v8.queryObjects is a V8-specific heap introspection API unavailable in QuickJS | 5 | `parallel/test-v8-query-objects.js#block_00_block_00`, `parallel/test-v8-query-objects.js#block_01_block_01`, `parallel/test-v8-query-objects.js#block_02_block_02`, ... (+2) |
 | requires V8 --expose_externalize_string globals | 5 | `parallel/test-fs-write.js#block_00_block_00`, `parallel/test-fs-write.js#block_01_block_01`, `parallel/test-fs-write.js#block_02_block_02`, ... (+2) |
+| v8.writeHeapSnapshot/getHeapSnapshot are V8-specific APIs and unavailable in QuickJS | 5 | `sequential/test-heapdump.js#block_00_block_00`, `sequential/test-heapdump.js#block_01_block_01`, `sequential/test-heapdump.js#block_02_block_02`, ... (+2) |
 | v8.GCProfiler is V8-specific and unavailable in QuickJS | 4 | `parallel/test-v8-collect-gc-profile-exit-before-stop.js#block_00_test_if_it_makes_the_process_crash`, `parallel/test-v8-collect-gc-profile-exit-before-stop.js#block_01_block_01`, `parallel/test-v8-collect-gc-profile-in-worker.js`, ... (+1) |
-| v8.writeHeapSnapshot/getHeapSnapshot are V8-specific APIs and unavailable in QuickJS | 4 | `sequential/test-heapdump.js#block_00_block_00`, `sequential/test-heapdump.js#block_01_block_01`, `sequential/test-heapdump.js#block_02_block_02`, ... (+1) |
 | QuickJS does not mirror V8's legacy RegExp static properties initialization | 3 | `parallel/test-startup-empty-regexp-statics.js#block_00_block_00`, `parallel/test-startup-empty-regexp-statics.js#block_01_block_01`, `parallel/test-startup-empty-regexp-statics.js#block_02_block_02` |
 | targets V8 external string internals/limits that QuickJS does not replicate | 3 | `parallel/test-stringbytes-external.js#block_00_block_00`, `parallel/test-stringbytes-external.js#block_01_block_01`, `parallel/test-stringbytes-external.js#block_02_https_github_com_nodejs_node_issues_1024` |
 | uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection | 3 | `es-module/test-vm-compile-function-leak.js`, `es-module/test-vm-contextified-script-leak.js`, `es-module/test-vm-synthetic-module-leak.js` |
 | --heapsnapshot-signal depends on V8 heap snapshot support, unavailable in QuickJS | 2 | `sequential/test-heapdump-flag-custom-dir.js`, `sequential/test-heapdump-flag.js` |
-| --use-largepages is a V8 startup flag not applicable to QuickJS/WASM | 2 | `parallel/test-startup-large-pages.js#block_00_block_00`, `parallel/test-startup-large-pages.js#block_01_block_01` |
 | uses common/gc checkIfCollectableByCounting, which depends on V8-only v8.queryObjects | 2 | `es-module/test-vm-source-text-module-leak.js`, `parallel/test-diagnostics-channel-memory-leak.js` |
 | v8.getHeapSnapshot is V8-specific and unavailable in QuickJS | 2 | `parallel/test-heapdump-async-hooks-init-promise.js`, `parallel/test-v8-getheapsnapshot-twice.js` |
 | v8.serialize/deserialize are V8-specific and unavailable in QuickJS | 2 | `parallel/test-v8-deserialize-buffer.js`, `parallel/test-v8-serialize-leak.js` |
 | v8.writeHeapSnapshot is a V8-specific API and is unavailable in QuickJS | 2 | `parallel/test-permission-fs-write-v8.js#block_00_block_00`, `parallel/test-permission-fs-write-v8.js#block_01_block_01` |
+| --use-largepages is a V8 startup flag not applicable to QuickJS/WASM | 1 | `parallel/test-startup-large-pages.js` |
 | GC observability used by common/gc.onGC is not available in the QuickJS/WASM runtime | 1 | `parallel/test-net-connect-memleak.js` |
 | QuickJS await/promise-hook semantics differ from V8, so AsyncLocalStorage runStores context is lost across await boundaries | 1 | `parallel/test-diagnostics-channel-tracing-channel-promise-run-stores.js` |
 | QuickJS private-field TypeError message text differs from V8 | 1 | `parallel/test-runner-mocking.js#test_21_mocks_a_constructor` |
@@ -1570,29 +2018,33 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-createcacheddata.js` |
 | vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host | 1 | `parallel/test-vm-module-referrer-realm.mjs` |
 
-### unevaluated (0)
-
-_No entries._
-
-### Node.js internals (1101)
+### unevaluated (3842)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
-| requires --expose-internals and internal/webstreams/readablestream | 82 | `parallel/test-whatwg-readablestream.js#block_00_block_00`, `parallel/test-whatwg-readablestream.js#block_01_block_01`, `parallel/test-whatwg-readablestream.js#block_02_block_02`, ... (+79) |
+| newly discovered, not yet evaluated | 3639 | `es-module/test-cjs-defer-static-import-eval.mjs`, `es-module/test-defer-import-builtin-module.mjs`, `es-module/test-defer-import-eval-with-tla.mjs`, ... (+3636) |
+| newly discovered subtest, not yet evaluated | 203 | `es-module/test-esm-json.mjs#test_01_should_load_json_with_import_calls`, `parallel/test-assert-deep.js#test_01_loose_deepequal`, `parallel/test-assert-deep.js#test_08_deepstrictequal_handles_shared_expected_array_elements_after`, ... (+200) |
+
+### Node.js internals (1180)
+
+| Reason | Count | Example entries |
+|--------|-------|-----------------|
+| requires --expose-internals and internal/webstreams/readablestream | 83 | `parallel/test-whatwg-readablestream.js#block_00_block_00`, `parallel/test-whatwg-readablestream.js#block_01_block_01`, `parallel/test-whatwg-readablestream.js#block_02_block_02`, ... (+80) |
 | requires internal/util/inspect via --expose-internals | 78 | `parallel/test-readline-interface.js#block_00_block_00`, `parallel/test-readline-interface.js#block_01_block_01`, `parallel/test-readline-interface.js#block_02_block_02`, ... (+75) |
+| requires --expose-internals plus internal/test/binding internalBinding('js_stream'/'util') | 61 | `parallel/test-util-inspect.js#block_00_special_function_inspection`, `parallel/test-util-inspect.js#block_01_block_01`, `parallel/test-util-inspect.js#block_02_block_02`, ... (+58) |
 | requires --expose-internals and internal/webstreams/adapters | 60 | `parallel/test-whatwg-webstreams-adapters-streambase.js#block_00_block_00`, `parallel/test-whatwg-webstreams-adapters-streambase.js#block_01_block_01`, `parallel/test-whatwg-webstreams-adapters-streambase.js#block_02_block_02`, ... (+57) |
-| inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs | 57 | `parallel/test-eventtarget.js#block_00_first_test_event`, `parallel/test-eventtarget.js#block_01_block_01`, `parallel/test-eventtarget.js#block_02_block_02`, ... (+54) |
-| requires --expose-internals plus internal/test/binding internalBinding('js_stream'/'util') | 43 | `parallel/test-util-inspect.js#block_00_special_function_inspection`, `parallel/test-util-inspect.js#block_01_block_01`, `parallel/test-util-inspect.js#block_02_block_02`, ... (+40) |
+| inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs | 53 | `parallel/test-eventtarget.js#block_00_first_test_event`, `parallel/test-eventtarget.js#block_01_block_01`, `parallel/test-eventtarget.js#block_02_block_02`, ... (+50) |
+| missing reason | 46 | `parallel/test-cli-node-options-disallowed.js`, `parallel/test-crypto-key-objects-to-crypto-key.js`, `parallel/test-fs-syncwritestream.js`, ... (+43) |
 | uses --expose-internals with internal/test/binding (internalBinding('uv')) | 32 | `parallel/test-fs-copyfile.js`, `parallel/test-fs-error-messages.js#block_00_stat`, `parallel/test-fs-error-messages.js#block_01_lstat`, ... (+29) |
+| requires internal/test/binding and internalBinding('js_stream') | 28 | `parallel/test-util-types.js#block_00_block_00`, `parallel/test-util-types.js#block_01_block_01`, `parallel/test-util-types.js#block_02_block_02`, ... (+25) |
+| requires --expose-internals and internal/crypto/webidl | 24 | `parallel/test-webcrypto-webidl.js#block_00_required_arguments_length`, `parallel/test-webcrypto-webidl.js#block_01_boolean`, `parallel/test-webcrypto-webidl.js#block_02_https_webidl_spec_whatwg_org_abstract_opdef_converttoint`, ... (+21) |
 | validates Node repository ESLint tooling/rules under tools/, not runtime API | 24 | `parallel/test-eslint-alphabetize-errors.js`, `parallel/test-eslint-alphabetize-primordials.js`, `parallel/test-eslint-async-iife-no-unused-result.js`, ... (+21) |
 | inherited: requires --expose-internals and internal/event_target | 23 | `parallel/test-nodeeventtarget.js#block_00_block_00`, `parallel/test-nodeeventtarget.js#block_01_block_01`, `parallel/test-nodeeventtarget.js#block_02_block_02`, ... (+20) |
-| missing reason | 21 | `parallel/test-cli-node-options-disallowed.js`, `parallel/test-crypto-prime.js#block_00_block_00`, `parallel/test-crypto-prime.js#block_01_block_01`, ... (+18) |
 | depends on internal/util.customPromisifyArgs symbol | 19 | `parallel/test-util-promisify.js#block_00_block_00`, `parallel/test-util-promisify.js#block_01_block_01`, `parallel/test-util-promisify.js#block_02_block_02`, ... (+16) |
 | inherited: requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties | 19 | `parallel/test-events-customevent.js#block_00_block_00`, `parallel/test-events-customevent.js#block_02_block_02`, `parallel/test-events-customevent.js#block_03_block_03`, ... (+16) |
-| requires --expose-internals and internal/crypto/webidl | 19 | `parallel/test-webcrypto-webidl.js#block_00_required_arguments_length`, `parallel/test-webcrypto-webidl.js#block_01_boolean`, `parallel/test-webcrypto-webidl.js#block_02_https_webidl_spec_whatwg_org_abstract_opdef_converttoint`, ... (+16) |
 | requires internalBinding('async_wrap') | 18 | `sequential/test-async-wrap-getasyncid.js#block_00_make_sure_that_all_providers_are_tested`, `sequential/test-async-wrap-getasyncid.js#block_01_block_01`, `sequential/test-async-wrap-getasyncid.js#block_02_block_02`, ... (+15) |
+| requires --expose-internals and internal/worker/js_transferable | 16 | `parallel/test-whatwg-transformstream.js#block_00_block_00`, `parallel/test-whatwg-transformstream.js#block_01_block_01`, `parallel/test-whatwg-transformstream.js#block_02_block_02`, ... (+13) |
 | requires --expose-internals and internal/event_target | 15 | `parallel/test-events-on-async-iterator.js`, `parallel/test-eventtarget-brandcheck.js`, `parallel/test-global-customevent.js`, ... (+12) |
-| requires --expose-internals and internal/worker/js_transferable | 15 | `parallel/test-whatwg-transformstream.js#block_00_block_00`, `parallel/test-whatwg-transformstream.js#block_01_block_01`, `parallel/test-whatwg-transformstream.js#block_02_block_02`, ... (+12) |
 | uses --expose-internals plus internal/errors and internal/util/inspect | 15 | `parallel/test-errors-systemerror.js#block_00_block_00`, `parallel/test-errors-systemerror.js#block_01_block_01`, `parallel/test-errors-systemerror.js#block_02_block_02`, ... (+12) |
 | inherited: requires --expose-internals and internal/validators | 13 | `parallel/test-internal-validators-validateoneof.js#block_00_block_00`, `parallel/test-internal-validators-validateoneof.js#block_01_block_01`, `parallel/test-internal-validators-validateoneof.js#block_02_block_02`, ... (+10) |
 | requires --expose-internals and internal/webstreams/* modules | 13 | `parallel/test-whatwg-webstreams-transfer.js#block_00_block_00`, `parallel/test-whatwg-webstreams-transfer.js#block_01_block_01`, `parallel/test-whatwg-webstreams-transfer.js#block_02_block_02`, ... (+10) |
@@ -1603,54 +2055,52 @@ _No entries._
 | requires --expose-internals and internal/webstreams/util (kState) | 11 | `parallel/test-whatwg-readablebytestream.js#block_00_block_00`, `parallel/test-whatwg-readablebytestream.js#block_01_block_01`, `parallel/test-whatwg-readablebytestream.js#block_02_block_02`, ... (+8) |
 | uses --expose-internals and internal/errors/internal/validators | 11 | `parallel/test-errors-hide-stack-frames.js#block_00_block_00`, `parallel/test-errors-hide-stack-frames.js#block_01_block_01`, `parallel/test-errors-hide-stack-frames.js#block_02_block_02`, ... (+8) |
 | inherited: requires --expose-internals and internal/socket_list | 10 | `parallel/test-internal-socket-list-receive.js#block_00_verify_that_the_message_won_t_be_sent_when_child_is_not_conn`, `parallel/test-internal-socket-list-receive.js#block_01_verify_that_a_node_socket_all_closed_message_will_be_sent`, `parallel/test-internal-socket-list-receive.js#block_02_verify_that_a_node_socket_count_message_will_be_sent`, ... (+7) |
-| inherited: requires --expose-internals and internal/crypto/webidl | 9 | `parallel/test-webcrypto-webidl.js#block_19_hmackeygenparams_hmacimportparams`, `parallel/test-webcrypto-webidl.js#block_20_aeskeygenparams_aesderivedkeyparams`, `parallel/test-webcrypto-webidl.js#block_21_hkdfparams`, ... (+6) |
+| requires --expose-internals, inspect integration, and internal EventTarget APIs | 10 | `parallel/test-eventtarget.js#block_13_block_13`, `parallel/test-eventtarget.js#block_14_block_14`, `parallel/test-eventtarget.js#block_15_block_15`, ... (+7) |
 | requires internal/http2/util and internalBinding('http2') constants | 9 | `parallel/test-http2-util-headers-list.js#block_00_block_00`, `parallel/test-http2-util-headers-list.js#block_01_block_01`, `parallel/test-http2-util-headers-list.js#block_02_block_02`, ... (+6) |
 | requires internal/http2/util kSocket and internal HTTP2 state | 9 | `parallel/test-http2-client-destroy.js#block_00_block_00`, `parallel/test-http2-client-destroy.js#block_01_test_destroy_before_client_operations`, `parallel/test-http2-client-destroy.js#block_02_test_destroy_before_goaway`, ... (+6) |
 | inherited: requires --expose-internals and internal/fs/sync_write_stream | 8 | `parallel/test-internal-fs-syncwritestream.js#block_00_verify_constructing_the_instance_with_default_options`, `parallel/test-internal-fs-syncwritestream.js#block_01_verify_constructing_the_instance_with_specified_options`, `parallel/test-internal-fs-syncwritestream.js#block_02_verify_that_the_file_will_be_written_synchronously`, ... (+5) |
 | inherited: uses --expose-internals and internal/test/binding primordials | 8 | `parallel/test-primordials-apply.js#block_00_block_00`, `parallel/test-primordials-apply.js#block_01_block_01`, `parallel/test-primordials-apply.js#block_02_block_02`, ... (+5) |
-| requires internal/crypto/util | 8 | `parallel/test-webcrypto-keygen.js#block_00_test_invalid_algorithms`, `parallel/test-webcrypto-keygen.js#block_01_test_bad_usages`, `parallel/test-webcrypto-keygen.js#block_02_test_rsa_key_generation`, ... (+5) |
+| requires internal/crypto/util | 8 | `parallel/test-webcrypto-keygen.js#block_00_test_invalid_algorithms`, `parallel/test-webcrypto-keygen.js#block_01_test_bad_usages`, `parallel/test-webcrypto-keygen.js#block_03_test_rsa_key_generation`, ... (+5) |
 | uses --expose-internals and internal/errors | 8 | `parallel/test-error-aggregateTwoErrors.js#block_00_block_00`, `parallel/test-error-aggregateTwoErrors.js#block_01_block_01`, `parallel/test-error-aggregateTwoErrors.js#block_02_block_02`, ... (+5) |
 | uses --expose-internals and require('internal/repl') | 8 | `parallel/test-repl-autocomplete.js`, `parallel/test-repl-envvars.js`, `parallel/test-repl-history-navigation.js`, ... (+5) |
+| inherited: requires --expose-internals and internal/crypto/webidl | 7 | `parallel/test-webcrypto-webidl.js#block_20_hmackeygenparams_hmacimportparams`, `parallel/test-webcrypto-webidl.js#block_21_aeskeygenparams_aesderivedkeyparams`, `parallel/test-webcrypto-webidl.js#block_22_hkdfparams`, ... (+4) |
 | requires --expose-internals and internal/js_stream_socket | 7 | `parallel/test-wrap-js-stream-destroy.js#block_00_close_events_and_vice_versa`, `parallel/test-wrap-js-stream-destroy.js#block_01_destroy_the_streamwrap_and_test_again`, `parallel/test-wrap-js-stream-destroy.js#block_02_destroy_the_client_socket_and_test_again`, ... (+4) |
+| requires --expose-internals and internal/test_runner/snapshot | 7 | `parallel/test-runner-snapshot-tests.js#test_00_snapshotmanager`, `parallel/test-runner-snapshot-tests.js#test_01_t_assert_snapshot_validation`, `parallel/test-runner-snapshot-tests.js#test_02_setresolvesnapshotpath`, ... (+4) |
 | requires --expose-internals and internalBinding('cares_wrap') | 7 | `parallel/test-dns-default-order-ipv4.js`, `parallel/test-dns-default-order-ipv6.js`, `parallel/test-dns-default-order-verbatim.js`, ... (+4) |
 | requires internal/event_target, ERR_INVALID_ARG_TYPE validation, returnValue/cancelBubble/srcElement properties | 7 | `parallel/test-events-customevent.js#block_01_block_01`, `parallel/test-events-customevent.js#block_13_block_13`, `parallel/test-events-customevent.js#block_14_block_14`, ... (+4) |
-| requires internal/http kOutHeaders symbol | 7 | `parallel/test-http-outgoing-internal-headers.js#block_00_block_00`, `parallel/test-http-outgoing-internal-headers.js#block_01_block_01`, `parallel/test-http-outgoing-internal-headers.js#block_02_block_02`, ... (+4) |
 | uses --expose-internals and require('internal/http2/util') | 7 | `parallel/test-http2-client-socket-destroy.js`, `parallel/test-http2-create-client-secure-session.js`, `parallel/test-http2-server-http1-client.js`, ... (+4) |
+| uses internal/test/binding UV constants and watcher._handle internals | 7 | `parallel/test-fs-watch-enoent.js#block_00_block_00`, `parallel/test-fs-watch-enoent.js#block_01_block_01`, `parallel/test-fs-watch-enoent.js#block_02_block_02`, ... (+4) |
 | inherited: uses --expose-internals, internal/test/binding, and internal/dgram handle internals | 6 | `parallel/test-handle-wrap-hasref.js#block_00_child_process`, `parallel/test-handle-wrap-hasref.js#block_01_dgram_ipv4`, `parallel/test-handle-wrap-hasref.js#block_02_dgram_ipv6`, ... (+3) |
-| requires --expose-internals and internal/test_runner/snapshot | 6 | `parallel/test-runner-snapshot-tests.js#test_00_snapshotmanager`, `parallel/test-runner-snapshot-tests.js#test_01_t_assert_snapshot_validation`, `parallel/test-runner-snapshot-tests.js#test_02_setresolvesnapshotpath`, ... (+3) |
+| requires --expose-internals, internal/fs/utils, and internal/test/binding constants.fs | 6 | `parallel/test-fs-utils-get-dirents.js#block_04_block_04`, `parallel/test-fs-utils-get-dirents.js#block_05_getdirent`, `parallel/test-fs-utils-get-dirents.js#block_06_block_06`, ... (+3) |
 | requires internal/timers | 6 | `parallel/test-timers-refresh.js#block_00_unref_d_timer`, `parallel/test-timers-refresh.js#block_01_should_throw_with_non_functions`, `parallel/test-timers-refresh.js#block_02_unref_pooled_timer`, ... (+3) |
 | uses --expose-internals and internal/errors SystemError | 6 | `parallel/test-errors-systemerror-frozen-intrinsics.js`, `parallel/test-errors-systemerror-stackTraceLimit-custom-setter.js`, `parallel/test-errors-systemerror-stackTraceLimit-deleted-and-Error-sealed.js`, ... (+3) |
 | directly tests internal/fs/utils validateOffsetLength* helpers | 5 | `parallel/test-fs-util-validateoffsetlength.js#block_00_block_00`, `parallel/test-fs-util-validateoffsetlength.js#block_01_block_01`, `parallel/test-fs-util-validateoffsetlength.js#block_02_block_02`, ... (+2) |
+| imports internal/fs/utils validateRmOptionsSync | 5 | `parallel/test-fs-rm.js#block_00_test_the_asynchronous_version`, `parallel/test-fs-rm.js#block_01_test_the_synchronous_version`, `parallel/test-fs-rm.js#block_02_test_input_validation`, ... (+2) |
 | imports internal/modules/esm/{loader,module_map,module_job,create_dynamic_module} | 5 | `es-module/test-esm-loader-modulemap.js#block_00_are_stored_in_the_map`, `es-module/test-esm-loader-modulemap.js#block_01_values_as_url_argument`, `es-module/test-esm-loader-modulemap.js#block_02_values_or_the_kasserttype_symbol_as_type_argument`, ... (+2) |
-| requires --expose-internals and internal/util | 5 | `parallel/test-internal-util-assertCrypto.js`, `parallel/test-internal-util-classwrapper.js`, `parallel/test-internal-util-helpers.js`, ... (+2) |
-| requires --expose-internals, internal/fs/utils, and internal/test/binding constants.fs | 5 | `parallel/test-fs-utils-get-dirents.js#block_04_block_04`, `parallel/test-fs-utils-get-dirents.js#block_05_getdirent`, `parallel/test-fs-utils-get-dirents.js#block_06_block_06`, ... (+2) |
+| requires --expose-internals and internal/crypto/util | 5 | `parallel/test-webcrypto-util.js#block_00_operator_yields_a_negative_int32_for_inputs_like_0x80_0x00_0`, `parallel/test-webcrypto-util.js#block_01_block_01`, `parallel/test-webcrypto-util.js#block_02_refs_https_github_com_web_platform_tests_wpt_pull_57614_pull`, ... (+2) |
+| requires --expose-internals and internal/util | 5 | `parallel/test-internal-util-assertCrypto.js`, `parallel/test-internal-util-helpers.js#block_00_actual_errors`, `parallel/test-internal-util-helpers.js#block_01_block_01`, ... (+2) |
 | requires private _http_server.kConnectionsCheckingInterval internals | 5 | `parallel/test-http-server-async-dispose.js`, `parallel/test-http-server-clear-timer.js`, `parallel/test-http-server-close-destroy-timeout.js`, ... (+2) |
 | uses --expose-internals with internalBinding('http2') and internal/http2/util | 5 | `parallel/test-http2-client-onconnect-errors.js`, `parallel/test-http2-info-headers-errors.js`, `parallel/test-http2-respond-nghttperrors.js`, ... (+2) |
-| imports internal/fs/utils validateRmOptionsSync | 4 | `parallel/test-fs-rm.js#block_00_test_the_asynchronous_version`, `parallel/test-fs-rm.js#block_01_test_the_synchronous_version`, `parallel/test-fs-rm.js#block_02_test_input_validation`, ... (+1) |
-| imports internal/fs/utils validateRmdirOptions | 4 | `parallel/test-fs-rmdir-recursive.js#block_00_test_the_asynchronous_version`, `parallel/test-fs-rmdir-recursive.js#block_01_test_the_synchronous_version`, `parallel/test-fs-rmdir-recursive.js#block_02_test_input_validation`, ... (+1) |
 | inherited: requires --expose-internals and internal/priority_queue | 4 | `parallel/test-priority-queue.js#block_02_block_02`, `parallel/test-priority-queue.js#block_03_block_03`, `parallel/test-priority-queue.js#block_04_block_04`, ... (+1) |
 | requires --expose-internals and internal/util customInspectSymbol | 4 | `parallel/test-whatwg-encoding-custom-interop.js#block_00_test_textencoder`, `parallel/test-whatwg-encoding-custom-interop.js#block_01_block_01`, `parallel/test-whatwg-encoding-custom-interop.js#block_02_block_02`, ... (+1) |
-| requires --expose-internals, inspect integration, and internal EventTarget APIs | 4 | `parallel/test-eventtarget.js#block_13_block_13`, `parallel/test-eventtarget.js#block_14_block_14`, `parallel/test-eventtarget.js#block_15_block_15`, ... (+1) |
+| requires --expose-internals and internal/webidl | 4 | `parallel/test-internal-webidl-converttoint.js#block_00_block_00`, `parallel/test-internal-webidl-converttoint.js#block_01_block_01`, `parallel/test-internal-webidl-converttoint.js#block_02_block_02`, ... (+1) |
+| requires internal/http kOutHeaders symbol | 4 | `parallel/test-http-outgoing-renderHeaders.js#block_00_block_00`, `parallel/test-http-outgoing-renderHeaders.js#block_01_block_01`, `parallel/test-http-outgoing-renderHeaders.js#block_02_block_02`, ... (+1) |
 | requires internal/test/binding and internalBinding('uv') | 4 | `parallel/test-fs-access.js#block_00_block_00`, `parallel/test-fs-access.js#block_01_block_01`, `parallel/test-fs-access.js#block_02_block_02`, ... (+1) |
 | requires internal/util.sleep | 4 | `parallel/test-timers-nested.js`, `parallel/test-timers-next-tick.js`, `parallel/test-util-sleep.js`, ... (+1) |
 | uses --expose-internals and internal/dgram kStateSymbol | 4 | `parallel/test-dgram-close-during-bind.js`, `parallel/test-dgram-close.js`, `parallel/test-dgram-recv-error.js`, ... (+1) |
 | uses --expose-internals with internal/errors and internal/test/binding | 4 | `parallel/test-buffer-fill.js#block_00_block_00`, `parallel/test-buffer-fill.js#block_01_block_01`, `parallel/test-buffer-fill.js#block_02_symbol_toprimitive`, ... (+1) |
-| Asserts internal webstreams kState | 3 | `parallel/test-blob.js#block_28_statement_28`, `parallel/test-blob.js#block_30_statement_30`, `parallel/test-blob.js#block_31_statement_31` |
+| Asserts internal webstreams kState | 3 | `parallel/test-blob.js#block_29_statement_29`, `parallel/test-blob.js#block_31_statement_31`, `parallel/test-blob.js#block_32_statement_32` |
 | directly tests internal/fs/utils getDirents with internal constants | 3 | `parallel/test-fs-utils-get-dirents.js#block_00_block_00`, `parallel/test-fs-utils-get-dirents.js#block_01_getdirents`, `parallel/test-fs-utils-get-dirents.js#block_02_block_02` |
-| explicitly tests private timers._unrefActive()/enroll()/unenroll() behavior | 3 | `parallel/test-timers-unref-active.js`, `parallel/test-timers-unref-remove-other-unref-timers-only-one-fires.js`, `parallel/test-timers-unref-remove-other-unref-timers.js` |
 | inherited: requires --expose-internals and internal/crypto/x509 | 3 | `parallel/test-crypto-x509.js#block_00_block_00`, `parallel/test-crypto-x509.js#block_01_block_01`, `parallel/test-crypto-x509.js#block_02_block_02` |
 | inherited: requires --expose-internals and internal/fixed_queue | 3 | `parallel/test-fixed-queue.js#block_00_block_00`, `parallel/test-fixed-queue.js#block_01_block_01`, `parallel/test-fixed-queue.js#block_02_block_02` |
-| inherited: requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo | 3 | `parallel/test-dns-lookup.js#block_00_block_00`, `parallel/test-dns-lookup.js#block_01_block_01`, `parallel/test-dns-lookup.js#block_02_block_02` |
+| inherited: requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo | 3 | `parallel/test-dns-lookup.js#block_00_block_00`, `parallel/test-dns-lookup.js#block_02_block_02`, `parallel/test-dns-lookup.js#block_03_block_03` |
 | inherited: uses --expose-internals with dgram._createSocketHandle and internal/test/binding | 3 | `parallel/test-dgram-create-socket-handle-fd.js#block_00_return_a_negative_number_if_the_existing_fd_is_invalid`, `parallel/test-dgram-create-socket-handle-fd.js#block_01_return_a_negative_number_if_the_type_of_fd_is_not_udp`, `parallel/test-dgram-create-socket-handle-fd.js#block_02_create_a_bound_handle` |
 | requires --expose-internals and internal/options | 3 | `parallel/test-options-binding.js`, `parallel/test-pending-deprecation.js`, `parallel/test-worker-cli-options.js` |
 | requires --expose-internals and node:internal/modules/esm/resolve | 3 | `es-module/test-cjs-legacyMainResolve-permission.js`, `es-module/test-cjs-legacyMainResolve.js`, `es-module/test-esm-resolve-type.mjs` |
-| requires internal/test/binding and internalBinding('js_stream') | 3 | `parallel/test-util-types.js#block_00_block_00`, `parallel/test-util-types.js#block_01_block_01`, `parallel/test-util-types.js#block_02_block_02` |
 | requires internal/test/binding internalBinding('tcp_wrap') | 3 | `parallel/test-tcp-wrap-connect.js`, `parallel/test-tcp-wrap-listen.js`, `parallel/test-tcp-wrap.js` |
 | uses --expose-internals and internal/errors AbortError | 3 | `parallel/test-errors-aborterror.js#block_00_block_00`, `parallel/test-errors-aborterror.js#block_01_block_01`, `parallel/test-errors-aborterror.js#block_02_block_02` |
-| uses --expose-internals and internalBinding('trace_events') | 3 | `parallel/test-trace-events-api.js`, `parallel/test-trace-events-category-used.js`, `parallel/test-trace-events-get-category-enabled-buffer.js` |
 | uses --expose-internals and internalBinding('uv') | 3 | `parallel/test-ttywrap-invalid-fd.js`, `parallel/test-uv-errmap.js`, `parallel/test-uv-errno.js` |
 | asserts private req._readableState and exact req/res close ordering | 2 | `parallel/test-http-req-res-close.js#block_00_after_res`, `parallel/test-http-req-res-close.js#block_01_req_should_emit_close_after_res` |
-| asserts private req.socket.parser.free lifecycle from Node internals | 2 | `parallel/test-http-server-connection-list-when-close.js#block_00_block_00`, `parallel/test-http-server-connection-list-when-close.js#block_01_block_01` |
 | checks Node source-tree release changelog files, not runtime API | 2 | `parallel/test-release-changelog.js#block_00_check_changelog_v_md`, `parallel/test-release-changelog.js#block_01_main_changelog_md_checks` |
 | depends on Node's internal JSTransferable protocol (messaging_transfer_symbol) | 2 | `parallel/test-worker-message-port-transfer-fake-js-transferable-internal.js`, `parallel/test-worker-message-port-transfer-fake-js-transferable.js` |
 | inherited: exercises non-public listen(handle/_handle/fd) paths via internal tcp/pipe bindings | 2 | `parallel/test-net-server-listen-handle.js#block_00_not_a_public_api_used_by_child_process`, `parallel/test-net-server-listen-handle.js#block_01_block_01` |
@@ -1662,33 +2112,37 @@ _No entries._
 | inherited: uses --expose-internals and internal/util customInspectSymbol | 2 | `parallel/test-compression-decompression-stream.js#test_00_decompressionstream_kinspect_method`, `parallel/test-compression-decompression-stream.js#test_01_compressionstream_kinspect_method` |
 | inherited: uses --expose-internals with internal/dgram and internal/test/binding | 2 | `parallel/test-dgram-bind-fd-error.js#block_00_throw_when_the_fd_is_occupied_according_to_https_github_com_`, `parallel/test-dgram-bind-fd-error.js#block_01_throw_when_the_type_of_fd_is_not_udp` |
 | patches internal/fs/promises FileHandle fd/close internals | 2 | `parallel/test-fs-promises-file-handle-aggregate-errors.js`, `parallel/test-fs-promises-file-handle-close-errors.js` |
+| requires --expose-internals and internal/crypto/x509 | 2 | `parallel/test-crypto-x509.js#block_03_block_03`, `parallel/test-crypto-x509.js#block_04_block_04` |
 | requires --expose-internals and internal/error_serdes | 2 | `sequential/test-error-serdes.js#block_00_block_00`, `sequential/test-error-serdes.js#block_01_block_01` |
+| requires --expose-internals and internal/event_target (kWeakHandler) | 2 | `parallel/test-abortcontroller-internal.js#test_00_a_weak_event_listener_should_not_prevent_gc`, `parallel/test-abortcontroller-internal.js#test_01_two_weak_listeners_with_the_same_retainer_should_both_run_on` |
+| requires --expose-internals and internal/navigator | 2 | `parallel/test-navigator.js#block_00_block_00`, `parallel/test-navigator.js#block_01_block_01` |
 | requires --expose-internals and internal/priority_queue | 2 | `parallel/test-priority-queue.js#block_00_block_00`, `parallel/test-priority-queue.js#block_01_block_01` |
 | requires --expose-internals and internal/timers | 2 | `parallel/test-child-process-http-socket-leak.js`, `parallel/test-tls-wrap-timeout.js` |
+| requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo | 2 | `parallel/test-dns-lookup-promises.js`, `parallel/test-dns-lookup.js#block_01_block_01` |
 | requires --expose-internals and require('internal/js_stream_socket') | 2 | `parallel/test-stream-wrap-encoding.js#block_00_block_00`, `parallel/test-stream-wrap-encoding.js#block_01_block_01` |
 | requires --expose-internals plus internal/js_stream_socket and internalBinding('stream_wrap') | 2 | `parallel/test-stream-wrap-drain.js`, `parallel/test-stream-wrap.js` |
 | requires internal _tls_common module | 2 | `parallel/test-tls-translate-peer-certificate.js#block_00_block_00`, `parallel/test-tls-translate-peer-certificate.js#block_01_block_01` |
 | requires internal/http2/util.updateOptionsBuffer and internalBinding('http2').optionsBuffer | 2 | `parallel/test-http2-util-update-options-buffer.js#block_00_block_00`, `parallel/test-http2-util-update-options-buffer.js#block_01_block_01` |
-| requires internal/quic/quic classes (non-public API) | 2 | `parallel/test-quic-internal-endpoint-listen-defaults.js`, `parallel/test-quic-internal-endpoint-options.js` |
 | requires internal/streams/add-abort-signal helper | 2 | `parallel/test-stream-add-abort-signal.js#block_00_block_00`, `parallel/test-stream-add-abort-signal.js#block_01_block_01` |
 | requires internal/test/binding internalBinding('timers') | 2 | `parallel/test-timers-now.js`, `parallel/test-timers-ordering.js` |
 | requires internal/v8_prof_polyfill | 2 | `parallel/test-tick-processor-version-check.js#block_00_block_00`, `parallel/test-tick-processor-version-check.js#block_01_block_01` |
+| requires internalBinding('util').getProxyDetails | 2 | `parallel/test-util-inspect-proxy.js#block_00_block_00`, `parallel/test-util-inspect-proxy.js#block_01_block_01` |
 | requires private modules _http_outgoing and internal/streams/state | 2 | `parallel/test-http-server-options-highwatermark.js#block_00_block_00`, `parallel/test-http-server-options-highwatermark.js#block_01_block_01` |
 | uses --expose-internals and internal/async_hooks symbols | 2 | `parallel/test-async-hooks-http-agent-destroy.js`, `parallel/test-async-hooks-http-agent.js` |
 | uses --expose-internals and internal/http2/core | 2 | `parallel/test-http2-invalid-last-stream-id.js`, `parallel/test-http2-options-max-headers-exceeds-nghttp2.js` |
 | uses --expose-internals and internal/test/binding | 2 | `parallel/test-process-binding.js`, `parallel/test-worker-message-port-transfer-native.js#block_01_block_01` |
 | uses --expose-internals and internal/test/binding internalBinding('http2') | 2 | `parallel/test-http2-binding.js`, `parallel/test-http2-respond-errors.js` |
+| uses --expose-internals and internal/test/binding primordials | 2 | `parallel/test-primordials-apply.js#block_03_block_03`, `parallel/test-primordials-apply.js#block_04_block_04` |
+| uses --expose-internals and internalBinding('trace_events') | 2 | `parallel/test-trace-events-category-used.js`, `parallel/test-trace-events-get-category-enabled-buffer.js` |
 | uses --expose-internals and require('internal/timers') | 2 | `parallel/test-http2-compat-socket.js`, `parallel/test-http2-socket-proxy.js` |
 | uses --expose-internals to monkey-patch internalBinding('crypto').SecureContext | 2 | `parallel/test-tls-clientcertengine-unsupported.js`, `parallel/test-tls-keyengine-unsupported.js` |
 | uses --expose-internals with internal/dgram _createSocketHandle and internal/test/binding | 2 | `parallel/test-dgram-create-socket-handle.js#block_00_block_00`, `parallel/test-dgram-create-socket-handle.js#block_01_block_01` |
 | uses --expose-internals with internal/test/binding and V8 native syntax | 2 | `parallel/test-buffer-write-fast.js`, `parallel/test-debug-v8-fast-api.js` |
 | uses --expose-internals with internalBinding('tls_wrap') | 2 | `parallel/test-tls-enable-trace-cli.js`, `parallel/test-tls-enable-trace.js` |
 | uses common/net.hasMultiLocalhost(), which depends on internalBinding('tcp_wrap') | 2 | `parallel/test-http-localaddress.js`, `parallel/test-https-localaddress.js` |
-| uses internal/test/binding UV constants and watcher._handle internals | 2 | `parallel/test-fs-watch-enoent.js#block_00_block_00`, `parallel/test-fs-watch-enoent.js#block_01_block_01` |
 | uses private server/socket _handle internals | 2 | `parallel/test-net-server-keepalive.js`, `parallel/test-net-server-nodelay.js` |
 | Common test harness setup only; no public API assertion | 1 | `parallel/test-structuredClone-global.js#block_00_statement_00` |
 | Windows-only test that also imports node:internal/modules/esm/resolve and internal/modules/run_main | 1 | `es-module/test-esm-long-path-win.js` |
-| asserts deprecated timers.active() behavior and private _idle* timer fields | 1 | `parallel/test-timers-active.js` |
 | asserts exact process.moduleLoadList bootstrap internals | 1 | `parallel/test-bootstrap-modules.js` |
 | asserts internal socket.parser lifecycle around HTTP upgrade | 1 | `parallel/test-http-parser-freed-before-upgrade.js` |
 | asserts internal zlib native-handle weak-reference/external-memory behavior | 1 | `parallel/test-zlib-unused-weak.js` |
@@ -1696,6 +2150,7 @@ _No entries._
 | asserts private Timer._destroyed state on timeout/interval objects | 1 | `parallel/test-timers-destroyed.js` |
 | asserts private internal/http kOutHeaders state | 1 | `parallel/test-http-correct-hostname.js` |
 | asserts private req._dumped internal state | 1 | `parallel/test-http-pause-no-dump.js` |
+| asserts private req.socket.parser.free lifecycle from Node internals | 1 | `parallel/test-http-server-connection-list-when-close.js` |
 | asserts private req.socket.parser.incoming lifecycle after keep-alive request end | 1 | `parallel/test-http-server-keepalive-end.js` |
 | asserts private zlib stream _closed state after error | 1 | `parallel/test-zlib-close-after-error.js` |
 | asserts private zlib stream _handle cleanup semantics | 1 | `parallel/test-zlib-destroy.js#block_00_block_00` |
@@ -1720,7 +2175,6 @@ _No entries._
 | imports internal/modules/esm/assert (Node internal module) | 1 | `es-module/test-esm-import-attributes-validation.js` |
 | imports internal/modules/esm/resolve (Node internal module) | 1 | `es-module/test-esm-loader-search.js` |
 | inherited: requires --expose-internals and internal/util | 1 | `parallel/test-internal-util-objects.js#block_00_block_00` |
-| inherits top-level internal/test/binding dependency | 1 | `parallel/test-util-inspect.js#block_78_block_78` |
 | invokes private req.client._events.close handlers directly | 1 | `parallel/test-http-req-close-robust-from-tampering.js` |
 | monkey-patches internalBinding('http_parser') and uses _http_common internals | 1 | `parallel/test-http-parser-lazy-loaded.js` |
 | monkey-patches internalBinding('os') | 1 | `parallel/test-os-checked-function.js` |
@@ -1736,29 +2190,24 @@ _No entries._
 | requires --expose-internals and child_process IPC to validate internal module visibility | 1 | `parallel/test-internal-module-require.js` |
 | requires --expose-internals and internal/assert | 1 | `parallel/test-internal-assert.js` |
 | requires --expose-internals and internal/cluster/round_robin_handle | 1 | `parallel/test-cluster-accept-fail.js` |
-| requires --expose-internals and internal/crypto/util | 1 | `parallel/test-webcrypto-util.js` |
+| requires --expose-internals and internal/crypto/util module | 1 | `parallel/test-webcrypto-keygen.js#block_02_test_cryptokeypair_prototype` |
 | requires --expose-internals and internal/crypto/webcrypto | 1 | `parallel/test-global-webcrypto-classes.js` |
 | requires --expose-internals and internal/dgram | 1 | `sequential/test-dgram-implicit-bind-failure.js` |
 | requires --expose-internals and internal/encoding | 1 | `parallel/test-whatwg-encoding-custom-internals.js` |
 | requires --expose-internals and internal/errors + internal/test/binding | 1 | `parallel/test-dns-memory-error.js` |
 | requires --expose-internals and internal/errors AbortError | 1 | `parallel/test-webstream-readablestream-pipeto.js` |
 | requires --expose-internals and internal/event_target (kEvents) | 1 | `parallel/test-events-once.js` |
-| requires --expose-internals and internal/event_target (kWeakHandler) | 1 | `parallel/test-abortcontroller-internal.js` |
 | requires --expose-internals and internal/freelist | 1 | `parallel/test-freelist.js` |
-| requires --expose-internals and internal/navigator | 1 | `parallel/test-navigator.js` |
 | requires --expose-internals and internal/test/binding | 1 | `parallel/test-internal-only-binding.js` |
 | requires --expose-internals and internal/test/binding + internal/worker/io | 1 | `parallel/test-worker-message-not-serializable.js` |
 | requires --expose-internals and internal/test/transfer | 1 | `parallel/test-messaging-marktransfermode.js` |
 | requires --expose-internals and internal/util/inspect | 1 | `parallel/test-icu-stringwidth.js` |
 | requires --expose-internals and internal/validators | 1 | `parallel/test-internal-validators-validateport.js` |
-| requires --expose-internals and internal/webidl | 1 | `parallel/test-internal-webidl-converttoint.js` |
 | requires --expose-internals and internal/webstreams/util | 1 | `parallel/test-whatwg-webstreams-coverage.js` |
 | requires --expose-internals and internal/worker | 1 | `parallel/test-worker-environmentdata.js` |
-| requires --expose-internals and internalBinding('cares_wrap') to stub getaddrinfo | 1 | `parallel/test-dns-lookup-promises.js` |
 | requires --expose-internals and internalBinding('module_wrap') | 1 | `parallel/test-internal-module-wrap.js` |
 | requires --expose-internals internalBinding('fs').internalModuleStat | 1 | `parallel/test-permission-fs-internal-module-stat.js` |
 | requires --expose-internals, internal/util, and internal/test/binding | 1 | `parallel/test-internal-util-decorate-error-stack.js` |
-| requires deprecated private _stream_wrap module | 1 | `parallel/test-warn-stream-wrap.js` |
 | requires internal/child_process via --expose-internals | 1 | `parallel/test-child-process-recv-handle.js` |
 | requires internal/dgram and internal/test/binding | 1 | `parallel/test-dgram-create-socket-handle.js#block_02_block_02` |
 | requires internal/errors | 1 | `parallel/test-util.js` |
@@ -1766,7 +2215,6 @@ _No entries._
 | requires internal/js_stream_socket and --expose-internals | 1 | `parallel/test-http-agent-domain-reused-gc.js` |
 | requires internal/linkedlist | 1 | `parallel/test-timers-linked-list.js` |
 | requires internal/options.getOptionValue('--max-http-header-size') | 1 | `parallel/test-http-max-http-headers.js` |
-| requires internal/quic/quic and internal/quic/symbols | 1 | `parallel/test-quic-internal-endpoint-stats-state.js` |
 | requires internal/readline/utils via --expose-internals | 1 | `parallel/test-readline-csi.js` |
 | requires internal/socketaddress and internal/test/binding | 1 | `parallel/test-socketaddress.js` |
 | requires internal/streams/state.getDefaultHighWaterMark() | 1 | `parallel/test-http-outgoing-buffer.js` |
@@ -1779,17 +2227,14 @@ _No entries._
 | requires internal/timers kTimeout symbol | 1 | `parallel/test-http-client-timeout-on-connect.js` |
 | requires internalBinding('js_stream').JSStream | 1 | `parallel/test-js-stream-call-properties.js` |
 | requires internalBinding('pipe_wrap') to construct raw Pipe handles | 1 | `parallel/test-net-connect-options-fd.js` |
-| requires internalBinding('quic').setCallbacks | 1 | `parallel/test-quic-internal-setcallbacks.js` |
 | requires internalBinding('tcp_wrap') handle APIs (plus cluster path) | 1 | `parallel/test-net-listen-handle-in-cluster-2.js` |
 | requires internalBinding('trace_events') | 1 | `parallel/test-trace-events-binding.js` |
 | requires internalBinding('tty_wrap').TTY | 1 | `parallel/test-stream-base-prototype-accessors-enumerability.js` |
-| requires internalBinding('util').getProxyDetails | 1 | `parallel/test-util-inspect-proxy.js` |
 | requires internalBinding('util').privateSymbols | 1 | `parallel/test-util-internal.js` |
 | requires internalBinding('uv') and internalBinding('stream_wrap') | 1 | `parallel/test-net-end-close.js` |
 | requires private core module _http_outgoing | 1 | `parallel/test-outgoing-message-pipe.js` |
 | second block asserts private EventEmitter kCapture symbol initialization details | 1 | `parallel/test-domain-ee.js` |
 | setup-only Node test-harness import has no public API assertion | 1 | `parallel/test-error-prepare-stack-trace.js#block_00_statement_00` |
-| tests deprecated internal timers.enroll() validation/error paths | 1 | `parallel/test-timers-enroll-invalid-msecs.js` |
 | uses --expose-internals and imports node:internal/modules/esm/get_format | 1 | `es-module/test-esm-url-extname.js` |
 | uses --expose-internals and internal/errors formatList | 1 | `parallel/test-error-format-list.js` |
 | uses --expose-internals and internal/http2/util | 1 | `parallel/test-http2-misbehaving-multiplex.js` |
@@ -1838,31 +2283,56 @@ _No entries._
 
 ## Config Hygiene
 
-21 non-runnable entries are missing a reason.
+46 non-runnable entries are missing a reason.
 
 <details>
 <summary>Entries missing reasons</summary>
 
 - `parallel/test-cli-node-options-disallowed.js` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_00_block_00` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_01_block_01` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_02_block_02` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_03_block_03` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_04_block_04` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_05_block_05` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_06_block_06` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_07_block_07` (Node.js internals)
-- `parallel/test-crypto-prime.js#block_08_block_08` (Node.js internals)
+- `parallel/test-crypto-key-objects-to-crypto-key.js` (Node.js internals)
 - `parallel/test-fs-syncwritestream.js` (Node.js internals)
 - `parallel/test-fs-watch-abort-signal.js#block_00_block_00` (Node.js internals)
 - `parallel/test-fs-watch-abort-signal.js#block_01_block_01` (Node.js internals)
+- `parallel/test-process-hrtime-bigint.js` (Node.js internals)
+- `parallel/test-process-hrtime.js` (Node.js internals)
+- `parallel/test-stream-finished.js#block_00_block_00` (Node.js internals)
+- `parallel/test-stream-finished.js#block_01_block_01` (Node.js internals)
+- `parallel/test-stream-finished.js#block_02_block_02` (Node.js internals)
+- `parallel/test-stream-finished.js#block_03_block_03` (Node.js internals)
+- `parallel/test-stream-finished.js#block_04_block_04` (Node.js internals)
+- `parallel/test-stream-finished.js#block_05_block_05` (Node.js internals)
+- `parallel/test-stream-finished.js#block_06_block_06` (Node.js internals)
+- `parallel/test-stream-finished.js#block_07_block_07` (Node.js internals)
+- `parallel/test-stream-finished.js#block_09_block_09` (Node.js internals)
+- `parallel/test-stream-finished.js#block_10_block_10` (Node.js internals)
+- `parallel/test-stream-finished.js#block_11_block_11` (Node.js internals)
+- `parallel/test-stream-finished.js#block_12_block_12` (Node.js internals)
+- `parallel/test-stream-finished.js#block_13_block_13` (Node.js internals)
+- `parallel/test-stream-finished.js#block_14_test_faulty_input_values_and_options` (Node.js internals)
+- `parallel/test-stream-finished.js#block_15_test_that_calling_returned_function_removes_listeners` (Node.js internals)
+- `parallel/test-stream-finished.js#block_16_block_16` (Node.js internals)
+- `parallel/test-stream-finished.js#block_17_block_17` (Node.js internals)
+- `parallel/test-stream-finished.js#block_18_block_18` (Node.js internals)
+- `parallel/test-stream-finished.js#block_19_block_19` (Node.js internals)
+- `parallel/test-stream-finished.js#block_20_block_20` (Node.js internals)
+- `parallel/test-stream-finished.js#block_25_block_25` (Node.js internals)
+- `parallel/test-stream-finished.js#block_26_block_26` (Node.js internals)
+- `parallel/test-stream-finished.js#block_27_block_27` (Node.js internals)
+- `parallel/test-stream-finished.js#block_28_block_28` (Node.js internals)
+- `parallel/test-stream-finished.js#block_29_block_29` (Node.js internals)
+- `parallel/test-stream-finished.js#block_30_block_30` (Node.js internals)
+- `parallel/test-stream-finished.js#block_31_block_31` (Node.js internals)
+- `parallel/test-stream-finished.js#block_32_block_32` (Node.js internals)
+- `parallel/test-stream-finished.js#block_33_block_33` (Node.js internals)
+- `parallel/test-stream-finished.js#block_35_block_35` (Node.js internals)
+- `parallel/test-stream-finished.js#block_37_block_37` (Node.js internals)
+- `parallel/test-stream-finished.js#block_38_block_38` (Node.js internals)
+- `parallel/test-stream-finished.js#block_39_block_39` (Node.js internals)
+- `parallel/test-stream-finished.js#block_41_block_41` (Node.js internals)
+- `parallel/test-util-deprecate.js#block_00_emits_deprecation_only_once_if_same_function_is_called` (Node.js internals)
+- `parallel/test-util-deprecate.js#block_01_emits_deprecation_twice_for_different_functions` (Node.js internals)
+- `parallel/test-util-deprecate.js#block_02_functions` (Node.js internals)
 - `parallel/test-webcrypto-derivebits.js#block_01_test_hkdf_bit_derivation` (Node.js internals)
 - `parallel/test-webcrypto-derivebits.js#block_02_test_pbkdf2_bit_derivation` (Node.js internals)
-- `parallel/test-webcrypto-derivekey.js#block_01_test_hkdf_key_derivation` (Node.js internals)
-- `parallel/test-webcrypto-derivekey.js#block_02_test_pbkdf2_key_derivation` (Node.js internals)
-- `parallel/test-webcrypto-derivekey.js#block_04_block_04` (Node.js internals)
-- `sequential/test-crypto-timing-safe-equal.js#block_00_block_00` (Node.js internals)
-- `sequential/test-crypto-timing-safe-equal.js#block_01_block_01` (Node.js internals)
-- `sequential/test-crypto-timing-safe-equal.js#block_02_block_02` (Node.js internals)
 
 </details>
