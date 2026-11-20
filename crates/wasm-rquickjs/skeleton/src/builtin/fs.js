@@ -5,6 +5,7 @@ import {
     ERR_DIR_CONCURRENT_OPERATION,
     ERR_FS_FILE_TOO_LARGE,
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_THIS,
     ERR_OUT_OF_RANGE,
 } from '__wasm_rquickjs_builtin/internal/errors';
 import {
@@ -715,17 +716,24 @@ export let Dirent = class Dirent {
 // --- Dir class ---
 
 export let Dir = class Dir {
+    #path;
+
     constructor(path, entries) {
         if (path === undefined) {
             const err = new TypeError('The "path" argument must be of type string. Received undefined');
             err.code = 'ERR_MISSING_ARGS';
             throw err;
         }
-        this.path = path;
+        this.#path = path;
         this._entries = entries;
         this._index = 0;
         this._closed = false;
         this._pendingAsyncOps = 0;
+    }
+
+    get path() {
+        if (!(#path in this)) throw new ERR_INVALID_THIS('Dir');
+        return this.#path;
     }
 
     _assertNotClosed() {

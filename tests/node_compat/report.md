@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2881/4467 (64.5%)
+**Primary compatibility (CI-enforced):** 2886/4467 (64.6%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2881 | 64.5% | 29.9% | 26.7% |
-| 🧩 known gap | 1586 | 35.5% | 16.5% | 14.7% |
+| ✅ passing (runnable) | 2886 | 64.6% | 30.0% | 26.7% |
+| 🧩 known gap | 1581 | 35.4% | 16.4% | 14.6% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3842 | — | 39.9% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1180 | — | — | 10.9% |
 | **Total** | **10804** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2881/9624 (29.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2886/9624 (30.0%)**.
 
 ## Inventory by Module
 
@@ -49,7 +49,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | eslint | 31 | 0 | 0 | 0 | 0 | 7 | 24 | 0.0% | 0.0% |
 | events | 96 | 59 | 2 | 0 | 0 | 3 | 32 | 96.7% | 92.2% |
 | fetch | 1 | 1 | 0 | 0 | 0 | 0 | 0 | 100.0% | 100.0% |
-| fs | 558 | 294 | 78 | 21 | 5 | 86 | 74 | 79.0% | 60.7% |
+| fs | 558 | 299 | 73 | 21 | 5 | 86 | 74 | 80.4% | 61.8% |
 | global | 9 | 4 | 3 | 0 | 0 | 0 | 2 | 57.1% | 57.1% |
 | heap | 26 | 0 | 0 | 15 | 8 | 3 | 0 | 0.0% | 0.0% |
 | http | 1019 | 231 | 280 | 301 | 2 | 129 | 76 | 45.2% | 24.5% |
@@ -343,7 +343,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-fs-mkdir.js` | 21 | 21 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-mkdtemp.js` | 4 | 4 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-mkdtempDisposableSync.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
-| `test-fs-opendir.js` | 5 | 0 | 5 | 0 | 0 | 0 | 0 |
+| `test-fs-opendir.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-fs-options-immutable.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-fs-promises.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
 | `test-fs-promisified.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
@@ -1094,7 +1094,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1586)
+### known gap (1581)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1111,7 +1111,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
 | Node 26.13.1 baseline gap: mustCall verification failed: | 19 | `parallel/test-domain-with-abort-on-uncaught-exception.js`, `parallel/test-fs-watch-recursive-watch-file.js`, `parallel/test-http-outgoing-writableFinished.js#block_01_finish_the_end_callback_receives_the_write_error_instead`, ... (+16) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 19 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+16) |
-| Node 26.13.1 baseline gap: Missing expected exception. | 16 | `parallel/test-assert-deep.js#test_02_date`, `parallel/test-assert-deep.js#test_03_regexp`, `parallel/test-assert-deep.js#test_07_gh_14441_circular_structures_should_be_consistent`, ... (+13) |
+| Node 26.13.1 baseline gap: Missing expected exception. | 15 | `parallel/test-assert-deep.js#test_02_date`, `parallel/test-assert-deep.js#test_03_regexp`, `parallel/test-assert-deep.js#test_07_gh_14441_circular_structures_should_be_consistent`, ... (+12) |
 | Node 26.13.1 baseline gap: Missing expected exception (TypeError). | 14 | `parallel/test-buffer-pool-untransferable.js`, `parallel/test-crypto-dh-stateless.js#block_00_block_00`, `parallel/test-crypto-dh-stateless.js#block_01_block_01`, ... (+11) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |
 | Node 26.13.1 baseline gap: The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input: | 13 | `parallel/test-crypto-authenticated.js#block_00_non_authenticating_mode`, `parallel/test-crypto-authenticated.js#block_01_throw`, `parallel/test-crypto-authenticated.js#block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1`, ... (+10) |
@@ -1158,7 +1158,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | Node 26.13.1 baseline gap: 7 test(s) failed | 4 | `parallel/test-sqlite-data-types.js`, `parallel/test-sqlite-statement.js#test_01_statement_prototype_get`, `parallel/test-sqlite-statement.js#test_04_statement_prototype_run`, ... (+1) |
 | Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09) | 4 | `es-module/test-require-module-tla-nested.js`, `es-module/test-require-module-tla-rejected.js`, `es-module/test-require-module-tla-resolved.js`, ... (+1) |
 | Node 26.13.1 baseline gap: The error is expected to be an instance of "TypeError". Received "DOMException" | 4 | `parallel/test-webcrypto-random.js#block_00_block_00`, `parallel/test-webcrypto-random.js#block_01_block_01`, `parallel/test-webcrypto-random.js#block_02_block_02`, ... (+1) |
-| Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception. | 4 | `parallel/test-fs-opendir.js#block_01_check_that_passing_a_positive_integer_as_buffersize_works`, `parallel/test-fs-opendir.js#block_02_check_read_throw_exceptions_on_invalid_callback`, `parallel/test-fs-opendir.js#block_03_check_if_directory_already_closed_the_callback_should_pass_a`, ... (+1) |
 | WASM child emulation does not support Node.js --test CLI output behavior | 4 | `parallel/test-runner-extraneous-async-activity.js#block_00_block_00`, `parallel/test-runner-extraneous-async-activity.js#block_01_block_01`, `parallel/test-runner-extraneous-async-activity.js#block_02_block_02`, ... (+1) |
 | inherited: --frozen-intrinsics flag semantics are not implemented | 4 | `parallel/test-freeze-intrinsics.js#block_00_ensure_we_can_extend_console`, `parallel/test-freeze-intrinsics.js#block_01_ensure_we_can_write_override_object_prototype_properties_on_`, `parallel/test-freeze-intrinsics.js#block_02_ensure_we_can_not_override_globalthis`, ... (+1) |
 | inherited: common-shim mustCall()/mustCallAtLeast() argument validation differs from Node's test harness | 4 | `parallel/test-common.js#block_00_test_for_leaked_global_detection`, `parallel/test-common.js#block_01_test_for_disabling_leaked_global_detection`, `parallel/test-common.js#block_02_test_tmpdir`, ... (+1) |

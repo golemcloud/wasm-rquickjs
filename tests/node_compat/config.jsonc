@@ -754,11 +754,11 @@
     "parallel/test-fs-opendir.js": {
       "split": true,
       "subtests": {
-        "block_00_check_the_opendir_sync_version": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
-        "block_01_check_that_passing_a_positive_integer_as_buffersize_works": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception." },
-        "block_02_check_read_throw_exceptions_on_invalid_callback": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception." },
-        "block_03_check_if_directory_already_closed_the_callback_should_pass_a": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception." },
-        "block_04_check_if_directory_already_closed_throw_an_promise_exception": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception." }
+        "block_00_check_the_opendir_sync_version": {},
+        "block_01_check_that_passing_a_positive_integer_as_buffersize_works": {},
+        "block_02_check_read_throw_exceptions_on_invalid_callback": {},
+        "block_03_check_if_directory_already_closed_the_callback_should_pass_a": {},
+        "block_04_check_if_directory_already_closed_throw_an_promise_exception": {}
       }
     },
     "parallel/test-fs-operations-with-surrogate-pairs.js": {},
