@@ -351,6 +351,32 @@ fn module_related_known_gaps_are_deferred_or_covered() -> anyhow::Result<()> {
 
 #[test]
 #[test_r::tag(report_contract)]
+fn target_baseline_gaps_match_the_mapping_record() -> anyhow::Result<()> {
+    let recorded = recorded_target_baseline_gaps()?;
+    let labelled: BTreeSet<String> = expand_entries(&load_node_compat_config(CONFIG_PATH)?)
+        .into_iter()
+        .filter(|item| {
+            item.category == NodeCompatCategory::KnownGap
+                && item
+                    .reason
+                    .as_deref()
+                    .is_some_and(|reason| reason.starts_with(TARGET_BASELINE_GAP_REASON_PREFIX))
+        })
+        .map(|item| item.key)
+        .collect();
+
+    let unrecorded: Vec<_> = labelled.difference(&recorded).collect();
+    let unlabelled: Vec<_> = recorded.difference(&labelled).collect();
+    assert!(
+        unrecorded.is_empty() && unlabelled.is_empty(),
+        "baseline-gap entries in {CONFIG_PATH} and baselineGaps.cases in {TARGET_MAPPING_RECORD_PATH} differ\nlabelled but not recorded:\n{unrecorded:#?}\nrecorded but not a labelled known gap:\n{unlabelled:#?}"
+    );
+
+    Ok(())
+}
+
+#[test]
+#[test_r::tag(report_contract)]
 fn module_known_gap_deferrals_require_an_exact_reason() {
     for accepted in [
         "WebAssembly module loading for .wasm files is not implemented; binary input is currently treated as JS source",
