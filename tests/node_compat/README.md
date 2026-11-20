@@ -14,6 +14,7 @@ tests/node_compat/
 │   ├── common/             # Node.js test/common/ infrastructure
 │   ├── fixtures/           # Node.js test/fixtures/ data files
 │   ├── sqlite/             # Node.js test/sqlite/ helpers (next-db.js in newer releases)
+│   ├── trace_events/       # Node.js test/trace_events/ (test-trace-events-*.js since Node 26)
 │   └── NODE_VERSION        # Version string (e.g., "26.13.1")
 ├── common-shim/            # Our WASM-compatible shim for test/common
 │   └── index.js
@@ -35,8 +36,8 @@ To fetch (or update) the vendored test suite:
 ```
 
 This sparse-checkouts `test/parallel/`, `test/sequential/`, `test/es-module/`,
-`test/common/`, `test/fixtures/`, and `test/sqlite/` from the Node.js repository at the
-specified tag. The `suite/` directory is gitignored — each
+`test/common/`, `test/fixtures/`, `test/sqlite/`, and `test/trace_events/` from the Node.js
+repository at the specified tag. The `suite/` directory is gitignored — each
 developer runs the vendor script to populate it.
 
 Configuration loading and report generation inspect these pinned sources to

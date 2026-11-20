@@ -6,7 +6,7 @@
 #
 # If no version is specified, defaults to the version in NODE_VERSION below.
 # The script sparse-checkouts test/parallel/, test/sequential/, test/es-module/,
-# test/common/, test/fixtures/, and test/sqlite/ from the nodejs/node repository at the given tag.
+# test/common/, test/fixtures/, test/sqlite/, and test/trace_events/ from the nodejs/node repository at the given tag.
 
 set -euo pipefail
 
@@ -31,7 +31,7 @@ git clone --depth 1 --sparse --branch "${TAG}" --single-branch \
     https://github.com/nodejs/node.git "${TMPDIR_CLONE}/node"
 
 cd "${TMPDIR_CLONE}/node"
-git sparse-checkout set test/parallel test/sequential test/es-module test/common test/fixtures test/sqlite
+git sparse-checkout set test/parallel test/sequential test/es-module test/common test/fixtures test/sqlite test/trace_events
 
 echo "==> Copying test files..."
 cp -r test/parallel "${SUITE_DIR}/parallel"
@@ -41,6 +41,10 @@ cp -r test/common "${SUITE_DIR}/common"
 cp -r test/fixtures "${SUITE_DIR}/fixtures"
 # Newer test-sqlite*.js files load shared helpers such as ../sqlite/next-db.js.
 cp -r test/sqlite "${SUITE_DIR}/sqlite"
+# Node 26 moved the test-trace-events-*.js files from parallel/ to trace_events/; older tags lack it.
+if [ -d test/trace_events ]; then
+    cp -r test/trace_events "${SUITE_DIR}/trace_events"
+fi
 
 # Record the version
 echo "${NODE_VERSION}" > "${SUITE_DIR}/NODE_VERSION"

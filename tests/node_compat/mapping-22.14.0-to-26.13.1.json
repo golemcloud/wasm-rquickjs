@@ -10,16 +10,15 @@
    "newly-split": 16,
    "renamed": 298,
    "target-change-eol": 48,
-   "moved": 26,
+   "moved": 37,
    "target-change-removed-upstream": 8,
    "moved-to-top-level": 10,
-   "unsplit": 8,
-   "unmapped-moved-to-unvendored-dir": 11
+   "unsplit": 8
   },
   "byDispositionAndStatus": {
    "moved / failed": 4,
    "moved / failed,passed": 21,
-   "moved / passed": 1,
+   "moved / passed": 12,
    "moved-to-top-level / failed": 1,
    "moved-to-top-level / failed,skipped": 4,
    "moved-to-top-level / passed": 3,
@@ -36,7 +35,6 @@
    "target-change-eol / -": 38,
    "target-change-eol / skipped": 10,
    "target-change-removed-upstream / -": 8,
-   "unmapped-moved-to-unvendored-dir / -": 11,
    "unsplit / failed": 2,
    "unsplit / skipped": 6
   },
@@ -1521,11 +1519,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-all.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-api.js",
@@ -1539,10 +1538,10 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-api.js"
    ],
+   "unvendoredReplacementDirs": null,
    "disposition": "dropped-no-baseline-case"
   },
   {
@@ -1557,10 +1556,10 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-async-hooks-worker.js"
    ],
+   "unvendoredReplacementDirs": null,
    "disposition": "dropped-no-baseline-case"
   },
   {
@@ -1572,11 +1571,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-async-hooks.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-bootstrap.js",
@@ -1587,11 +1587,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-bootstrap.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-environment.js",
@@ -1605,10 +1606,10 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-environment.js"
    ],
+   "unvendoredReplacementDirs": null,
    "disposition": "dropped-no-baseline-case"
   },
   {
@@ -1620,11 +1621,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-file-pattern.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-fs-sync.js",
@@ -1638,10 +1640,10 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-fs-sync.js"
    ],
+   "unvendoredReplacementDirs": null,
    "disposition": "dropped-no-baseline-case"
   },
   {
@@ -1653,11 +1655,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-http.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-net-abstract-socket.js",
@@ -1671,10 +1674,10 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-net-abstract-socket.js"
    ],
+   "unvendoredReplacementDirs": null,
    "disposition": "dropped-no-baseline-case"
   },
   {
@@ -1686,11 +1689,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-net.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-none.js",
@@ -1701,11 +1705,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-none.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-process-exit.js",
@@ -1716,11 +1721,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-process-exit.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-promises.js",
@@ -1731,11 +1737,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-promises.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-threadpool.js",
@@ -1749,10 +1756,10 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-threadpool.js"
    ],
+   "unvendoredReplacementDirs": null,
    "disposition": "dropped-no-baseline-case"
   },
   {
@@ -1764,11 +1771,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-v8.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-trace-events-vm.js",
@@ -1779,11 +1787,12 @@
     "2026-09-24",
     "test: enable trace_events tests with perfetto"
    ],
-   "replacements": null,
-   "unvendoredReplacementDirs": [
-    "trace_events"
+   "replacements": [
+    "trace_events/test-trace-events-vm.js"
    ],
-   "disposition": "unmapped-moved-to-unvendored-dir"
+   "unvendoredReplacementDirs": null,
+   "disposition": "moved",
+   "note": "same-basename move to test/trace_events/ with legacy-JSON/Perfetto helpers from common/trace_events.js; the harness runs it with hasPerfetto false, the legacy JSON path"
   },
   {
    "file": "parallel/test-util-getcallsite.js",

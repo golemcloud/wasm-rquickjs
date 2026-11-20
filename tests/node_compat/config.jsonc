@@ -17331,6 +17331,25 @@
     "sequential/test-watch-mode-worker.mjs": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "sequential/test-watch-mode.mjs": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "sequential/test-without-async-context-frame.mjs": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "sequential/test-zlib-crc32-fast-api.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" }
+    "sequential/test-zlib-crc32-fast-api.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+
+    // === newly discovered tests (not yet evaluated) ===
+    "trace_events/test-trace-events-all.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-all.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-api.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "trace_events/test-trace-events-async-hooks-worker.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "trace_events/test-trace-events-async-hooks.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-async-hooks.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-bootstrap.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-bootstrap.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-environment.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "trace_events/test-trace-events-file-pattern.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-file-pattern.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-fs-sync.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "trace_events/test-trace-events-http.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-http.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-net-abstract-socket.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "trace_events/test-trace-events-net.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-net.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-none.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-none.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-process-exit.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-process-exit.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-promises.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-promises.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-threadpool.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "trace_events/test-trace-events-v8.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-v8.js (upstream e7d8ab529b)" },
+    "trace_events/test-trace-events-vm.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-trace-events-vm.js (upstream e7d8ab529b)" }
   }
 }
