@@ -112,7 +112,8 @@ The 75 Node 26-only cases break down as follows:
   coverage: `assert.CallTracker` (10), multi-argument `assert.fail` (5), `fs.rmdir` with
   `recursive` (10), keygen `hash`/`mgf1Hash` (2), dgram deprecations (1), FileHandle close on GC
   (1), and `_stream_*` aliases (1).
-- 11 are `test-trace-events-*` tests that moved to `test/trace_events/`, which is not vendored.
+- 11 are `test-trace-events-*` tests that moved to `test/trace_events/`, which was not vendored
+  at qualification time. It is vendored now, and all 11 replacements pass as runnable.
 - 3 are sqlite tests renamed by "sqlite: rename DatabaseSync and StatementSync" (`f2b698f1cf`).
 - 8 are renamed-unmapped.
 - 23 are failing cases in 20 files: stream 6, crypto/webcrypto 6, buffer 2, sqlite 2, and one each
@@ -318,8 +319,8 @@ All of this is required for either target unless marked "26 only".
 4. **Vendoring.** Vendor `test/sqlite/`, which `test-sqlite*.js` now load as `../sqlite/next-db.js`,
    and copy it in `setup_node_compat_test_files`. `test/sea/` and `test/trace_events/` (26 only)
    are where moved tests now live; vendor them only if those cases stay classified.
-   `test/sqlite/` vendoring and copying are in place; `test/sea/` and `test/trace_events/` are
-   still open.
+   `test/sqlite/` and `test/trace_events/` vendoring and copying are in place, including the
+   `common/trace_events.js` helper; `test/sea/` is still open.
 5. **Shim helpers.**
    - Both targets need `hasFIPS` and `isBoringSSL` in `common-shim/crypto.js`, plus
      `hasInspector`, `hasSQLite`, `skipIfSQLiteMissing`, `expectRequireStack`,

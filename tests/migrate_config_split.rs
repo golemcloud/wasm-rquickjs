@@ -40,7 +40,7 @@ use std::fs;
 use std::path::Path;
 use test_r::test;
 
-const SUITES: [&str; 3] = ["parallel", "sequential", "es-module"];
+const SUITES: [&str; 4] = ["parallel", "sequential", "es-module", "trace_events"];
 const NEW_FILE_REASON: &str = "newly discovered, not yet evaluated";
 const NEW_SUBTEST_REASON: &str = "newly discovered subtest, not yet evaluated";
 /// Keys written first, in this order; any other key follows alphabetically, then `split` and

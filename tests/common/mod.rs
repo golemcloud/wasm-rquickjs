@@ -3286,7 +3286,8 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
         }
     }
 
-    // Copy vendored ESM common helpers that are not replaced by local shims.
+    // Copy vendored ESM common helpers and the trace_events helper that are not replaced by
+    // local shims.
     let vendored_common_dir = std::path::Path::new("tests/node_compat/suite/common");
     if vendored_common_dir.exists() {
         for entry in fs::read_dir(vendored_common_dir)? {
@@ -3294,7 +3295,7 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
             let file_name = entry.file_name();
             let file_name_str = file_name.to_string_lossy();
             if entry.file_type()?.is_file()
-                && file_name_str.ends_with(".mjs")
+                && (file_name_str.ends_with(".mjs") || file_name_str == "trace_events.js")
                 && !common_dir.join(file_name_str.as_ref()).exists()
             {
                 fs::copy(entry.path(), common_dir.join(file_name_str.as_ref()))?;

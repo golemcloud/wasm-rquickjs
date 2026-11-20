@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2875/4456 (64.5%)
+**Primary compatibility (CI-enforced):** 2886/4467 (64.6%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2875 | 64.5% | 29.9% | 26.7% |
-| 🧩 known gap | 1581 | 35.5% | 16.5% | 14.7% |
+| ✅ passing (runnable) | 2886 | 64.6% | 30.0% | 26.7% |
+| 🧩 known gap | 1581 | 35.4% | 16.4% | 14.6% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
-| ❔ unevaluated (excluded) | 3836 | — | 39.9% | 35.6% |
+| ❔ unevaluated (excluded) | 3842 | — | 39.9% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1180 | — | — | 10.9% |
-| **Total** | **10787** |  |  | **100.0%** |
+| **Total** | **10804** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2875/9607 (29.9%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2886/9624 (30.0%)**.
 
 ## Inventory by Module
 
@@ -78,7 +78,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | test_runner | 344 | 84 | 41 | 21 | 1 | 188 | 9 | 67.2% | 25.1% |
 | timers | 112 | 45 | 6 | 0 | 0 | 20 | 41 | 88.2% | 63.4% |
 | tls | 264 | 4 | 7 | 177 | 0 | 65 | 11 | 36.4% | 1.6% |
-| trace_events | 18 | 1 | 7 | 5 | 0 | 2 | 3 | 12.5% | 6.7% |
+| trace_events | 35 | 12 | 7 | 5 | 0 | 8 | 3 | 63.2% | 37.5% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 51 | 16 | 13 | 0 | 0 | 21 | 1 | 55.2% | 32.0% |
 | util | 235 | 27 | 70 | 0 | 0 | 20 | 118 | 27.8% | 23.1% |
@@ -2017,11 +2017,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-createcacheddata.js` |
 | vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host | 1 | `parallel/test-vm-module-referrer-realm.mjs` |
 
-### unevaluated (3836)
+### unevaluated (3842)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
-| newly discovered, not yet evaluated | 3633 | `es-module/test-cjs-defer-static-import-eval.mjs`, `es-module/test-defer-import-builtin-module.mjs`, `es-module/test-defer-import-eval-with-tla.mjs`, ... (+3630) |
+| newly discovered, not yet evaluated | 3639 | `es-module/test-cjs-defer-static-import-eval.mjs`, `es-module/test-defer-import-builtin-module.mjs`, `es-module/test-defer-import-eval-with-tla.mjs`, ... (+3636) |
 | newly discovered subtest, not yet evaluated | 203 | `es-module/test-esm-json.mjs#test_01_should_load_json_with_import_calls`, `parallel/test-assert-deep.js#test_01_loose_deepequal`, `parallel/test-assert-deep.js#test_08_deepstrictequal_handles_shared_expected_array_elements_after`, ... (+200) |
 
 ### Node.js internals (1180)
