@@ -10,7 +10,8 @@ description.workspace = true
 [features]
 default = []
 optimize = ["dep:wasmtime", "dep:wasmtime-wasi", "dep:wasmtime-wasi-http", "dep:wasmtime-wizer", "dep:tokio", "dep:rand_10", "dep:bytes"]
-use-golem-wasmtime = []
+# The Golem fork's task group hook lets tests attribute host calls the way Golem does.
+use-golem-wasmtime = ["wasmtime?/task-group-hook"]
 # Development-only: read the skeleton from the checkout instead of embedding it into this
 # crate. This keeps skeleton edits from invalidating the host-side test binary.
 external-skeleton = []

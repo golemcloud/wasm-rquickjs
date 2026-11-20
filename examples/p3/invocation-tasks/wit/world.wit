@@ -1,0 +1,30 @@
+package test:invocation-tasks;
+
+// Host effects. The host records which exported call's component-model task makes each call.
+interface effects {
+  note: func(label: string);
+  effect: async func(label: string, delay-ms: u32);
+}
+
+world invocation-tasks {
+  import effects;
+
+  // Starts promise jobs, a microtask, a nextTick callback and a timer, awaits host effects in
+  // five rounds, and returns its name.
+  export background: async func(name: string, delay-ms: u32) -> string;
+  // Awaits a promise that `send-signal` resolves.
+  export wait-for-signal: async func(name: string) -> string;
+  // Resolves the promise `wait-for-signal` awaits after a host effect.
+  export send-signal: async func(name: string, delay-ms: u32) -> string;
+  // Sets a timer that records after `delay-ms` and returns at once.
+  export start-timer: async func(name: string, delay-ms: u32) -> string;
+  // Records and returns at once.
+  export quick: async func(name: string) -> string;
+  // Starts a throwing microtask and a throwing timer, then work that must still run.
+  export throwing: async func(name: string, delay-ms: u32) -> string;
+  // Records, then sets a timer that records and resolves the promise `wait-for-signal` awaits, and
+  // returns at once.
+  export sync-timer: func(name: string, delay-ms: u32);
+  // Sets the test context store to `value`, awaits host effects, and records what it reads.
+  export context-flow: async func(name: string, value: u32, delay-ms: u32) -> string;
+}

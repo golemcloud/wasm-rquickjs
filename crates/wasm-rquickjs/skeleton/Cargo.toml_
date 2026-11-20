@@ -83,6 +83,12 @@ typescript-transform-runtime = ["typescript-runtime"]
 test-observability = []
 typescript-compiler-profiling = ["typescript-transform-runtime", "test-observability"]
 
+# An async exported call returns its result before it drains its own remaining work, which then
+# runs on the call's task after the return. Enable it only for hosts that keep driving a call's
+# task until it exits. Without it, the call drains its own work before it returns, except while a
+# JavaScript producer feeds a component future/stream that the host reads after a return.
+post-return-drain = []
+
 # Private measurement hooks for the GOL-360 TCP write/backpressure benchmark.
 net-write-profiling = []
 
@@ -194,9 +200,9 @@ libsqlite3-sys = { git = "https://github.com/golemcloud/rusqlite", branch = "v0.
 # pending top-level awaits during runtime teardown. The fork carries quickjs-ng PR #1751
 # (GC-traced modules, jobs retaining their realm) and releases the module values that
 # Module::declare and Module::load leaked (rquickjs issue #783).
-rquickjs = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
-rquickjs-core = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
-rquickjs-macro = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
-rquickjs-sys = { git = "https://github.com/golemcloud/rquickjs", branch = "v0.14.0-patched" }
+rquickjs = { git = "https://github.com/golemcloud/rquickjs", branch = "gol-1060-job-owners" }
+rquickjs-core = { git = "https://github.com/golemcloud/rquickjs", branch = "gol-1060-job-owners" }
+rquickjs-macro = { git = "https://github.com/golemcloud/rquickjs", branch = "gol-1060-job-owners" }
+rquickjs-sys = { git = "https://github.com/golemcloud/rquickjs", branch = "gol-1060-job-owners" }
 # The bridge includes the Preview 3 receive signatures and reconstruction policy.
 golem-websocket = { git = "https://github.com/golemcloud/wasm-rquickjs", branch = "gol804-websocket-current-generator" }
