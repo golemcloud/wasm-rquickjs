@@ -6853,10 +6853,15 @@ export const testSyncBuiltinEsmExports = async () => {
     }
 };
 
-export const testBuiltinFirstImport = async (specifier) => {
+export const testBuiltinFirstImport = async (specifier, requireFirst = false) => {
     try {
+        let required;
+        if (requireFirst) {
+            const module = await import('node:module');
+            required = module.createRequire(import.meta.url)(specifier);
+        }
         let namespace;
-        if (specifier === 'node:console') {
+        if (specifier === 'node:console' && !requireFirst) {
             const consoleObject = globalThis.console;
             const logDescriptor = Object.getOwnPropertyDescriptor(consoleObject, 'log');
             const warnDescriptor = Object.getOwnPropertyDescriptor(consoleObject, 'warn');
@@ -6898,12 +6903,24 @@ export const testBuiltinFirstImport = async (specifier) => {
         const module = await import('node:module');
         const require = module.createRequire(import.meta.url);
         assert.strictEqual(require(specifier), namespace.default);
+        assert.strictEqual(require(specifier), require(specifier));
+        assert.strictEqual(await import(specifier), namespace);
+        if (requireFirst) {
+            assert.strictEqual(required, namespace.default);
+        }
+        if (specifier !== 'node:test' && specifier !== 'node:sqlite') {
+            const alias = specifier.slice('node:'.length);
+            assert.strictEqual(await import(alias), namespace);
+            assert.strictEqual(require(alias), namespace.default);
+        }
         return true;
     } catch (error) {
         console.error(`builtin-first-import ${specifier}:`, error);
         throw error;
     }
 };
+
+export const testBuiltinRequireFirst = (specifier) => testBuiltinFirstImport(specifier, true);
 
 export const testEsmResolutionErrorUrls = async () => {
     try {
