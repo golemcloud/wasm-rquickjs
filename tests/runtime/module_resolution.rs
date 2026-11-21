@@ -592,19 +592,21 @@ async fn every_syncable_builtin_can_be_imported_first(
     ];
 
     for specifier in SPECIFIERS {
-        let (result, output) = invoke_and_capture_output(
-            compiled_test.wasm_path(),
-            None,
-            "test-builtin-first-import",
-            &[Val::String((*specifier).to_string())],
-        )
-        .await;
-        let result = result.with_context(|| format!("failed first import of {specifier}"))?;
-        assert_eq!(
-            result,
-            Some(Val::Bool(true)),
-            "unexpected result for first import of {specifier}; output:\n{output}"
-        );
+        for entrypoint in ["test-builtin-first-import", "test-builtin-require-first"] {
+            let (result, output) = invoke_and_capture_output(
+                compiled_test.wasm_path(),
+                None,
+                entrypoint,
+                &[Val::String((*specifier).to_string())],
+            )
+            .await;
+            let result = result.with_context(|| format!("{entrypoint} failed for {specifier}"))?;
+            assert_eq!(
+                result,
+                Some(Val::Bool(true)),
+                "unexpected {entrypoint} result for {specifier}; output:\n{output}"
+            );
+        }
     }
     Ok(())
 }

@@ -1,4 +1,6 @@
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
+use rquickjs::loader::BuiltinResolver;
+
+use super::loader::BuiltinSourceLoader;
 
 pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
     resolver
@@ -40,8 +42,8 @@ pub fn add_to_resolver(resolver: BuiltinResolver) -> BuiltinResolver {
         .with_module("__wasm_rquickjs_builtin/internal/webstreams/util")
 }
 
-pub fn module_loader() -> BuiltinLoader {
-    BuiltinLoader::default()
+pub fn module_loader() -> BuiltinSourceLoader {
+    BuiltinSourceLoader::default()
         .with_module(
             "__wasm_rquickjs_builtin/internal/http",
             include_str!("http.js"),

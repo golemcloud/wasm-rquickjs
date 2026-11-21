@@ -800,8 +800,6 @@ fn builtin_esm_sync_uses_one_generated_public_facade_path() {
     );
     assert!(SYNC_EXPORTS_RS.contains("collect_static_esm_export_names"));
     assert!(SYNC_EXPORTS_RS.contains("canonical_public_builtin_alias"));
-    assert!(SYNC_EXPORTS_RS.contains("static FACADES: OnceLock"));
-    assert!(SYNC_EXPORTS_RS.contains("or_insert_with(|| facade_source"));
     assert!(!SYNC_EXPORTS_RS.contains("enum TokenKind"));
     assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsKeys(__wasmRquickjsDefault)"));
     assert!(SYNC_EXPORTS_RS.contains("__wasmRquickjsHasOwn(__wasmRquickjsDefault"));

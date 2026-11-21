@@ -1,5 +1,83 @@
 use super::*;
 
+#[test]
+fn optimizer_keeps_one_copy_of_builtin_sources() -> anyhow::Result<()> {
+    use wasm_rquickjs::GenerationTarget;
+    use wasmparser_encoder::{Parser, Payload};
+
+    let temp = Utf8TempDir::new()?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    let template = build_preinit_template(temp.path(), GenerationTarget::WasiP3, "full-p3")?;
+    let input = temp.path().join("input.wasm");
+    let source = r#"
+        const registry = globalThis.__wasm_rquickjs_sync_builtin_esm_exports;
+        const loaded = JSON.stringify({
+            buffer: Object.hasOwn(registry, 'node:buffer'),
+            vm: Object.hasOwn(registry, 'node:vm'),
+        });
+        export function run() { return loaded; }
+        export function ready() { return loaded; }
+    "#;
+    wasm_rquickjs::inject_js_into_component(&template, &input, &[source])?;
+    let markers = [
+        (
+            "buffer",
+            " * The buffer module from node.js.\n * Based on https://github.com/feross/buffer (MIT license).",
+        ),
+        (
+            "vm",
+            "const moduleNamespaceBrandSymbol = Symbol('wasm-rquickjs.vm.namespaceBrand');",
+        ),
+        (
+            "internal/http",
+            "// Internal HTTP symbols used by node:http internals.\n// Matches Node's internal/http export shape for compatibility tests.",
+        ),
+    ];
+    let counts = |bytes: &[u8]| -> anyhow::Result<Vec<usize>> {
+        let mut counts = vec![0; markers.len()];
+        for payload in Parser::new(0).parse_all(bytes) {
+            if let Payload::DataSection(data) = payload? {
+                for segment in data {
+                    let segment = segment?;
+                    for (count, (_, marker)) in counts.iter_mut().zip(&markers) {
+                        *count += segment
+                            .data
+                            .windows(marker.len())
+                            .filter(|window| *window == marker.as_bytes())
+                            .count();
+                    }
+                }
+            }
+        }
+        Ok(counts)
+    };
+    assert_eq!(
+        counts(&std::fs::read(&input)?)?,
+        vec![1; markers.len()],
+        "each marker must identify one embedded static source before preinitialization"
+    );
+    let mut snapshots = Vec::new();
+    for index in 0..2 {
+        let output = temp.path().join(format!("snapshot-{index}.wasm"));
+        runtime.block_on(optimize_component(&input, &output, "wizer-initialize"))?;
+        let loaded: serde_json::Value =
+            serde_json::from_str(&runtime.block_on(run_probe(&output, false))?.unwrap())?;
+        assert_eq!(loaded, serde_json::json!({"buffer": true, "vm": false}));
+        snapshots.push(std::fs::read(output)?);
+    }
+    let copies = counts(&snapshots[0])?;
+    for ((name, _), copies) in markers.iter().zip(copies) {
+        assert_eq!(copies, 1, "retained built-in source copies for {name}");
+    }
+    assert!(
+        snapshots[0] == snapshots[1],
+        "preinitialization must be deterministic"
+    );
+    Ok(())
+}
+
 #[tokio::test]
 async fn optimizer_denies_external_io_for_all_initializers() -> anyhow::Result<()> {
     let temp = Utf8TempDir::new()?;
