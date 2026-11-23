@@ -50,6 +50,85 @@ async fn fetch_post_json_and_get(
     assert!(output.contains(
         "Body: {\"id\":0,\"userId\":1,\"title\":\"foo\",\"body\":\"bar\",\"completed\":false}"
     ));
+    assert!(output.contains("Override bodyUsed: false\n"));
+    assert!(output.contains("Override body: overridden\n"));
+    assert!(output.contains("Request override method: POST\n"));
+    assert!(output.contains("Request override body: overridden-in-request\n"));
+
+    // Expected per Fetch's Request constructor steps 34-41 and Node's Request: a null body
+    // inherits, RequestInit members are read by name, and GET/HEAD reject any body.
+    let expected = [
+        (
+            "constructor override",
+            r#""PUT source=null replacement=b body=replaced input=POST/false/false""#,
+        ),
+        (
+            "constructor retain",
+            r#""PUT source=a replacement=null body=original""#,
+        ),
+        (
+            "fetch override",
+            r#""PUT source=null replacement=b body=replaced input=false/false""#,
+        ),
+        (
+            "fetch retain",
+            r#""PUT source=a replacement=null body=original used=true""#,
+        ),
+        ("constructor undefined body", r#""original""#),
+        ("constructor null body", r#""original""#),
+        ("constructor empty body", r#""""#),
+        (
+            "fetch null body",
+            r#""POST source=a replacement=null body=original""#,
+        ),
+        (
+            "fetch empty body",
+            r#""POST source=a replacement=null body=""#,
+        ),
+        (
+            "used input replacement",
+            r#""fresh POST source=a replacement=null body=fresh""#,
+        ),
+        ("used input null constructor", r#""threw TypeError""#),
+        ("used input null fetch", r#""threw TypeError""#),
+        ("offset view snapshot", r#""abc""#),
+        ("constructor inherited members", r#""PUT proto""#),
+        (
+            "fetch inherited members",
+            r#""PUT source=a replacement=null body=proto""#,
+        ),
+        (
+            "non-enumerable method",
+            r#""PUT PUT source=a replacement=null body=original""#,
+        ),
+        ("unknown members", "false"),
+        (
+            "null method",
+            r#""null null source=a replacement=null body=original""#,
+        ),
+        ("GET inherited body", r#""threw TypeError""#),
+        ("HEAD replacement body", r#""threw TypeError""#),
+        ("GET empty input body", r#""threw TypeError""#),
+        ("fetch GET rejects before use", r#""TypeError used=false""#),
+        ("fetch HEAD replacement", r#""threw TypeError""#),
+        (
+            "bodyless GET and HEAD",
+            r#""HEAD GET GET source=null replacement=null body=""#,
+        ),
+        (
+            "null signal detaches",
+            r#""null POST source=null replacement=null body=original""#,
+        ),
+    ];
+    let mismatched: Vec<_> = expected
+        .iter()
+        .map(|(name, value)| format!("RequestInit {name}: {value}\n"))
+        .filter(|line| !output.contains(line.as_str()))
+        .collect();
+    assert!(
+        mismatched.is_empty(),
+        "missing {mismatched:#?} in output:\n{output}"
+    );
 
     Ok(())
 }
