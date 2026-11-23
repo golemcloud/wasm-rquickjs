@@ -291,18 +291,10 @@ export class FileHandle {
 
     get fd() { return this._fd; }
 
-    async appendFile(data, options) {
-        if (this._closed) throw makeEBADF('write');
-        validateAppendFileData(data);
-        if (typeof data === 'string') {
-            const pos = null;
-            const result = native.fs_write_string(this._fd, data, pos);
-            if (result.error) throw createSystemError(result.error);
-        } else {
-            const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-            const result = native.fs_write_buffer(this._fd, dataArray, 0, dataArray.length, null);
-            if (result.error) throw createSystemError(result.error);
-        }
+    // FileHandle.appendFile is FileHandle.writeFile, as in Node: a handle opened with an
+    // append flag appends at the end.
+    appendFile(data, options) {
+        return this.writeFile(data, options);
     }
 
     async chmod(mode) {
@@ -386,6 +378,7 @@ export class FileHandle {
                 position = position !== undefined ? position : null;
             }
         }
+        length |= 0;
 
         if (length === 0) {
             return { bytesRead: 0, buffer };

@@ -165,7 +165,9 @@ const HAS_LCHMOD = false;
 const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 const FILE_HANDLE_IN_USE_COUNT_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUseCount');
 
+// Node 26 exposes fs.constants as a null-prototype object.
 export let constants = {
+    __proto__: null,
     F_OK, R_OK, W_OK, X_OK,
     O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NOCTTY,
     O_TRUNC, O_APPEND, O_DIRECTORY, O_NOATIME, O_NOFOLLOW,
@@ -825,6 +827,16 @@ export let Dir = class Dir {
         });
     }
 
+    [Symbol.dispose]() {
+        if (this._closed) return;
+        this.closeSync();
+    }
+
+    async [Symbol.asyncDispose]() {
+        if (this._closed) return;
+        await this.close();
+    }
+
     [Symbol.asyncIterator]() {
         const self = this;
         return {
@@ -1271,6 +1283,8 @@ function makeStatFsResult(bigint) {
         return {
             type: BigInt(0),
             bsize: BigInt(4096),
+            // Node 26 adds the fragment size; WASI exposes no filesystem statistics.
+            frsize: BigInt(4096),
             blocks: BigInt(0),
             bfree: BigInt(0),
             bavail: BigInt(0),
@@ -1281,6 +1295,7 @@ function makeStatFsResult(bigint) {
     return {
         type: 0,
         bsize: 4096,
+        frsize: 4096,
         blocks: 0,
         bfree: 0,
         bavail: 0,

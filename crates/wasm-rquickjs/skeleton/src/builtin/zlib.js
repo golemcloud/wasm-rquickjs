@@ -680,7 +680,12 @@ class ZlibBase extends Transform {
     }
 
     this._pendingFlushes.push(kind);
-    this.write(Buffer.alloc(0), '', () => {
+    this.write(Buffer.alloc(0), '', (err) => {
+      if (err) {
+        // A write after destroy reports ERR_STREAM_DESTROYED, as in Node.
+        if (callback) callback(err);
+        return;
+      }
       // Force read to emit anything buffered in readable state
       this.read(0);
       if (callback) callback();
@@ -715,7 +720,12 @@ class ZlibBase extends Transform {
         `The value of "strategy" is out of range. It must be >= 0 and <= 4. Received ${strategy}`);
     }
     if (this._level !== level || this._strategy !== strategy) {
-      this.flush(Z_SYNC_FLUSH, () => {
+      this.flush(Z_SYNC_FLUSH, (err) => {
+        // Node 26 paramsAfterFlushCallback: a failed flush or destroyed stream skips the update.
+        if (err || this.destroyed) {
+          if (callback) callback(err);
+          return;
+        }
         if (this._nativeHandle !== null) {
           zlib_stream_params(this._nativeHandle, level, strategy);
         }
