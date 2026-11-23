@@ -2202,7 +2202,7 @@ function checkIsPromise(obj) {
     return obj !== null && typeof obj === 'object' && typeof obj.then === 'function' && typeof obj.catch === 'function';
 }
 
-function ensureAsyncAssertionFrame(error, assertionFn) {
+function ensureAsyncAssertionFrame(error, assertionFn, receiver) {
     if (!error || typeof error !== 'object' || typeof assertionFn !== 'function' || !assertionFn.name) {
         return;
     }
@@ -2211,7 +2211,9 @@ function ensureAsyncAssertionFrame(error, assertionFn) {
         return;
     }
 
-    const asyncFrame = 'at async Function.' + assertionFn.name;
+    // Like Node 26's V8 frames, the frame is named after the receiver the assertion was called on.
+    const owner = receiver === assert ? 'assert.' : receiver === strict ? 'strict.' : '';
+    const asyncFrame = 'at async ' + owner + assertionFn.name;
     if (error.stack.indexOf(asyncFrame) !== -1) {
         return;
     }
@@ -2219,7 +2221,7 @@ function ensureAsyncAssertionFrame(error, assertionFn) {
     error.stack += '\n    ' + asyncFrame + ' (native)';
 }
 
-async function waitForActual(promiseFn, assertionFn) {
+async function waitForActual(promiseFn, assertionFn, receiver) {
     let resultPromise;
     if (typeof promiseFn === 'function') {
         // If this throws synchronously, async function semantics make the returned
@@ -2237,7 +2239,7 @@ async function waitForActual(promiseFn, assertionFn) {
     try {
         await resultPromise;
     } catch (e) {
-        ensureAsyncAssertionFrame(e, assertionFn);
+        ensureAsyncAssertionFrame(e, assertionFn, receiver);
         return e;
     }
 
@@ -2354,12 +2356,12 @@ function doesNotThrow(fn) {
 
 async function rejects(promiseFn) {
     let args = Array.prototype.slice.call(arguments, 1);
-    expectsError.apply(null, [rejects, await waitForActual(promiseFn, rejects)].concat(args));
+    expectsError.apply(null, [rejects, await waitForActual(promiseFn, rejects, this)].concat(args));
 }
 
 async function doesNotReject(promiseFn) {
     const args = Array.prototype.slice.call(arguments, 1);
-    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn, doesNotReject)].concat(args));
+    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn, doesNotReject, this)].concat(args));
 }
 
 function ifError(value) {
