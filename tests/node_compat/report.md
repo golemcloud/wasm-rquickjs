@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 2924/4467 (65.5%)
+**Primary compatibility (CI-enforced):** 2926/4467 (65.5%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 2924 | 65.5% | 30.4% | 27.1% |
-| 🧩 known gap | 1543 | 34.5% | 16.0% | 14.3% |
+| ✅ passing (runnable) | 2926 | 65.5% | 30.4% | 27.1% |
+| 🧩 known gap | 1541 | 34.5% | 16.0% | 14.3% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3842 | — | 39.9% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1180 | — | — | 10.9% |
 | **Total** | **10804** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **2924/9624 (30.4%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **2926/9624 (30.4%)**.
 
 ## Inventory by Module
 
@@ -73,7 +73,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | snapshot | 61 | 0 | 0 | 0 | 57 | 4 | 0 | 0.0% | 0.0% |
 | sqlite | 117 | 2 | 57 | 0 | 0 | 58 | 0 | 3.4% | 1.7% |
 | stdio | 23 | 12 | 7 | 3 | 0 | 0 | 1 | 63.2% | 54.5% |
-| stream | 872 | 677 | 39 | 2 | 0 | 113 | 41 | 94.6% | 81.5% |
+| stream | 872 | 679 | 37 | 2 | 0 | 113 | 41 | 94.8% | 81.7% |
 | string_decoder | 5 | 3 | 0 | 0 | 0 | 2 | 0 | 100.0% | 60.0% |
 | test_runner | 344 | 84 | 41 | 21 | 1 | 188 | 9 | 67.2% | 25.1% |
 | timers | 112 | 45 | 6 | 0 | 0 | 20 | 41 | 88.2% | 63.4% |
@@ -802,8 +802,8 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-stream-toArray.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-transform-destroy.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-transform-split-highwatermark.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-typedarray.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
-| `test-stream-uint8array.js` | 5 | 4 | 1 | 0 | 0 | 0 | 0 |
+| `test-stream-typedarray.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-stream-uint8array.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-unpipe-event.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-wrap-encoding.js` | 2 | 0 | 0 | 0 | 0 | 0 | 2 |
 | `test-stream-writable-aborted.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
@@ -1094,7 +1094,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1543)
+### known gap (1541)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1108,7 +1108,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 24 | `es-module/test-typescript-commonjs.mjs#test_00_require_a_ts_file_with_explicit_extension_succeeds`, `es-module/test-typescript-commonjs.mjs#test_01_eval_require_a_ts_file_with_implicit_extension_fails`, `es-module/test-typescript-commonjs.mjs#test_02_eval_require_a_cts_file_with_implicit_extension_fails`, ... (+21) |
 | Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly | 23 | `es-module/test-esm-import-attributes-errors.js`, `es-module/test-require-module-cached-tla.js`, `es-module/test-require-module-dynamic-import-1.js`, ... (+20) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
-| Node 26.13.1 baseline gap: Expected values to be strictly deep-equal: | 21 | `es-module/test-esm-import-attributes-errors.mjs`, `es-module/test-esm-import-meta.mjs`, `es-module/test-require-module-error-catching.js`, ... (+18) |
+| Node 26.13.1 baseline gap: Expected values to be strictly deep-equal: | 19 | `es-module/test-esm-import-attributes-errors.mjs`, `es-module/test-esm-import-meta.mjs`, `es-module/test-require-module-error-catching.js`, ... (+16) |
 | Node 26.13.1 baseline gap: mustCall verification failed: | 19 | `parallel/test-domain-with-abort-on-uncaught-exception.js`, `parallel/test-fs-watch-recursive-watch-file.js`, `parallel/test-http-outgoing-writableFinished.js#block_01_finish_the_end_callback_receives_the_write_error_instead`, ... (+16) |
 | process.permission and --permission CLI semantics are incomplete in execPath emulation | 19 | `parallel/test-cli-permission-deny-fs.js#block_00_block_00`, `parallel/test-cli-permission-deny-fs.js#block_01_block_01`, `parallel/test-cli-permission-deny-fs.js#block_02_block_02`, ... (+16) |
 | wasi:sockets UDP implementation crashes in wasmtime | 14 | `parallel/test-dgram-connect-send-callback-buffer.js`, `parallel/test-dgram-connect-send-callback-multi-buffer.js`, `parallel/test-dgram-connect-send-default-host.js`, ... (+11) |

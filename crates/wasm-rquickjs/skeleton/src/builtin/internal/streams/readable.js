@@ -379,6 +379,10 @@ function howMuchToRead(n, state) {
         return 1;
     }
     if (Number.isNaN(n)) {
+        // Without a decoder, read() returns the next buffered chunk, as in Node 26.
+        if (!state.decoder && state.length) {
+            return state.buffer.first().length;
+        }
         // Only flow one buffer at a time.
         if (state.flowing && state.length) {
             return state.buffer.first().length;
