@@ -13,6 +13,9 @@ const inspectDiffOptions = {
     showProxy: false,
 };
 const RegExpPrototypeExec = RegExp.prototype.exec;
+const DatePrototypeGetTime = Date.prototype.getTime;
+const TypedArrayPrototypeGetSymbolToStringTag =
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag).get;
 const RegExpPrototypeSourceGetter = Object.getOwnPropertyDescriptor(RegExp.prototype, 'source').get;
 
 function inspectForDiff(value) {
@@ -1761,7 +1764,9 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        return Object.is(actual.getTime(), expected.getTime());
+        // Like Node 26 keyCheck in partial mode, expected's own properties must match too.
+        return Object.is(DatePrototypeGetTime.call(actual), DatePrototypeGetTime.call(expected)) &&
+            compareExpectedProperties(actual, expected, memo, false);
     }
 
     if (expectedTag === '[object RegExp]' || actualTag === '[object RegExp]') {
@@ -1771,7 +1776,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
 
         return actual.source === expected.source &&
             actual.flags === expected.flags &&
-            actual.lastIndex === expected.lastIndex;
+            actual.lastIndex === expected.lastIndex &&
+            compareExpectedProperties(actual, expected, memo, false);
     }
 
     if (expectedTag === '[object ArrayBuffer]' || expectedTag === '[object SharedArrayBuffer]') {
@@ -1814,6 +1820,11 @@ function innerPartialDeepEqual(actual, expected, memo) {
         if (!isTypedArrayView(actual, actualTag) || actualTag !== expectedTag || actual.byteLength < expected.byteLength) {
             return false;
         }
+        // Symbol.toStringTag can be forged; compare the intrinsic element type like Node 26.
+        if (TypedArrayPrototypeGetSymbolToStringTag.call(actual) !==
+            TypedArrayPrototypeGetSymbolToStringTag.call(expected)) {
+            return false;
+        }
 
         const actualTypedArray = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
         const expectedTypedArray = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
@@ -1827,7 +1838,9 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        return compareExpectedProperties(actual, expected, memo, false);
+        // Element bytes were matched above; like Node's getOwnNonIndexProperties, only the
+        // remaining own properties are compared.
+        return compareExpectedProperties(actual, expected, memo, true);
     }
 
     const expectedIsURL = isURLValue(expected, expectedTag);
@@ -1837,7 +1850,7 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        return actual.href === expected.href;
+        return actual.href === expected.href && compareExpectedProperties(actual, expected, memo, false);
     }
 
     if (expectedTag === '[object Error]' || expected instanceof Error) {

@@ -593,7 +593,8 @@ function _deepObjEquiv(a, b, strict, memo) {
         } catch (_) {
             return false;
         }
-        if (aDateTime !== bDateTime) return false;
+        // Two invalid dates (NaN time) are equal, as in Node 26.
+        if (aDateTime !== bDateTime && (aDateTime === aDateTime || bDateTime === bDateTime)) return false;
         // In strict mode, also check constructor and own properties
         if (strict && !_deepSkipPrototype && a.constructor !== b.constructor) return false;
         const dKeysA = Object.keys(a);
@@ -823,17 +824,37 @@ function _deepObjEquiv(a, b, strict, memo) {
     }
 
     if (!memo) {
-        memo = { a: [], b: [] };
+        memo = { a: [], b: [], cycle: { useSet: false } };
     }
-    // Check for cycles: if we've seen this exact pair (a, b), assume equal
-    for (let mi = 0; mi < memo.a.length; mi++) {
-        if (memo.a[mi] === a && memo.b[mi] === b) {
-            return true;
+    // Node 26 cycle handling (comparisons.js handleCycles). One level below the roots,
+    // only the root on the same side counts. Once the comparison goes deeper, every object
+    // on the current path counts, from either side, for the rest of the comparison: an
+    // object on the path then matches only when its counterpart is on the path too.
+    const depth = memo.a.length;
+    if (depth >= 2) {
+        memo.cycle.useSet = true;
+    }
+    if (memo.cycle.useSet) {
+        const aOnPath = memo.a.includes(a) || memo.b.includes(a);
+        const bOnPath = memo.a.includes(b) || memo.b.includes(b);
+        if (aOnPath || bOnPath) {
+            return aOnPath && bOnPath;
         }
+    } else if (depth === 1) {
+        if (memo.a[0] === a) return memo.b[0] === b;
+        if (memo.b[0] === b) return false;
     }
     memo.a.push(a);
     memo.b.push(b);
+    try {
+        return _deepContainerEquiv(a, b, strict, memo);
+    } finally {
+        memo.a.length = depth;
+        memo.b.length = depth;
+    }
+}
 
+function _deepContainerEquiv(a, b, strict, memo) {
     if (a instanceof Map && b instanceof Map) {
         if (a.size !== b.size) return false;
         const aEntries = Array.from(a.entries());
@@ -866,7 +887,7 @@ function _deepObjEquiv(a, b, strict, memo) {
                 for (let j = 0; j < bEntries.length; j++) {
                     if (matchedB[j]) continue;
                     if (Object.is(aKey, bEntries[j][0])) {
-                        const valueMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                        const valueMemo = { a: memo.a.slice(), b: memo.b.slice(), cycle: memo.cycle };
                         if (_innerDeep(aEntries[i][1], bEntries[j][1], strict, valueMemo)) {
                             memo.a = valueMemo.a;
                             memo.b = valueMemo.b;
@@ -886,9 +907,9 @@ function _deepObjEquiv(a, b, strict, memo) {
             let found = false;
             for (let j = 0; j < bEntries.length; j++) {
                 if (matchedB[j]) continue;
-                const keyMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                const keyMemo = { a: memo.a.slice(), b: memo.b.slice(), cycle: memo.cycle };
                 if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, keyMemo)) {
-                    const valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice() };
+                    const valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice(), cycle: keyMemo.cycle };
                     if (_innerDeep(aEntries[ai][1], bEntries[j][1], strict, valueMemo)) {
                         memo.a = valueMemo.a;
                         memo.b = valueMemo.b;
@@ -947,7 +968,7 @@ function _deepObjEquiv(a, b, strict, memo) {
             let found = false;
             for (let j = 0; j < arrB.length; j++) {
                 if (usedB[j]) continue;
-                if (_innerDeep(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
+                if (_innerDeep(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice(), cycle: memo.cycle })) {
                     usedB[j] = true;
                     found = true;
                     break;
@@ -977,7 +998,8 @@ function _deepObjEquiv(a, b, strict, memo) {
         for (let i = 0; i < a.length; i++) {
             const aHas = _hasOwnProp(a, i);
             const bHas = _hasOwnProp(b, i);
-            if (strict && aHas !== bHas) return false;
+            // Node 26: a hole never equals a present element, also in loose mode.
+            if (aHas !== bHas) return false;
             if (!_innerDeep(a[i], b[i], strict, memo)) return false;
         }
         const keysA = Object.keys(a).filter(function(k) { return !_isArrIdx(k, a.length); });
@@ -1616,7 +1638,8 @@ export function parseEnv(content) {
         throw new ERR_INVALID_ARG_TYPE('content', 'string', content);
     }
 
-    const store = {};
+    // Node 26 returns a null-prototype object, so keys such as __proto__ are plain entries.
+    const store = { __proto__: null };
     let remaining = _parseEnvTrimSpaces(content.replace(/\r/g, ''));
 
     while (remaining.length > 0) {
