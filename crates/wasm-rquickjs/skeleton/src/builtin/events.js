@@ -575,10 +575,15 @@ EventEmitter.prototype.eventNames = function eventNames() {
     return Object.keys(this._events).concat(Object.getOwnPropertySymbols(this._events));
 };
 
-// Legacy static listenerCount
+// Static listenerCount; like Node 26 it also counts EventTarget (including AbortSignal) listeners.
 EventEmitter.listenerCount = function(emitter, eventName) {
-    if (emitter == null || typeof emitter.listenerCount !== 'function') return 0;
-    return emitter.listenerCount(eventName);
+    if (emitter == null) return 0;
+    if (typeof emitter.listenerCount === 'function') return emitter.listenerCount(eventName);
+    if (typeof emitter.addEventListener === 'function' && emitter._listeners) {
+        const entries = emitter._listeners[eventName];
+        return entries ? entries.length : 0;
+    }
+    return 0;
 };
 
 EventEmitter.once = function(emitter, name, options) {

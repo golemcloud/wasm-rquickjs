@@ -1080,11 +1080,13 @@ export let openSync = function openSync(path, flags, mode) {
     mode = validateMode(mode, 'mode', 0o666);
     mode = mode & ~process.umask();
     const fullPath = pathToString(path);
+    // Opening an existing file with O_CREAT creates no entry, so watchers see no 'rename'.
+    const created = (flags & O_CREAT) && _activeWatchers.size > 0 && native.fs_stat(fullPath).error;
     const result = native.fs_open(fullPath, flags, mode);
     if (result.error) {
         throw createSystemError(result.error);
     }
-    if (flags & O_CREAT) {
+    if (created) {
         _notifyFSWatchers(fullPath, 'rename');
     }
     return result.fd;
@@ -3422,9 +3424,16 @@ ReadStream.prototype.close = function(cb) {
     this.destroy();
 };
 
+// Like Node 26 validateThisInternalField, autoClose works only on stream instances.
 Object.defineProperty(ReadStream.prototype, 'autoClose', {
-    get() { return this._readableState ? this._readableState.autoDestroy : true; },
-    set(val) { if (this._readableState) this._readableState.autoDestroy = val; }
+    get() {
+        if (!this || !this._readableState) throw new ERR_INVALID_THIS('ReadStream');
+        return this._readableState.autoDestroy;
+    },
+    set(val) {
+        if (!this || !this._readableState) throw new ERR_INVALID_THIS('ReadStream');
+        this._readableState.autoDestroy = val;
+    }
 });
 
 Object.defineProperty(ReadStream.prototype, 'pending', {
@@ -3685,8 +3694,14 @@ WriteStream.prototype.close = function(cb) {
 };
 
 Object.defineProperty(WriteStream.prototype, 'autoClose', {
-    get() { return this._writableState ? this._writableState.autoDestroy : true; },
-    set(val) { if (this._writableState) this._writableState.autoDestroy = val; }
+    get() {
+        if (!this || !this._writableState) throw new ERR_INVALID_THIS('WriteStream');
+        return this._writableState.autoDestroy;
+    },
+    set(val) {
+        if (!this || !this._writableState) throw new ERR_INVALID_THIS('WriteStream');
+        this._writableState.autoDestroy = val;
+    }
 });
 
 Object.defineProperty(WriteStream.prototype, 'pending', {

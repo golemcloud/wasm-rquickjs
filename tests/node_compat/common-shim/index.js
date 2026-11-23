@@ -939,9 +939,9 @@ function applyNetFlagsAndDefaults() {
         }
     }
 
-    // Match Node's test/common behavior: inflate this timeout to reduce flakes.
+    // Match Node 26 test/common behavior: inflate this timeout to reduce flakes.
     net.setDefaultAutoSelectFamilyAttemptTimeout(
-        common.platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 10)
+        common.platformTimeout(net.getDefaultAutoSelectFamilyAttemptTimeout() * 5)
     );
 }
 

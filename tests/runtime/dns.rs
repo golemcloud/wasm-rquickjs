@@ -127,7 +127,7 @@ async fn dns_module_api(#[tagged_as("dns")] compiled: &CompiledTest) -> anyhow::
         );
         assert!(
             result_obj["nullHostname"].as_bool().unwrap_or(false),
-            "lookup('') should return null address with IPv4 family"
+            "lookup('') should throw ERR_INVALID_ARG_VALUE"
         );
         assert!(
             result_obj["lookupAll"].as_bool().unwrap_or(false),

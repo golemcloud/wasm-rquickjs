@@ -526,6 +526,9 @@ Socket.prototype.connect = function connect(...args) {
     if (options.host !== undefined && typeof options.host !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('options.host', 'string', options.host);
     }
+    if (typeof options.host === 'string' && options.host.includes('\u0000')) {
+        throw new ERR_INVALID_ARG_VALUE('options.host', options.host, 'must be a string without null bytes');
+    }
 
     if (options.lookup !== undefined && typeof options.lookup !== 'function') {
         throw new ERR_INVALID_ARG_TYPE('options.lookup', 'Function', options.lookup);
@@ -1942,7 +1945,8 @@ export const connect = createConnection;
 // --- Auto-select family stubs ---
 
 let _defaultAutoSelectFamily = false;
-let _defaultAutoSelectFamilyAttemptTimeout = 250;
+// Node 26 raised the --network-family-autoselection-attempt-timeout default from 250 to 500 ms.
+let _defaultAutoSelectFamilyAttemptTimeout = 500;
 
 export function getDefaultAutoSelectFamily() { return _defaultAutoSelectFamily; }
 export function setDefaultAutoSelectFamily(value) { _defaultAutoSelectFamily = !!value; }
