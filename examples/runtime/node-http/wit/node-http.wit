@@ -20,6 +20,7 @@ world node-http {
   export http-pipelined-response-order: func() -> bool;
   export http-expect-continue-flow: func() -> bool;
   export http-half-open-pipelined-requests: func() -> bool;
+  export http-response-after-buffered-request-end: func() -> bool;
   export http-pipelined-close-lifecycle: func() -> bool;
   export http-pipelined-connection-close: func() -> bool;
   export http-pipelined-active-timeout: func() -> bool;
@@ -35,6 +36,7 @@ world node-http {
   export http-informational-write-after-close: func() -> bool;
   export http-max-requests-closes-socket: func() -> bool;
   export net-writev-boundaries: func() -> bool;
+  export net-read-end-after-data-ticks: func() -> bool;
   export net-write-timeout-lifecycle: func() -> bool;
   export net-write-profile: func(chunk-size: u32, chunk-count: u32, corked: bool) -> string;
   export http-pipelined-max-requests: func() -> bool;
