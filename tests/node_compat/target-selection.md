@@ -3,8 +3,9 @@
 **Status:** Node.js 26.13.1 with npm 11.20.0 is the selected target for NJ-02 (GOL-1947),
 compared against Node.js 24.22.3. This record is a qualification result, not implemented runtime
 support. NJ-02 has since switched the `node_compat` suite and the runtime's `process` version
-metadata to 26.13.1; see [`mapping-22.14.0-to-26.13.1.json`](mapping-22.14.0-to-26.13.1.json). Host
-Node.js and npm pins are still 22.14.0 and 10.9.2.
+metadata to 26.13.1; its 22.14.0 baseline audit is kept with
+[pull request #218](https://github.com/golemcloud/wasm-rquickjs/pull/218). Host Node.js and npm pins
+are still 22.14.0 and 10.9.2.
 No material blocker to Node 26 was found, and it is supported one year longer than Node 24
 (end of life 2029-04-30 against 2028-04-30).
 

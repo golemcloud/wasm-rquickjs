@@ -24,16 +24,16 @@
     "parallel/test-path-basename.js": {},
     "parallel/test-path-dirname.js": {},
     "parallel/test-path-extname.js": {},
-    "parallel/test-path-join.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: path.win32.join resolves .. through a CON: device-name segment" },
+    "parallel/test-path-join.js": {},
     "parallel/test-path-isabsolute.js": {},
-    "parallel/test-path-normalize.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-path-normalize.js": {},
     "parallel/test-path-parse-format.js": {},
     "parallel/test-path-relative.js": {},
-    "parallel/test-path-resolve.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: path.win32.resolve(\"\\\\\\\\.\\\\PHYSICALDRIVE0\")" },
+    "parallel/test-path-resolve.js": {},
     "parallel/test-path-zero-length-strings.js": {},
     "parallel/test-path.js": {},
     "parallel/test-path-glob.js": {},
-    "parallel/test-path-makelong.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-path-makelong.js": {},
     "parallel/test-path-posix-exists.js": {},
     "parallel/test-path-win32-exists.js": {},
 
@@ -54,8 +54,8 @@
         "test_10_output_that_extends_beyond_10_lines_should_also_be_truncated": {},
         "test_11_bad_args_to_assertionerror_constructor_should_throw_typeerro": {},
         "test_12_nan_is_handled_correctly": {},
-        "test_13_test_strict_assert": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
-        "test_14_additional_asserts": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "test_13_test_strict_assert": {},
+        "test_14_additional_asserts": { "category": "known-gap", "reason": "QuickJS exposes no eval/Function source text, so assert.ok there reports 'false == true' (the 22.14.0 expectation) instead of the Node 26.13.1 source line" },
         "test_15_throws_accepts_objects": {},
         "test_16_additional_assert": {},
         "test_17_assert_strict_exists": {},
@@ -89,24 +89,24 @@
       "subtests": {
         "test_00_deepequal": {},
         "test_01_loose_deepequal": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
-        "test_02_date": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
-        "test_03_regexp": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+        "test_02_date": {},
+        "test_03_regexp": {},
         "test_04_deepequal_should_pass_for_these_weird_cases": {},
-        "test_05_es6_maps_and_sets": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "test_05_es6_maps_and_sets": {},
         "test_06_gh_6416_make_sure_circular_refs_do_not_throw": {},
-        "test_07_gh_14441_circular_structures_should_be_consistent": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+        "test_07_gh_14441_circular_structures_should_be_consistent": {},
         "test_08_deepstrictequal_handles_shared_expected_array_elements_after": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_09_deepstrictequal_handles_cross_root_aliases_after_cycle_detec": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_10_ensure_reflexivity_of_deepequal_with_arguments_objects": {},
         "test_11_more_checking_that_arguments_objects_are_handled_correctly": {},
-        "test_12_handle_sparse_arrays": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+        "test_12_handle_sparse_arrays": {},
         "test_13_handle_sets_and_maps_with_mixed_keys": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_14_handle_different_error_messages": {},
         "test_15_handle_nan": {},
         "test_16_handle_boxed_primitives": {},
         "test_17_minus_zero": {},
         "test_18_handle_symbols_enumerable_only": {},
-        "test_19_additional_tests": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be loosely deep-equal:" },
+        "test_19_additional_tests": {},
         "test_20_having_the_same_number_of_owned_properties_the_same_set_of_k": {},
         "test_21_having_an_identical_prototype_property": {},
         "test_22_primitives": {},
@@ -114,11 +114,11 @@
         "test_24_having_the_same_number_of_owned_properties_the_same_set_of_k": {},
         "test_25_prototype_check": {},
         "test_26_check_extra_properties_on_errors": {},
-        "test_27_check_proxies": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "test_27_check_proxies": {},
         "test_28_test_28": {},
         "test_29_basic_valueof_check": {},
         "test_30_basic_array_out_of_bounds_check": {},
-        "test_31_test_31": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "test_31_test_31": {},
         "test_32_test_32": {},
         "test_33_verify_that_extra_keys_will_be_tested_for_when_using_fake_ar": {},
         "test_34_verify_that_changed_tags_will_still_check_for_the_error_mess": {},
@@ -127,7 +127,7 @@
         "test_37_check_for_aggregateerror": {},
         "test_38_verify_that_valueof_is_not_called_for_boxed_primitives": {},
         "test_39_check_getters": {},
-        "test_40_verify_object_types_being_identical_on_both_sides": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+        "test_40_verify_object_types_being_identical_on_both_sides": {},
         "test_41_verify_commutativity": {},
         "test_42_crypto": {},
         "test_43_comparing_two_identical_weakmap_instances": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
@@ -167,7 +167,7 @@
       "split": true,
       "subtests": {
         "test_00_equalarraypairs": {},
-        "test_01_looseequalarraypairs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be loosely deep-equal:" },
+        "test_01_looseequalarraypairs": {},
         "test_02_notequalarraypairs": {}
       }
     },
@@ -213,7 +213,7 @@
         "block_30_statement_30": { "category": "known-gap", "reason": "Blob byte-stream BYOB final read does not settle at end of stream" },
         "block_31_statement_31": { "category": "node-internals", "reason": "Asserts internal webstreams kState" },
         "block_32_statement_32": { "category": "node-internals", "reason": "Asserts internal webstreams kState" },
-        "block_33_block_33": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection: AssertionError: 'a\\rb' !== 'a\\nb'; carries 22.14.0 subtest block_32_block_32" },
+        "block_33_block_33": { "category": "runnable" },
         "block_34_block_34": { "category": "runnable" },
         "block_35_statement_35": { "category": "runnable" },
         "block_36_statement_36": { "category": "runnable" },
@@ -277,7 +277,7 @@
         "block_07_test_for_non_string_parameter": {}
       }
     },
-    "parallel/test-url-urltooptions.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
+    "parallel/test-url-urltooptions.js": {},
     "parallel/test-url-format-whatwg.js": {
       "category": "known-gap",
       "reason": "all assertions are gated by common.hasIntl; URL-only IDNA formatting is covered by focused runtime tests while the broader Intl API remains unavailable",
@@ -309,7 +309,7 @@
         "test_01_parse_result_should_equal_new_url_url": {}
       }
     },
-    "parallel/test-url-parse-invalid-input.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception.; the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests" },
+    "parallel/test-url-parse-invalid-input.js": { "category": "runnable", "reason": "the runnable assertions execute, while its common.hasIntl-gated invalid-IDNA matrix is covered separately by focused runtime tests" },
     "parallel/test-url-parse-query.js": {},
     "parallel/test-url-relative.js": {},
 
@@ -416,13 +416,13 @@
         "block_18_test_for_array_constructor_in_different_context": {},
         "block_19_test_for_other_constructors_in_different_context": {},
         "block_20_test_for_property_descriptors": {},
-        "block_21_exceptions_should_print_the_error_message_not": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_22_block_22": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_21_exceptions_should_print_the_error_message_not": { "category": "runnable" },
+        "block_22_block_22": { "category": "runnable" },
         "block_23_block_23": {},
         "block_24_block_24": {},
-        "block_25_block_25": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_23_block_23" },
-        "block_26_prevent_enumerable_error_properties_from_being_printed": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_27_doesn_t_capture_stack_trace": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_25_block_25": { "category": "known-gap", "reason": "QuickJS makes Error.stackTraceLimit a read-only data property after Object.defineProperty(Error, \"stackTraceLimit\", { value: 0 }), unlike V8" },
+        "block_26_prevent_enumerable_error_properties_from_being_printed": { "category": "runnable" },
+        "block_27_doesn_t_capture_stack_trace": { "category": "runnable" },
         "block_28_https_github_com_nodejs_node_v0_x_archive_issues_1944": {},
         "block_29_should_not_throw": {},
         "block_30_should_not_throw": {},
@@ -445,66 +445,66 @@
         "block_47_a_bonafide_native_promise": {},
         "block_48_test_map_iterators": {},
         "block_49_test_set_iterators": {},
-        "block_50_the_constructor_and_symbol_tostringtag": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_51_assumes_that_the_first_numeric_character_is_the_start_of_an_": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_52_test_display_of_constructors": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_53_empty_and_circular_before_depth": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_54_corner_cases": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_55_block_55": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_56_block_56": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_57_block_57": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_58_block_58": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_59_https_github_com_nodejs_node_pull_6334_is_backported": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_60_block_60": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_61_block_61": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_62_block_62": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_63_util_inspect_defaultoptions_tests": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_64_setting_custom_inspect_property_to_a_non_function_should_do_": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_65_block_65": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_63_block_63" },
-        "block_66_block_66": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_67_check_compact_indentation": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_68_block_68": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_69_block_69": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_70_block_70": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_71_class_properties_should_not_be_detected_as_class": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_72_verify_non_enumerable_keys_get_escaped": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_73_check_for_special_colors": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_50_the_constructor_and_symbol_tostringtag": { "category": "runnable" },
+        "block_51_assumes_that_the_first_numeric_character_is_the_start_of_an_": { "category": "runnable" },
+        "block_52_test_display_of_constructors": { "category": "runnable" },
+        "block_53_empty_and_circular_before_depth": { "category": "runnable" },
+        "block_54_corner_cases": { "category": "runnable" },
+        "block_55_block_55": { "category": "runnable" },
+        "block_56_block_56": { "category": "runnable" },
+        "block_57_block_57": { "category": "runnable" },
+        "block_58_block_58": { "category": "runnable" },
+        "block_59_https_github_com_nodejs_node_pull_6334_is_backported": { "category": "runnable" },
+        "block_60_block_60": { "category": "runnable" },
+        "block_61_block_61": { "category": "runnable" },
+        "block_62_block_62": { "category": "runnable" },
+        "block_63_util_inspect_defaultoptions_tests": { "category": "runnable" },
+        "block_64_setting_custom_inspect_property_to_a_non_function_should_do_": { "category": "runnable" },
+        "block_65_block_65": { "category": "runnable", "reason": "carries 22.14.0 subtest block_63_block_63" },
+        "block_66_block_66": { "category": "runnable" },
+        "block_67_check_compact_indentation": { "category": "runnable" },
+        "block_68_block_68": { "category": "runnable" },
+        "block_69_block_69": { "category": "runnable" },
+        "block_70_block_70": { "category": "runnable" },
+        "block_71_class_properties_should_not_be_detected_as_class": { "category": "runnable" },
+        "block_72_verify_non_enumerable_keys_get_escaped": { "category": "runnable" },
+        "block_73_check_for_special_colors": { "category": "runnable" },
         "block_74_only_the_name_is_colored_and_space_are_unstyled": {},
-        "block_75_non_indices_array_properties_are_sorted_as_well": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_75_non_indices_array_properties_are_sorted_as_well": { "category": "runnable" },
         "block_76_manipulate_the_prototype_in_weird_ways": { "category": "known-gap", "reason": "requires V8 hidden-class constructor-name recovery after the prototype constructor is detached" },
-        "block_77_check_that_the_fallback_always_works": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_78_check_the_getter_option": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_77_check_that_the_fallback_always_works": { "category": "runnable" },
+        "block_78_check_the_getter_option": { "category": "runnable" },
         "block_79_https_github_com_nodejs_node_issues_64838": {},
         "block_80_property_getter_throwing_an_error": {},
         "block_81_https_github_com_nodejs_node_issues_60683": {},
         "block_82_property_getter_throwing_an_error_with_getters_that_throws_r": {},
         "block_83_property_getter_throwing_an_error_whose_own_getters_throw_th": {},
-        "block_84_check_compact_number_mode": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_85_block_85": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_77_block_77" },
+        "block_84_check_compact_number_mode": { "category": "runnable" },
+        "block_85_block_85": { "category": "runnable", "reason": "carries 22.14.0 subtest block_77_block_77" },
         "block_86_block_86": {},
         "block_87_block_87": {},
         "block_88_block_88": {},
-        "block_89_block_89": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_90_inspect_prototype_properties": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_91_regression_test_for_https_github_com_nodejs_node_issues_3573": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_92_test_changing_util_inspect_colors_colors_and_aliases": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_89_block_89": { "category": "runnable" },
+        "block_90_inspect_prototype_properties": { "category": "runnable" },
+        "block_91_regression_test_for_https_github_com_nodejs_node_issues_3573": { "category": "runnable" },
+        "block_92_test_changing_util_inspect_colors_colors_and_aliases": { "category": "runnable" },
         "block_93_https_github_com_nodejs_node_issues_31889": { "category": "known-gap", "reason": "uses V8 native %GetUndetectable() syntax which QuickJS cannot evaluate" },
-        "block_94_truncate_output_for_primitives_with_1_character_left": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_95_block_95": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_96_block_96": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_97_block_97": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_98_block_98": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_99_block_99": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_100_block_100": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: util.inspect prints the symbol key of a boxed String as [Symbol(foo)]; 26.13.1 expects Symbol(foo); carries 22.14.0 subtest block_90_block_90" },
-        "block_101_block_101": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_91_block_91" },
-        "block_102_regression_test_for_https_github_com_nodejs_node_issues_4124": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_94_truncate_output_for_primitives_with_1_character_left": { "category": "runnable" },
+        "block_95_block_95": { "category": "runnable" },
+        "block_96_block_96": { "category": "runnable" },
+        "block_97_block_97": { "category": "runnable" },
+        "block_98_block_98": { "category": "runnable" },
+        "block_99_block_99": { "category": "runnable" },
+        "block_100_block_100": { "category": "runnable" },
+        "block_101_block_101": { "category": "runnable", "reason": "carries 22.14.0 subtest block_91_block_91" },
+        "block_102_regression_test_for_https_github_com_nodejs_node_issues_4124": { "category": "runnable" },
         "block_103_block_103": {},
-        "block_104_block_104": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_105_block_105": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_106_block_106": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_95_block_95" },
-        "block_107_block_107": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_108_block_108": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "block_109_block_109": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:; carries 22.14.0 subtest block_98_block_98" },
+        "block_104_block_104": { "category": "runnable" },
+        "block_105_block_105": { "category": "runnable" },
+        "block_106_block_106": { "category": "runnable", "reason": "carries 22.14.0 subtest block_95_block_95" },
+        "block_107_block_107": { "category": "runnable" },
+        "block_108_block_108": { "category": "runnable" },
+        "block_109_block_109": { "category": "runnable", "reason": "carries 22.14.0 subtest block_98_block_98" },
         "block_110_block_110": {},
         "block_111_block_111": {},
         "block_112_block_112": {},
@@ -514,8 +514,8 @@
       }
     },
     "parallel/test-util-internal.js": { "category": "node-internals", "reason": "requires internalBinding('util').privateSymbols" },
-    "parallel/test-util-isDeepStrictEqual.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-    "parallel/test-util-parse-env.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "parallel/test-util-isDeepStrictEqual.js": {},
+    "parallel/test-util-parse-env.js": { "category": "runnable" },
     "parallel/test-util-primordial-monkeypatching.js": {},
     "parallel/test-util-promisify.js": {
       "category": "node-internals",
@@ -545,8 +545,8 @@
     },
     "parallel/test-util-sigint-watchdog.js": { "category": "node-internals", "reason": "requires internal/test/binding and internalBinding('contextify')" },
     "parallel/test-util-sleep.js": { "category": "node-internals", "reason": "requires internal/util.sleep" },
-    "parallel/test-util-stripvtcontrolcharacters.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-    "parallel/test-util-styletext.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: The argument 'format' must be a valid string format. Received \"grey\"" },
+    "parallel/test-util-stripvtcontrolcharacters.js": {},
+    "parallel/test-util-styletext.js": {},
     "parallel/test-util-text-decoder.js": {
       "split": true,
       "subtests": {
@@ -633,7 +633,7 @@
     "parallel/test-fs-chown-type-check.js": {},
     "parallel/test-fs-close.js": {},
     "parallel/test-fs-close-errors.js": {},
-    "parallel/test-fs-constants.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-fs-constants.js": { "category": "runnable" },
     "parallel/test-fs-copyfile.js": { "category": "node-internals", "reason": "uses --expose-internals with internal/test/binding (internalBinding('uv'))" },
     "parallel/test-fs-copyfile-respect-permissions.js": {
       "category": "wasi-impossible",
@@ -778,13 +778,13 @@
     },
     "parallel/test-fs-promises-exists.js": {},
     "parallel/test-fs-promises-file-handle-aggregate-errors.js": { "category": "node-internals", "reason": "patches internal/fs/promises FileHandle fd/close internals" },
-    "parallel/test-fs-promises-file-handle-append-file.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab" },
+    "parallel/test-fs-promises-file-handle-append-file.js": { "category": "runnable" },
     "parallel/test-fs-promises-file-handle-chmod.js": {},
     "parallel/test-fs-promises-file-handle-close-errors.js": { "category": "node-internals", "reason": "patches internal/fs/promises FileHandle fd/close internals" },
-    "parallel/test-fs-promises-file-handle-dispose.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: not a function" },
+    "parallel/test-fs-promises-file-handle-dispose.js": { "category": "runnable" },
     "parallel/test-fs-promises-file-handle-op-errors.js": { "category": "node-internals", "reason": "patches internal/fs/promises FileHandle fd internals" },
     "parallel/test-fs-promises-file-handle-read-worker.js": { "category": "wasi-impossible", "reason": "depends on real worker_threads execution to read the transferred FileHandle in a separate context, which is not available in single-threaded WASM" },
-    "parallel/test-fs-promises-file-handle-read.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: Error converting from js 'string' i" },
+    "parallel/test-fs-promises-file-handle-read.js": {},
     "parallel/test-fs-promises-file-handle-readFile.js": {},
     "parallel/test-fs-promises-file-handle-stat.js": {},
     "parallel/test-fs-promises-file-handle-stream.js": {},
@@ -795,13 +795,13 @@
     "parallel/test-fs-promises-readfile-empty.js": {},
     "parallel/test-fs-promises-readfile-with-fd.js": {},
     "parallel/test-fs-promises-readfile.js": { "category": "node-internals", "reason": "patches internalBinding('fs') via internal/test/binding" },
-    "parallel/test-fs-promises-watch.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Test timed out after 120s" },
+    "parallel/test-fs-promises-watch.js": {},
     "parallel/test-fs-promises-write-optional-params.js": {},
     "parallel/test-fs-promises-writefile.js": {},
     "parallel/test-fs-promises.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
+        "block_00_block_00": {},
         "block_01_block_01": { "category": "known-gap", "reason": "the rooted symlink target used by this subtest cannot be resolved inside a WASI preopen" }
       }
     },
@@ -978,8 +978,8 @@
     "parallel/test-fs-statfs.js": {
       "split": true,
       "subtests": {
-        "block_00_synchronous": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: The expression evaluated to a falsy value:" },
-        "block_01_synchronous_bigint": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: The expression evaluated to a falsy value:" }
+        "block_00_synchronous": {},
+        "block_01_synchronous_bigint": {}
       }
     },
     "parallel/test-fs-stream-construct-compat-error-read.js": {},
@@ -1139,7 +1139,7 @@
     "parallel/test-fs-watch-recursive-sync-write.js": {},
     "parallel/test-fs-watch-recursive-update-file.js": {},
     "parallel/test-fs-watch-recursive-validate.js": {},
-    "parallel/test-fs-watch-recursive-watch-file.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+    "parallel/test-fs-watch-recursive-watch-file.js": { "category": "runnable" },
     "parallel/test-fs-watch-ref-unref.js": {},
     "parallel/test-fs-watch-stop-async.js": {},
     "parallel/test-fs-watch-stop-sync.js": {},
@@ -1208,7 +1208,7 @@
     "parallel/test-fs-write-optional-params.js": {},
     "parallel/test-fs-write-reuse-callback.js": {},
     "parallel/test-fs-write-sigxfsz.js": { "category": "wasi-impossible", "reason": "requires POSIX RLIMIT_FSIZE/SIGXFSZ behavior via /bin/sh ulimit" },
-    "parallel/test-fs-write-stream-autoclose-option.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+    "parallel/test-fs-write-stream-autoclose-option.js": {},
     "parallel/test-fs-write-stream-change-open.js": {},
     "parallel/test-fs-write-stream-close-without-callback.js": {},
     "parallel/test-fs-write-stream-double-close.js": {
@@ -1324,7 +1324,7 @@
     "parallel/test-dgram-async-dispose.mjs": {},
     "parallel/test-net-server-async-dispose.mjs": {},
     "parallel/test-timers-immediate-queue.js": { "category": "known-gap", "reason": "setImmediate queue turn semantics are unstable and can trap in the timeout scheduler" },
-    "parallel/test-timers-immediate-queue-throw.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+    "parallel/test-timers-immediate-queue-throw.js": {},
     "parallel/test-timers-immediate-unref.js": {},
     "parallel/test-timers-immediate-unref-nested-once.js": {},
     "parallel/test-timers-immediate-unref-simple.js": {},
@@ -1611,10 +1611,10 @@
     "parallel/test-crypto-cipheriv-decipheriv.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
-        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
-        "block_03_block_03": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {}
       }
     },
     "parallel/test-crypto-classes.js": {},
@@ -1627,7 +1627,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-crypto-dh-curves.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-crypto-dh-curves.js": { "category": "known-gap", "reason": "createDiffieHellman() verifyError prime checks are not implemented; open DH coverage obligation from the 22.14.0 baseline" },
     "parallel/test-crypto-dh-errors.js": {},
     "parallel/test-crypto-dh-generate-keys.js": {},
     "parallel/test-crypto-dh-group-setters.js": {},
@@ -1640,14 +1640,14 @@
     "parallel/test-crypto-dh-stateless.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_03_block_03": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_04_test_that_error_messages_include_the_correct_property_path": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_05_block_05": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_06_block_06": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
-        "block_07_test_c_error_conditions_both_sync_throws_and_async_callback": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." }
+        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_03_block_03": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_04_test_that_error_messages_include_the_correct_property_path": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_05_block_05": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_06_block_06": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" },
+        "block_07_test_c_error_conditions_both_sync_throws_and_async_callback": { "category": "known-gap", "reason": "Node 26.13.1 crypto.diffieHellman() key-type and option validation is not met yet; open DH coverage obligation from the 22.14.0 baseline" }
       }
     },
     "parallel/test-crypto-dh.js": {
@@ -1720,25 +1720,25 @@
     "parallel/test-crypto-key-objects.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_03_block_03": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_04_block_04": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
         "block_05_block_05": { "category": "known-gap", "reason": "importing scrypt-encrypted PKCS#8 keys traps in the WASM crypto backend" },
-        "block_06_block_06": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "block_06_block_06": {},
         "block_07_importing_an_okp_private_jwk_where_x_does_not_match_d_should": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "block_08_importing_an_ec_private_jwk_where_x_does_not_match_d_should_": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
-        "block_09_block_09": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_10_block_10": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_09_block_09" },
-        "block_11_block_11": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_12_block_12": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_13_block_13": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_12_block_12" },
-        "block_14_block_14": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_15_block_15": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_16_block_16": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_15_block_15" },
-        "block_17_block_17": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_18_block_18": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
+        "block_09_block_09": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {},
+        "block_12_block_12": {},
+        "block_13_block_13": { "category": "runnable", "reason": "carries 22.14.0 subtest block_12_block_12" },
+        "block_14_block_14": {},
+        "block_15_block_15": {},
+        "block_16_block_16": { "category": "runnable", "reason": "carries 22.14.0 subtest block_15_block_15" },
+        "block_17_block_17": {},
+        "block_18_block_18": {},
         "block_19_test_that_createpublickey_createprivatekey_error_messages_us": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
     },
@@ -1884,22 +1884,22 @@
     "parallel/test-crypto-sign-verify.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_02_test_handling_of_exceptional_conditions": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_03_test_signing_and_verifying": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_04_block_04": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_05_block_05": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_06_special_tests_for_rsa_pkcs1_pss_padding": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_07_https_www_emc_com_emc_plus_rsa_labs_standards_initiatives_pk": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_08_test_exceptions_for_invalid_padding_and_saltlength_values": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_09_test_throws_exception_when_key_options_is_null": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_10_block_10": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_11_block_11": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_test_handling_of_exceptional_conditions": {},
+        "block_03_test_signing_and_verifying": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_special_tests_for_rsa_pkcs1_pss_padding": {},
+        "block_07_https_www_emc_com_emc_plus_rsa_labs_standards_initiatives_pk": {},
+        "block_08_test_exceptions_for_invalid_padding_and_saltlength_values": {},
+        "block_09_test_throws_exception_when_key_options_is_null": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {},
         "block_12_block_12": { "category": "known-gap", "reason": "RSA private-key parsing/signing path is incomplete (Failed to parse private key)" },
-        "block_13_regression_test_for_https_github_com_nodejs_node_issues_4079": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_14_block_14": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key" },
-        "block_15_block_15": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Failed to export key; carries 22.14.0 subtest block_17_block_17" },
+        "block_13_regression_test_for_https_github_com_nodejs_node_issues_4079": {},
+        "block_14_block_14": {},
+        "block_15_block_15": { "category": "runnable", "reason": "carries 22.14.0 subtest block_17_block_17" },
         "block_16_test_that_sign_verify_error_messages_use_correct_property_pa": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "block_17_crypto_verify_accepts_arraybuffer_and_sharedarraybuffer_for_": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
@@ -2012,8 +2012,8 @@
     "parallel/test-buffer-failed-alloc-typed-arrays.js": {},
     "parallel/test-buffer-fakes.js": {},
     "parallel/test-buffer-inheritance.js": {},
-    "parallel/test-buffer-isascii.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Cannot perform operation on a detached ArrayBuffer" },
-    "parallel/test-buffer-isutf8.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Cannot perform operation on a detached ArrayBuffer" },
+    "parallel/test-buffer-isascii.js": {},
+    "parallel/test-buffer-isutf8.js": {},
     "parallel/test-buffer-iterator.js": {},
     "parallel/test-buffer-nopendingdep-map.js": {},
     "parallel/test-buffer-of-no-deprecation.js": {},
@@ -2123,10 +2123,10 @@
         "block_03_block_03": {}
       }
     },
-    "parallel/test-buffer-bytelength.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Conversion from string failed: invalid utf-8 sequence of 1 bytes from index 300" },
+    "parallel/test-buffer-bytelength.js": {},
     "parallel/test-buffer-compare.js": {},
     "parallel/test-buffer-compare-offset.js": {},
-    "parallel/test-buffer-concat.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+    "parallel/test-buffer-concat.js": {},
     "parallel/test-buffer-constants.js": {},
     "parallel/test-buffer-copy.js": {
       "split": true,
@@ -2264,7 +2264,7 @@
         "block_05_test_uint": {}
       }
     },
-    "parallel/test-buffer-pool-untransferable.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
+    "parallel/test-buffer-pool-untransferable.js": {},
     "parallel/test-buffer-constructor-deprecation-error.js": {},
     "parallel/test-buffer-constructor-outside-node-modules.js": {},
     "parallel/test-buffer-pending-deprecation.js": {},
@@ -2696,7 +2696,7 @@
     "parallel/test-diagnostics-channel-has-subscribers.js": {},
     "parallel/test-diagnostics-channel-object-channel-pub-sub.js": {},
     "parallel/test-diagnostics-channel-pub-sub.js": {},
-    "parallel/test-diagnostics-channel-symbol-named.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-diagnostics-channel-symbol-named.js": {},
     "parallel/test-diagnostics-channel-tracing-channel-args-types.js": { "category": "known-gap", "reason": "tracingChannel({}) argument-validation behavior differs from Node.js (message/throw shape mismatch)" },
     "parallel/test-diagnostics-channel-tracing-channel-callback-early-exit.js": {},
     "parallel/test-diagnostics-channel-tracing-channel-callback-error.js": {},
@@ -2767,7 +2767,7 @@
         "block_01_block_01": {}
       }
     },
-    "parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-net-autoselectfamily-attempt-timeout-cli-option.js": {},
     "parallel/test-net-autoselectfamily-attempt-timeout-default-value.js": {},
     "parallel/test-net-autoselectfamily-commandline-option.js": {},
     "parallel/test-net-autoselectfamily-default.js": {
@@ -2821,7 +2821,7 @@
     "parallel/test-net-can-reset-timeout.js": {},
     "parallel/test-net-child-process-connect-reset.js": { "category": "wasi-impossible", "reason": "[manual] This test fundamentally requires `child_process.spawn()` with IPC communication and OS signal handling (`SIGKILL`), which are impossible in a WebAssembly sandbox. The entire test logic dep..." },
     "parallel/test-net-client-bind-twice.js": {},
-    "parallel/test-net-connect-abort-controller.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Test timed out after 120s" },
+    "parallel/test-net-connect-abort-controller.js": {},
     "parallel/test-net-connect-after-destroy.js": {},
     "parallel/test-net-connect-buffer.js": {},
     "parallel/test-net-connect-buffer2.js": {},
@@ -2840,7 +2840,7 @@
       "subtests": {
         "block_00_block_00": {},
         "block_01_block_01": {},
-        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." }
+        "block_02_block_02": {}
       }
     },
     "parallel/test-net-connect-options-ipv6.js": { "category": "known-gap", "reason": "IPv6 sockets are not available in this runtime (common.hasIPv6=false)" },
@@ -3631,7 +3631,7 @@
     "parallel/test-stream-pipe-multiple-pipes.js": {},
     "parallel/test-stream-pipeline-with-empty-string.js": {},
     "parallel/test-stream-push-order.js": {},
-    "parallel/test-stream-push-strings.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "parallel/test-stream-push-strings.js": {},
     "parallel/test-stream-readable-add-chunk-during-data.js": {},
     "parallel/test-stream-readable-constructor-set-methods.js": {},
     "parallel/test-stream-readable-data.js": {},
@@ -3670,7 +3670,7 @@
     "parallel/test-stream-readable-from-web-termination.js": {},
     "parallel/test-stream-readable-hwm-0-async.js": {},
     "parallel/test-stream-readable-hwm-0.js": {},
-    "parallel/test-stream-readable-infinite-read.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+    "parallel/test-stream-readable-infinite-read.js": {},
     "parallel/test-stream-readable-invalid-chunk.js": {},
     "parallel/test-stream-readable-next-no-null.js": {},
     "parallel/test-stream-readable-no-unneeded-readable.js": {
@@ -3729,7 +3729,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected \"actual\" to be strict" },
+        "block_01_block_01": {},
         "block_02_controller_enqueue_see_https_github_com_nodejs_node_issues_5": {}
       }
     },
@@ -3818,7 +3818,7 @@
         "block_02_block_02": {}
       }
     },
-    "parallel/test-stream-writable-write-error.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "parallel/test-stream-writable-write-error.js": {},
     "parallel/test-stream-writable-write-writev-finish.js": {
       "split": true,
       "subtests": {
@@ -4052,7 +4052,7 @@
       }
     },
     "parallel/test-worker-message-port-close-while-receiving.js": {},
-    "parallel/test-zlib-zero-byte.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+    "parallel/test-zlib-zero-byte.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
     "parallel/test-async-hooks-vm-gc.js": {},
     "parallel/test-finalization-registry-shutdown.js": {},
     "parallel/test-heapdump-async-hooks-init-promise.js": { "category": "engine-difference", "reason": "v8.getHeapSnapshot is V8-specific and unavailable in QuickJS" },
@@ -4171,7 +4171,7 @@
     "es-module/test-esm-loader-cache-clearing.js": { "category": "runnable" },
     "es-module/test-vm-compile-function-leak.js": { "category": "engine-difference", "reason": "uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection" },
     "es-module/test-vm-contextified-script-leak.js": { "category": "engine-difference", "reason": "uses common/gc checkIfCollectable, which is replaced by a non-observing WASM shim and cannot verify collection" },
-    "es-module/test-esm-import-meta.mjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "es-module/test-esm-import-meta.mjs": { "category": "runnable" },
     "es-module/test-esm-import-meta-resolve.mjs": {
       "category": "known-gap",
       "reason": "same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes",
@@ -4198,10 +4198,10 @@
       }
     },
     "parallel/test-zlib-flush-flags.js": {},
-    "parallel/test-zlib-convenience-methods.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+    "parallel/test-zlib-convenience-methods.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
     "parallel/test-zlib-from-string.js": {},
     "parallel/test-zlib-brotli-from-string.js": {},
-    "parallel/test-zlib-empty-buffer.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: The \"original\" argument must be of " },
+    "parallel/test-zlib-empty-buffer.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
     "parallel/test-zlib-deflate-constructors.js": {},
     "parallel/test-zlib-not-string-or-buffer.js": {},
     "parallel/test-zlib-sync-no-event.js": {},
@@ -4251,21 +4251,21 @@
     "parallel/test-zlib-invalid-input-memory.js": { "category": "node-internals", "reason": "relies on common/gc onGC tracking of internal zlib handle lifetime" },
     "parallel/test-zlib-kmaxlength-rangeerror.js": {},
     "parallel/test-zlib-maxOutputLength.js": {},
-    "parallel/test-zlib-params.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-    "parallel/test-zlib-random-byte-pipes.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+    "parallel/test-zlib-params.js": {},
+    "parallel/test-zlib-random-byte-pipes.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
     "parallel/test-zlib-reset-before-write.js": {},
     "parallel/test-zlib-truncated.js": {
       "split": true,
       "subtests": {
-        "block_00_value_as_truncated_input": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "block_01_mistaken_for_an_empty_truncated_frame": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "block_02_must_report_that_the_frame_is_incomplete": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" }
+        "block_00_value_as_truncated_input": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+        "block_01_mistaken_for_an_empty_truncated_frame": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+        "block_02_must_report_that_the_frame_is_incomplete": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" }
       }
     },
     "parallel/test-zlib-unused-weak.js": { "category": "node-internals", "reason": "asserts internal zlib native-handle weak-reference/external-memory behavior" },
     "parallel/test-zlib-write-after-close.js": {},
     "parallel/test-zlib-write-after-end.js": {},
-    "parallel/test-zlib-write-after-flush.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+    "parallel/test-zlib-write-after-flush.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
     "parallel/test-zlib-close-after-error.js": { "category": "node-internals", "reason": "asserts private zlib stream _closed state after error" },
     "parallel/test-zlib-close-in-ondata.js": {},
     "parallel/test-zlib-destroy.js": {
@@ -4519,8 +4519,8 @@
         "block_00_block_00": {},
         "block_01_block_01": {},
         "block_02_block_02": {},
-        "block_03_block_03": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Test timed out after 120s" },
-        "block_04_block_04": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Test timed out after 120s" },
+        "block_03_block_03": {},
+        "block_04_block_04": {},
         "block_05_block_05": {}
       }
     },
@@ -4600,7 +4600,7 @@
       "split": true,
       "subtests": {
         "block_00_block_00": {},
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Test timed out after 120s" }
+        "block_01_block_01": {}
       }
     },
     "parallel/test-http-early-hints.js": {
@@ -4711,7 +4711,7 @@
       }
     },
     "parallel/test-http-outgoing-end-cork.js": { "category": "known-gap", "reason": "the client never observes a reused keep-alive socket, so the corked-response reuse loop does not terminate" },
-    "parallel/test-http-outgoing-end-multiple.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Test timed out after 120s" },
+    "parallel/test-http-outgoing-end-multiple.js": {},
     "parallel/test-http-outgoing-end-types.js": {},
     "parallel/test-http-outgoing-finish-writable.js": {},
     "parallel/test-http-outgoing-finish.js": {},
@@ -4729,9 +4729,9 @@
       "split": true,
       "subtests": {
         "block_00_before_finish_is_emitted": {},
-        "block_01_finish_the_end_callback_receives_the_write_error_instead": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-        "block_02_surfaces_through_the_socket_write_callbacks": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-        "block_03_has_nothing_to_send": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" }
+        "block_01_finish_the_end_callback_receives_the_write_error_instead": { "category": "known-gap", "reason": "node:http client requests always use wasi:http, so a createConnection socket's write failures are not observed" },
+        "block_02_surfaces_through_the_socket_write_callbacks": {},
+        "block_03_has_nothing_to_send": {}
       }
     },
     "parallel/test-http-outgoing-write-types.js": {},
@@ -4852,7 +4852,7 @@
     "parallel/test-http-server-request-timeout-keepalive.js": { "category": "known-gap", "reason": "server.requestTimeout handling across keep-alive requests is not Node-compatible" },
     "parallel/test-http-server-request-timeout-pipelining.js": { "category": "known-gap", "reason": "server.requestTimeout handling for pipelined requests is not Node-compatible" },
     "parallel/test-http-server-request-timeout-upgrade.js": { "category": "known-gap", "reason": "server.requestTimeout is not disabled with Node-compatible semantics after Upgrade" },
-    "parallel/test-http-server-response-standalone.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+    "parallel/test-http-server-response-standalone.js": {},
     "parallel/test-http-server-stale-close.js": { "category": "wasi-impossible", "reason": "requires child_process.fork(), which is unavailable in WASI" },
     "parallel/test-http-server-timeouts-validation.js": {
       "split": true,
@@ -5171,7 +5171,7 @@
     "parallel/test-readline-interface-recursive-writes.js": { "category": "known-gap", "reason": "node:readline Interface constructor/options are not implemented" },
 
     // Tests using ../common/hijackstdio (additional)
-    "parallel/test-console.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "parallel/test-console.js": {},
 
     // Tests using ../common/udp
     "parallel/test-dgram-reuseport.js": { "category": "known-gap", "reason": "dgram reusePort handling is incomplete and support probing can hang" },
@@ -5235,7 +5235,7 @@
     "parallel/test-http-header-validators.js": {},
     "parallel/test-http-hostname-typechecking.js": {},
     "parallel/test-http-import-websocket.js": {},
-    "parallel/test-http-incoming-matchKnownFields.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "parallel/test-http-incoming-matchKnownFields.js": {},
     "parallel/test-http-incoming-message-connection-setter.js": {},
     "parallel/test-http-incoming-message-destroy.js": {},
     "parallel/test-http-insecure-parser-per-stream.js": {
@@ -5250,7 +5250,7 @@
     },
     "parallel/test-http-invalid-path-chars.js": {},
     "parallel/test-http-invalid-urls.js": {},
-    "parallel/test-http-invalidheaderfield2.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: _checkInvalidHeaderChar('\\x01\\x02\\x03\\x04\\x05\\x06\\x07\\b', true) unexpectedly failed in lenient mode" },
+    "parallel/test-http-invalidheaderfield2.js": { "category": "runnable" },
     "parallel/test-http-localaddress.js": { "category": "node-internals", "reason": "uses common/net.hasMultiLocalhost(), which depends on internalBinding('tcp_wrap')" },
     "parallel/test-http-max-header-size-per-stream.js": {
       "split": true,
@@ -5992,7 +5992,7 @@
     "es-module/test-esm-dynamic-import.js": { "category": "runnable" },
     "es-module/test-esm-encoded-path-native.js": { "category": "runnable" },
     "es-module/test-esm-error-cache.js": { "category": "runnable" },
-    "es-module/test-esm-import-attributes-errors.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
+    "es-module/test-esm-import-attributes-errors.js": { "category": "runnable" },
     "es-module/test-esm-import-attributes-validation.js": { "category": "node-internals", "reason": "imports internal/modules/esm/assert (Node internal module)" },
     "es-module/test-esm-invalid-data-urls.js": { "category": "runnable" },
     "es-module/test-esm-invalid-pjson.js": { "category": "known-gap", "reason": "same-process ESM invalid package config diagnostics are covered by module-resolution runtime tests; vendored fixture asserts stderr/status through spawned process.execPath ESM entry-point emulation" },
@@ -6022,7 +6022,7 @@
     "es-module/test-esm-url-extname.js": { "category": "node-internals", "reason": "uses --expose-internals and imports node:internal/modules/esm/get_format" },
     "es-module/test-esm-windows.js": { "category": "runnable" },
     "es-module/test-loaders-hidden-from-users.js": { "category": "node-internals", "reason": "uses --expose-internals plus Node internals (require('internal/...'), process.binding('natives'))" },
-    "es-module/test-require-module-cached-tla.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
+    "es-module/test-require-module-cached-tla.js": { "category": "runnable" },
     "es-module/test-require-module-conditional-exports-module.js": { "category": "runnable" },
     "es-module/test-require-module-conditional-exports.js": {
       "split": true,
@@ -6087,11 +6087,11 @@
     "es-module/test-require-module-detect-entry-point-aou.js": { "category": "runnable" },
     "es-module/test-require-module-detect-entry-point.js": { "category": "runnable" },
     "es-module/test-require-module-dont-detect-cjs.js": { "category": "runnable" },
-    "es-module/test-require-module-dynamic-import-1.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-    "es-module/test-require-module-dynamic-import-2.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
+    "es-module/test-require-module-dynamic-import-1.js": { "category": "runnable" },
+    "es-module/test-require-module-dynamic-import-2.js": { "category": "runnable" },
     "es-module/test-require-module-dynamic-import-3.js": { "category": "runnable" },
     "es-module/test-require-module-dynamic-import-4.js": { "category": "runnable" },
-    "es-module/test-require-module-error-catching.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "es-module/test-require-module-error-catching.js": { "category": "runnable" },
     "es-module/test-require-module-errors.js": { "category": "engine-difference", "reason": "asserts V8-specific syntax error stderr text/format that differs in QuickJS" },
     "es-module/test-require-module-feature-detect.js": { "category": "runnable" },
     "es-module/test-require-module-implicit.js": { "category": "runnable" },
@@ -6103,7 +6103,7 @@
     "es-module/test-require-module-tla-retry-import.js": { "category": "runnable" },
     "es-module/test-require-module-tla-retry-require.js": { "category": "runnable" },
     "es-module/test-require-module-transpiled.js": { "category": "runnable" },
-    "es-module/test-require-module-twice.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+    "es-module/test-require-module-twice.js": { "category": "runnable" },
     "es-module/test-require-module-warning.js": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --trace-require-module warning output" },
     "es-module/test-require-module-with-detection.js": {
       "split": true,
@@ -6118,7 +6118,7 @@
       "subtests": {
         "block_00_test_named_exports": { "category": "runnable" },
         "block_01_test_esm_that_import_esm": { "category": "runnable" },
-        "block_02_test_esm_that_import_cjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_02_test_esm_that_import_cjs": { "category": "runnable" },
         "block_03_test_esm_that_require_cjs": { "category": "runnable" },
         "block_04_also_test_default_export": { "category": "runnable" },
         "block_05_test_data_import": { "category": "runnable" }
@@ -6171,8 +6171,8 @@
     "es-module/test-esm-example-loader.mjs": { "category": "runnable" },
     "es-module/test-esm-experimental-warnings.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-export-not-found.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-exports-deprecations.mjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal:" },
-    "es-module/test-esm-exports.mjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection: AssertionError: Expected values to be strictly deep-equal:" },
+    "es-module/test-esm-exports-deprecations.mjs": { "category": "runnable" },
+    "es-module/test-esm-exports.mjs": { "category": "runnable" },
     "es-module/test-esm-extension-lookup-deprecation.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-extensionless-esm-and-wasm.mjs": {
       "split": true,
@@ -6196,11 +6196,11 @@
     "es-module/test-esm-import-attributes-1.mjs": { "category": "runnable" },
     "es-module/test-esm-import-attributes-2.mjs": { "category": "runnable" },
     "es-module/test-esm-import-attributes-3.mjs": { "category": "runnable" },
-    "es-module/test-esm-import-attributes-errors.mjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+    "es-module/test-esm-import-attributes-errors.mjs": { "category": "runnable" },
     "es-module/test-esm-import-flag.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-import-json-named-export.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
-    "es-module/test-esm-imports-deprecations.mjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: Invalid module \"#/foo\" is not a val" },
-    "es-module/test-esm-imports.mjs": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): TypeError: Invalid module \"#/foo\" is not a val" },
+    "es-module/test-esm-imports-deprecations.mjs": { "category": "runnable" },
+    "es-module/test-esm-imports.mjs": { "category": "runnable" },
     "es-module/test-esm-initialization.mjs": { "category": "known-gap", "reason": "requires simulated process.execPath / Node CLI mode support deferred to follow-up PR" },
     "es-module/test-esm-json-cache.mjs": { "category": "runnable" },
     "es-module/test-esm-json.mjs": {
@@ -6512,7 +6512,7 @@
         "block_03_block_03": { "reason": "inherited: requires worker_threads.BroadcastChannel, unavailable without threads in WASM" }
       }
     },
-    "parallel/test-c-ares.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+    "parallel/test-c-ares.js": {},
     "parallel/test-cli-bad-options.js": { "category": "known-gap", "reason": "child_process execPath emulation does not yet match Node CLI argument validation/exit codes" },
     "parallel/test-cli-eval-event.js": {},
     "parallel/test-cli-node-options-disallowed.js": {},
@@ -6796,7 +6796,7 @@
     "parallel/test-domain-top-level-error-handler-throw.js": { "category": "known-gap", "reason": "domain module depends on async_hooks, not fully working" },
     "parallel/test-domain-uncaught-exception.js": { "category": "known-gap", "reason": "domain module depends on async_hooks, not fully working" },
     "parallel/test-domain-vm-promise-isolation.js": { "category": "known-gap", "reason": "domain module depends on async_hooks, not fully working" },
-    "parallel/test-domain-with-abort-on-uncaught-exception.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+    "parallel/test-domain-with-abort-on-uncaught-exception.js": { "category": "known-gap", "reason": "requires child_process.exec of a shell command line, which WASM child emulation does not support" },
     "parallel/test-domexception-cause.js": {
       "split": true,
       "subtests": {
@@ -6931,22 +6931,22 @@
     "parallel/test-file.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_03_block_03": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_04_block_04": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_05_block_05": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_06_block_06": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_07_block_07": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_08_block_08": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_09_block_09": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_10_block_10": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_11_block_11": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_12_block_12": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_13_block_13": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_14_block_14": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
-        "block_15_block_15": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" }
+        "block_00_block_00": {},
+        "block_01_block_01": {},
+        "block_02_block_02": {},
+        "block_03_block_03": {},
+        "block_04_block_04": {},
+        "block_05_block_05": {},
+        "block_06_block_06": {},
+        "block_07_block_07": {},
+        "block_08_block_08": {},
+        "block_09_block_09": {},
+        "block_10_block_10": {},
+        "block_11_block_11": {},
+        "block_12_block_12": {},
+        "block_13_block_13": {},
+        "block_14_block_14": {},
+        "block_15_block_15": {}
       }
     },
     "parallel/test-filehandle-readablestream.js": { "category": "known-gap", "reason": "fs/promises FileHandle.readableWebStream support is missing or incomplete" },
@@ -7381,7 +7381,7 @@
         "block_06_block_06": { "reason": "inherited: requires --expose-internals and internal/event_target" }
       }
     },
-    "parallel/test-npm-install.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: - process terminated with status 1, expected 0" },
+    "parallel/test-npm-install.js": { "category": "known-gap", "reason": "requires spawning the npm CLI, which WASM child emulation does not support" },
     "parallel/test-npm-version.js": { "category": "node-internals", "reason": "checks Node source-tree deps/npm package.json artifact, not runtime API" },
     "parallel/test-openssl-ca-options.js": { "category": "wasi-impossible", "reason": "requires spawning node subprocesses to validate CLI CA flags" },
     "parallel/test-options-binding.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/options" },
@@ -7734,7 +7734,7 @@
       }
     },
     "parallel/test-process-getactiveresources.js": { "category": "known-gap", "reason": "process.getActiveResourcesInfo() is not implemented" },
-    "parallel/test-process-getgroups.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+    "parallel/test-process-getgroups.js": { "category": "known-gap", "reason": "requires child_process.exec('id -G'), which WASM child emulation does not support" },
     "parallel/test-process-kill-null.js": { "category": "wasi-impossible", "reason": "sending host process signals is not supported in WASI" },
     "parallel/test-process-load-env-file.js": { "category": "known-gap", "reason": "process.loadEnvFile() behavior is incomplete" },
     "parallel/test-process-ppid.js": { "category": "known-gap", "reason": "process.ppid is stubbed and not wired to parent process IDs" },
@@ -7993,7 +7993,7 @@
         "block_01_block_01": { "category": "runnable" }
       }
     },
-    "parallel/test-require-delete-array-iterator.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: value is not iterable" },
+    "parallel/test-require-delete-array-iterator.js": { "category": "runnable" },
     "parallel/test-require-dot.js": { "category": "runnable" },
     "parallel/test-require-exceptions.js": { "category": "runnable" },
     "parallel/test-require-extensions-main.js": { "category": "runnable" },
@@ -8032,7 +8032,7 @@
     "parallel/test-runner-assert.js": {
       "split": true,
       "subtests": {
-        "test_00_expected_methods_are_on_t_assert": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "test_00_expected_methods_are_on_t_assert": {},
         "test_01_t_assert_ok_correctly_parses_the_stacktrace": { "category": "known-gap", "reason": "node:test t.assert.ok does not preserve Node-compatible assertion stack formatting" },
         "test_02_t_assert_called": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_03_t_assert_callcount": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
@@ -8190,7 +8190,7 @@
         "test_29_method_fails_if_field_is_a_property_instead_of_a_method": {},
         "test_30_mocks_can_be_auto_restored": {},
         "test_31_mock_implementation_can_be_changed_dynamically": {},
-        "test_32_local_mocks_are_auto_restored_after_the_test_finishes": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+        "test_32_local_mocks_are_auto_restored_after_the_test_finishes": {},
         "test_33_reset_mock_calls": {},
         "test_34_uses_top_level_mock": {},
         "test_35_the_getter_and_setter_options_cannot_be_used_together": {},
@@ -8217,7 +8217,7 @@
     "parallel/test-runner-module-mocking.js": {
       "split": true,
       "subtests": {
-        "test_00_input_validation": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception." },
+        "test_00_input_validation": { "category": "runnable" },
         "test_01_core_module_mocking_with_namedexports_option": { "category": "runnable" },
         "test_02_cjs_mocking_with_namedexports_option": { "category": "runnable" },
         "test_03_esm_mocking_with_namedexports_option": { "category": "runnable" },
@@ -8583,38 +8583,38 @@
     },
     "parallel/test-source-map-cjs-require-cache.js": { "category": "known-gap", "reason": "asserts a CJS module's source map stays findable until GC reclaims the module; QuickJS reference counting reclaims the module as soon as its require.cache and module.children references are dropped, so the pre-GC precondition cannot hold — a tracing-GC vs refcount engine difference" },
     "parallel/test-spawn-cmd-named-pipe.js": { "category": "wasi-impossible", "reason": "Windows-only named pipe/cmd shell behavior is not available in WASI" },
-    "parallel/test-sqlite-custom-functions.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 10 test(s) failed" },
-    "parallel/test-sqlite-data-types.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 7 test(s) failed" },
+    "parallel/test-sqlite-custom-functions.js": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+    "parallel/test-sqlite-data-types.js": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
     "parallel/test-sqlite-named-parameters.js": {
       "split": true,
       "subtests": {
-        "test_00_named_parameters": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 4 test(s) failed" },
-        "test_01_statement_prototype_setallowunknownnamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 3 test(s) failed" },
-        "test_02_options_allowunknownnamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 5 test(s) failed" }
+        "test_00_named_parameters": {},
+        "test_01_statement_prototype_setallowunknownnamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_02_options_allowunknownnamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" }
       }
     },
     "parallel/test-sqlite-session.js": {
       "split": true,
       "subtests": {
-        "test_00_creating_and_applying_a_changeset": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_01_database_createsession_closed_database_results_in_exception": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_02_session_changeset_closed_database_results_in_exception": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+        "test_00_creating_and_applying_a_changeset": {},
+        "test_01_database_createsession_closed_database_results_in_exception": {},
+        "test_02_session_changeset_closed_database_results_in_exception": {},
         "test_03_session_methods_reopened_database_results_in_exception": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
-        "test_04_database_applychangeset_closed_database_results_in_exception": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_05_database_createsession_use_table_option_to_track_specific_ta": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+        "test_04_database_applychangeset_closed_database_results_in_exception": {},
+        "test_05_database_createsession_use_table_option_to_track_specific_ta": {},
         "test_06_conflict_resolution": { "category": "known-gap", "reason": "node:sqlite applyChangeset conflict-resolution behavior is incomplete" },
         "test_07_filter_handler_throws": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_08_database_applychangeset_changeset_detached_by_filter": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_09_database_applychangeset_changeset_detached_by_sql_function": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
-        "test_10_database_createsession_filter_changes": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_11_database_createsession_specify_other_database": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_12_database_createsession_wrong_arguments": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_13_database_applychangeset_wrong_arguments": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+        "test_10_database_createsession_filter_changes": {},
+        "test_11_database_createsession_specify_other_database": {},
+        "test_12_database_createsession_wrong_arguments": {},
+        "test_13_database_applychangeset_wrong_arguments": {},
         "test_14_database_applychangeset_malformed_changeset_returns_sqlite_c": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
-        "test_15_session_patchset": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_16_session_close_using_session_after_close_throws_exception": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_17_session_close_after_closing_database_throws_exception": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_18_session_close_closing_twice": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+        "test_15_session_patchset": {},
+        "test_16_session_close_using_session_after_close_throws_exception": {},
+        "test_17_session_close_after_closing_database_throws_exception": {},
+        "test_18_session_close_closing_twice": {},
         "test_19_session_close_and_dispose_while_generating_changes_throws_ex": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_20_session_symbol_dispose_closed_session_is_a_no_op": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_21_session_symbol_dispose_after_closing_database_is_a_no_op": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
@@ -8626,26 +8626,26 @@
         "test_27_concurrent_applychangeset_with_workers": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
     },
-    "parallel/test-sqlite-transactions.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
+    "parallel/test-sqlite-transactions.js": {},
     "parallel/test-sqlite-typed-array-and-data-view.js": {
       "split": true,
       "subtests": {
-        "test_00_statement_with_typedarray_dataview": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 12 test(s) failed" },
-        "test_01_statement_with_arraybuffer_and_sharedarraybuffer": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 4 test(s) failed" }
+        "test_00_statement_with_typedarray_dataview": {},
+        "test_01_statement_with_arraybuffer_and_sharedarraybuffer": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" }
       }
     },
     "parallel/test-sqlite.js": {
       "split": true,
       "subtests": {
         "test_00_accessing_the_node_sqlite_module": { "category": "known-gap", "reason": "WASM child emulation does not support --no-experimental-sqlite CLI flag" },
-        "test_01_err_sqlite_error_is_thrown_for_errors_originating_from_sqlit": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "test_02_in_memory_databases_are_supported": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+        "test_01_err_sqlite_error_is_thrown_for_errors_originating_from_sqlit": {},
+        "test_02_in_memory_databases_are_supported": {},
         "test_03_sqlite_constants_are_defined": {},
-        "test_04_pragmas_are_supported": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
+        "test_04_pragmas_are_supported": {},
         "test_05_buffer_is_supported_as_the_database_path": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_06_url_is_supported_as_the_database_path": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_07_uri_query_params": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
-        "test_08_sql_apis_enabled_at_build_time": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 10 test(s) failed; carries 22.14.0 subtest test_05_math_functions_are_enabled" }
+        "test_08_sql_apis_enabled_at_build_time": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" }
       }
     },
     "parallel/test-stack-size-limit.js": { "category": "wasi-impossible", "reason": "requires a real subprocess with independent stack-size overflow handling" },
@@ -8718,7 +8718,7 @@
         "block_17_block_17": { "category": "known-gap", "reason": "stream edge case not yet handled" },
         "block_18_block_18": {},
         "block_19_block_19": {},
-        "block_20_block_20": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
+        "block_20_block_20": {},
         "block_21_block_21": {},
         "block_22_skipped_if_canpushmore_returns_false_on_the_final_done_true_": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
@@ -8797,7 +8797,7 @@
         "block_37_block_37": {},
         "block_38_block_38": {},
         "block_39_block_39": {},
-        "block_40_block_40": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Cannot find module 'internal/streams/end-of-stream'; carries 22.14.0 subtest block_39_block_39" },
+        "block_40_block_40": { "category": "runnable", "reason": "carries 22.14.0 subtest block_39_block_39" },
         "block_41_block_41": {},
         "block_42_block_42": { "category": "known-gap", "reason": "stream edge case not yet handled" }
       }
@@ -9073,9 +9073,9 @@
         "block_01_statement_01": { "category": "runnable" },
         "block_02_statement_02": { "category": "runnable" },
         "block_03_statement_03": { "category": "runnable" },
-        "block_04_statement_04": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
-        "block_05_statement_05": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
-        "block_06_statement_06": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
+        "block_04_statement_04": { "category": "runnable" },
+        "block_05_statement_05": { "category": "runnable" },
+        "block_06_statement_06": { "category": "runnable" },
         "block_07_options_can_be_null_or_undefined": { "category": "runnable" },
         "block_08_statement_08": { "category": "runnable" },
         "block_09_transfer_can_be_null_or_undefined": { "category": "runnable" },
@@ -9564,8 +9564,8 @@
         "block_01_statement_01": { "category": "runnable" },
         "block_02_statement_02": { "category": "known-gap", "reason": "SourceTextModule evaluation timeout does not interrupt an infinite loop" },
         "block_03_check_the_generated_identifier_for_each_module": { "category": "known-gap", "reason": "SourceTextModule identifiers are not incremented per VM context like Node" },
-        "block_04_check_inspection_of_the_instance": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
-        "block_05_block_05": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_04_check_inspection_of_the_instance": { "category": "runnable" },
+        "block_05_block_05": { "category": "runnable" },
         "block_06_check_dependencies_getter_returns_same_object_every_time": { "category": "runnable" },
         "block_07_check_the_impossibility_of_creating_an_abstract_instance_of_": { "category": "runnable" },
         "block_08_check_to_throws_invalid_exportnames": { "category": "runnable" },
@@ -9576,14 +9576,14 @@
       }
     },
     "parallel/test-vm-module-cached-data.js": { "category": "engine-difference", "reason": "SourceTextModule cachedData depends on V8 code cache internals unavailable in QuickJS" },
-    "parallel/test-vm-module-dynamic-import.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly" },
+    "parallel/test-vm-module-dynamic-import.js": { "category": "runnable" },
     "parallel/test-vm-module-dynamic-namespace.js": { "category": "runnable" },
-    "parallel/test-vm-module-errors.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected exception (Ty" },
+    "parallel/test-vm-module-errors.js": { "category": "runnable" },
     "parallel/test-vm-module-import-meta.js": { "category": "runnable" },
     "parallel/test-vm-module-link.js": { "category": "runnable" },
     "parallel/test-vm-module-reevaluate.js": { "category": "runnable" },
     "parallel/test-vm-module-referrer-realm.mjs": { "category": "engine-difference", "reason": "vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host" },
-    "parallel/test-vm-module-synthetic.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): Error: Module status must not be unlinked or l" },
+    "parallel/test-vm-module-synthetic.js": { "category": "runnable" },
     "parallel/test-vm-new-script-new-context.js": {
       "split": true,
       "subtests": {
@@ -9741,7 +9741,7 @@
       "subtests": {
         "block_00_block_00": {},
         "block_01_block_01": {},
-        "block_02_block_02": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: QuotaExceededError is not defined (the Node 26 QuotaExceededError global is not implemented)" },
+        "block_02_block_02": {},
         "block_03_block_03": {}
       }
     },
@@ -9822,13 +9822,13 @@
         "test_05_localstorage_is_not_persisted_if_it_is_unused": { "category": "known-gap", "reason": "common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags" },
         "test_06_localstorage_is_persisted_if_it_is_used": { "category": "known-gap", "reason": "common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags" },
         "test_07_webstorage_quota_for_localstorage_and_sessionstorage": { "category": "known-gap", "reason": "common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags" },
-        "test_08_disabled_with_no_webstorage": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Only --eval/-e, --input-type, and script files are supported in WASM child emulation; carries 22.14.0 subtest test_00_disabled_without_experimental_webstorage" },
+        "test_08_disabled_with_no_webstorage": { "category": "runnable", "reason": "carries 22.14.0 subtest test_00_disabled_without_experimental_webstorage" },
         "test_09_a_malformed_localstorage_file_throws_instead_of_aborting": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" },
         "test_10_a_malformed_localstorage_file_does_not_leak_connections": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
     },
     "parallel/test-webstream-encoding-inspect.js": { "category": "runnable" },
-    "parallel/test-webstream-readable-from.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Missing expected exception (TypeError)." },
+    "parallel/test-webstream-readable-from.js": { "category": "runnable" },
     "parallel/test-webstream-readablestream-pipeto.js": { "category": "node-internals", "reason": "requires --expose-internals and internal/errors AbortError" },
     "parallel/test-webstreams-abort-controller.js": {
       "split": true,
@@ -10083,7 +10083,7 @@
     "parallel/test-whatwg-url-custom-searchparams-constructor.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
+        "block_00_block_00": { "category": "runnable" },
         "block_01_block_01": { "category": "runnable" }
       }
     },
@@ -10665,8 +10665,8 @@
     "parallel/test-zlib.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" },
-        "block_01_block_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: not a function" }
+        "block_00_block_00": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+        "block_01_block_01": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" }
       }
     },
     "sequential/test-async-wrap-getasyncid.js": {
@@ -10964,13 +10964,13 @@
     "es-module/test-require-module-retry-import-errored-2.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla-error-metadata.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "es-module/test-require-module-tla-error-snapshot.mjs": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-tla-execution.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: - stderr did not match expectation, checker throws:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
+    "es-module/test-require-module-tla-execution.js": { "category": "runnable", "reason": "carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
     "es-module/test-require-module-tla-instantiation-error.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "es-module/test-require-module-tla-nested.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
-    "es-module/test-require-module-tla-print-execution.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: - stderr did not match expectation, checker throws:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
-    "es-module/test-require-module-tla-rejected.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
-    "es-module/test-require-module-tla-resolved.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
-    "es-module/test-require-module-tla-unresolved.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:; carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
+    "es-module/test-require-module-tla-nested.js": { "category": "runnable", "reason": "carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
+    "es-module/test-require-module-tla-print-execution.js": { "category": "known-gap", "reason": "child_process execPath emulation does not implement --experimental-print-required-tla diagnostics output" },
+    "es-module/test-require-module-tla-rejected.js": { "category": "runnable", "reason": "carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
+    "es-module/test-require-module-tla-resolved.js": { "category": "runnable", "reason": "carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
+    "es-module/test-require-module-tla-unresolved.js": { "category": "runnable", "reason": "carries 22.14.0 es-module/test-require-module-tla.js (upstream 8d10bc7b09)" },
     "es-module/test-vm-main-context-default-loader-eval.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-abort-controller-any-timeout.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-abortsignal-any-source-gc.mjs": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
@@ -11013,7 +11013,7 @@
       }
     },
     "parallel/test-assert-myers-diff.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-assert-partial-deep-equal.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed; carries 22.14.0 parallel/test-assert-objects.js (upstream 096b61131a)" },
+    "parallel/test-assert-partial-deep-equal.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-assert-objects.js (upstream 096b61131a)" },
     "parallel/test-async-hooks-enabledhooksexits.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-async-hooks-stack-overflow-nested-async.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-async-hooks-stack-overflow-try-catch.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
@@ -12579,7 +12579,7 @@
     },
     "parallel/test-fs-negative-zero.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-fs-openAsBlobSync.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-fs-promises-appendfile.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Ab; carries 22.14.0 parallel/test-fs-promises-writefile-typedarray.js (upstream 3ac95f2d0c)" },
+    "parallel/test-fs-promises-appendfile.js": { "category": "runnable", "reason": "carries 22.14.0 parallel/test-fs-promises-writefile-typedarray.js (upstream 3ac95f2d0c); parallel/test-fs-promises-writefile-with-fd.js (upstream 3ac95f2d0c)" },
     "parallel/test-fs-promises-file-handle-pull.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-fs-promises-file-handle-pullsync.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-fs-promises-file-handle-readLines.mjs": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
@@ -14982,14 +14982,14 @@
       "reason": "carries 22.14.0 parallel/test-sqlite-database-sync.js (upstream f2b698f1cf); parallel/test-sqlite-statement-sync.js (upstream f2b698f1cf)",
       "split": true,
       "subtests": {
-        "test_00_database_constructor": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 26 test(s) failed" },
-        "test_01_database_prototype_open": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 3 test(s) failed" },
-        "test_02_database_prototype_close": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_03_database_prototype_prepare": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 5 test(s) failed" },
-        "test_04_database_prototype_exec": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 5 test(s) failed" },
-        "test_05_database_prototype_istransaction": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 3 test(s) failed" },
-        "test_06_database_prototype_location": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 5 test(s) failed" },
-        "test_07_database_prototype_symbol_dispose": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" }
+        "test_00_database_constructor": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_01_database_prototype_open": {},
+        "test_02_database_prototype_close": {},
+        "test_03_database_prototype_prepare": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_04_database_prototype_exec": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_05_database_prototype_istransaction": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_06_database_prototype_location": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_07_database_prototype_symbol_dispose": {}
       }
     },
     "parallel/test-sqlite-diagnostic-channel.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
@@ -15014,33 +15014,33 @@
       }
     },
     "parallel/test-sqlite-statement-binding-reentry.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-sqlite-statement-columns.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 7 test(s) failed; carries 22.14.0 parallel/test-sqlite-database-sync.js (upstream f2b698f1cf); parallel/test-sqlite-statement-sync.js (upstream f2b698f1cf)" },
+    "parallel/test-sqlite-statement-columns.js": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
     "parallel/test-sqlite-statement.js": {
       "category": "runnable",
       "reason": "carries 22.14.0 parallel/test-sqlite-database-sync.js (upstream f2b698f1cf); parallel/test-sqlite-statement-sync.js (upstream f2b698f1cf)",
       "split": true,
       "subtests": {
-        "test_00_statement_constructor": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly deep-equal:" },
-        "test_01_statement_prototype_get": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 7 test(s) failed" },
-        "test_02_statement_prototype_all": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 6 test(s) failed" },
-        "test_03_statement_prototype_iterate": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 10 test(s) failed" },
-        "test_04_statement_prototype_run": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 7 test(s) failed" },
-        "test_05_statement_prototype_sourcesql": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_06_statement_prototype_expandedsql": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_07_statement_prototype_stat": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 7 test(s) failed" },
-        "test_08_statement_prototype_resetstats": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 8 test(s) failed" },
-        "test_09_statement_prototype_setreadbigints": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 5 test(s) failed" },
-        "test_10_statement_prototype_setreturnarrays": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_11_statement_prototype_get_with_array_output": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_12_statement_prototype_all_with_array_output": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_13_statement_prototype_iterate_with_array_output": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_14_statement_prototype_setallowbarenamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 3 test(s) failed" },
-        "test_15_options_readbigints": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 4 test(s) failed" },
-        "test_16_options_returnarrays": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 6 test(s) failed" },
-        "test_17_options_allowbarenamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 4 test(s) failed" },
-        "test_18_statement_prototype_close": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 2 test(s) failed" },
-        "test_19_statement_prototype_symbol_dispose": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 4 test(s) failed" },
-        "test_20_options_persistent": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: 4 test(s) failed" },
+        "test_00_statement_constructor": {},
+        "test_01_statement_prototype_get": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_02_statement_prototype_all": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_03_statement_prototype_iterate": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_04_statement_prototype_run": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_05_statement_prototype_sourcesql": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_06_statement_prototype_expandedsql": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_07_statement_prototype_stat": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_08_statement_prototype_resetstats": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_09_statement_prototype_setreadbigints": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_10_statement_prototype_setreturnarrays": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_11_statement_prototype_get_with_array_output": {},
+        "test_12_statement_prototype_all_with_array_output": {},
+        "test_13_statement_prototype_iterate_with_array_output": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_14_statement_prototype_setallowbarenamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_15_options_readbigints": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_16_options_returnarrays": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_17_options_allowbarenamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_18_statement_prototype_close": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_19_statement_prototype_symbol_dispose": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_20_options_persistent": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
         "test_21_values_larger_than_the_maximum_string_length": {}
       }
     },
@@ -15185,7 +15185,7 @@
         "block_03_block_03": {},
         "block_04_block_04": {},
         "block_05_block_05": {},
-        "block_06_block_06": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
+        "block_06_block_06": {},
         "block_07_block_07": {},
         "block_08_block_08": {},
         "block_09_block_09": {}
@@ -15397,7 +15397,7 @@
     "parallel/test-trace-sigint-in-worker.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-uncaught-exception-handler-stack-overflow-on-stack-overflow.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-uncaught-exception-handler-stack-overflow.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-url-invalid-file-url-path-input.js": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: ERR_INVALID_FILE_URL_PATH has no err.input URL; the historical code assertion passes; carries 22.14.0 parallel/test-url-fileurltopath.js subtest test_03_fileurltopath_with_invalid_path" },
+    "parallel/test-url-invalid-file-url-path-input.js": { "category": "runnable" },
     "parallel/test-url-parse-deprecation.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-urlpattern-invalidthis.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-urlpattern-types.js": {

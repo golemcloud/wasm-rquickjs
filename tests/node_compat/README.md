@@ -160,14 +160,13 @@ with `NODE_COMPAT_MIGRATION_DECISIONS=/path/to/decisions.json`:
 
 The `node_compat` suite and the runtime's `process` version metadata target Node.js 26.13.1,
 selected by NJ-01 (with npm 11.20.0) against Node.js 24.22.3. The host Node.js and npm pins of the
-runtime, npm and `agentic_ts` lanes are still 22.14.0 and npm 10.9.2 until the npm refresh. The
-22.14.0 baseline cases that the switch could not carry over unchanged are recorded, with their
-disposition, in [`mapping-22.14.0-to-26.13.1.json`](mapping-22.14.0-to-26.13.1.json). Cases that
-regressed on 26.13.1 are `known-gap` entries whose reason starts with `Node 26.13.1 baseline gap: `
-and are listed in the record's `baselineGaps`; `node_compat_report` fails when the two lists differ.
-They are outstanding repairs, not accepted gaps: a repair makes the entry `runnable` and removes it
-from `baselineGaps`. A 22.14.0 case whose assertion upstream reversed is a target change, not a
-baseline gap. See
+runtime, npm and `agentic_ts` lanes are still 22.14.0 and npm 10.9.2 until the npm refresh. Every
+22.14.0 baseline case that the switch could not carry over unchanged was audited against the
+26.13.1 suite: it was repaired, or it is a `known-gap` whose reason names its own cause, such as a
+Node 26.13.1 assertion the runtime does not meet yet. The source-bound audit evidence is kept with
+[pull request #218](https://github.com/golemcloud/wasm-rquickjs/pull/218), not in this
+repository. A 22.14.0 case whose assertion upstream reversed is a target change, not a baseline
+gap. See
 [`target-selection.md`](target-selection.md) for pin provenance, measured suite, API and
 npm 10.9.2-to-11.20.0 differences, required harness changes and switching instructions, and
 [`target-mapping-22.14.0.json`](target-mapping-22.14.0.json) for the mapping of every 22.14.0
