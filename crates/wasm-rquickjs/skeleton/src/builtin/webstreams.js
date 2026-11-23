@@ -115,14 +115,16 @@ ReadableStream.from = function from(iterable) {
         throw errArgNotIterable();
     }
 
-    let iterator;
+    // Like Node 26 readableStreamFromIterable, the iterator is obtained eagerly and must be an
+    // object.
+    const iterator = typeof asyncIteratorFactory === 'function'
+        ? asyncIteratorFactory.call(iterable)
+        : iteratorFactory.call(iterable);
+    if (iterator === null || (typeof iterator !== 'object' && typeof iterator !== 'function')) {
+        throw errInvalidState('The iterator method must return an object');
+    }
     return new ReadableStream({
         async pull(controller) {
-            if (iterator === undefined) {
-                iterator = typeof asyncIteratorFactory === 'function'
-                    ? asyncIteratorFactory.call(iterable)
-                    : iteratorFactory.call(iterable);
-            }
             const result = await iterator.next();
             if (result.done) {
                 controller.close();

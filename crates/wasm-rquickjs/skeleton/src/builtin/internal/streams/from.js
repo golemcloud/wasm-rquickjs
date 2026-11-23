@@ -3,7 +3,7 @@
 // deno-lint-ignore-file
 
 import { Buffer } from "buffer";
-import { ERR_INVALID_ARG_TYPE, ERR_STREAM_NULL_VALUES } from "__wasm_rquickjs_builtin/internal/errors";
+import { aggregateTwoErrors, ERR_INVALID_ARG_TYPE, ERR_STREAM_NULL_VALUES } from "__wasm_rquickjs_builtin/internal/errors";
 import { nextTick } from "node:process";
 
 function _from(Readable, iterable, opts) {
@@ -36,6 +36,7 @@ function _from(Readable, iterable, opts) {
         // TODO(ronag): What options should be allowed?
         ...opts,
     });
+    const originalDestroy = readable._destroy;
 
     // Flag to protect against _read
     // being called before last iteration completion.
@@ -48,11 +49,16 @@ function _from(Readable, iterable, opts) {
         }
     };
 
+    // Like Node 26, a destroy passed in opts (such as Duplex.from's async-function source)
+    // runs before the iterator closes, so a source waiting on it can settle.
     readable._destroy = function (error, cb) {
-        close(error).then(
-            () => nextTick(cb, error), // nextTick is here in case cb throws
-            (e) => nextTick(cb, e || error),
-        );
+        originalDestroy.call(this, error, (destroyError) => {
+            const combinedError = destroyError || error;
+            close(combinedError).then(
+                () => nextTick(cb, combinedError), // nextTick is here in case cb throws
+                (closeError) => nextTick(cb, aggregateTwoErrors(combinedError, closeError)),
+            );
+        });
     };
 
     async function close(error) {

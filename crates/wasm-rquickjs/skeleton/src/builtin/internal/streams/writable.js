@@ -287,10 +287,9 @@ function _write(stream, chunk, encoding, cb) {
         }
 
         if (typeof chunk === "string") {
+            // Node 26 rejects a string chunk with 'buffer' encoding (upstream f352556da8).
             if (encoding === "buffer") {
-                const err = new TypeError('Second argument must be a buffer');
-                err.code = 'ERR_INVALID_ARG_TYPE';
-                throw err;
+                throw new ERR_UNKNOWN_ENCODING(encoding);
             }
             if (state.decodeStrings !== false) {
                 chunk = Buffer.from(chunk, encoding);

@@ -1559,7 +1559,8 @@ function newReadableStreamFromStreamReadable(streamReadable, options = {}) {
 
     streamReadable.pause();
 
-    const cleanup = eos(streamReadable, (error) => {
+    // Like Node 26, a Duplex's readable completion does not wait for its half-open writable side.
+    const cleanup = eos(streamReadable, { writable: false }, (error) => {
         cleanup();
         streamReadable.on('error', () => {});
         if (error)
