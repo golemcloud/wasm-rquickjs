@@ -235,13 +235,14 @@ function ServerResponse(req, options) {
     this.req = req;
     this.socket = req.socket;
     this.connection = req.socket;
-    this._standaloneSocket = false;
     this.statusCode = 200;
     this.statusMessage = undefined;
     this.sendDate = true;
     this.headersSent = false;
     this.finished = false;
     this._finishEmitted = false;
+    this._endCallbacks = [];
+    this._flushError = undefined;
     this._writableEnded = false;
     this._headers = Object.create(null);
     this._headerNames = Object.create(null);
@@ -294,7 +295,6 @@ ServerResponse.prototype.assignSocket = function assignSocket(socket) {
     }
     this.socket = socket;
     this.connection = socket;
-    this._standaloneSocket = true;
     socket._httpMessage = this;
     const pending = this._pendingOutput;
     this._pendingOutput = [];
@@ -309,7 +309,6 @@ ServerResponse.prototype.detachSocket = function detachSocket(socket) {
     }
     this.socket = null;
     this.connection = null;
-    this._standaloneSocket = false;
 };
 
 Object.defineProperty(ServerResponse.prototype, 'writableEnded', {
@@ -325,7 +324,8 @@ Object.defineProperty(ServerResponse.prototype, 'writableFinished', {
             !this._finishEmitted &&
             (this._needDrain || this.socket.writableNeedDrain) &&
             (this.socket.writableLength || 0) > 0;
-        return this.finished && this._outputSize === 0 && !socketHasBlockedOutput;
+        return this.finished && this._outputSize === 0 && !socketHasBlockedOutput &&
+            this._flushError === undefined;
     },
 });
 
@@ -942,6 +942,27 @@ ServerResponse.prototype.write = function write(chunk, encoding, cb) {
     return result;
 };
 
+// Like Node 26, end() callbacks report the flush outcome: null once finished, or the flush error.
+function queueEndCallback(res, callback) {
+    if (res._finishEmitted) {
+        callback(new ERR_STREAM_ALREADY_FINISHED('end'));
+        return;
+    }
+    if (res._flushError !== undefined) {
+        process.nextTick(callback, res._flushError);
+        return;
+    }
+    res._endCallbacks.push(callback);
+}
+
+function flushEndCallbacks(res, error) {
+    const callbacks = res._endCallbacks;
+    res._endCallbacks = [];
+    for (const callback of callbacks) {
+        callback(error);
+    }
+}
+
 ServerResponse.prototype.end = function end(data, encoding, cb) {
     if (typeof data === 'function') {
         cb = data;
@@ -958,11 +979,7 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
                 scheduleWriteAfterEnd(this, cb);
             }
         } else if (typeof cb === 'function') {
-            if (this.writableFinished) {
-                cb(new ERR_STREAM_ALREADY_FINISHED('end'));
-            } else {
-                this.on('finish', cb);
-            }
+            queueEndCallback(this, cb);
         }
         return this;
     }
@@ -1038,18 +1055,20 @@ ServerResponse.prototype.end = function end(data, encoding, cb) {
         this._writeOutput(Buffer.from('0\r\n\r\n'));
     }
 
-    if (this._standaloneSocket) {
-        this._writeOutput(Buffer.alloc(0));
-    }
-
     if (typeof cb === 'function') {
-        this.once('finish', cb);
+        queueEndCallback(this, cb);
     }
-    const finishResponse = () => {
-        // Like Node's internal end completion, this only notifies finish.
-        // Socket errors belong to socket error/close handling and public write
-        // callbacks; re-emitting them here races the socket's abort cleanup.
+    const finishResponse = (error) => {
+        // Like Node 26, a failed flush never finishes: end() callbacks receive the
+        // write error instead of a 'finish' event. Socket errors still belong to
+        // socket error/close handling; re-emitting them here races its abort cleanup.
+        if (error) {
+            this._flushError = error;
+            flushEndCallbacks(this, error);
+            return;
+        }
         this._finishEmitted = true;
+        flushEndCallbacks(this, null);
         this.emit('finish');
     };
 
@@ -1103,7 +1122,8 @@ ServerResponse.prototype.writeProcessing = function writeProcessing(callback) {
     this._writeOutput(Buffer.from('HTTP/1.1 102 Processing\r\n\r\n'), callback);
 };
 
-const LINK_HEADER_REGEX = /^(?:<[^>]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$/;
+// Like Node 26, CR and LF are rejected inside the link target.
+const LINK_HEADER_REGEX = /^(?:<[^>\r\n]*>)(?:\s*;\s*[^;"\s]+(?:=(")?[^;"\s]*\1)?)*$/;
 
 function _validateLinkHeaderFormat(value) {
     if (value === undefined || !LINK_HEADER_REGEX.test(value)) {
@@ -1153,8 +1173,19 @@ ServerResponse.prototype.writeEarlyHints = function writeEarlyHints(hints, cb) {
 
     let head = 'HTTP/1.1 103 Early Hints\r\n';
     head += 'Link: ' + link + '\r\n';
+    // Like Node 26, every extra hint is validated so it cannot inject header lines.
     for (const key of Object.keys(hints)) {
         if (key !== 'link') {
+            if (!_checkIsHttpToken(key)) {
+                const err = new TypeError(`Header name must be a valid HTTP token ["${key}"]`);
+                err.code = 'ERR_INVALID_HTTP_TOKEN';
+                throw err;
+            }
+            if (INVALID_HEADER_CHAR_REGEX.test(String(hints[key]))) {
+                const err = new TypeError(`Invalid character in header content ["${key}"]`);
+                err.code = 'ERR_INVALID_CHAR';
+                throw err;
+            }
             head += key + ': ' + hints[key] + '\r\n';
         }
     }
@@ -1340,7 +1371,7 @@ function createConnectionParser(server, socket) {
         state.bytesReceived += data.length;
 
         // Clear idle keep-alive timeout on new data
-        socket.setTimeout(0);
+        socket.setTimeout?.(0);
 
         state.buffer = Buffer.concat([state.buffer, data]);
         if (!state.inputPaused) parseLoop();
@@ -1348,7 +1379,7 @@ function createConnectionParser(server, socket) {
         // Track active request inactivity via server.setTimeout().
         // Keep-alive idle timeout remains managed after responses finish.
         if (state.responseQueue.some((context) => !context.responseFinished)) {
-            socket.setTimeout(server.timeout || 0);
+            socket.setTimeout?.(server.timeout || 0);
         }
     });
 
@@ -1436,9 +1467,10 @@ function createConnectionParser(server, socket) {
             }
         }
         // Complete cleanup for the whole pipeline before invoking application
-        // error handlers, since an unhandled request error throws.
+        // error handlers. Like Node's IncomingMessage, the error is emitted only
+        // to requests with an 'error' listener.
         for (const req of requestsWithErrors) {
-            req.emit('error', err);
+            if (req.listenerCount('error') > 0) req.emit('error', err);
         }
     });
 
@@ -1514,7 +1546,7 @@ function createConnectionParser(server, socket) {
         if (state.buffer.length > 0 && state.state === IDLE) {
             parseLoop();
             if (state.responseQueue.length > 0 || state.current !== null) {
-                socket.setTimeout(server.timeout || 0);
+                socket.setTimeout?.(server.timeout || 0);
                 return true;
             }
         }
@@ -1534,9 +1566,9 @@ function createConnectionParser(server, socket) {
             ? server.keepAliveTimeout
             : 0;
         if (kaTimeout > 0) {
-            socket.setTimeout(kaTimeout);
+            socket.setTimeout?.(kaTimeout);
         } else {
-            socket.setTimeout(0);
+            socket.setTimeout?.(0);
         }
         return true;
     }

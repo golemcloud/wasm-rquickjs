@@ -363,8 +363,12 @@ export function _checkIsHttpToken(value) {
     return HTTP_TOKEN_REGEX.test(value);
 }
 
-export function _checkInvalidHeaderChar(value) {
-    return INVALID_HEADER_CHAR_REGEX.test(value);
+// Node 26 lenient (Fetch spec) values reject only NUL, CR, LF and characters above 0xff.
+// eslint-disable-next-line no-control-regex
+const LENIENT_INVALID_HEADER_CHAR_REGEX = /[\x00\x0a\x0d]|[^\x00-\xff]/;
+
+export function _checkInvalidHeaderChar(value, lenient = false) {
+    return (lenient ? LENIENT_INVALID_HEADER_CHAR_REGEX : INVALID_HEADER_CHAR_REGEX).test(value);
 }
 
 export { HTTPParser, methods };
