@@ -4,6 +4,8 @@ package test:invocation-tasks;
 interface effects {
   note: func(label: string);
   effect: async func(label: string, delay-ms: u32);
+  // Keeps the stream and reads it only after the next exported call returns.
+  hand-over: async func(label: string, s: stream<u8>);
 }
 
 world invocation-tasks {
@@ -25,6 +27,9 @@ world invocation-tasks {
   // Records, then sets a timer that records and resolves the promise `wait-for-signal` awaits, and
   // returns at once.
   export sync-timer: func(name: string, delay-ms: u32);
+  // Records, then sets a timer that hands a stream of 1, 2, 3 over to the host, and returns at
+  // once.
+  export sync-hand-over: func(name: string, delay-ms: u32);
   // Sets the test context store to `value`, awaits host effects, and records what it reads.
   export context-flow: async func(name: string, value: u32, delay-ms: u32) -> string;
 }

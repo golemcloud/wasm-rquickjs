@@ -249,7 +249,9 @@ impl Drop for PendingDrain {
 }
 
 /// Drains the invocation's own work and the work it adopted. Returns `false` when the rest must
-/// drain after the return (see [`super::p3::drain_invocation_before_return`]).
+/// drain after the return (see [`super::p3::drain_invocation_before_return`]), also when a
+/// JavaScript producer becomes active while the adopted work drains: the adopted drains then keep
+/// running on the call's task after the return.
 async fn drain_before_return(owner: u64) -> bool {
     loop {
         if !super::p3::drain_invocation_before_return().await {
@@ -260,7 +262,13 @@ async fn drain_before_return(owner: u64) -> bool {
             return true;
         };
         for adoption in adoptions {
-            let _ = adoption.await;
+            let completed = super::p3::await_unless_any_writer_activates(async {
+                let _ = adoption.await;
+            })
+            .await;
+            if !completed {
+                return false;
+            }
         }
     }
 }

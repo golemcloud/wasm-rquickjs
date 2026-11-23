@@ -11,18 +11,22 @@
 
 use camino::{Utf8Path, Utf8PathBuf};
 use camino_tempfile::Utf8TempDir;
+use futures::StreamExt;
 use std::collections::{HashMap, VecDeque};
 use std::future::Future;
+use std::pin::Pin;
 use std::process::Command;
 use std::sync::{Arc, Mutex};
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use wasm_rquickjs::{
     EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
 };
 use wasmtime::component::{
-    Accessor, Component, Func, HasSelf, Linker, TaskGroupHook, TaskGroupId, Val, bindgen,
+    Accessor, Component, Func, HasSelf, Linker, Source, StreamConsumer, StreamReader, StreamResult,
+    TaskGroupHook, TaskGroupId, Val, bindgen,
 };
-use wasmtime::{Config, Engine, Result, Store};
+use wasmtime::{Config, Engine, Result, Store, StoreContextMut};
 use wasmtime_wasi::p2::pipe::MemoryOutputPipe;
 use wasmtime_wasi::{ResourceTable, WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
@@ -142,6 +146,8 @@ struct Host {
     table: ResourceTable,
     io_ctx: wasmtime_wasi::IoCtx,
     attribution: Attribution,
+    /// The stream of the last `hand-over` call, which the test reads when it chooses.
+    handed_over: Option<StreamReader<u8>>,
 }
 
 impl wasmtime_wasi::WasiView for Host {
@@ -175,6 +181,36 @@ impl<T> host_effects::HostWithStore<T> for HasSelf<Host> {
         accessor.with(|mut access| access.get().attribution.record(&label));
         tokio::time::sleep(Duration::from_millis(delay_ms.into())).await;
     }
+
+    async fn hand_over(accessor: &Accessor<T, Self>, label: String, s: StreamReader<u8>) {
+        accessor.with(|mut access| {
+            let host = access.get();
+            host.attribution.record(&label);
+            host.handed_over = Some(s);
+        });
+    }
+}
+
+/// Sends the items of a component `stream<u8>` to a channel, which closes when the stream ends.
+struct CollectConsumer(futures::channel::mpsc::UnboundedSender<u8>);
+
+impl<D> StreamConsumer<D> for CollectConsumer {
+    type Item = u8;
+
+    fn poll_consume(
+        self: Pin<&mut Self>,
+        _: &mut Context<'_>,
+        store: StoreContextMut<D>,
+        mut source: Source<Self::Item>,
+        _: bool,
+    ) -> Poll<Result<StreamResult>> {
+        let item = &mut None;
+        source.read(store, item)?;
+        if let Some(item) = item.take() {
+            let _ = self.0.unbounded_send(item);
+        }
+        Poll::Ready(Ok(StreamResult::Completed))
+    }
 }
 
 struct Instance {
@@ -182,6 +218,8 @@ struct Instance {
     bindings: InvocationTasks,
     /// The synchronous `sync-timer` export, called untyped so that it can overlap other calls.
     sync_timer: Func,
+    /// The synchronous `sync-hand-over` export, called untyped like `sync_timer`.
+    sync_hand_over: Func,
     attribution: Attribution,
     stderr: MemoryOutputPipe,
 }
@@ -211,6 +249,7 @@ async fn instantiate(component_path: &Utf8Path) -> Result<Instance> {
             table: ResourceTable::new(),
             io_ctx,
             attribution: attribution.clone(),
+            handed_over: None,
         },
     );
     store.task_group_hook(attribution.clone());
@@ -219,10 +258,14 @@ async fn instantiate(component_path: &Utf8Path) -> Result<Instance> {
     let sync_timer = instance
         .get_func(&mut store, "sync-timer")
         .expect("sync-timer is exported");
+    let sync_hand_over = instance
+        .get_func(&mut store, "sync-hand-over")
+        .expect("sync-hand-over is exported");
     Ok(Instance {
         store,
         bindings,
         sync_timer,
+        sync_hand_over,
         attribution,
         stderr,
     })
@@ -242,6 +285,7 @@ async fn wait_for_finish(attribution: &Attribution, calls: &[&str]) {
     }
 }
 
+/// Calls a synchronous `func(name: string, delay-ms: u32)` export untyped.
 async fn call_sync_timer(
     accessor: &Accessor<Host>,
     sync_timer: Func,
@@ -632,6 +676,65 @@ fn without_post_return_drain_a_call_drains_the_work_it_adopts_before_it_returns(
     );
     assert!(
         at(&events, "result:b") > at(&events, "record:a:timer"),
+        "{events:#?}"
+    );
+}
+
+#[test]
+fn without_post_return_drain_a_call_returns_while_adopted_work_feeds_a_stream_the_host_reads_later()
+{
+    let (_temp, wasm) = component_with_features("");
+    let (events, bytes) = block_on_with_timeout(async {
+        let Instance {
+            mut store,
+            bindings,
+            sync_hand_over,
+            attribution,
+            ..
+        } = instantiate(&wasm).await?;
+        let bytes = store
+            .run_concurrent(async |accessor| -> Result<Vec<u8>> {
+                attribution.arm("a");
+                call_sync_timer(accessor, sync_hand_over, "a", 100).await?;
+                attribution.arm("b");
+                let b = tokio::time::timeout(
+                    Duration::from_secs(20),
+                    bindings.call_quick(accessor, "b".into()),
+                )
+                .await
+                .unwrap_or_else(|_| {
+                    panic!(
+                        "b must return while the stream it adopted waits for the host: {:#?}",
+                        attribution.events()
+                    )
+                })?;
+                attribution.result("b");
+                assert_eq!(b, "b");
+                let reader = accessor
+                    .with(|mut access| access.get().handed_over.take())
+                    .expect("the adopted timer handed a stream over");
+                let (tx, rx) = futures::channel::mpsc::unbounded();
+                accessor.with(|access| reader.pipe(access, CollectConsumer(tx)))?;
+                let bytes = rx.collect::<Vec<u8>>().await;
+                wait_for_finish(&attribution, &["a", "b"]).await;
+                Ok(bytes)
+            })
+            .await??;
+        Ok((attribution.events(), bytes))
+    });
+
+    assert_eq!(bytes, [1, 2, 3], "{events:#?}");
+    assert_attributed(&events, "a", &["sync"]);
+    assert_eq!(
+        attributions(&events, "a:")
+            .into_iter()
+            .filter(|(label, _)| label != "a:sync")
+            .collect::<Vec<_>>(),
+        [
+            ("a:timer".to_string(), "b".to_string()),
+            ("a:stream".to_string(), "b".to_string()),
+            ("a:handed-over".to_string(), "b".to_string()),
+        ],
         "{events:#?}"
     );
 }

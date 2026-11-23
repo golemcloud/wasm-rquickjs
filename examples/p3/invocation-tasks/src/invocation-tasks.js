@@ -1,4 +1,4 @@
-import { note, effect } from 'test:invocation-tasks/effects';
+import { note, effect, handOver } from 'test:invocation-tasks/effects';
 
 let resolveSignal;
 const signal = new Promise((resolve) => {
@@ -72,6 +72,21 @@ export function syncTimer(name, delayMs) {
     setTimeout(() => {
         note(`${name}:timer`);
         resolveSignal(name);
+    }, delayMs);
+}
+
+export function syncHandOver(name, delayMs) {
+    note(`${name}:sync`);
+    async function* bytes() {
+        for (let i = 1; i <= 3; i++) {
+            await Promise.resolve();
+            yield i;
+        }
+    }
+    setTimeout(async () => {
+        note(`${name}:timer`);
+        await handOver(`${name}:stream`, bytes());
+        note(`${name}:handed-over`);
     }, delayMs);
 }
 

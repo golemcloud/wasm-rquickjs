@@ -855,6 +855,20 @@ pub(crate) async fn drain_invocation_before_return() -> bool {
     }
 }
 
+/// Awaits `future` unless any invocation has, or starts meanwhile, an active JavaScript producer:
+/// it may feed a component future/stream that the host reads only after a return, so waiting for
+/// work that depends on it before the return could deadlock. Returns whether `future` completed.
+pub(crate) async fn await_unless_any_writer_activates(future: impl Future<Output = ()>) -> bool {
+    let js_state = ensure_initialized().await;
+    let Some(activation) = js_state.writer_lease.wait_for_activation_if_inactive(true) else {
+        return false;
+    };
+    matches!(
+        futures::future::select(Box::pin(future), activation).await,
+        futures::future::Either::Left(_)
+    )
+}
+
 pub async fn call_js_export<A, R>(
     wit_package: &'static str,
     function_path: &'static [&'static str],
