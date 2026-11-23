@@ -9883,9 +9883,10 @@ export const testVmMainContextDefaultLoader = async () => {
         ].join('\n'));
         assert.strictEqual(util.inspect(inspectSourceTextModule, { depth: -1 }), '[SourceTextModule]');
         const inspectSyntheticModule = new vm.SyntheticModule([], () => {}, { context: inspectContext });
+        // Node 26 links a SyntheticModule when it is constructed.
         assert.strictEqual(util.inspect(inspectSyntheticModule), [
             'SyntheticModule {',
-            "  status: 'unlinked',",
+            "  status: 'linked',",
             "  identifier: 'vm:module(0)',",
             "  context: { foo: 'bar' }",
             '}',
@@ -9894,8 +9895,8 @@ export const testVmMainContextDefaultLoader = async () => {
         for (const invalidThis of [null, { __proto__: null }, vm.SourceTextModule.prototype]) {
             assert.throws(() => inspectSourceTextModule[util.inspect.custom].call(invalidThis), {
                 name: 'TypeError',
-                code: 'ERR_INVALID_ARG_TYPE',
-                message: /The "this" argument must be an instance of Module/,
+                code: 'ERR_INVALID_THIS',
+                message: 'Value of "this" must be of type Module',
             });
         }
         assert.throws(() => new vm.SyntheticModule(undefined, () => {}, {}), {
@@ -10049,10 +10050,14 @@ export const testVmMainContextDefaultLoader = async () => {
         assert.throws(() => syntheticModule.setExport(1, 2), TypeError);
         assert.throws(() => syntheticModule.setExport('missing', 2), ReferenceError);
 
+        // Node 26 links a SyntheticModule at construction, so exports can be set before evaluate().
         const prelinkedSynthetic = new vm.SyntheticModule(['x'], function() {});
-        assert.throws(() => prelinkedSynthetic.setExport('x', 1), {
-            code: 'ERR_VM_MODULE_STATUS',
-        });
+        assert.strictEqual(prelinkedSynthetic.status, 'linked');
+        prelinkedSynthetic.setExport('x', 1);
+        assert.strictEqual(prelinkedSynthetic.namespace.x, 1);
+        await prelinkedSynthetic.evaluate();
+        assert.strictEqual(prelinkedSynthetic.status, 'evaluated');
+        assert.strictEqual(prelinkedSynthetic.namespace.x, 1);
 
         const rejectedSynthetic = new vm.SyntheticModule([], function() {
             const promise = Promise.reject(new Error('ignored'));

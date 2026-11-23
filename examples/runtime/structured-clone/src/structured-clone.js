@@ -330,9 +330,13 @@ export async function testPolicyCase(index) {
                 const outer = new Constructor([blob]);
                 assert.equal(await structuredClone(outer).text(), 'hello world');
             }
-            const file = structuredClone(new BufferFile(['hi'],'secret.txt',{type:'TEXT/PLAIN'}));
+            // Node 26 keeps a File's name and lastModified across structuredClone (nodejs/node#47612).
+            const file = structuredClone(new BufferFile(['hi'],'secret.txt',{type:'TEXT/PLAIN', lastModified: 5}));
             assert.equal(await file.text(), 'hi');
-            assert.equal(file.name, undefined);
+            assert.equal(file instanceof BufferFile, true);
+            assert.equal(file.name, 'secret.txt');
+            assert.equal(file.lastModified, 5);
+            assert.equal(file.type, 'text/plain');
             break;
         }
         case 7: {

@@ -71,7 +71,7 @@ async fn fetch_post_and_get_as_array_buffer(
 
     assert_eq!(
         output,
-        "fetch test 2\nResponse body as ArrayBuffer: ArrayBuffer {\n  [Uint8Contents]: <7b 22 69 64 22 3a 30 2c 22 75 73 65 72 49 64 22 3a 31 2c 22 74 69 74 6c 65 22 3a 22 66 6f 6f 22 2c 22 62 6f 64 79 22 3a 22 62 61 72 22 2c 22 63 6f 6d 70 6c 65 74 65 64 22 3a 66 61 6c 73 65 7d>,\n  byteLength: 64\n}\n"
+        "fetch test 2\nResponse body as ArrayBuffer: ArrayBuffer {\n  [Uint8Contents]: <7b 22 69 64 22 3a 30 2c 22 75 73 65 72 49 64 22 3a 31 2c 22 74 69 74 6c 65 22 3a 22 66 6f 6f 22 2c 22 62 6f 64 79 22 3a 22 62 61 72 22 2c 22 63 6f 6d 70 6c 65 74 65 64 22 3a 66 61 6c 73 65 7d>,\n  [byteLength]: 64\n}\n"
     );
 
     Ok(())

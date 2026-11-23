@@ -110,7 +110,7 @@ async fn strip_typescript_types_matches_node_contract(
     assert_eq!(report["rewriteImportedDefault"]["answer"], 42);
     assert_eq!(
         report["rewriteImportedKeys"],
-        serde_json::json!(["changed", "default"])
+        serde_json::json!(["changed", "default", "module.exports"])
     );
     assert_eq!(report["rewriteImportedChangedIsUndefined"], true);
     assert_eq!(report["rewriteTransformCount"], 2);
