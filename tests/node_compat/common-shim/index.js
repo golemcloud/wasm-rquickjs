@@ -9,6 +9,16 @@ require('./tmpdir');
 var noop = function() {};
 var _mustCallChecks = [];
 
+// Like upstream common's _mustCallInner, keep the wrapped function's name and
+// length, which APIs such as sqlite's db.function() read.
+function _copyFunctionShape(wrapper, fn) {
+    Object.defineProperties(wrapper, {
+        name: { value: fn.name, writable: false, enumerable: false, configurable: true },
+        length: { value: fn.length, writable: false, enumerable: false, configurable: true },
+    });
+    return wrapper;
+}
+
 function copyEnv(env) {
     var copy = {};
     var keys = Object.keys(env || {});
@@ -547,7 +557,7 @@ var common = {
             return wrapped.apply(this, arguments);
         };
         _mustCallChecks.push({ expected: expected, getActual: function() { return actual; }, callSite: callSite });
-        return wrapper;
+        return _copyFunctionShape(wrapper, wrapped);
     },
     mustCallAtLeast: function(fn, minimum) {
         var wrapped = fn || noop;
@@ -559,7 +569,7 @@ var common = {
             return wrapped.apply(this, arguments);
         };
         _mustCallChecks.push({ minimum: min, getActual: function() { return actual; }, callSite: callSite });
-        return wrapper;
+        return _copyFunctionShape(wrapper, wrapped);
     },
     mustNotCall: function(msg) {
         function mustNotCall() {
