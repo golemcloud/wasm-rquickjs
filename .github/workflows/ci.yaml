@@ -137,6 +137,12 @@ jobs:
         # Streaming-redirect fetch depends on a wasmtime-wasi-http fix that only the Golem
         # fork carries; stock `test-runtime` skips these cases.
         run: cargo test --test runtime $CI_WASMTIME_FORK_FEATURES -- fetch_redirect_with_ --report-time
+      - name: Invocation task attribution (Golem fork)
+        # The host attributes host calls by task group, which only the Golem fork's
+        # `TaskGroupHook` exposes.
+        env:
+          WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
+        run: cargo test --test p3_invocation_tasks $CI_WASMTIME_FORK_FEATURES -- --test-threads 2
       - name: Optimizer copy budget contracts (Golem fork)
         # Full guest templates spawn Cargo/Wasmtime compiler pools. Reuse only
         # build artifacts and bound competing cases; runtime state stays fresh.

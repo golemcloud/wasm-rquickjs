@@ -69,6 +69,12 @@ pub mod native_module {
             ));
             timers.abort_handles.borrow_mut().insert(key, handle);
             timers.active_tasks.borrow_mut().insert(key);
+            // The timer belongs to the invocation that registers it: its callbacks run on that
+            // invocation's task, and that invocation's drain waits for it.
+            timers
+                .owners
+                .borrow_mut()
+                .insert(key, crate::internal::invocation::job_owner_of(&ctx));
             let task = super::ComponentTimerTask {
                 task: Some(Box::pin(async move {
                     let _ = task.await;
@@ -209,6 +215,7 @@ impl<F> Drop for ComponentTimerTask<F> {
         self.timers.abort_handles.borrow_mut().remove(&self.key);
         self.timers.unrefed_timers.borrow_mut().remove(&self.key);
         self.timers.active_tasks.borrow_mut().remove(&self.key);
+        self.timers.owners.borrow_mut().remove(&self.key);
         self.timers.changed();
     }
 }

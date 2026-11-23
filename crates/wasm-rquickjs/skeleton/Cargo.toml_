@@ -83,6 +83,12 @@ typescript-transform-runtime = ["typescript-runtime"]
 test-observability = []
 typescript-compiler-profiling = ["typescript-transform-runtime", "test-observability"]
 
+# An async exported call returns its result before it drains its own remaining work, which then
+# runs on the call's task after the return. Enable it only for hosts that keep driving a call's
+# task until it exits. Without it, the call drains its own work before it returns, except while a
+# JavaScript producer feeds a component future/stream that the host reads after a return.
+post-return-drain = []
+
 # Private measurement hooks for the GOL-360 TCP write/backpressure benchmark.
 net-write-profiling = []
 
