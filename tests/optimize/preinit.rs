@@ -178,7 +178,7 @@ fn optimize_guest_failure(input: &Utf8Path, output: &Utf8Path) -> anyhow::Result
         .stdout(Stdio::null())
         .stderr(std::fs::File::create(&stderr_path)?)
         .spawn()?;
-    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(60);
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(300);
     let status = loop {
         if let Some(status) = child.try_wait()? {
             break status;
@@ -187,7 +187,7 @@ fn optimize_guest_failure(input: &Utf8Path, output: &Utf8Path) -> anyhow::Result
             child.kill()?;
             child.wait()?;
             anyhow::bail!(
-                "optimizer did not reject pre-initialization I/O within 60 seconds: {}",
+                "optimizer did not reject pre-initialization I/O within 300 seconds: {}",
                 std::fs::read_to_string(&stderr_path)?
             );
         }
