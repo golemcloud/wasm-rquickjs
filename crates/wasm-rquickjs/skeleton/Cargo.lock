@@ -1907,7 +1907,7 @@ dependencies = [
 [[package]]
 name = "rquickjs"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=gol-1060-job-owners#399720d48cf192e113edd865f04cb712f460ead1"
+source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#c8e7d557a5bb1e65dc68c10af563e5cc9939c2eb"
 dependencies = [
  "rquickjs-core",
  "rquickjs-macro",
@@ -1988,7 +1988,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-core"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=gol-1060-job-owners#399720d48cf192e113edd865f04cb712f460ead1"
+source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#c8e7d557a5bb1e65dc68c10af563e5cc9939c2eb"
 dependencies = [
  "async-lock",
  "hashbrown 0.17.1",
@@ -1999,7 +1999,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-macro"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=gol-1060-job-owners#399720d48cf192e113edd865f04cb712f460ead1"
+source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#c8e7d557a5bb1e65dc68c10af563e5cc9939c2eb"
 dependencies = [
  "convert_case",
  "indexmap",
@@ -2013,7 +2013,7 @@ dependencies = [
 [[package]]
 name = "rquickjs-sys"
 version = "0.14.0"
-source = "git+https://github.com/golemcloud/rquickjs?branch=gol-1060-job-owners#399720d48cf192e113edd865f04cb712f460ead1"
+source = "git+https://github.com/golemcloud/rquickjs?branch=v0.14.0-patched#c8e7d557a5bb1e65dc68c10af563e5cc9939c2eb"
 dependencies = [
  "bindgen",
  "cc",
