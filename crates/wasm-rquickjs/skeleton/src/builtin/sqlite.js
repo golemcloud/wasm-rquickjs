@@ -130,7 +130,7 @@ class _DatabaseSyncImpl {
             allowBareNamedParameters: options.allowBareNamedParameters ?? this.#options.allowBareNamedParameters,
             allowUnknownNamedParameters: options.allowUnknownNamedParameters ?? this.#options.allowUnknownNamedParameters,
         };
-        return new StatementSync(_stmtSecret, this.#connId, sql, stmtOptions);
+        return new Statement(_stmtSecret, this.#connId, sql, stmtOptions);
     }
 
     function(name, optionsOrFn, maybeFn) {
@@ -327,7 +327,7 @@ class _DatabaseSyncImpl {
     }
 }
 
-export function DatabaseSync(path, options) {
+export function Database(path, options) {
     if (!new.target) {
         const err = new TypeError('Cannot call constructor without `new`');
         err.code = 'ERR_CONSTRUCT_CALL_REQUIRED';
@@ -335,7 +335,10 @@ export function DatabaseSync(path, options) {
     }
     return new _DatabaseSyncImpl(path, options);
 }
-DatabaseSync.prototype = _DatabaseSyncImpl.prototype;
+Database.prototype = _DatabaseSyncImpl.prototype;
+Object.defineProperty(_DatabaseSyncImpl.prototype, 'constructor', { value: Database, writable: true, configurable: true });
+// DEP0210: Node 26 renamed DatabaseSync to Database and keeps the old name as an alias.
+export const DatabaseSync = Database;
 
 export class Session {
     #sessionId;
@@ -380,7 +383,7 @@ export class Session {
 
 const _stmtSecret = Symbol('stmtSecret');
 
-export class StatementSync {
+export class Statement {
     #connId;
     #sql;
     #options;
@@ -628,4 +631,7 @@ export function isAutocommitDatabaseSync(db) {
     return is_autocommit(_getConnId(db));
 }
 
-export default { DatabaseSync, StatementSync, Session, SQLTagStore, constants, backup, serializeDatabase, restoreDatabase, serializeDatabaseSync, restoreDatabaseSync, isAutocommitDatabaseSync };
+// DEP0211: Node 26 renamed StatementSync to Statement and keeps the old name as an alias.
+export const StatementSync = Statement;
+
+export default { Database, DatabaseSync, Statement, StatementSync, Session, SQLTagStore, constants, backup, serializeDatabase, restoreDatabase, serializeDatabaseSync, restoreDatabaseSync, isAutocommitDatabaseSync };

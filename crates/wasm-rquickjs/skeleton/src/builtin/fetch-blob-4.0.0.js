@@ -96,6 +96,8 @@ const _Blob = class Blob {
         if (options === null) options = {}
 
         const encoder = new TextEncoder()
+        // WHATWG "convert line endings to native"; the native ending is "\n" on this POSIX target.
+        const nativeEndings = options.endings === 'native'
         for (const element of blobParts) {
             let part
             if (ArrayBuffer.isView(element)) {
@@ -105,7 +107,8 @@ const _Blob = class Blob {
             } else if (element instanceof Blob) {
                 part = element
             } else {
-                part = encoder.encode(`${element}`)
+                const text = `${element}`
+                part = encoder.encode(nativeEndings ? text.replace(/\r\n|\r|\n/g, '\n') : text)
             }
 
             const size = ArrayBuffer.isView(part) ? part.byteLength : part.size

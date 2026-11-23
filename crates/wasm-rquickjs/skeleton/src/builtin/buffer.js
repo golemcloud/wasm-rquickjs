@@ -650,23 +650,32 @@ Buffer.concat = function concat (list, length) {
         }
     }
 
+    // Use the intrinsic byteLength so a spoofed `length` property cannot
+    // expose uninitialized memory.
     if (length === undefined) {
         length = 0
         for (i = 0; i < list.length; ++i) {
-            length += list[i].length
+            length += getTypedArrayByteLength(list[i])
         }
+    } else {
+        validateInteger(length, 'length', 0, K_MAX_LENGTH)
     }
 
     const buffer = Buffer.allocUnsafe(length)
     let pos = 0
     for (i = 0; i < list.length; ++i) {
         const buf = list[i]
-        if (pos + buf.length > buffer.length) {
-            buffer.set(buf.subarray(0, buffer.length - pos), pos)
+        const bufLength = getTypedArrayByteLength(buf)
+        if (pos + bufLength > length) {
+            buffer.set(new Uint8Array(getTypedArrayBuffer(buf), getTypedArrayByteOffset(buf), length - pos), pos)
+            pos = length
             break
         }
-        buffer.set(buf, pos)
-        pos += buf.length
+        buffer.set(new Uint8Array(getTypedArrayBuffer(buf), getTypedArrayByteOffset(buf), bufLength), pos)
+        pos += bufLength
+    }
+    if (pos < length) {
+        buffer.fill(0, pos, length)
     }
     return buffer
 }
@@ -2388,24 +2397,21 @@ const hexCharValueTable = [
 ]
 /* eslint-enable no-multi-spaces, indent */
 
+// Node 26 treats detached ArrayBuffers and views as empty input.
+function isDetachedBuffer (buffer) {
+    if (typeof buffer.detached === 'boolean') return buffer.detached
+    if (buffer.byteLength !== 0) return false
+    try {
+        new Uint8Array(buffer)
+        return false
+    } catch (e) {
+        return true
+    }
+}
+
 function validateBufferSource (source) {
     if (source instanceof ArrayBuffer || source instanceof SharedArrayBuffer) {
-        if (typeof source.detached === 'boolean' && source.detached) {
-            const err = new TypeError('Cannot perform operation on a detached ArrayBuffer')
-            err.code = 'ERR_INVALID_STATE'
-            throw err
-        }
-        if (source.byteLength === 0 && source.maxByteLength === undefined) {
-            // Possibly detached — try to create a view to detect
-            try {
-                new Uint8Array(source)
-            } catch (e) {
-                const err = new TypeError('Cannot perform operation on a detached ArrayBuffer')
-                err.code = 'ERR_INVALID_STATE'
-                throw err
-            }
-        }
-        return new Uint8Array(source)
+        return isDetachedBuffer(source) ? new Uint8Array(0) : new Uint8Array(source)
     }
     if (!ArrayBuffer.isView(source)) {
         const err = new TypeError(
@@ -2414,6 +2420,9 @@ function validateBufferSource (source) {
         )
         err.code = 'ERR_INVALID_ARG_TYPE'
         throw err
+    }
+    if (isDetachedBuffer(source.buffer)) {
+        return new Uint8Array(0)
     }
     return new Uint8Array(source.buffer, source.byteOffset, source.byteLength)
 }
@@ -2535,11 +2544,32 @@ Object.defineProperties(_Blob.prototype, {
 
 export const Blob = _Blob
 
+let _fileCloneState
+// structuredClone keeps a File's name and lastModified (Node 26, nodejs/node#47612).
+const fileCloneAdapter = {__proto__: null,
+    kind: 'Blob',
+    clone(value) {
+        return new _File(_innerKey, cloneBlobBacking(blobBacking.get(value)), _fileCloneState(value))
+    },
+    cloneBacking(value, memo) { return cloneBlobBacking(blobBacking.get(value), memo) },
+}
+
 const _File = class File extends _Blob {
     #name = ''
     #lastModified = 0
 
+    static {
+        _fileCloneState = value => ({ name: value.#name, lastModified: value.#lastModified })
+    }
+
     constructor(fileBits, fileName, options = {}) {
+        if (fileBits === _innerKey) {
+            super(_innerKey, fileName)
+            this.#name = options.name
+            this.#lastModified = options.lastModified
+            registerCloneAdapter(this, fileCloneAdapter)
+            return
+        }
         if (arguments.length < 2) {
             throw new TypeError(`Failed to construct 'File': 2 arguments required, but only ${arguments.length} present.`)
         }
@@ -2562,6 +2592,7 @@ const _File = class File extends _Blob {
         }
 
         this.#name = String(fileName)
+        registerCloneAdapter(this, fileCloneAdapter)
     }
 
     get name() {

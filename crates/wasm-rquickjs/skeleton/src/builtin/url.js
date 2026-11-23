@@ -5,7 +5,7 @@ import {
     domainToUnicode as domainToUnicodeNative,
 } from '__wasm_rquickjs_builtin/url_native';
 import * as querystring from 'node:querystring';
-import { ERR_INVALID_ARG_TYPE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
+import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import { createPrivateWeakMap } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 const __URLSearchParams__ = "__URLSearchParams__";
@@ -82,7 +82,8 @@ function URLSearchParamsPolyfill(search) {
         throw new TypeError("Class constructor URLSearchParams cannot be invoked without 'new'");
     }
 
-    if (search === undefined || search === null) {
+    // WebIDL union resolution: only undefined means "no init"; null becomes the string "null".
+    if (search === undefined) {
         search = "";
     } else if (search instanceof URLSearchParams || search instanceof URLSearchParamsPolyfill) {
         search = search.toString();
@@ -484,8 +485,8 @@ function parseToPairs(search) {
         toUSVString(search);
     }
 
-    if (typeof search === "object" || typeof search === 'function') {
-        const iterator = search && search[Symbol.iterator];
+    if ((typeof search === "object" && search !== null) || typeof search === 'function') {
+        const iterator = search[Symbol.iterator];
         if (iterator !== undefined) {
             if (typeof iterator !== 'function') {
                 throw makeNotIterableError();
@@ -510,14 +511,24 @@ function parseToPairs(search) {
                 pairs.push([toUSVString(first.value), toUSVString(second.value)]);
             }
         } else {
-            const symbols = Object.getOwnPropertySymbols(search || {});
+            const symbols = Object.getOwnPropertySymbols(search);
             if (symbols.length > 0) {
                 toUSVString(symbols[0]);
             }
-            const keys = Object.keys(search || {});
+            // A record key that collides after USV conversion keeps its first position and
+            // takes the last value.
+            const indexByKey = new Map();
+            const keys = Object.keys(search);
             for (let i = 0; i < keys.length; i++) {
-                const key = keys[i];
-                pairs.push([toUSVString(key), toUSVString(search[key])]);
+                const key = toUSVString(keys[i]);
+                const value = toUSVString(search[keys[i]]);
+                const index = indexByKey.get(key);
+                if (index === undefined) {
+                    indexByKey.set(key, pairs.length);
+                    pairs.push([key, value]);
+                } else {
+                    pairs[index][1] = value;
+                }
             }
         }
     } else {
@@ -686,11 +697,6 @@ function makeInvalidUrlError(input) {
 }
 
 const FORBIDDEN_HOST_CHARS = /[\0\t\n\r #%/<>?@\\^|]/;
-const WARN_INVALID_HOSTNAME_KEY = '__wasm_rquickjs_url_warned_invalid_hostname';
-
-if (globalThis[WARN_INVALID_HOSTNAME_KEY] === undefined) {
-    globalThis[WARN_INVALID_HOSTNAME_KEY] = false;
-}
 
 function validateHostName(hostname, ipv6Host, input) {
     if (!hostname) {
@@ -698,28 +704,6 @@ function validateHostName(hostname, ipv6Host, input) {
     }
     if (FORBIDDEN_HOST_CHARS.test(hostname)) {
         throw makeInvalidUrlError(input);
-    }
-}
-
-function emitInvalidUrlDeprecation(input) {
-    if (globalThis[WARN_INVALID_HOSTNAME_KEY]) {
-        return;
-    }
-    globalThis[WARN_INVALID_HOSTNAME_KEY] = true;
-
-    const warningMessage = `The URL ${input} is invalid. Future versions of Node.js will throw an error.`;
-
-    if (typeof process !== 'undefined' && typeof process.emitWarning === 'function') {
-        process.emitWarning(warningMessage, {
-            type: 'DeprecationWarning',
-            code: 'DEP0170',
-        });
-    }
-
-    if (typeof process !== 'undefined' &&
-        process.stderr &&
-        typeof process.stderr.write === 'function') {
-        process.stderr.write(`[DEP0170] DeprecationWarning: ${warningMessage}\n`);
     }
 }
 
@@ -781,11 +765,13 @@ export function fileURLToPath(url, options) {
 
     const pathname = url.pathname;
     if (pathname.indexOf('%2F') !== -1 || pathname.indexOf('%2f') !== -1) {
-        throw makeNodeError(
+        const err = makeNodeError(
             'ERR_INVALID_FILE_URL_PATH',
             TypeError,
             'File URL path must not include encoded / characters'
         );
+        err.input = url;
+        throw err;
     }
 
     return decodeURIComponent(pathname);
@@ -863,6 +849,9 @@ export function pathToFileURL(path, options) {
 }
 
 export function urlToHttpOptions(url) {
+    if (url === null || (typeof url !== 'object' && typeof url !== 'function')) {
+        throw new ERR_INVALID_ARG_TYPE('url', 'object', url);
+    }
     const options = {
         protocol: url.protocol,
         hostname: typeof url.hostname === 'string' && url.hostname.startsWith('[')
@@ -1519,7 +1508,7 @@ export function parse(urlString, parseQueryString, slashesDenoteHost) {
     }
 
     if (shouldWarnInvalidHost) {
-        emitInvalidUrlDeprecation(urlString);
+        throw new ERR_INVALID_ARG_VALUE('url', 'Invalid port in url', urlString);
     }
 
     if (parseQueryString) {

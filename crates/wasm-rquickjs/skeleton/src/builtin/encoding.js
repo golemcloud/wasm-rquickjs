@@ -234,6 +234,8 @@ Object.defineProperties(TextDecoder.prototype, {
     },
 });
 
+const toWellFormed = Function.prototype.call.bind(String.prototype.toWellFormed);
+
 export class TextEncoder {
     constructor() {
     }
@@ -243,14 +245,15 @@ export class TextEncoder {
     }
 
     encode(input = '') {
-        return encodingNative.encode(`${input}`);
+        // USVString conversion: lone surrogates become U+FFFD.
+        return encodingNative.encode(toWellFormed(`${input}`));
     }
 
     encodeInto(string, uint8Array) {
         if (typeof string !== 'string') {
             throw new TypeError('The "src" argument must be of type string. Received type ' + typeof string);
         }
-        return encodingNative.encode_into(string, uint8Array);
+        return encodingNative.encode_into(toWellFormed(string), uint8Array);
     }
 }
 

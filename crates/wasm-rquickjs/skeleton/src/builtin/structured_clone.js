@@ -483,7 +483,7 @@ function optionsTransfer(options) {
     throw invalidArgument("Failed to execute 'structuredClone': Options cannot be converted to a dictionary");
   const transfer = options.transfer;
   if (transfer === undefined) return [];
-  const memberError = () => invalidArgument("Failed to execute 'structuredClone': transfer in Options can not be converted to sequence.");
+  const memberError = () => invalidArgument("Failed to execute 'structuredClone': transfer in Options cannot be converted to sequence.");
   if (!isObject(transfer)) throw memberError();
   const method = transfer[symbolIterator];
   if (method == null) throw memberError();
