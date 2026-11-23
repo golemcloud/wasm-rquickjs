@@ -1,6 +1,6 @@
 import { isAbortSignal, markTransferableSignal } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import { AbortController as NativeAbortController, AbortSignal as NativeAbortSignal } from '__wasm_rquickjs_builtin/abort_controller';
-import { validateAbortSignal, validateObject } from '__wasm_rquickjs_builtin/internal/validators';
+import { validateAbortSignal, validateObject, validateOneOf } from '__wasm_rquickjs_builtin/internal/validators';
 import { NativeWeakRef, nativeWeakRefDeref } from '__wasm_rquickjs_builtin/internal/weak_collections';
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -33,6 +33,7 @@ import {
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native';
 import {
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
     ERR_OUT_OF_RANGE,
     isErrorStackTraceLimitWritable
 } from '__wasm_rquickjs_builtin/internal/errors';
@@ -61,7 +62,9 @@ const getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
 // If --no-deprecation is set, then it is a no-op.
-export const deprecate = _internalDeprecate;
+export function deprecate(fn, msg, code, { modifyPrototype } = {}) {
+    return _internalDeprecate(fn, msg, code, undefined, modifyPrototype);
+}
 
 
 const debugs = {};
@@ -540,7 +543,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         return a === b;
     }
 
-    if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
+    if (strict && !_deepSkipPrototype && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
         return false;
 
     // Check type tags match - objects of different built-in types are never equal
@@ -592,7 +595,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         }
         if (aDateTime !== bDateTime) return false;
         // In strict mode, also check constructor and own properties
-        if (strict && a.constructor !== b.constructor) return false;
+        if (strict && !_deepSkipPrototype && a.constructor !== b.constructor) return false;
         const dKeysA = Object.keys(a);
         const dKeysB = Object.keys(b);
         if (dKeysA.length !== dKeysB.length) return false;
@@ -712,7 +715,7 @@ function _deepObjEquiv(a, b, strict, memo) {
             return false;
         }
         if (aSource !== bSource || aFlags !== bFlags || aLastIndex !== bLastIndex) return false;
-        if (strict && a.constructor !== b.constructor) return false;
+        if (strict && !_deepSkipPrototype && a.constructor !== b.constructor) return false;
         const rKeysA = Object.keys(a);
         const rKeysB = Object.keys(b);
         if (rKeysA.length !== rKeysB.length) return false;
@@ -780,7 +783,7 @@ function _deepObjEquiv(a, b, strict, memo) {
     if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
         if (aTypedBrand === '' || bTypedBrand === '') {
-            if (strict) {
+            if (strict && !_deepSkipPrototype) {
                 if (a.constructor !== b.constructor) return false;
             } else {
                 if (aTag !== bTag) return false;
@@ -1051,9 +1054,19 @@ export function innerDeepEqual(a, b, strict, memo) {
     return _innerDeep(a, b, strict, memo);
 }
 
-export function isDeepStrictEqual(val1, val2) {
+// Node 26 util.isDeepStrictEqual(val1, val2, skipPrototype): strict comparison that
+// ignores [[Prototype]] and constructor identity.
+let _deepSkipPrototype = false;
+
+export function isDeepStrictEqual(val1, val2, skipPrototype) {
     _deepCallCount = 0;
-    return _innerDeep(val1, val2, true, undefined);
+    const previous = _deepSkipPrototype;
+    _deepSkipPrototype = !!skipPrototype;
+    try {
+        return _innerDeep(val1, val2, true, undefined);
+    } finally {
+        _deepSkipPrototype = previous;
+    }
 }
 
 const _externalValueMarkerSymbol = Symbol.for('wasm-rquickjs.util.types.external');
@@ -1423,78 +1436,43 @@ export function getCallSite(frameCount, options) {
     return getCallSites(frameCount, options);
 }
 
-const _styleTextFormats = Object.keys(inspect.colors);
+// Node 26 lib/util.js styleText helpers.
+const _kStyleTextHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const _kStyleTextHexCloseSeq = '\u001b[39m';
 
-function _throwStyleTextInvalidArgValue(name, value, reason) {
-    let inspected;
-    try {
-        inspected = JSON.stringify(value);
-    } catch (_) {
-        inspected = String(value);
-    }
+// Replaces nested close codes so the outer style resumes; a close code at the very
+// end of the text is left alone.
+function _replaceStyleTextCloseCode(str, closeSeq, openSeq, keepClose) {
+    const closeLen = closeSeq.length;
+    let index = str.indexOf(closeSeq);
+    if (index === -1) return str;
 
-    let message = "The argument '" + name + "' " + reason;
-    if (inspected !== undefined) {
-        message += '. Received ' + inspected;
-    }
+    let result = '';
+    let lastIndex = 0;
+    const replacement = keepClose ? closeSeq + openSeq : openSeq;
 
-    const err = new TypeError(message);
-    err.code = 'ERR_INVALID_ARG_VALUE';
-    throw err;
-}
-
-function _isStyleTextFormatValue(format) {
-    return format === 'none' || _styleTextFormats.indexOf(format) !== -1;
-}
-
-function _normalizeStyleTextFormats(format) {
-    if (typeof format === 'string') {
-        if (!_isStyleTextFormatValue(format)) {
-            _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
+    do {
+        const afterClose = index + closeLen;
+        if (afterClose < str.length) {
+            result += str.slice(lastIndex, index) + replacement;
+            lastIndex = afterClose;
+        } else {
+            break;
         }
-        return [format];
-    }
+        index = str.indexOf(closeSeq, lastIndex);
+    } while (index !== -1);
 
-    if (Array.isArray(format)) {
-        for (let i = 0; i < format.length; i++) {
-            if (typeof format[i] !== 'string' || !_isStyleTextFormatValue(format[i])) {
-                _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
-            }
-        }
-        return format;
-    }
-
-    _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
+    return result + str.slice(lastIndex);
 }
 
-function _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose) {
-    if (text.indexOf(closeSequence) === -1) {
-        return text;
-    }
-
-    const replacement = keepClose ? closeSequence + openSequence : openSequence;
-    return text.split(closeSequence).join(replacement);
-}
-
-function _applyStyleTextFormat(format, text) {
-    if (format === 'none') {
-        return text;
-    }
-
-    const style = inspect.colors[format];
-    if (!Array.isArray(style) || style.length < 2) {
-        _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
-    }
-
-    const open = style[0];
-    const close = style[1];
-    const openSequence = '\u001b[' + open + 'm';
-    const closeSequence = '\u001b[' + close + 'm';
-
-    const keepClose = open === 1 || open === 2;
-    const processedText = _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose);
-
-    return openSequence + processedText + closeSequence;
+function _styleTextHexOpenSeq(hex) {
+    const digits = hex.length === 4
+        ? hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3]
+        : hex.slice(1);
+    const r = parseInt(digits.slice(0, 2), 16);
+    const g = parseInt(digits.slice(2, 4), 16);
+    const b = parseInt(digits.slice(4, 6), 16);
+    return '\u001b[38;2;' + r + ';' + g + ';' + b + 'm';
 }
 
 function _parseStyleTextForceColor(value) {
@@ -1556,44 +1534,60 @@ export function styleText(format, text, options) {
     if (typeof text !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('text', 'string', text);
     }
-
-    const formats = _normalizeStyleTextFormats(format);
-    let stream = typeof process !== 'undefined' ? process.stdout : undefined;
-    let validateStream = true;
-
     if (options !== undefined) {
-        if (typeof options !== 'object' || options === null || Array.isArray(options)) {
-            throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
-        }
-
-        if (options.stream !== undefined) {
-            stream = options.stream;
-        }
-
-        if (options.validateStream !== undefined) {
-            if (typeof options.validateStream !== 'boolean') {
-                throw new ERR_INVALID_ARG_TYPE('options.validateStream', 'boolean', options.validateStream);
-            }
-            validateStream = options.validateStream;
-        }
+        validateObject(options, 'options');
+    }
+    const validateStream = options?.validateStream ?? true;
+    if (typeof validateStream !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.validateStream', 'boolean', validateStream);
     }
 
+    let skipColorize = false;
     if (validateStream) {
+        const stream = options?.stream ?? (typeof process !== 'undefined' ? process.stdout : undefined);
         if (!_isStyleTextStream(stream)) {
-            throw new ERR_INVALID_ARG_TYPE('options.stream', ['ReadableStream', 'WritableStream', 'Stream'], stream);
+            throw new ERR_INVALID_ARG_TYPE('stream', ['ReadableStream', 'WritableStream', 'Stream'], stream);
         }
-
-        if (!_shouldStyleTextColorize(stream)) {
-            return text;
-        }
+        skipColorize = !_shouldStyleTextColorize(stream);
     }
 
-    let styledText = text;
-    for (let i = formats.length - 1; i >= 0; i--) {
-        styledText = _applyStyleTextFormat(formats[i], styledText);
+    const formatArray = Array.isArray(format) ? format : [format];
+    const colors = inspect.colors;
+
+    let openCodes = '';
+    let closeCodes = '';
+    let processedText = text;
+
+    for (const key of formatArray) {
+        if (key === 'none') continue;
+
+        if (typeof key === 'string' && key[0] === '#') {
+            if (!_kStyleTextHexColor.test(key)) {
+                throw new ERR_INVALID_ARG_VALUE('format', key, 'must be a valid hex color (#RGB or #RRGGBB)');
+            }
+            if (skipColorize) continue;
+            const hexOpenSeq = _styleTextHexOpenSeq(key);
+            openCodes += hexOpenSeq;
+            closeCodes = _kStyleTextHexCloseSeq + closeCodes;
+            processedText = _replaceStyleTextCloseCode(processedText, _kStyleTextHexCloseSeq, hexOpenSeq, false);
+            continue;
+        }
+
+        const codes = typeof key === 'string' || typeof key === 'number' ? colors[key] : undefined;
+        if (!codes) {
+            validateOneOf(key, 'format', Object.getOwnPropertyNames(colors));
+        }
+        const openSeq = '\u001b[' + codes[0] + 'm';
+        const closeSeq = '\u001b[' + codes[1] + 'm';
+        const keepClose = codes[0] === 1 || codes[0] === 2;
+        openCodes += openSeq;
+        closeCodes = closeSeq + closeCodes;
+        processedText = _replaceStyleTextCloseCode(processedText, closeSeq, openSeq, keepClose);
     }
 
-    return styledText;
+    if (skipColorize) return text;
+
+    return openCodes + processedText + closeCodes;
 }
 
 // --- util.parseEnv() ---

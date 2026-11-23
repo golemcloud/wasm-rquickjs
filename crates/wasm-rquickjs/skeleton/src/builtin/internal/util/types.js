@@ -21,7 +21,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-const _toString = Object.prototype.toString;
+const _objectToString = Object.prototype.toString;
+// These brand checks read Symbol.toStringTag, which V8's native checks never do,
+// so a throwing user getter must not escape them.
+const _toString = {
+    call(value) {
+        try {
+            return _objectToString.call(value);
+        } catch {
+            return "";
+        }
+    },
+};
 const _getPrototypeOf = Object.getPrototypeOf;
 
 const _isObjectLike = (value) =>

@@ -86,7 +86,7 @@ export function emitExperimentalWarning(feature) {
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
 // If --no-deprecation is set, then it is a no-op.
-export function deprecate(fn, msg, code) {
+export function deprecate(fn, msg, code, useEmitSync, modifyPrototype = true) {
     // TODO(kt3k): Uncomment this
     // if (process.noDeprecation === true) {
     //  return fn;
@@ -115,14 +115,53 @@ export function deprecate(fn, msg, code) {
         return Reflect.apply(fn, this, args);
     }
 
-    // The wrapper will keep the same prototype as fn to maintain prototype chain
-    Object.setPrototypeOf(deprecated, fn);
-    if (fn.prototype) {
-        // Setting this (rather than using Object.setPrototype, as above) ensures
-        // that calling the unwrapped constructor gives an instanceof the wrapped
-        // constructor.
-        deprecated.prototype = fn.prototype;
+    if (modifyPrototype) {
+        // The wrapper will keep the same prototype as fn to maintain prototype chain
+        Object.setPrototypeOf(deprecated, fn);
+        if (fn.prototype) {
+            // Setting this (rather than using Object.setPrototype, as above) ensures
+            // that calling the unwrapped constructor gives an instanceof the wrapped
+            // constructor.
+            deprecated.prototype = fn.prototype;
+        }
+
+        Object.defineProperty(deprecated, 'length', {
+            __proto__: null,
+            ...Object.getOwnPropertyDescriptor(fn, 'length'),
+        });
     }
+
+    return deprecated;
+}
+
+function isPendingDeprecation() {
+    const execArgv = globalThis.process?.execArgv;
+    return (Array.isArray(execArgv) && execArgv.includes('--pending-deprecation')) ||
+        globalThis.process?.env?.NODE_PENDING_DEPRECATION === '1';
+}
+
+// Like deprecate(), but warns only with --pending-deprecation.
+export function pendingDeprecate(fn, msg, code) {
+    let warned = false;
+    function deprecated(...args) {
+        if (!warned && isPendingDeprecation()) {
+            warned = true;
+            if (code !== undefined) {
+                if (!codesWarned.has(code)) {
+                    process.emitWarning(msg, "DeprecationWarning", code, deprecated);
+                    codesWarned.add(code);
+                }
+            } else {
+                process.emitWarning(msg, "DeprecationWarning", deprecated);
+            }
+        }
+        return Reflect.apply(fn, this, args);
+    }
+
+    Object.defineProperty(deprecated, 'length', {
+        __proto__: null,
+        ...Object.getOwnPropertyDescriptor(fn, 'length'),
+    });
 
     return deprecated;
 }
@@ -252,6 +291,7 @@ export default {
     sleep,
     once,
     deprecate,
+    pendingDeprecate,
     emitExperimentalWarning,
     promisify,
     removeColors,
