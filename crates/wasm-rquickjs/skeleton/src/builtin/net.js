@@ -321,6 +321,7 @@ function Socket(options) {
     this._reading = false;
     this._readToken = 0;
     this._readInFlight = false;
+    this._readEndPending = false;
     this._netPaused = false;
     this._pendingReadChunks = [];
     this._abortSignal = null;
@@ -608,6 +609,7 @@ Socket.prototype.connect = function connect(...args) {
         this._reading = false;
         this._readToken++;
         this._readInFlight = false;
+        this._readEndPending = false;
         this._netPaused = false;
         this._pendingReadChunks.length = 0;
         this.destroyed = false;
@@ -999,7 +1001,7 @@ Socket.prototype._read = function _read(n) {
         this.once('connect', () => this._read(n));
         return;
     }
-    if (!this._handle || this.destroyed) return;
+    if (!this._handle || this.destroyed || this._readEndPending) return;
     if (this._netPaused) {
         // Readable may request prefetch while paused. No native read starts,
         // so do not leave its pending-read flag blocking the later resume.
@@ -1042,7 +1044,7 @@ Socket.prototype._drainPendingReadChunks = function _drainPendingReadChunks() {
     while (!this._netPaused && this._pendingReadChunks.length > 0) {
         const chunk = this._pendingReadChunks.shift();
         if (chunk === null || chunk === undefined) {
-            this.push(null);
+            this._pushReadEnd();
             return;
         }
         const keepGoing = this.push(chunk);
@@ -1051,6 +1053,24 @@ Socket.prototype._drainPendingReadChunks = function _drainPendingReadChunks() {
             return;
         }
     }
+};
+
+// Node delivers a peer's EOF in its own I/O callback, after the ticks queued by the data that
+// preceded it. Pushing it in the same turn lets 'end' overtake work such as an HTTP response
+// that a request handler starts from a nextTick.
+Socket.prototype._pushReadEnd = function _pushReadEnd() {
+    const token = this._readToken;
+    this._readEndPending = true;
+    deferred(() => {
+        if (token !== this._readToken || this.destroyed) return;
+        this._readEndPending = false;
+        if (this._netPaused) {
+            this._pendingReadChunks.push(null);
+            return;
+        }
+        this.push(null);
+        this.read(0);
+    });
 };
 
 Socket.prototype._startPollLoop = function _startPollLoop() {
@@ -1071,8 +1091,7 @@ Socket.prototype._startPollLoop = function _startPollLoop() {
                     if (this._netPaused) {
                         this._pendingReadChunks.push(null);
                     } else {
-                        this.push(null);
-                        this.read(0);
+                        this._pushReadEnd();
                     }
                     break;
                 }
@@ -1249,6 +1268,7 @@ Socket.prototype._destroy = function _destroy(err, callback) {
     this._reading = false;
     this._readToken++;
     this._readInFlight = false;
+    this._readEndPending = false;
     this._netPaused = false;
     this._pendingReadChunks.length = 0;
     this._clearAbortSignal();

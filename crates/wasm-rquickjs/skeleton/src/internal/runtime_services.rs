@@ -753,12 +753,24 @@ impl OwnedJsRuntime {
             // Child bootstrap must return diagnostic allocation failures to its
             // caller rather than trapping the entire component.
             super::error_formatting::initialize(&ctx)?;
+            super::promise_hook::initialize(&ctx);
             super::custom_invocation_context::initialize(&ctx)?;
+            // The invocation whose work runs now, for queues kept in JavaScript such as
+            // `process.nextTick`.
+            ctx.globals().set(
+                "__wasm_rquickjs_job_owner",
+                Function::new(ctx.clone(), |ctx: rquickjs::Ctx<'_>| {
+                    super::invocation::job_owner_of(&ctx) as f64
+                })?,
+            )?;
             ctx.store_userdata(VariantCaseTagCache::default())
                 .expect("Failed to initialize variant tag cache");
             #[cfg(feature = "test-observability")]
             crate::builtin::install_gc_observability(&ctx)
                 .expect("Failed to initialize GC observability");
+            #[cfg(feature = "test-observability")]
+            super::promise_hook::test_context_store::install(&ctx)
+                .expect("Failed to initialize the test context store");
             Ok::<(), rquickjs::Error>(())
         })
         .await?;
@@ -985,6 +997,8 @@ pub(crate) struct TimerServices {
     pub(crate) last_abort_id: AtomicUsize,
     pub(crate) unrefed_timers: RefCell<HashSet<usize>>,
     pub(crate) active_tasks: RefCell<HashSet<usize>>,
+    /// The invocation that registered each component-owned timer; absent means the runtime.
+    pub(crate) owners: RefCell<HashMap<usize, u64>>,
     change_waiters: RefCell<Vec<futures::channel::oneshot::Sender<()>>>,
 }
 
@@ -1125,15 +1139,40 @@ impl TimerServices {
         receiver
     }
 
-    fn referenced_count(&self) -> usize {
-        self.abort_handles
+    fn owner_of(&self, key: usize) -> u64 {
+        self.owners
             .borrow()
-            .len()
-            .saturating_sub(self.unrefed_timers.borrow().len())
+            .get(&key)
+            .copied()
+            .unwrap_or(super::invocation::RUNTIME_OWNER)
     }
 
-    pub(crate) fn abort_unrefed(&self) {
-        let unrefed = self.unrefed_timers.borrow().clone();
+    /// Referenced timers registered by `owner`.
+    fn referenced_count(&self, owner: u64) -> usize {
+        let unrefed = self.unrefed_timers.borrow();
+        self.abort_handles
+            .borrow()
+            .keys()
+            .filter(|key| !unrefed.contains(key) && self.owner_of(**key) == owner)
+            .count()
+    }
+
+    fn has_active_tasks(&self, owner: u64) -> bool {
+        self.active_tasks
+            .borrow()
+            .iter()
+            .any(|key| self.owner_of(*key) == owner)
+    }
+
+    /// Aborts the unreferenced timers registered by `owner`.
+    pub(crate) fn abort_unrefed(&self, owner: u64) {
+        let unrefed: Vec<usize> = self
+            .unrefed_timers
+            .borrow()
+            .iter()
+            .copied()
+            .filter(|key| self.owner_of(*key) == owner)
+            .collect();
         let mut abort_handles = self.abort_handles.borrow_mut();
         let mut unrefed_mut = self.unrefed_timers.borrow_mut();
         for id in &unrefed {
@@ -1155,7 +1194,10 @@ impl TimerServices {
 /// probe describes ordinary asynchronous work, including referenced TCP accept/read tasks.
 /// Drop a pending probe after each poll: rquickjs otherwise holds its runtime lock while idle
 /// waits, preventing an external timer callback from entering the context to finish that work.
+///
+/// Only the current invocation's jobs, scheduler futures and timers are considered.
 pub(crate) async fn idle_component_runtime(rt: &AsyncRuntime, ctx: &AsyncContext) {
+    let owner = super::invocation::current();
     let timers = AsyncContext::async_with(ctx, async |ctx| {
         ctx.userdata::<RuntimeServices>()
             .expect("runtime services not initialized")
@@ -1175,10 +1217,10 @@ pub(crate) async fn idle_component_runtime(rt: &AsyncRuntime, ctx: &AsyncContext
 
         // No await or JS call may separate this snapshot from the return/registration below.
         // A timer callback cannot interleave while this single-threaded component poll runs.
-        if timers.referenced_count() == 0 {
-            timers.abort_unrefed();
+        if timers.referenced_count(owner) == 0 {
+            timers.abort_unrefed(owner);
         }
-        if timers.active_tasks.borrow().is_empty() {
+        if !timers.has_active_tasks(owner) {
             return;
         }
         let changed = timers.wait_for_change();

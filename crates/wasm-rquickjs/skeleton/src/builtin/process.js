@@ -606,8 +606,11 @@ process.cwd = function cwd() {
 // is used only as a wakeup when no other host callback would reach a checkpoint;
 // this keeps nextTick separate from ECMAScript Promise jobs, unlike the previous
 // Promise-based drain which could run during dynamic import evaluation.
+// Each callback belongs to the invocation that queued it and is drained only
+// while that invocation's work runs, on its own task.
 const __nextTickQueue = [];
-let __nextTickWakeupScheduled = false;
+const __nextTickWakeupOwners = new Set();
+const __jobOwner = globalThis.__wasm_rquickjs_job_owner;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
     if (domain && typeof domain.emit === 'function') {
@@ -641,10 +644,16 @@ function __wasm_rquickjs_handleUncaughtError(err, domain) {
 globalThis.__wasm_rquickjs_handleUncaughtError = __wasm_rquickjs_handleUncaughtError;
 
 function __drainNextTickQueue() {
-    __nextTickWakeupScheduled = false;
+    const owner = __jobOwner();
+    __nextTickWakeupOwners.delete(owner);
     let drained = 0;
-    while (__nextTickQueue.length > 0) {
-        const entry = __nextTickQueue.shift();
+    for (let index = 0; index < __nextTickQueue.length;) {
+        const entry = __nextTickQueue[index];
+        if (entry.owner !== owner) {
+            index += 1;
+            continue;
+        }
+        __nextTickQueue.splice(index, 1);
         drained += 1;
         const previousScope = __enterScope(entry.scope);
         try {
@@ -668,10 +677,12 @@ function __drainNextTickQueue() {
 }
 
 function __requestNextTickWakeup() {
-    if (__nextTickWakeupScheduled || __nextTickQueue.length === 0) {
+    const owner = __jobOwner();
+    if (__nextTickWakeupOwners.has(owner) ||
+        !__nextTickQueue.some((entry) => entry.owner === owner)) {
         return;
     }
-    __nextTickWakeupScheduled = true;
+    __nextTickWakeupOwners.add(owner);
     if (typeof globalThis.setTimeout === 'function') {
         globalThis.setTimeout(function __nextTickWakeup() {
             __drainNextTickQueue();
@@ -692,7 +703,7 @@ process.nextTick = function processNextTick(callback, ...args) {
             'The "callback" argument must be of type function.' + _invalidArgTypeHelper(callback));
     }
     const domain = process.domain || null;
-    __nextTickQueue.push({ callback, args, domain, scope: __captureScope() });
+    __nextTickQueue.push({ callback, args, domain, scope: __captureScope(), owner: __jobOwner() });
     __requestNextTickWakeup();
 };
 
@@ -1096,7 +1107,7 @@ process._runExitHandlers = function _runExitHandlers(code) {
 const _pendingRejections = new Map();
 const _ignoredUnhandledRejections = createPrivateWeakSet();
 const _emittedUnhandledRejections = createPrivateWeakSet();
-const _pendingRejectionHandled = new Set();
+const _pendingRejectionHandled = new Map();
 const _requireEsmRejectionScopes = [];
 const _sameValue = Object.is;
 let _nextRequireEsmRejectionScope = 0;
@@ -1112,7 +1123,7 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
         return;
     }
     if (!isHandled) {
-        _pendingRejections.set(promise, { reason });
+        _pendingRejections.set(promise, { reason, owner: __jobOwner() });
         const scope = _requireEsmRejectionScopes[_requireEsmRejectionScopes.length - 1];
         if (scope !== undefined) {
             scope.promises.push(promise);
@@ -1120,7 +1131,7 @@ globalThis.__wasm_rquickjs_rejection_tracker = function(promise, reason, isHandl
     } else {
         if (!_pendingRejections.delete(promise) && _emittedUnhandledRejections.has(promise)) {
             _emittedUnhandledRejections.delete(promise);
-            _pendingRejectionHandled.add(promise);
+            _pendingRejectionHandled.set(promise, __jobOwner());
         }
     }
 };
@@ -1134,9 +1145,14 @@ globalThis.__wasm_rquickjs_unhandled_rejection_checkpoint = function() {
         return 0;
     }
 
+    // Each rejection is reported by the invocation in which it happened.
+    const owner = __jobOwner();
     let emitted = 0;
     const handled = Array.from(_pendingRejectionHandled);
-    for (const promise of handled) {
+    for (const [promise, handledOwner] of handled) {
+        if (handledOwner !== owner) {
+            continue;
+        }
         if (!_pendingRejectionHandled.delete(promise)) {
             continue;
         }
@@ -1152,7 +1168,7 @@ globalThis.__wasm_rquickjs_unhandled_rejection_checkpoint = function() {
 
     const pending = Array.from(_pendingRejections);
     for (const [promise, entry] of pending) {
-        if (!_pendingRejections.has(promise)) {
+        if (entry.owner !== owner || !_pendingRejections.has(promise)) {
             continue;
         }
         _pendingRejections.delete(promise);

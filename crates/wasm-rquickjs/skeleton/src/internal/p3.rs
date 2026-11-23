@@ -5,6 +5,7 @@
 //! shared `rquickjs::AsyncRuntime` is created once via an async init-once guard
 //! (`ensure_initialized`) that is safe under concurrent exported calls.
 
+use super::invocation::spawn_local;
 use super::{format_caught_error, format_js_exception};
 use futures::future::{AbortHandle, Abortable};
 use rquickjs::function::{Args, Constructor, IntoArgs, This};
@@ -19,9 +20,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::rc::Rc;
 use std::task::{Context as TaskContext, Poll};
-use wit_bindgen_p3::rt::async_support::{
-    FutureReader, FutureWriter, StreamReader, StreamWriter, spawn_local,
-};
+use wit_bindgen_p3::rt::async_support::{FutureReader, FutureWriter, StreamReader, StreamWriter};
 
 use super::runtime_services::{
     OwnedJsRuntime, RuntimeServices, initialize_builtin_wiring, initialize_dispose_symbols,
@@ -76,6 +75,7 @@ impl JsState {
                 .timers
                 .component_owned
                 .set(true);
+            super::invocation::register_component_runtime(&ctx);
         })
         .await;
 
@@ -414,13 +414,15 @@ pub async fn ensure_initialized() -> &'static JsState {
                     INIT = InitState::InProgress;
                 }
                 super::refresh_component_cwd();
-                let state = JsState::new_base().await;
+                let state = super::invocation::as_runtime(JsState::new_base()).await;
                 unsafe {
                     STATE = Some(state);
                 }
                 // Borrow the published state to evaluate JS. No `&mut STATE` is
                 // taken across this await, so concurrent yielding callers are safe.
-                unsafe { STATE.as_ref().unwrap() }.finish_init().await;
+                super::invocation::as_runtime(unsafe { STATE.as_ref().unwrap() }.finish_init())
+                    .await;
+                super::invocation::finish(super::invocation::RUNTIME_OWNER);
                 unsafe {
                     INIT = InitState::Done;
                 }
@@ -436,7 +438,8 @@ pub async fn ensure_initialized() -> &'static JsState {
                 // Fail closed before process refresh can invoke application JS.
                 super::restore_runtime_state();
                 let state = unsafe { STATE.as_ref().unwrap() };
-                JsState::refresh_process_env(state).await;
+                super::invocation::as_runtime(JsState::refresh_process_env(state)).await;
+                super::invocation::finish(super::invocation::RUNTIME_OWNER);
                 unsafe {
                     INIT = InitState::Done;
                 }
@@ -460,18 +463,25 @@ pub fn get_js_state() -> &'static JsState {
     }
 }
 
+/// Liveness lease for JavaScript producers feeding component futures/streams, kept per
+/// invocation. Such producers can remain backpressured after the import or export that created
+/// them has produced its result, so the invocation's scheduler must stay driven until they finish.
+/// Writer waiters by id, each keyed by the invocation whose writers it watches, or `None` for any
+/// invocation's.
+type WriterWaiters = RefCell<HashMap<usize, (Option<u64>, futures::channel::oneshot::Sender<()>)>>;
+
 struct RuntimeWriterLease {
-    active_writers: Cell<usize>,
+    active_writers: RefCell<HashMap<u64, usize>>,
     writer_generation: Cell<usize>,
     next_waiter_id: Cell<usize>,
-    activation_waiters: RefCell<HashMap<usize, futures::channel::oneshot::Sender<()>>>,
-    inactivity_waiters: RefCell<HashMap<usize, futures::channel::oneshot::Sender<()>>>,
+    activation_waiters: WriterWaiters,
+    inactivity_waiters: WriterWaiters,
 }
 
 impl RuntimeWriterLease {
     fn new() -> Self {
         Self {
-            active_writers: Cell::new(0),
+            active_writers: RefCell::new(HashMap::new()),
             writer_generation: Cell::new(0),
             next_waiter_id: Cell::new(0),
             activation_waiters: RefCell::new(HashMap::new()),
@@ -480,60 +490,71 @@ impl RuntimeWriterLease {
     }
 
     fn register_writer(&'static self) -> RuntimeWriterGuard {
-        if self.active_writers.get() == 0 {
-            for (_, waiter) in self.activation_waiters.borrow_mut().drain() {
-                let _ = waiter.send(());
-            }
+        let owner = super::invocation::current();
+        if !self.has_active_writers() {
+            notify_waiters(&self.activation_waiters, Some(owner));
         }
-        self.active_writers.set(
-            self.active_writers
-                .get()
-                .checked_add(1)
-                .expect("runtime writer lease count overflowed"),
-        );
+        if !self.has_any_active_writers() {
+            notify_waiters(&self.activation_waiters, None);
+        }
+        *self.active_writers.borrow_mut().entry(owner).or_default() += 1;
         self.writer_generation.set(
             self.writer_generation
                 .get()
                 .checked_add(1)
                 .expect("runtime writer lease generation overflowed"),
         );
-        RuntimeWriterGuard { lease: self }
+        RuntimeWriterGuard { lease: self, owner }
     }
 
+    /// Whether the current invocation has active writers.
     fn has_active_writers(&self) -> bool {
-        self.active_writers.get() != 0
+        self.active_writers
+            .borrow()
+            .contains_key(&super::invocation::current())
+    }
+
+    /// Whether any invocation has active writers.
+    fn has_any_active_writers(&self) -> bool {
+        !self.active_writers.borrow().is_empty()
     }
 
     fn writer_generation(&self) -> usize {
         self.writer_generation.get()
     }
 
-    fn retain_driver_if_active(&'static self, drive_guard: DriveGuard) -> Result<(), DriveGuard> {
-        if self.has_active_writers() {
-            spawn_local(cleanup_retained_driver(get_js_state(), drive_guard));
-            Ok(())
-        } else {
-            Err(drive_guard)
-        }
-    }
-
-    fn wait_for_activation_if_inactive(&'static self) -> Option<WriterActivationWaiter> {
-        if self.has_active_writers() {
-            return None;
-        }
-
+    fn add_waiter(
+        &self,
+        waiters: &WriterWaiters,
+        key: Option<u64>,
+    ) -> (usize, futures::channel::oneshot::Receiver<()>) {
         let waiter_id = self.next_waiter_id.get();
         self.next_waiter_id.set(
             waiter_id
                 .checked_add(1)
-                .expect("runtime writer activation waiter id overflowed"),
+                .expect("runtime writer waiter id overflowed"),
         );
         let (sender, receiver) = futures::channel::oneshot::channel();
-        let previous = self
-            .activation_waiters
-            .borrow_mut()
-            .insert(waiter_id, sender);
+        let previous = waiters.borrow_mut().insert(waiter_id, (key, sender));
         debug_assert!(previous.is_none());
+        (waiter_id, receiver)
+    }
+
+    /// Waits until the current invocation, or with `any` any invocation, has an active writer;
+    /// `None` when it already has one.
+    fn wait_for_activation_if_inactive(&'static self, any: bool) -> Option<WriterActivationWaiter> {
+        let key = if any {
+            if self.has_any_active_writers() {
+                return None;
+            }
+            None
+        } else {
+            if self.has_active_writers() {
+                return None;
+            }
+            Some(super::invocation::current())
+        };
+        let (waiter_id, receiver) = self.add_waiter(&self.activation_waiters, key);
         Some(WriterActivationWaiter {
             lease: self,
             waiter_id,
@@ -545,19 +566,8 @@ impl RuntimeWriterLease {
         if !self.has_active_writers() {
             return None;
         }
-
-        let waiter_id = self.next_waiter_id.get();
-        self.next_waiter_id.set(
-            waiter_id
-                .checked_add(1)
-                .expect("runtime writer inactivity waiter id overflowed"),
-        );
-        let (sender, receiver) = futures::channel::oneshot::channel();
-        let previous = self
-            .inactivity_waiters
-            .borrow_mut()
-            .insert(waiter_id, sender);
-        debug_assert!(previous.is_none());
+        let (waiter_id, receiver) =
+            self.add_waiter(&self.inactivity_waiters, Some(super::invocation::current()));
         Some(WriterInactivityWaiter {
             lease: self,
             waiter_id,
@@ -566,20 +576,37 @@ impl RuntimeWriterLease {
     }
 }
 
+/// Wakes the waiters with `key`.
+fn notify_waiters(waiters: &WriterWaiters, key: Option<u64>) {
+    let ids: Vec<usize> = waiters
+        .borrow()
+        .iter()
+        .filter(|(_, (waiter_key, _))| *waiter_key == key)
+        .map(|(id, _)| *id)
+        .collect();
+    for id in ids {
+        if let Some((_, waiter)) = waiters.borrow_mut().remove(&id) {
+            let _ = waiter.send(());
+        }
+    }
+}
+
 struct RuntimeWriterGuard {
     lease: &'static RuntimeWriterLease,
+    owner: u64,
 }
 
 impl Drop for RuntimeWriterGuard {
     fn drop(&mut self) {
-        let active_writers = self.lease.active_writers.get();
-        debug_assert!(active_writers > 0);
-        let active_writers = active_writers - 1;
-        self.lease.active_writers.set(active_writers);
-        if active_writers == 0 {
-            for (_, waiter) in self.lease.inactivity_waiters.borrow_mut().drain() {
-                let _ = waiter.send(());
-            }
+        let mut active_writers = self.lease.active_writers.borrow_mut();
+        let count = active_writers
+            .get_mut(&self.owner)
+            .expect("runtime writer lease count missing");
+        *count -= 1;
+        if *count == 0 {
+            active_writers.remove(&self.owner);
+            drop(active_writers);
+            notify_waiters(&self.lease.inactivity_waiters, Some(self.owner));
         }
     }
 }
@@ -668,30 +695,34 @@ async fn spawn_drive_guard(rt: &AsyncRuntime, ctx: &AsyncContext) -> DriveGuard 
         })
         .await;
     let (handle, registration) = AbortHandle::new_pair();
-    let drive = rt.drive();
+    let mut drive = Box::pin(Abortable::new(rt.drive(), registration));
+    let owner = super::invocation::current();
     spawn_local(async move {
         // `Abortable` resolves to `Err(Aborted)` once the guard is dropped; the driver itself never
-        // completes on its own while the runtime is alive.
-        let _ =
-            super::runtime_services::with_component_wake(Abortable::new(drive, registration), hub)
-                .await;
+        // completes on its own while the runtime is alive. Each poll also adopts work that a
+        // synchronous call left, which wakes every driver.
+        let drive = futures::future::poll_fn(move |cx| {
+            super::invocation::adopt_runtime_work(owner);
+            drive.as_mut().poll(cx)
+        });
+        let _ = super::runtime_services::with_component_wake(drive, hub).await;
     });
     DriveGuard(handle)
 }
 
-/// Drains the JavaScript event loop before an exported call returns.
+/// Drains the current invocation's part of the JavaScript event loop.
 ///
-/// After the export produces its result (a direct value or an awaited Promise) the P3 wrapper would
-/// otherwise return immediately and drop its [`DriveGuard`], so any work the export merely
-/// *scheduled* — `setTimeout`/`setInterval`/`setImmediate` callbacks, `queueMicrotask`/Promise jobs,
-/// `future<T>`/`stream<T>` writer tasks — would never run. It waits for all *ref'd* timers to finish, then aborts any remaining *unref'd* timers (Node's
-/// event loop exits once only unref'd timers are left) so [`AsyncRuntime::idle`] can complete.
+/// An exported call's work can outlive its result: `setTimeout`/`setInterval`/`setImmediate`
+/// callbacks, `queueMicrotask`/Promise jobs and `future<T>`/`stream<T>` writer tasks it merely
+/// *scheduled*. This waits for the invocation's *ref'd* timers to finish, then aborts its
+/// remaining *unref'd* timers (Node's event loop exits once only unref'd timers are left) so that
+/// [`AsyncRuntime::idle`], which only considers the current invocation's jobs and futures, can
+/// complete. Other invocations' work is neither run nor awaited.
 ///
-/// `idle()` drives the runtime on its own (exactly as the plain `idle()` calls during
-/// `finish_init` do), so this is also used during initialization where no `DriveGuard` exists. In
-/// an exported call the caller's `DriveGuard` is additionally kept alive across this call, so any
-/// scheduler task started by the parked JS promise (`future<T>`/`stream<T>` writers) keeps being
-/// polled too.
+/// `idle()` drives the runtime on its own, so this is also used during initialization, as the
+/// runtime's own work, where no `DriveGuard` exists. After an exported call the invocation's
+/// `DriveGuard` is additionally kept alive across this call, so any scheduler task started by the
+/// invocation (`future<T>`/`stream<T>` writers) keeps being polled too.
 async fn drain_and_idle(js_state: &JsState) {
     let mut drove_runtime = false;
     loop {
@@ -745,12 +776,13 @@ async fn run_turn_checkpoint(js_state: &JsState) -> bool {
     .await
 }
 
-/// Drains the runtime while detecting JavaScript producers created by the drain itself. The second
-/// activation poll handles the case where the final idle poll both creates a writer and completes;
-/// `select` polls its left-hand idle future first and would otherwise report a false quiescence.
-async fn drain_without_writer_activation(js_state: &'static JsState) -> bool {
+/// Drains the current invocation's work while detecting JavaScript producers that the invocation,
+/// or with `any` any invocation, starts meanwhile. The second activation poll handles the case
+/// where the final idle poll both creates a writer and completes; `select` polls its left-hand
+/// idle future first and would otherwise report a false quiescence.
+async fn drain_without_writer_activation(js_state: &'static JsState, any: bool) -> bool {
     let lease = &js_state.writer_lease;
-    let Some(activation) = lease.wait_for_activation_if_inactive() else {
+    let Some(activation) = lease.wait_for_activation_if_inactive(any) else {
         return false;
     };
     let idle = Box::pin(drain_and_idle(js_state));
@@ -765,9 +797,8 @@ async fn drain_without_writer_activation(js_state: &'static JsState) -> bool {
     }
 }
 
-/// Releases one export's scheduler driver only after all JavaScript producers have finished and
-/// the shared runtime has reached quiescence. Keeping one cleanup future per driver preserves the
-/// component task's ownership: cancelling one export cannot orphan a driver retained by another.
+/// Releases an invocation's scheduler driver only after the invocation's JavaScript producers have
+/// finished and its work has reached quiescence.
 async fn cleanup_retained_driver(js_state: &'static JsState, drive_guard: DriveGuard) {
     let lease = &js_state.writer_lease;
 
@@ -775,31 +806,67 @@ async fn cleanup_retained_driver(js_state: &'static JsState, drive_guard: DriveG
         if let Some(inactivity) = lease.wait_for_inactivity_if_active() {
             inactivity.await;
         }
-        if drain_without_writer_activation(js_state).await {
+        if drain_without_writer_activation(js_state, false).await {
             break;
         }
     }
     drop(drive_guard);
 }
 
-/// Completes an asynchronous export without waiting for runtime-global quiescence while a
-/// JavaScript producer is backpressured on a component future/stream that may only be consumed
-/// after the export result becomes visible to the host.
+/// Drains the work of the current invocation on its async exported call's task, before or after
+/// the call returns its result (see `invocation::invocation`): its QuickJS jobs, scheduler
+/// futures, `process.nextTick` callbacks, referenced timers, and the JavaScript producers that
+/// feed component futures/streams it handed out.
 ///
 /// The activation waiter closes the check-before-idle race: `drain_and_idle` can itself execute a
-/// pending QuickJS job that creates such a writer. If that happens, the idle attempt is dropped and
-/// this export's scheduler driver is retained by the runtime lease. If the writer also finishes
-/// before the activation is observed, normal draining is retried.
-async fn finish_async_export(js_state: &'static JsState, mut drive_guard: DriveGuard) {
+/// pending QuickJS job that creates a producer. If that happens, the idle attempt is dropped and
+/// the scheduler driver is kept until the producers finish. If the producer also finishes before
+/// the activation is observed, normal draining is retried.
+pub(crate) async fn drain_invocation() {
+    let js_state = ensure_initialized().await;
+    let drive_guard = spawn_drive_guard(&js_state.rt, &js_state.ctx).await;
     loop {
-        drive_guard = match js_state.writer_lease.retain_driver_if_active(drive_guard) {
-            Ok(()) => return,
-            Err(drive_guard) => drive_guard,
-        };
-        if drain_without_writer_activation(js_state).await {
+        if js_state.writer_lease.has_active_writers() {
+            cleanup_retained_driver(js_state, drive_guard).await;
+            return;
+        }
+        if drain_without_writer_activation(js_state, false).await {
             return;
         }
     }
+}
+
+/// Drains the work of the current invocation before its async exported call returns, like
+/// [`drain_invocation`], but returns `false` instead of waiting while any invocation has an active
+/// JavaScript producer: it may feed a component future/stream that the host consumes only after
+/// this or another call returns, and the host may wait for that before it lets this invocation's
+/// work finish. It stops waiting as soon as any invocation starts one. The rest of the work then
+/// drains after the return.
+pub(crate) async fn drain_invocation_before_return() -> bool {
+    let js_state = ensure_initialized().await;
+    let _drive_guard = spawn_drive_guard(&js_state.rt, &js_state.ctx).await;
+    loop {
+        if js_state.writer_lease.has_any_active_writers() {
+            return false;
+        }
+        if drain_without_writer_activation(js_state, true).await {
+            return true;
+        }
+    }
+}
+
+/// Awaits `future` unless any invocation has, or starts meanwhile, an active JavaScript producer:
+/// it may feed a component future/stream that the host reads only after a return, so waiting for
+/// work that depends on it before the return could deadlock. Returns whether `future` completed.
+pub(crate) async fn await_unless_any_writer_activates(future: impl Future<Output = ()>) -> bool {
+    let js_state = ensure_initialized().await;
+    let Some(activation) = js_state.writer_lease.wait_for_activation_if_inactive(true) else {
+        return false;
+    };
+    matches!(
+        futures::future::select(Box::pin(future), activation).await,
+        futures::future::Either::Left(_)
+    )
 }
 
 pub async fn call_js_export<A, R>(
@@ -975,9 +1042,9 @@ where
     .await;
     let (result, created_writer) = result;
 
-    if let Some(drive_guard) = drive_guard {
-        finish_async_export(js_state, drive_guard).await;
-    } else if created_writer {
+    // An async call drains its invocation's work in `invocation::invocation`.
+    drop(drive_guard);
+    if created_writer {
         panic!(
             "A synchronous exported function created a component future/stream writer that is \
              still active. Declare the exported function as `async func` in WIT."
@@ -1402,9 +1469,9 @@ where
     .await;
     let (result, created_writer) = result;
 
-    if let Some(drive_guard) = drive_guard {
-        finish_async_export(js_state, drive_guard).await;
-    } else if created_writer {
+    // An async call drains its invocation's work in `invocation::invocation`.
+    drop(drive_guard);
+    if created_writer {
         panic!(
             "A synchronous exported resource method created a component future/stream writer \
              that is still active. Declare the exported method as `async func` in WIT."
