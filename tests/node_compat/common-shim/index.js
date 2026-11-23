@@ -125,6 +125,16 @@ function parseInlineEvalArgs(args) {
         if (arg === '--preserve-symlinks' || arg === '--preserve-symlinks-main') {
             continue;
         }
+        // The runtime has no Web Storage, so --no-webstorage already holds; its
+        // --localstorage-file value is then unused.
+        if (arg === '--no-webstorage') {
+            parsed.noWebstorage = true;
+            continue;
+        }
+        if (parsed.noWebstorage && arg === '--localstorage-file') {
+            i++;
+            continue;
+        }
 
         throw new Error('Only --eval/-e, --input-type, and script files are supported in WASM child emulation');
     }
