@@ -32,6 +32,7 @@ import {
 import {
     NativeWeakRef,
     createPrivateWeakMap,
+    createPrivateWeakSet,
     nativeWeakMapDelete,
     nativeWeakMapGet,
     nativeWeakMapHas,
@@ -114,7 +115,22 @@ export function guessHandleType(_fd) {
     notImplemented("util.guessHandleType");
 }
 
+// Proxies the runtime uses to emulate engine objects (such as vm module namespaces) are
+// not proxies in Node, so util.inspect and util.types.isProxy must not report them.
+const engineObjectProxies = createPrivateWeakSet();
+
+export function markEngineObjectProxy(proxy) {
+    engineObjectProxies.add(proxy);
+    return proxy;
+}
+
+// Returns the target an engine-object proxy emulates, or undefined for other values.
+export function getEngineObjectProxyTarget(value) {
+    return engineObjectProxies.has(value) ? getProxyDetailsNative(value, false) : undefined;
+}
+
 export function getProxyDetails(value, fullProxy = true) {
+    if (engineObjectProxies.has(value)) return undefined;
     return getProxyDetailsNative(value, fullProxy);
 }
 

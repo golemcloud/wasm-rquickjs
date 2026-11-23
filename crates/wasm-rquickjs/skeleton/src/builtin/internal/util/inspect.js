@@ -28,6 +28,7 @@ import { createPrivateWeakMap, createPrivateWeakSet } from "__wasm_rquickjs_buil
 import {
     ALL_PROPERTIES,
     getConstructorName as internalGetConstructorName,
+    getEngineObjectProxyTarget,
     getPromiseDetails,
     getProxyDetails,
     getOwnNonIndexProperties,
@@ -578,17 +579,35 @@ function formatValue(
 
     // Memorize the context for custom inspection on proxies.
     const context = value;
+    // Engine objects emulated with a proxy format as their target, without a Proxy wrapper.
+    const engineTarget = getEngineObjectProxyTarget(value);
+    if (engineTarget !== undefined) {
+        value = engineTarget;
+    }
     // Always check for proxies to prevent side effects and to prevent triggering
     // any proxy handlers.
-    const proxy = getProxyDetails(value, !!ctx.showProxy);
+    let proxy = getProxyDetails(value, !!ctx.showProxy);
+    // Node 26 formats the target of a proxy wrapped in `Proxy(...)`, once per proxy level.
+    let proxies = 0;
     if (proxy !== undefined) {
-        if (proxy === null || proxy[0] === null) {
-            return ctx.stylize("<Revoked Proxy>", "special");
-        }
         if (ctx.showProxy) {
+            if (proxy === null || proxy[0] === null) {
+                return ctx.stylize("<Revoked Proxy>", "special");
+            }
             return formatProxy(ctx, proxy, recurseTimes);
         }
-        value = proxy;
+        do {
+            if (proxy === null) {
+                let formatted = ctx.stylize("<Revoked Proxy>", "special");
+                for (let i = 0; i < proxies; i++) {
+                    formatted = `${ctx.stylize("Proxy(", "special")}${formatted}${ctx.stylize(")", "special")}`;
+                }
+                return formatted;
+            }
+            value = proxy;
+            proxy = getProxyDetails(value, false);
+            proxies += 1;
+        } while (proxy !== undefined);
     }
 
     // Provide a hook for user-specified inspect functions.
@@ -641,7 +660,11 @@ function formatValue(
         return ctx.stylize(`[Circular *${index}]`, "special");
     }
 
-    return formatRaw(ctx, value, recurseTimes, typedArray);
+    let formatted = formatRaw(ctx, value, recurseTimes, typedArray);
+    for (let i = 0; i < proxies; i++) {
+        formatted = `${ctx.stylize("Proxy(", "special")}${formatted}${ctx.stylize(")", "special")}`;
+    }
+    return formatted;
 }
 
 function formatRaw(ctx, value, recurseTimes, typedArray) {
@@ -868,6 +891,20 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             // Ensure 'cause' property is included in keys (it's non-enumerable)
             if (Object.prototype.hasOwnProperty.call(value, 'cause') && keys.indexOf('cause') === -1) {
                 keys.push('cause');
+            }
+            // Node 26 also prints AggregateError errors and SuppressedError error/suppressed.
+            try {
+                const errors = value.errors;
+                if (Array.isArray(errors) && Object.prototype.hasOwnProperty.call(value, 'errors') && keys.indexOf('errors') === -1) {
+                    keys.push('errors');
+                }
+            } catch {
+                // A throwing errors getter is ignored.
+            }
+            for (const key of ['error', 'suppressed']) {
+                if (Object.prototype.hasOwnProperty.call(value, key) && keys.indexOf(key) === -1) {
+                    keys.push(key);
+                }
             }
             base = formatError(value, constructor, tag, ctx, keys);
             if (keys.length === 0 && protoProps === undefined) {
