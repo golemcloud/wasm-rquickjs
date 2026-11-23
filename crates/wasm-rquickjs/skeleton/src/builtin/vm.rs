@@ -140,6 +140,7 @@ fn eval_in_new_context_impl<'js>(
         "DisposableStack",
         "Float16Array",
         "InternalError",
+        "QuotaExceededError",
         "SuppressedError",
         "atob",
         "btoa",

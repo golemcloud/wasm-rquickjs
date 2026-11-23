@@ -39,6 +39,54 @@ class DOMException extends Error {
     }
 }
 
+function toQuotaDouble(options, key) {
+    const value = +options[key];
+    if (!Number.isFinite(value)) {
+        throw new TypeError(`Cannot convert options.${key} to a double: the value is ${Number.isNaN(value) ? 'NaN' : 'Infinity'}`);
+    }
+    if (value < 0) {
+        throw new RangeError(`options.${key} must not be negative`);
+    }
+    return value;
+}
+
+// https://webidl.spec.whatwg.org/#quotaexceedederror (Node 26 global)
+class QuotaExceededError extends DOMException {
+    #quota;
+    #requested;
+
+    constructor(message = '', options = {__proto__: null}) {
+        super(message, 'QuotaExceededError');
+        let quota = null;
+        let requested = null;
+        if (options !== null && options !== undefined) {
+            if ('quota' in options) quota = toQuotaDouble(options, 'quota');
+            if ('requested' in options) requested = toQuotaDouble(options, 'requested');
+        }
+        if (quota !== null && requested !== null && requested < quota) {
+            throw new RangeError('options.requested must not be less than options.quota');
+        }
+        this.#quota = quota;
+        this.#requested = requested;
+    }
+
+    get quota() {
+        if (!(#quota in this)) throw new TypeError('Value of "this" must be of type QuotaExceededError');
+        return this.#quota;
+    }
+
+    get requested() {
+        if (!(#requested in this)) throw new TypeError('Value of "this" must be of type QuotaExceededError');
+        return this.#requested;
+    }
+}
+
+Object.defineProperties(QuotaExceededError.prototype, {
+    [Symbol.toStringTag]: {__proto__: null, configurable: true, value: 'QuotaExceededError'},
+    quota: {__proto__: null, enumerable: true, configurable: true},
+    requested: {__proto__: null, enumerable: true, configurable: true},
+});
+
 // We need access to the Event _eventTrusted WeakMap to mark events as trusted.
 // Import the _eventTrusted symbol from events module.
 import { _eventTrusted, Event } from 'node:events';
@@ -379,4 +427,4 @@ Object.defineProperty(AbortSignal.prototype, Symbol.toStringTag, {
     configurable: true,
 });
 
-export { AbortController, AbortSignal, DOMException };
+export { AbortController, AbortSignal, DOMException, QuotaExceededError };

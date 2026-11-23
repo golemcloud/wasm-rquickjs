@@ -2707,52 +2707,36 @@ impl KeyData {
     }
 
     fn export_sec1_private_der(&self) -> Option<Vec<u8>> {
-        match self {
-            KeyData::EcP256Private(sk) => {
-                let secret_key = p256::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
+        // RustCrypto omits the optional curve parameters, which OpenSSL writes and requires
+        // when it reads SEC1, so add the named curve.
+        let (der, curve_oid) = match self {
+            KeyData::EcP256Private(sk) => (
+                p256::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.2.840.10045.3.1.7",
+            ),
             #[cfg(feature = "crypto-full")]
-            KeyData::EcP384Private(sk) => {
-                let secret_key = p384::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
+            KeyData::EcP384Private(sk) => (
+                p384::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.3.132.0.34",
+            ),
             #[cfg(feature = "crypto-full")]
-            KeyData::EcK256Private(sk) => {
-                let secret_key = k256::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
-            _ => None,
-        }
+            KeyData::EcK256Private(sk) => (
+                k256::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.3.132.0.10",
+            ),
+            _ => return None,
+        };
+        use sec1::der::{Decode, Encode};
+        let mut key = sec1::EcPrivateKey::from_der(&der).ok()?;
+        key.parameters = Some(sec1::EcParameters::NamedCurve(
+            sec1::der::asn1::ObjectIdentifier::new(curve_oid).ok()?,
+        ));
+        key.to_der().ok()
     }
 
     fn export_sec1_private_pem(&self) -> Option<String> {
-        match self {
-            KeyData::EcP256Private(sk) => {
-                let secret_key = p256::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP384Private(sk) => {
-                let secret_key = p384::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcK256Private(sk) => {
-                let secret_key = k256::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            _ => None,
-        }
+        let der = self.export_sec1_private_der()?;
+        sec1::der::pem::encode_string("EC PRIVATE KEY", sec1::LineEnding::LF, &der).ok()
     }
 
     fn export_pkcs8_encrypted_der(&self, cipher_name: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
@@ -5762,6 +5746,7 @@ pub mod native_module {
             .unwrap_or(&[]);
         super::create_private_key_from_der(slice)
             .or_else(|| super::create_rsa_private_key_from_der(slice))
+            .or_else(|| super::create_private_key_from_sec1_der(slice))
     }
 
     #[rquickjs::function]

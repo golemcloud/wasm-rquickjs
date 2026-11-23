@@ -2,7 +2,7 @@ import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_pol
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
 import { TO_CRYPTO_KEY_ALGORITHM_NAMES } from '__wasm_rquickjs_builtin/internal/crypto/util';
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
-import { DOMException } from '__wasm_rquickjs_builtin/abort_controller'
+import { DOMException, QuotaExceededError } from '__wasm_rquickjs_builtin/abort_controller'
 import {
     ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS,
     ERR_CRYPTO_INVALID_DIGEST,
@@ -691,7 +691,7 @@ export function getRandomValues(typedArray) {
         throw new DOMException('The data argument must be an integer-type TypedArray', 'TypeMismatchError');
     }
     if (typedArray.byteLength > 65536) {
-        throw new DOMException('The requested length exceeds 65,536 bytes', 'QuotaExceededError');
+        throw new QuotaExceededError('The requested length exceeds 65,536 bytes');
     }
     // Use a plain Uint8Array view to randomize the underlying buffer,
     // which works for all integer typed array types including Buffer subclasses
@@ -6215,6 +6215,9 @@ function base64UrlToBytes(value) {
 
 function normalizeDiffieHellmanPublicKey(key) {
     if (key instanceof KeyObject) {
+        if (key.type !== 'public' && key.type !== 'private') {
+            throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.type, 'private or public');
+        }
         if (key.type === 'private') {
             return createPublicKey(key);
         }
@@ -6225,10 +6228,8 @@ function normalizeDiffieHellmanPublicKey(key) {
 
 function normalizeDiffieHellmanPrivateKey(key) {
     if (key instanceof KeyObject) {
-        if (key.type === 'public') {
-            const err = new TypeError("The property 'options.privateKey' is invalid. Received a public key");
-            err.code = 'ERR_INVALID_ARG_VALUE';
-            throw err;
+        if (key.type !== 'private') {
+            throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.type, 'private');
         }
         return key;
     }
@@ -6376,9 +6377,12 @@ function computeMontgomeryDiffieHellman(type_, privateKey, publicKey) {
     return deriveMontgomerySharedSecret(privateMaterial.privateKey, publicMaterial.publicKey, outputLength);
 }
 
-export function diffieHellman(options) {
+export function diffieHellman(options, callback) {
     if (options === null || typeof options !== 'object' || Array.isArray(options)) {
         throw createDiffieHellmanOptionsTypeError(options);
+    }
+    if (callback !== undefined && typeof callback !== 'function') {
+        throw new ERR_INVALID_ARG_TYPE('callback', 'function', callback);
     }
     if (options.publicKey === undefined) {
         throw createMissingDiffieHellmanPropertyError('publicKey', options.publicKey);
@@ -6386,7 +6390,21 @@ export function diffieHellman(options) {
     if (options.privateKey === undefined) {
         throw createMissingDiffieHellmanPropertyError('privateKey', options.privateKey);
     }
+    if (callback === undefined) {
+        return computeDiffieHellmanSecret(options);
+    }
+    // Node 26 runs the derivation as a job and reports its result or error to the callback.
+    let secret;
+    try {
+        secret = computeDiffieHellmanSecret(options);
+    } catch (err) {
+        process.nextTick(() => callback(err));
+        return;
+    }
+    process.nextTick(() => callback(null, secret));
+}
 
+function computeDiffieHellmanSecret(options) {
     const publicKey = normalizeDiffieHellmanPublicKey(options.publicKey);
     const privateKey = normalizeDiffieHellmanPrivateKey(options.privateKey);
     const publicType = publicKey.asymmetricKeyType;
@@ -7195,12 +7213,21 @@ Sign.prototype._write = function(chunk, encoding, callback) {
     return Transform.prototype._write.call(this, chunk, encoding, callback);
 };
 
+function validateJwkKeyInput(key, name) {
+    if (key !== null && typeof key === 'object' && key.format === 'jwk' &&
+        (key.key === null || typeof key.key !== 'object')) {
+        throw new ERR_INVALID_ARG_TYPE(name, 'object', key.key);
+    }
+}
+
 Sign.prototype.sign = function(privateKey, outputEncoding) {
     if (privateKey === null || privateKey === undefined) {
         const err = new Error('No key provided to sign');
         err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
         throw err;
     }
+    // Sign.prototype.sign names its key argument privateKey in validation errors.
+    validateJwkKeyInput(privateKey, 'privateKey.key');
     let keyObj;
     let padding;
     let saltLength;
@@ -7389,6 +7416,23 @@ Verify.prototype._write = function(chunk, encoding, callback) {
     return Transform.prototype._write.call(this, chunk, encoding, callback);
 };
 
+// Node verifies with a private key as given. A DH private key has no derivable public
+// KeyObject here, so return it to reach the unsupported key type error.
+function createVerifyKey(key) {
+    try {
+        return createPublicKey(key);
+    } catch (err) {
+        let privateKey;
+        try {
+            privateKey = createPrivateKey(key);
+        } catch {
+            throw err;
+        }
+        if (privateKey.asymmetricKeyType === 'dh') return privateKey;
+        throw err;
+    }
+}
+
 Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     if (publicKey === null || publicKey === undefined) {
         const err = new Error('No key provided to verify');
@@ -7413,10 +7457,10 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
             const privKey = createPrivateKey(publicKey);
             keyObj = createPublicKey(privKey);
         } else {
-            keyObj = createPublicKey(publicKey);
+            keyObj = createVerifyKey(publicKey);
         }
     } else {
-        keyObj = createPublicKey(publicKey);
+        keyObj = createVerifyKey(publicKey);
     }
 
     const sigBytes = toBytes(signature, signatureEncoding);
@@ -7546,6 +7590,7 @@ export function sign(algorithm, data, key, callback) {
     }
     const normalizedData = toBytes(data);
     validateSignContext(key);
+    validateJwkKeyInput(key, 'key.key');
     const s = new Sign(algo);
     s.update(normalizedData);
     // A missing key fails synchronously, as in Node.js.

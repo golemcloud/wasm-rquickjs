@@ -113,7 +113,7 @@ function getRandomValues(array) {
     throw new DOMException('Float typed arrays are not supported', 'TypeMismatchError');
   }
   if (array.byteLength > 65536) {
-    throw new DOMException('The ArrayBufferView byte length exceeds the limit (65536)', 'QuotaExceededError');
+    throw new QuotaExceededError('The ArrayBufferView byte length exceeds the limit (65536)');
   }
   if (array instanceof Int8Array) randomize_int8_array(array);
   else if (array instanceof Uint8ClampedArray) randomize_uint8_clamped_array(array);
