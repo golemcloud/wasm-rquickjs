@@ -191,6 +191,17 @@ function __wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, 
     format = 'module';
   }
 
+  // Node 26 validateAttributes rejects every key other than "type" before checking the type.
+  if (unsupportedKey !== undefined) {
+    var unsupportedValueText = typeof unsupportedValue === 'string'
+      ? '"' + unsupportedValue + '"'
+      : String(unsupportedValue);
+    return semanticError(Object.assign(
+      new TypeError('Import attribute "' + unsupportedKey + '" with value ' + unsupportedValueText + ' is not supported'),
+      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
+    ));
+  }
+
   if (typeValue !== undefined && typeValue !== 'json' && !(typeValue === 'css' && format === 'css')) {
     return semanticError(Object.assign(
       new TypeError('Import attribute type "' + typeValue + '" is not supported'),
@@ -216,16 +227,6 @@ function __wasm_rquickjs_import_attr_prepare_from_options(value, parsedOptions, 
     var prepared = semanticError(error);
     if (asyncSemanticErrors) moduleTypeErrorCache[moduleTypeErrorCacheKey] = prepared;
     return prepared;
-  }
-
-  if (unsupportedKey !== undefined) {
-    var unsupportedValueText = typeof unsupportedValue === 'string'
-      ? '"' + unsupportedValue + '"'
-      : String(unsupportedValue);
-    return semanticError(Object.assign(
-      new TypeError('Import attribute "' + unsupportedKey + '" with value ' + unsupportedValueText + ' is not supported'),
-      { code: 'ERR_IMPORT_ATTRIBUTE_UNSUPPORTED' }
-    ));
   }
 
   if (typeValue !== undefined) {
@@ -992,8 +993,7 @@ impl Loader for DataUrlLoader {
             // request independently of the engine's module cache. Legacy
             // `assert { ... }` remains a syntax error.
             let processed = process_static_import_attrs(&source, path);
-            if let Some(error_source) =
-                esm_preflight_error_module_source(&processed.source, false, false)
+            if let Some(error_source) = esm_preflight_error_module_source(&processed.source, false)
             {
                 return Module::declare(ctx.clone(), path, error_source.as_bytes().to_vec());
             }
@@ -2136,6 +2136,14 @@ fn validate_import_attrs_error(
     format: Option<&str>,
     specifier: &str,
 ) -> Option<(String, String)> {
+    // Node 26 validateAttributes rejects every key other than "type" before checking the type.
+    if let Some(key) = unsupported_key {
+        return Some((
+            "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED".to_string(),
+            format!("Import attribute \"{key}\" is not supported"),
+        ));
+    }
+
     if let Some(tv) = type_value {
         match tv {
             "json" => {
@@ -2172,13 +2180,6 @@ fn validate_import_attrs_error(
         ));
     }
 
-    if let Some(key) = unsupported_key {
-        return Some((
-            "ERR_IMPORT_ATTRIBUTE_UNSUPPORTED".to_string(),
-            format!("Import attribute \"{key}\" is not supported"),
-        ));
-    }
-
     None
 }
 
@@ -2208,11 +2209,7 @@ fn throw_import_attr_type_incompatible<'js, T>(ctx: &Ctx<'js>) -> rquickjs::Resu
     Err(ctx.throw(error_obj.into_value()))
 }
 
-fn esm_preflight_error_module_source(
-    source: &str,
-    package_type_module_js: bool,
-    raw_cjs_global_messages: bool,
-) -> Option<String> {
+fn esm_preflight_error_module_source(source: &str, package_type_module_js: bool) -> Option<String> {
     if package_type_module_js {
         let name = find_bare_cjs_global_in_esm(source)?;
         let message = format!(
@@ -2225,24 +2222,14 @@ fn esm_preflight_error_module_source(
     }
 
     let name = find_bare_cjs_global_in_esm(source)?;
-    let message = if raw_cjs_global_messages {
-        match name {
-            "require" => "require is not defined",
-            "exports" => "exports is not defined",
-            "module" => "module is not defined",
-            "__filename" => "__filename is not defined",
-            "__dirname" => "__dirname is not defined",
-            _ => return None,
-        }
-    } else {
-        match name {
-            "require" => "require is not defined in ES module scope, you can use import instead",
-            "exports" => "exports is not defined in ES module scope",
-            "module" => "module is not defined in ES module scope",
-            "__filename" => "__filename is not defined in ES module scope",
-            "__dirname" => "__dirname is not defined in ES module scope",
-            _ => return None,
-        }
+    // Node 26 adds the ES module scope explanation on both the import and require(esm) paths.
+    let message = match name {
+        "require" => "require is not defined in ES module scope, you can use import instead",
+        "exports" => "exports is not defined in ES module scope",
+        "module" => "module is not defined in ES module scope",
+        "__filename" => "__filename is not defined in ES module scope",
+        "__dirname" => "__dirname is not defined in ES module scope",
+        _ => return None,
     };
     let escaped = DataUrlLoader::js_string_escape(message);
     Some(format!(
@@ -2250,17 +2237,11 @@ fn esm_preflight_error_module_source(
     ))
 }
 
-fn esm_require_global_preflight_error_module_source(
-    source: &str,
-    raw_cjs_global_messages: bool,
-) -> Option<String> {
+fn esm_require_global_preflight_error_module_source(source: &str) -> Option<String> {
     find_bare_cjs_global_in_esm_among(source, &["require"])?;
-    let message = if raw_cjs_global_messages {
-        "require is not defined"
-    } else {
-        "require is not defined in ES module scope, you can use import instead"
-    };
-    let escaped = DataUrlLoader::js_string_escape(message);
+    let escaped = DataUrlLoader::js_string_escape(
+        "require is not defined in ES module scope, you can use import instead",
+    );
     Some(format!(
         "await Promise.reject(new ReferenceError('{escaped}'));\n"
     ))
@@ -11025,7 +11006,10 @@ fn initialize_module_import_meta<'js>(
             .is_ok_and(|entry| entry == *filename);
         meta.prop(
             "main",
-            Property::from(is_main).writable().enumerable().configurable(),
+            Property::from(is_main)
+                .writable()
+                .enumerable()
+                .configurable(),
         )?;
     }
     if init.include_resolve {
@@ -11439,15 +11423,6 @@ fn read_module_source_or_throw<'js>(
             Err(Error::new_loading(module_id))
         }
     }
-}
-
-fn require_esm_in_progress(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
-    let globals = ctx.globals();
-    let Ok(registry) = globals.get::<_, Object>("__wasm_rquickjs_require_esm_in_progress") else {
-        return false;
-    };
-    registry.get::<_, bool>(filename).unwrap_or(false)
-        || registry.get::<_, bool>(file_url).unwrap_or(false)
 }
 
 fn require_esm_forced_module(ctx: &Ctx<'_>, filename: &str, file_url: &str) -> bool {
@@ -13283,14 +13258,13 @@ enum EsmFilePreflightMode {
 fn esm_file_preflight_error_module_source(
     source: &str,
     mode: EsmFilePreflightMode,
-    raw_cjs_global_messages: bool,
 ) -> Option<String> {
     match mode {
         EsmFilePreflightMode::RequireOnly => {
-            esm_require_global_preflight_error_module_source(source, raw_cjs_global_messages)
+            esm_require_global_preflight_error_module_source(source)
         }
         EsmFilePreflightMode::PackageTypeModuleJs => {
-            esm_preflight_error_module_source(source, true, raw_cjs_global_messages)
+            esm_preflight_error_module_source(source, true)
         }
     }
 }
@@ -13320,7 +13294,6 @@ fn declare_esm_file_module_from_source<'js>(
     let processed = process_static_import_attrs(&raw_source, module_id);
     let source = &processed.source;
     let init = file_import_meta_init(url, fs_abs_path.clone());
-    let raw_cjs_global_messages = require_esm_in_progress(ctx, &fs_abs_path, &init.url);
 
     let globals = ctx.globals();
     if let Ok(cache) = globals.get::<_, Object>("__esm_error_cache")
@@ -13330,9 +13303,7 @@ fn declare_esm_file_module_from_source<'js>(
         return Err(ctx.throw(cached_error));
     }
 
-    if let Some(error_source) =
-        esm_file_preflight_error_module_source(source, preflight_mode, raw_cjs_global_messages)
-    {
+    if let Some(error_source) = esm_file_preflight_error_module_source(source, preflight_mode) {
         return Module::declare(ctx.clone(), module_id, error_source.as_bytes().to_vec());
     }
     if let Some(error_source) = cjs_named_import_error_module_source(ctx, &fs_abs_path, source) {
@@ -14224,7 +14195,6 @@ import "./dep.js" withあ;
                 export { exports as "module.exports" };
             "#,
                 true,
-                false,
             )
             .is_none()
         );
@@ -14310,35 +14280,28 @@ import "./dep.js" withあ;
 
     #[test]
     fn package_type_diagnostics_use_first_cjs_global() {
-        let require_diag = esm_preflight_error_module_source("require('x');", true, false).unwrap();
+        let require_diag = esm_preflight_error_module_source("require('x');", true).unwrap();
         assert!(require_diag.contains("require is not defined"));
         assert!(require_diag.contains(".cjs"));
 
         let filename_diag =
-            esm_preflight_error_module_source("console.log(__filename);", true, false).unwrap();
+            esm_preflight_error_module_source("console.log(__filename);", true).unwrap();
         assert!(filename_diag.contains("__filename is not defined"));
         assert!(filename_diag.contains(".cjs"));
 
         assert!(
-            esm_preflight_error_module_source(
-                "const require = 1; export default require;",
-                true,
-                false
-            )
-            .is_none()
-        );
-        assert!(
-            esm_preflight_error_module_source("export default typeof require;", false, false)
+            esm_preflight_error_module_source("const require = 1; export default require;", true)
                 .is_none()
         );
         assert!(
-            esm_preflight_error_module_source("export default typeof (exports);", false, false)
-                .is_none()
+            esm_preflight_error_module_source("export default typeof require;", false).is_none()
+        );
+        assert!(
+            esm_preflight_error_module_source("export default typeof (exports);", false).is_none()
         );
         assert!(
             esm_preflight_error_module_source(
                 "if (true) { const exports = 1; Object.keys(exports); }",
-                false,
                 false
             )
             .is_none()
@@ -14346,20 +14309,17 @@ import "./dep.js" withあ;
         let block_scoped_exports_diag = esm_preflight_error_module_source(
             "if (false) { const exports = 1; } Object.keys(exports);",
             false,
-            false,
         )
         .unwrap();
         assert!(block_scoped_exports_diag.contains("exports is not defined in ES module scope"));
         let for_scoped_exports_diag = esm_preflight_error_module_source(
             "for (let exports of []) {} Object.keys(exports);",
             false,
-            false,
         )
         .unwrap();
         assert!(for_scoped_exports_diag.contains("exports is not defined in ES module scope"));
         let unbraced_for_scoped_exports_diag = esm_preflight_error_module_source(
             "for (let exports of [1]) Object.keys(exports); Object.keys(exports);",
-            false,
             false,
         )
         .unwrap();
@@ -14369,7 +14329,6 @@ import "./dep.js" withあ;
         let for_await_scoped_exports_diag = esm_preflight_error_module_source(
             "for await (let exports of []) {} Object.keys(exports);",
             false,
-            false,
         )
         .unwrap();
         assert!(
@@ -14378,31 +14337,24 @@ import "./dep.js" withあ;
         assert!(esm_preflight_error_module_source(
             "try { throw { a: 1 }; } catch (exports) { Object.keys(exports); } export default 1;",
             false,
-            false,
         )
         .is_none());
         assert!(
             esm_preflight_error_module_source(
                 "if (false) { var exports = 1; } Object.keys(exports);",
                 false,
-                false,
             )
             .is_none()
         );
         let object_key_exports_diag =
-            esm_preflight_error_module_source("export default ({ var: exports });", false, false)
-                .unwrap();
+            esm_preflight_error_module_source("export default ({ var: exports });", false).unwrap();
         assert!(object_key_exports_diag.contains("exports is not defined in ES module scope"));
         let lexical_object_key_exports_diag =
-            esm_preflight_error_module_source("export default ({ const: exports });", false, false)
+            esm_preflight_error_module_source("export default ({ const: exports });", false)
                 .unwrap();
         assert!(
             lexical_object_key_exports_diag.contains("exports is not defined in ES module scope")
         );
-        let raw_exports_diag =
-            esm_preflight_error_module_source("Object.keys(exports);", false, true).unwrap();
-        assert!(raw_exports_diag.contains("exports is not defined"));
-        assert!(!raw_exports_diag.contains("ES module scope"));
     }
 
     #[test]

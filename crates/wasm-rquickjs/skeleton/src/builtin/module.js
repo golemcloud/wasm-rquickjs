@@ -3254,8 +3254,9 @@ function decorateRequireAsyncModuleError(err, parent) {
     const requireStack = [];
     for (let cursor = parent; cursor; cursor = cursor.parent) {
         const id = cursor.filename || cursor.id;
-        // The synthetic main record of the runtime is not a module of the graph.
-        if (cursor === mainModule || id === '/') break;
+        // The synthetic main record of the runtime (filename '/') is not a module of the
+        // graph; an entry script reuses that record with its real filename.
+        if (id === '/') break;
         requireStack.push(id);
     }
     if (requireStack.length > 0) {
@@ -3267,7 +3268,19 @@ function decorateRequireAsyncModuleError(err, parent) {
     });
 }
 
-function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOverride) {
+const CJS_GLOBAL_LIKE_NAMES = ['require', 'module', 'exports', '__filename', '__dirname'];
+
+// Node's ModuleJobSync explains a bare CommonJS global reference in an ES module
+// (lib/internal/modules/esm/module_job.js explainCommonJSGlobalLikeNotDefinedError).
+function explainCommonJsGlobalLikeNotDefinedError(err) {
+    if (!err || err.name !== 'ReferenceError' || typeof err.message !== 'string') return;
+    const name = CJS_GLOBAL_LIKE_NAMES.find((globalLike) => err.message === globalLike + ' is not defined');
+    if (name === undefined) return;
+    err.message += ' in ES module scope';
+    if (name === 'require') err.message += ', you can use import instead';
+}
+
+function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOverride, parentModule = mod.parent) {
     let esmIdentity = resolvedFilename;
     if (
         sourceOverride === undefined &&
@@ -3295,7 +3308,8 @@ function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOver
         try {
             namespace = _requireEsm(esmIdentity);
         } catch (err) {
-            decorateRequireAsyncModuleError(err, mod.parent);
+            decorateRequireAsyncModuleError(err, parentModule);
+            explainCommonJsGlobalLikeNotDefinedError(err);
             throw err;
         }
         if (namespace && typeof namespace === 'object' && Object.hasOwn(namespace, 'module.exports')) {
@@ -3529,7 +3543,7 @@ function loadCommonJsTransaction(descriptor) {
         }
         if (isEsm) {
             try {
-                mod.exports = requireEsmWithCacheGuard(mod, filename);
+                mod.exports = requireEsmWithCacheGuard(mod, filename, undefined, undefined, parentModule);
             } catch (err) {
                 discardCjsModuleLoad(cacheKey, parentModule, mod);
                 throw err;
