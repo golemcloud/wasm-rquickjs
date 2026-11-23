@@ -790,7 +790,8 @@ function _deepObjEquiv(a, b, strict, memo) {
                 if (aTag !== bTag) return false;
             }
         }
-        if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
+        const floatTag = _getTypedArrayTag(a);
+        if (!strict && (floatTag === 'Float16Array' || floatTag === 'Float32Array' || floatTag === 'Float64Array')) {
             if (a.length !== b.length) return false;
             for (let i = 0; i < a.length; i++) {
                 if (a[i] != b[i]) return false;
