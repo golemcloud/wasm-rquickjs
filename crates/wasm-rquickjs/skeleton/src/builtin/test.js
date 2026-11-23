@@ -4,6 +4,7 @@
 // and an aggregate error is thrown after all tests in a suite complete.
 
 import assert from 'node:assert';
+import { isDeepStrictEqual } from 'node:util';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE } from '__wasm_rquickjs_builtin/internal/errors';
 import { validateNumber, validateInteger } from '__wasm_rquickjs_builtin/internal/validators';
 
@@ -16,6 +17,89 @@ function activeTestEntryFile(moduleContext) {
     }
     return moduleContext ? moduleContext.filename : undefined;
 }
+
+// --- t.assert methods (Node 26 lib/internal/test_runner/assert.js) ---
+const kTestAssertMethods = [
+    'deepEqual', 'deepStrictEqual', 'doesNotMatch', 'doesNotReject', 'doesNotThrow', 'equal',
+    'fail', 'ifError', 'match', 'notDeepEqual', 'notDeepStrictEqual', 'notEqual',
+    'notStrictEqual', 'partialDeepStrictEqual', 'rejects', 'strictEqual', 'throws',
+];
+
+function getMockContext(fn) {
+    const ctx = fn == null ? undefined : fn.mock;
+    if (ctx === null || typeof ctx !== 'object' || typeof ctx.callCount !== 'function' || !Array.isArray(ctx.calls)) {
+        throw new ERR_INVALID_ARG_TYPE('fn', 'mock function', fn);
+    }
+    return ctx;
+}
+
+function assertCalledWithAt(fn, n, args, stackStartFn) {
+    const calls = getMockContext(fn).calls;
+    if (n > calls.length) {
+        throw new assert.AssertionError({
+            message: `Expected mock function to have been called at least ${n} times, ` +
+                `but it was called ${calls.length} times`,
+            actual: calls.length,
+            expected: n,
+            operator: stackStartFn.name,
+            stackStartFn,
+        });
+    }
+    const actual = calls[n - 1].arguments;
+    if (!isDeepStrictEqual(actual, args)) {
+        throw new assert.AssertionError({
+            message: `Expected call ${n} of mock function to have been called with:`,
+            actual,
+            expected: args,
+            operator: 'deepStrictEqual',
+            stackStartFn,
+        });
+    }
+}
+
+const mockAssertions = {
+    called: function called(fn, message) {
+        const count = getMockContext(fn).callCount();
+        if (count === 0) {
+            throw new assert.AssertionError({
+                message: message ?? 'Expected mock function to have been called',
+                actual: count,
+                operator: 'called',
+                stackStartFn: called,
+            });
+        }
+    },
+    callCount: function callCount(fn, times, message) {
+        validateInteger(times, 'times', 0);
+        const count = getMockContext(fn).callCount();
+        if (count !== times) {
+            throw new assert.AssertionError({
+                message: message ??
+                    `Expected mock function to have been called ${times} times, but it was called ${count} times`,
+                actual: count,
+                expected: times,
+                operator: 'callCount',
+                stackStartFn: callCount,
+            });
+        }
+    },
+    lastCalledWith: function lastCalledWith(fn, ...args) {
+        const count = getMockContext(fn).callCount();
+        if (count === 0) {
+            throw new assert.AssertionError({
+                message: 'Expected mock function to have been called',
+                actual: count,
+                operator: 'lastCalledWith',
+                stackStartFn: lastCalledWith,
+            });
+        }
+        assertCalledWithAt(fn, count, args, lastCalledWith);
+    },
+    nthCalledWith: function nthCalledWith(fn, n, ...args) {
+        validateInteger(n, 'n', 1);
+        assertCalledWithAt(fn, n, args, nthCalledWith);
+    },
+};
 
 // --- Custom assertions registry (testAssertions.register) ---
 const _customAssertions = {};
@@ -59,6 +143,18 @@ Object.defineProperty(SuiteContext.prototype, 'fullName', {
     }
 });
 
+// Node 26 SuiteContext: whether the suite has passed so far, the retry attempt, and
+// diagnostics reported for the suite.
+Object.defineProperty(SuiteContext.prototype, 'passed', {
+    get: function () { return !this._failed; },
+});
+Object.defineProperty(SuiteContext.prototype, 'attempt', {
+    get: function () { return 0; },
+});
+SuiteContext.prototype.diagnostic = function (msg) {
+    (this._diagnostics || (this._diagnostics = [])).push(msg);
+};
+
 SuiteContext.prototype.collectBeforeEach = function () {
     let fns = [];
     if (this.parent) {
@@ -99,18 +195,18 @@ function TestContext(name, parent, filePath) {
     this._planCount = undefined;
     this._assertionCount = 0;
 
-    // Build t.assert: copy assert methods excluding AssertionError, CallTracker, strict,
-    // and add snapshot/fileSnapshot per Node.js spec.
+    // Build t.assert like Node 26 (lib/internal/test_runner/assert.js and test.js): the
+    // assertion map, then registered custom assertions, which may replace entries, then ok.
     // All methods are wrapped to track assertion count for t.plan().
-    const uncopiedKeys = ['AssertionError', 'CallTracker', 'strict'];
     const tAssert = {};
     const self = this;
-    const assertKeys = Object.keys(assert);
-    for (let i = 0; i < assertKeys.length; i++) {
-        const key = assertKeys[i];
-        if (!uncopiedKeys.includes(key)) {
-            tAssert[key] = wrapAssertForPlan(assert[key], self);
-        }
+    for (let i = 0; i < kTestAssertMethods.length; i++) {
+        const key = kTestAssertMethods[i];
+        tAssert[key] = wrapAssertForPlan(assert[key], self);
+    }
+    const mockAssertKeys = Object.keys(mockAssertions);
+    for (let i = 0; i < mockAssertKeys.length; i++) {
+        tAssert[mockAssertKeys[i]] = wrapAssertForPlan(mockAssertions[mockAssertKeys[i]], self);
     }
     tAssert.snapshot = wrapAssertForPlan(function snapshot(_value, _options) {
         throw new Error('snapshot is not supported in this context');
@@ -124,12 +220,15 @@ function TestContext(name, parent, filePath) {
         const ckey = customKeys[ci];
         tAssert[ckey] = wrapAssertForPlan(wrapCustomAssertion(_customAssertions[ckey], this), self);
     }
+    if (!Object.prototype.hasOwnProperty.call(_customAssertions, 'ok')) {
+        tAssert.ok = wrapAssertForPlan(assert.ok, self);
+    }
     this.assert = tAssert;
 }
 
 Object.defineProperty(TestContext.prototype, 'fullName', {
     get: function () {
-        const parentName = this._parent ? this._parent.fullName : '';
+        const parentName = this._parent && this._parent !== rootSuite ? this._parent.fullName : '';
         if (parentName) {
             return `${parentName} > ${this.name}`;
         }
@@ -162,21 +261,48 @@ TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
     }
 
     const childCtx = new TestContext(parsed.name, parentTest);
-    const restoreMocks = function () { childCtx.mock.restoreAll(); };
+    // Hooks registered with t.beforeEach/t.afterEach run around every subtest of t and of
+    // its subtests: beforeEach from the outermost context in, afterEach from the innermost out.
+    const beforeEachFns = collectContextHooks(parentTest, '_beforeEachFns').reverse().flat();
+    const afterEachFns = collectContextHooks(parentTest, '_afterEachFns').flat();
+    const runHooks = function (hooks) {
+        for (let i = 0; i < hooks.length; i++) hooks[i].call(childCtx, childCtx);
+    };
+    const succeed = function () {
+        try {
+            runHooks(afterEachFns);
+        } finally {
+            childCtx.mock.restoreAll();
+        }
+    };
+    const fail = function () {
+        try { runHooks(afterEachFns); } catch (ignored) {}
+        childCtx.mock.restoreAll();
+    };
 
     try {
+        runHooks(beforeEachFns);
         if (fn.length >= 2) {
             // done callback pattern
             return new Promise(function (resolve, reject) {
                 const done = function (err) {
-                    restoreMocks();
-                    if (err) reject(err);
-                    else resolve();
+                    if (err) {
+                        fail();
+                        reject(err);
+                        return;
+                    }
+                    try {
+                        succeed();
+                    } catch (e) {
+                        reject(e);
+                        return;
+                    }
+                    resolve();
                 };
                 try {
                     fn.call(childCtx, childCtx, done);
                 } catch (e) {
-                    restoreMocks();
+                    fail();
                     reject(e);
                 }
             });
@@ -185,22 +311,32 @@ TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
         const result = fn.call(childCtx, childCtx);
         if (result && typeof result.then === 'function') {
             return result.then(function () {
-                restoreMocks();
+                succeed();
             }, function (e) {
-                restoreMocks();
+                fail();
                 throw e;
             });
         }
-        restoreMocks();
+        succeed();
         return Promise.resolve();
     } catch (e) {
-        restoreMocks();
+        fail();
         if (e instanceof SkipError) {
             return Promise.resolve();
         }
         return Promise.reject(e);
     }
 };
+
+// Returns the hooks of `key` registered on ctx and its ancestor test contexts, innermost
+// context first, each context's hooks in registration order.
+function collectContextHooks(ctx, key) {
+    const hooks = [];
+    for (let c = ctx; c instanceof TestContext; c = c._parent) {
+        hooks.push(c[key]);
+    }
+    return hooks;
+}
 
 TestContext.prototype.before = function (fn) {
     this._beforeFns.push(fn);
@@ -728,6 +864,7 @@ function test(nameOrOpts, optionsOrFn, maybeFn) {
     }
 
     // Top-level test — run immediately
+    runRootBeforeHooks();
     const result = runTest(parsed, rootSuite);
     if (result.status === 'async') {
         const p = result.promise.then(function (resolved) {
@@ -791,6 +928,7 @@ function describe(nameOrOpts, optionsOrFn, maybeFn) {
     }
 
     // Top-level suite — run immediately
+    runRootBeforeHooks();
     const result = runSuite(parsed.name, parsed.options, parsed.fn, rootSuite, parsed.moduleContext);
     if (result.status === 'async-suite') {
         if (result.promise) {
@@ -860,6 +998,17 @@ function before(fn) {
         currentSuite.beforeFns.push(fn);
     } else {
         rootSuite.beforeFns.push(fn);
+    }
+}
+
+// Top-level tests run as soon as they are declared, so root before() hooks declared so far run
+// before the next top-level test or suite, with the root context (fullName '<root>').
+let rootBeforeHooksRun = 0;
+const rootHookContext = { fullName: '<root>', name: '<root>' };
+function runRootBeforeHooks() {
+    while (rootBeforeHooksRun < rootSuite.beforeFns.length) {
+        const hook = rootSuite.beforeFns[rootBeforeHooksRun++];
+        hook.call(rootHookContext, rootHookContext);
     }
 }
 
@@ -1260,6 +1409,36 @@ MockTracker.prototype.module = function module(specifier, options) {
     }
     if (opts.namedExports !== undefined && (opts.namedExports === null || typeof opts.namedExports !== 'object')) {
         throw new ERR_INVALID_ARG_TYPE('options.namedExports', 'object', opts.namedExports);
+    }
+    // Node 26 options.exports replaces namedExports/defaultExport; `exports.default` is the default export.
+    const hasExports = 'exports' in opts;
+    const hasNamedExports = 'namedExports' in opts;
+    const hasDefaultExport = 'defaultExport' in opts;
+    if (hasExports && (opts.exports === null || typeof opts.exports !== 'object')) {
+        throw new ERR_INVALID_ARG_TYPE('options.exports', 'object', opts.exports);
+    }
+    if (hasExports && (hasNamedExports || hasDefaultExport)) {
+        let reason = "cannot be used with 'options.namedExports'";
+        if (hasDefaultExport) {
+            reason = hasNamedExports ?
+                "cannot be used with 'options.namedExports' or 'options.defaultExport'" :
+                "cannot be used with 'options.defaultExport'";
+        }
+        throw new ERR_INVALID_ARG_VALUE('options.exports', opts.exports, reason);
+    }
+    if (hasExports) {
+        const namedExports = {};
+        const descriptors = Object.getOwnPropertyDescriptors(opts.exports);
+        const converted = { cache: opts.cache };
+        for (const key of Reflect.ownKeys(descriptors)) {
+            if (key === 'default') {
+                Object.defineProperty(converted, 'defaultExport', descriptors[key]);
+            } else {
+                Object.defineProperty(namedExports, key, descriptors[key]);
+            }
+        }
+        converted.namedExports = namedExports;
+        opts = converted;
     }
 
     var registerFn = globalThis.__wasm_rquickjs_register_module_mock;

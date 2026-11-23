@@ -2559,7 +2559,9 @@ assert.match = match;
 assert.doesNotMatch = doesNotMatch;
 assert.fail = fail;
 assert.AssertionError = AssertionError;
-assert.CallTracker = CallTracker;
+// Node 26 removed assert.CallTracker (DEP0173, end of life). It stays available here for
+// existing callers, non-enumerable as Node 26 no longer lists it among the assert methods.
+Object.defineProperty(assert, 'CallTracker', { value: CallTracker, writable: true, configurable: true, enumerable: false });
 
 const strict = function strict(value, message) {
     innerOk(strict, arguments.length, value, message);
@@ -2584,7 +2586,7 @@ strict.match = match;
 strict.doesNotMatch = doesNotMatch;
 strict.fail = fail;
 strict.AssertionError = AssertionError;
-strict.CallTracker = CallTracker;
+Object.defineProperty(strict, 'CallTracker', { value: CallTracker, writable: true, configurable: true, enumerable: false });
 strict.strict = strict;
 
 assert.strict = strict;

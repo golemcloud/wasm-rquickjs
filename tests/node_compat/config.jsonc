@@ -8116,16 +8116,7 @@
         "test_15_coverage_with_directory_and_file_named_file": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
       }
     },
-    "parallel/test-runner-custom-assertions.js": {
-      "split": true,
-      "subtests": {
-        "test_00_throws_if_name_is_not_a_string": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-        "test_01_throws_if_fn_is_not_a_function": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-        "test_02_invokes_a_custom_assertion_as_part_of_the_test_plan": {},
-        "test_03_can_override_existing_assertions": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-        "test_04_this_is_set_to_the_testcontext": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" }
-      }
-    },
+    "parallel/test-runner-custom-assertions.js": { "split": false },
     "parallel/test-runner-enable-source-maps-issue.js": {},
     "parallel/test-runner-error-reporter.js": {
       "category": "unevaluated",
@@ -8298,14 +8289,7 @@
         "test_01_test_01": {}
       }
     },
-    "parallel/test-runner-test-fullname.js": {
-      "split": true,
-      "subtests": {
-        "test_00_suite": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: Expected values to be strictly equal:" },
-        "test_01_test_01": { "category": "known-gap", "reason": "Node 26.13.1 baseline gap: mustCall verification failed:" },
-        "test_02_suite_with_context_checks": { "category": "unevaluated", "reason": "newly discovered subtest, not yet evaluated" }
-      }
-    },
+    "parallel/test-runner-test-fullname.js": { "split": false },
     "parallel/test-runner-typechecking.js": {},
     "parallel/test-runner-wait-for.js": {
       "split": true,
