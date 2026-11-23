@@ -17,7 +17,9 @@ import * as internalUtilDebuglog from '__wasm_rquickjs_builtin/internal/util/deb
 import * as internalWebstreamsUtil from '__wasm_rquickjs_builtin/internal/webstreams/util';
 import * as internalStreamsAddAbortSignal from '__wasm_rquickjs_builtin/internal/streams/add-abort-signal';
 import * as internalStreamsState from '__wasm_rquickjs_builtin/internal/streams/state';
+import * as internalStreamsEndOfStream from '__wasm_rquickjs_builtin/internal/streams/end-of-stream';
 import * as internalTestBinding from '__wasm_rquickjs_builtin/internal/test/binding';
+import { kSupportedAlgorithms } from '__wasm_rquickjs_builtin/internal/crypto/util';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 import { get_diagnostic_data as diagnosticData } from '__wasm_rquickjs_builtin/internal/binding/util_native';
@@ -89,6 +91,10 @@ const internalUtilDebuglogCjs = cjsExport(internalUtilDebuglog);
 const internalWebstreamsUtilCjs = cjsExport(internalWebstreamsUtil);
 const internalStreamsAddAbortSignalCjs = cjsExport(internalStreamsAddAbortSignal);
 const internalStreamsStateCjs = cjsExport(internalStreamsState);
+const internalStreamsEndOfStreamCjs = {
+    eos: internalStreamsEndOfStream.eos,
+    kEosNodeSynchronousCallback: internalStreamsEndOfStream.kEosNodeSynchronousCallback,
+};
 const internalTestBindingCjs = cjsExport(internalTestBinding);
 
 const builtinCjsCache = Object.create(null);
@@ -187,7 +193,9 @@ builtinModuleMap['internal/util/debuglog'] = internalUtilDebuglogCjs;
 builtinModuleMap['internal/webstreams/util'] = internalWebstreamsUtilCjs;
 builtinModuleMap['internal/streams/add-abort-signal'] = internalStreamsAddAbortSignalCjs;
 builtinModuleMap['internal/streams/state'] = internalStreamsStateCjs;
+builtinModuleMap['internal/streams/end-of-stream'] = internalStreamsEndOfStreamCjs;
 builtinModuleMap['internal/test/binding'] = internalTestBindingCjs;
+builtinModuleMap['internal/crypto/util'] = { kSupportedAlgorithms };
 
 // --- Module mock registry (used by node:test mock.module()) ---
 const _moduleMockRegistry = Object.create(null);
@@ -3231,6 +3239,34 @@ function unmarkRequireEsmSourceOverride(previous) {
     }
 }
 
+const REQUIRED_TLA_HINT = ' To see where the top-level await comes from, use --experimental-print-required-tla.';
+
+// Node's ERR_REQUIRE_ASYNC_MODULE lists the requiring modules (parent first).
+function decorateRequireAsyncModuleError(err, parent) {
+    if (!err || err.code !== 'ERR_REQUIRE_ASYNC_MODULE' || Object.hasOwn(err, 'requireStack') ||
+        typeof err.message !== 'string' || !err.message.includes('\nRequired module: ')) {
+        return;
+    }
+    let message = err.message;
+    if (rustHasExecArgvFlag('--experimental-print-required-tla')) {
+        message = message.replace(REQUIRED_TLA_HINT, '');
+    }
+    const requireStack = [];
+    for (let cursor = parent; cursor; cursor = cursor.parent) {
+        const id = cursor.filename || cursor.id;
+        // The synthetic main record of the runtime is not a module of the graph.
+        if (cursor === mainModule || id === '/') break;
+        requireStack.push(id);
+    }
+    if (requireStack.length > 0) {
+        message += '\nRequire stack:\n- ' + requireStack.join('\n- ');
+    }
+    err.message = message;
+    Object.defineProperty(err, 'requireStack', {
+        value: requireStack, writable: true, enumerable: false, configurable: true,
+    });
+}
+
 function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOverride) {
     let esmIdentity = resolvedFilename;
     if (
@@ -3255,7 +3291,13 @@ function requireEsmWithCacheGuard(mod, resolvedFilename, forceModule, sourceOver
     });
     try {
         if (forceModule) markRequireEsmForcedModule(resolvedFilename);
-        const namespace = _requireEsm(esmIdentity);
+        let namespace;
+        try {
+            namespace = _requireEsm(esmIdentity);
+        } catch (err) {
+            decorateRequireAsyncModuleError(err, mod.parent);
+            throw err;
+        }
         if (namespace && typeof namespace === 'object' && Object.hasOwn(namespace, 'module.exports')) {
             return namespace['module.exports'];
         }

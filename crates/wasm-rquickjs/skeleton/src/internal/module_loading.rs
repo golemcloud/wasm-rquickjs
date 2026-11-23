@@ -6135,7 +6135,8 @@ impl NodeModulesResolver {
     }
 
     fn validate_package_import_specifier(specifier: &str) -> Result<(), NodePackageResolveError> {
-        if specifier == "#" || specifier.starts_with("#/") || specifier.ends_with('/') {
+        // Node 25+ accepts `#/` subpath imports.
+        if specifier == "#" || specifier.ends_with('/') {
             return Err(NodePackageResolveError::InvalidPackagePatternMatch {
                 specifier: specifier.to_string(),
                 message: "is not a valid internal imports specifier name".to_string(),
@@ -10571,7 +10572,8 @@ fn is_node_modules_package_scope(dir: &std::path::Path) -> bool {
 fn cjs_named_export_source(names: &[String], host_global: &str) -> String {
     let mut out = String::new();
     for (index, name) in names.iter().enumerate() {
-        if name == "default" {
+        // Node 23+ always exports `module.exports` itself under this name.
+        if name == "default" || name == "module.exports" {
             continue;
         }
         let local = format!("__cjs_export_{}", index);
@@ -10590,6 +10592,7 @@ fn build_cjs_facade_source(default_member_expression: &str, names: &[String]) ->
         r#"const {host_global}=import.meta.__wasm_rquickjs_global;
 var __cjs_default = {host_global}.{default_member_expression};
 export default __cjs_default;
+export {{ __cjs_default as "module.exports" }};
 {}
 "#,
         named_exports,
@@ -11012,6 +11015,17 @@ fn initialize_module_import_meta<'js>(
                 .writable()
                 .enumerable()
                 .configurable(),
+        )?;
+        // Node 24+: true only for the entry point, which process.argv[1] names.
+        let is_main = ctx
+            .globals()
+            .get::<_, Object>("process")
+            .and_then(|process| process.get::<_, Object>("argv"))
+            .and_then(|argv| argv.get::<_, String>(1))
+            .is_ok_and(|entry| entry == *filename);
+        meta.prop(
+            "main",
+            Property::from(is_main).writable().enumerable().configurable(),
         )?;
     }
     if init.include_resolve {

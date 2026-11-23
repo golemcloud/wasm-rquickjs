@@ -42,6 +42,10 @@ function isServerResponse(stream) {
 
 const nop = () => { };
 
+// Internal only (Node exposes it to tests): if eos() can settle immediately
+// because the signal is already aborted, invoke the callback before returning.
+export const kEosNodeSynchronousCallback = Symbol('kEosNodeSynchronousCallback');
+
 
 export function eos(stream, options, callback) {
     if (arguments.length === 2) {
@@ -194,7 +198,9 @@ export function eos(stream, options, callback) {
             cleanup();
             endCallback.call(stream, new AbortError());
         };
-        if (options.signal.aborted) {
+        if (options.signal.aborted && options[kEosNodeSynchronousCallback]) {
+            abort();
+        } else if (options.signal.aborted) {
             nextTick(abort);
         } else {
             const originalCallback = callback;
