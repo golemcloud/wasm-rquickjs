@@ -1,5 +1,6 @@
 import { registerCloneAdapter } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native'
+import { TO_CRYPTO_KEY_ALGORITHM_NAMES } from '__wasm_rquickjs_builtin/internal/crypto/util';
 import Transform from '__wasm_rquickjs_builtin/internal/streams/transform'
 import { DOMException } from '__wasm_rquickjs_builtin/abort_controller'
 import {
@@ -1817,9 +1818,28 @@ function parseAeadOptions(algorithm, options) {
     };
 }
 
+// Node 26 options.xtsStandard selects the SM4-XTS tweak standard. The
+// runtime has no SM4-XTS cipher, so a valid value is unsupported for every
+// cipher it has.
+function validateXtsStandard(options) {
+    if (options === null || options === undefined) return;
+    const xtsStandard = options.xtsStandard;
+    if (xtsStandard === undefined || xtsStandard === null) return;
+    if (typeof xtsStandard !== 'string') {
+        throw new ERR_INVALID_ARG_TYPE('options.xtsStandard', 'string', xtsStandard);
+    }
+    if (xtsStandard !== 'GB' && xtsStandard !== 'IEEE') {
+        throw new ERR_INVALID_ARG_VALUE('options.xtsStandard', xtsStandard, "must be one of: 'GB', 'IEEE'");
+    }
+    const err = new Error('xtsStandard is only supported for XTS ciphers');
+    err.code = 'ERR_CRYPTO_UNSUPPORTED_OPERATION';
+    throw err;
+}
+
 function Cipheriv(algorithm, key, iv, options) {
     if (!(this instanceof Cipheriv)) return new Cipheriv(algorithm, key, iv, options);
     this._algorithm = normalizeCipherAlgorithm(algorithm);
+    validateXtsStandard(options);
     this._aeadConfig = parseAeadOptions(this._algorithm, options);
     this._authTagLength = this._aeadConfig.authTagLength;
     this._authTagLengthExplicit = this._aeadConfig.hasAuthTagLength;
@@ -2015,6 +2035,7 @@ function validateDecipherAuthTagLength(decipher, actualLength) {
 function Decipheriv(algorithm, key, iv, options) {
     if (!(this instanceof Decipheriv)) return new Decipheriv(algorithm, key, iv, options);
     this._algorithm = normalizeCipherAlgorithm(algorithm);
+    validateXtsStandard(options);
     this._aeadConfig = parseAeadOptions(this._algorithm, options);
     this._authTagLength = this._aeadConfig.authTagLength;
     this._authTagLengthExplicit = this._aeadConfig.hasAuthTagLength;
@@ -2832,24 +2853,6 @@ export function setFips(_val) {
 
 export const fips = false;
 
-const TO_CRYPTO_KEY_ALGORITHM_NAMES = {
-    'AES-CTR': 'AES-CTR',
-    'AES-CBC': 'AES-CBC',
-    'AES-GCM': 'AES-GCM',
-    'AES-KW': 'AES-KW',
-    'PBKDF2': 'PBKDF2',
-    'HKDF': 'HKDF',
-    'HMAC': 'HMAC',
-    'ED25519': 'Ed25519',
-    'ED448': 'Ed448',
-    'X25519': 'X25519',
-    'X448': 'X448',
-    'RSASSA-PKCS1-V1_5': 'RSASSA-PKCS1-v1_5',
-    'RSA-PSS': 'RSA-PSS',
-    'RSA-OAEP': 'RSA-OAEP',
-    'ECDH': 'ECDH',
-    'ECDSA': 'ECDSA',
-};
 
 const KEY_OBJECT_TYPES = new Set(['secret', 'public', 'private']);
 const PRIVATE_KEY_CACHE = new Map();
@@ -2932,6 +2935,171 @@ function parseKeyOutputEncoding(enc, asymmetricKeyType, isPublic, objName) {
 
 function isRawKeyFormat(format) {
     return format === 'raw-public' || format === 'raw-private' || format === 'raw-seed';
+}
+
+// Raw key formats (Node 24+): bare key bytes for OKP and EC keys. They are
+// converted to and from the DER and JWK encodings the native layer supports.
+const RAW_EC_CURVES = {
+    'P-256': [0x06, 0x08, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x03, 0x01, 0x07],
+    'secp256k1': [0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x0a],
+    'P-384': [0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x22],
+    'P-521': [0x06, 0x05, 0x2b, 0x81, 0x04, 0x00, 0x23],
+};
+const RAW_EC_CURVE_ALIASES = {
+    'prime256v1': 'P-256', 'secp256r1': 'P-256', 'P-256': 'P-256',
+    'secp256k1': 'secp256k1',
+    'secp384r1': 'P-384', 'P-384': 'P-384',
+    'secp521r1': 'P-521', 'P-521': 'P-521',
+};
+const RAW_EC_ECDH_NAMES = {
+    'P-256': 'prime256v1', 'secp256k1': 'secp256k1', 'P-384': 'secp384r1', 'P-521': 'secp521r1',
+};
+const EC_PUBLIC_KEY_OID = [0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01];
+
+// The native ECDH has no P-521, so derive a raw P-521 private key's public
+// point (d * G, uncompressed) with BigInt affine arithmetic.
+const P521_P = (1n << 521n) - 1n;
+const P521_B = 0x0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00n;
+const P521_G = [
+    0x00c6858e06b70404e9cd9e3ecb662395b4429c648139053fb521f828af606b4d3dbaa14b5e77efe75928fe1dc127a2ffa8de3348b3c1856a429bf97e7e31c2e5bd66n,
+    0x011839296a789a3bc0045c8a5fb42c7d1bd998f54449579b446817afbd17273e662c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650n,
+];
+
+function p521PublicPoint(privateBytes) {
+    const mod = (a) => { a %= P521_P; return a < 0n ? a + P521_P : a; };
+    const inv = (a) => {
+        let t = 0n, nt = 1n, r = P521_P, nr = mod(a);
+        while (nr) { const q = r / nr; [t, nt] = [nt, t - q * nt]; [r, nr] = [nr, r - q * nr]; }
+        return mod(t);
+    };
+    const add = (p1, p2) => {
+        if (!p1) return p2;
+        if (!p2) return p1;
+        const [x1, y1] = p1, [x2, y2] = p2;
+        let l;
+        if (x1 === x2) {
+            if (mod(y1 + y2) === 0n) return null;
+            l = mod((3n * x1 * x1 - 3n) * inv(2n * y1));
+        } else {
+            l = mod((y2 - y1) * inv(x2 - x1));
+        }
+        const x3 = mod(l * l - x1 - x2);
+        return [x3, mod(l * (x1 - x3) - y1)];
+    };
+    let k = 0n;
+    for (const b of privateBytes) k = (k << 8n) | BigInt(b);
+    let r = null, q = P521_G;
+    for (; k; k >>= 1n) {
+        if (k & 1n) r = add(r, q);
+        q = add(q, q);
+    }
+    if (!r) throw new ERR_INVALID_ARG_VALUE('key.key', 'invalid private key');
+    const out = [0x04];
+    for (const c of r) {
+        const hex = c.toString(16).padStart(132, '0');
+        for (let i = 0; i < hex.length; i += 2) out.push(parseInt(hex.slice(i, i + 2), 16));
+    }
+    return out;
+}
+
+function derTlv(tag, content) {
+    const n = content.length;
+    const len = n < 0x80 ? [n] : n < 0x100 ? [0x81, n] : [0x82, n >> 8, n & 0xff];
+    return [tag, ...len, ...content];
+}
+
+function rawKeyBuffer(bytes) {
+    return Buffer.from(bytes);
+}
+
+function exportRawKey(key, format, type_) {
+    const keyType = key.asymmetricKeyType;
+    if (key._type === 'secret' || format === 'raw-seed' ||
+        (format === 'raw-private' && key._type !== 'private')) {
+        throw new ERR_INVALID_ARG_VALUE('options.format', format);
+    }
+    const okp = OKP_TYPE_INFO[keyType];
+    if (okp) {
+        // The key bytes end both the PKCS#8 and the SPKI encoding.
+        if (format === 'raw-private') {
+            const der = new Uint8Array(key.export({ format: 'der', type: 'pkcs8' }));
+            return rawKeyBuffer(der.slice(der.length - okp.privateLength));
+        }
+        const pub = key._type === 'public' ? key : createPublicKey(key);
+        const der = new Uint8Array(pub.export({ format: 'der', type: 'spki' }));
+        return rawKeyBuffer(der.slice(der.length - okp.publicLength));
+    }
+    if (keyType === 'ec') {
+        const jwk = key.export({ format: 'jwk' });
+        if (format === 'raw-private') {
+            return rawKeyBuffer(base64UrlToBytes(jwk.d));
+        }
+        const x = base64UrlToBytes(jwk.x);
+        const y = base64UrlToBytes(jwk.y);
+        if (type_ === 'compressed') {
+            return rawKeyBuffer([0x02 | (y[y.length - 1] & 1), ...x]);
+        }
+        if (type_ !== undefined && type_ !== null && type_ !== 'uncompressed') {
+            throw new ERR_INVALID_ARG_VALUE('options.type', type_);
+        }
+        return rawKeyBuffer([0x04, ...x, ...y]);
+    }
+    throw new ERR_INVALID_ARG_VALUE('options.format', format);
+}
+
+function importRawKey(key, isPrivate) {
+    const { format, asymmetricKeyType: keyType } = key;
+    if (format === 'raw-seed' || (format === 'raw-private') !== isPrivate) {
+        throw new ERR_INVALID_ARG_VALUE('key.format', format);
+    }
+    const bytes = [...toBytes(key.key)];
+    const okp = OKP_TYPE_INFO[keyType];
+    if (okp) {
+        const length = isPrivate ? okp.privateLength : okp.publicLength;
+        if (bytes.length !== length) {
+            throw new ERR_INVALID_ARG_VALUE('key.key', key.key);
+        }
+        const der = Buffer.from([...(isPrivate ? okp.privatePrefix : okp.publicPrefix), ...bytes]);
+        return isPrivate
+            ? createPrivateKeyFromData(der, 'der', undefined, 'pkcs8')
+            : createPublicKeyFromData(der, 'der');
+    }
+    if (keyType === 'ec') {
+        const crv = RAW_EC_CURVE_ALIASES[key.namedCurve];
+        if (crv === undefined) {
+            throw new ERR_INVALID_ARG_VALUE('key.namedCurve', key.namedCurve);
+        }
+        const oid = RAW_EC_CURVES[crv];
+        let point = bytes;
+        if (isPrivate) {
+            if (crv === 'P-521') {
+                point = p521PublicPoint(bytes);
+            } else {
+                const ecdh = createECDH(RAW_EC_ECDH_NAMES[crv]);
+                ecdh.setPrivateKey(Buffer.from(bytes));
+                point = [...ecdh.getPublicKey(undefined, 'uncompressed')];
+            }
+        }
+        if (point[0] === 0x04) {
+            const size = (point.length - 1) / 2;
+            const jwk = {
+                kty: 'EC', crv,
+                x: bytesToBase64Url(new Uint8Array(point.slice(1, 1 + size))),
+                y: bytesToBase64Url(new Uint8Array(point.slice(1 + size))),
+            };
+            if (isPrivate) {
+                jwk.d = bytesToBase64Url(new Uint8Array(bytes));
+                return createPrivateKeyFromData(jwk, 'jwk');
+            }
+            return createPublicKeyFromData(jwk, 'jwk');
+        }
+        const der = derTlv(0x30, [
+            ...derTlv(0x30, [...EC_PUBLIC_KEY_OID, ...oid]),
+            ...derTlv(0x03, [0x00, ...bytes]),
+        ]);
+        return createPublicKeyFromData(Buffer.from(der), 'der');
+    }
+    throw new ERR_INVALID_ARG_VALUE('key.asymmetricKeyType', keyType);
 }
 
 // ===== KeyObject =====
@@ -3020,6 +3188,16 @@ class KeyObject {
     }
 
     export(options) {
+        if (options !== null && typeof options === 'object' && isRawKeyFormat(options.format)) {
+            return exportRawKey(this, options.format, options.type);
+        }
+        // Private encodings are never valid for a public key, including the
+        // derived and JWK-backed public keys exported by the custom paths.
+        if (this._type === 'public' && options !== null && typeof options === 'object' &&
+            (options.format === 'pem' || options.format === 'der') &&
+            (options.type === 'pkcs8' || options.type === 'sec1')) {
+            throw new ERR_INVALID_ARG_VALUE('options.type', options.type);
+        }
         if (this._customData) {
             const customExport = tryExportCustomKeyObject(this, options);
             if (customExport !== undefined) {
@@ -3058,7 +3236,6 @@ class KeyObject {
         if (!isPublic && options.passphrase !== undefined && format !== 'pem' && format !== 'der') {
             throw new ERR_CRYPTO_INCOMPATIBLE_KEY_OPTIONS(format, 'does not support encryption');
         }
-        // Raw formats keep the native path; they are not implemented, and fail there.
         let type_ = options.type || null;
         let cipher;
         let passphrase;
@@ -3177,7 +3354,7 @@ class KeyObject {
                 ensureAllowedCryptoKeyUsages(
                     usages,
                     new Set(['deriveBits', 'deriveKey']),
-                    'Unsupported key usage for an HKDF key',
+                    'Unsupported key usage for a HKDF key',
                 );
                 cryptoAlgorithm = { name: 'HKDF' };
             } else if (normalizedAlgorithm.upperName === 'HMAC') {
@@ -5150,9 +5327,42 @@ function exportDsaCustomKeyObject(keyObject, options) {
         throw err;
     }
     const dsa = keyObject._customData.dsa;
+    if (keyObject._type === 'private' && (options.type === 'pkcs8' || options.cipher != null)) {
+        const der = dsaPrivateDerToPkcs8(dsa.der);
+        if (options.cipher != null) {
+            const encrypted = webCryptoNative.encrypt_pkcs8_der(
+                der, normalizeCipherAlgorithm(options.cipher), toBytes(options.passphrase));
+            if (encrypted === null || encrypted === undefined) {
+                throw new Error('Failed to export encrypted key');
+            }
+            if (format === 'pem') return encodeDerAsPem('ENCRYPTED PRIVATE KEY', new Uint8Array(encrypted));
+            return toBinaryOutput(new Uint8Array(encrypted));
+        }
+        if (format === 'pem') return encodeDerAsPem('PRIVATE KEY', der);
+        return toBinaryOutput(der);
+    }
     if (format === 'pem') return dsa.pem;
     if (format === 'der') return toBinaryOutput(dsa.der);
     return undefined;
+}
+
+// Converts an OpenSSL traditional DSA private key (SEQUENCE of version, p, q, g, y, x)
+// to PKCS#8; PKCS#8 input is returned unchanged.
+function dsaPrivateDerToPkcs8(der) {
+    const root = readAsn1Element(der, 0);
+    const top = readAsn1Children(der, root.valueStart, root.valueEnd);
+    if (top.length !== 6 || !top.every((element) => element.tag === 0x02)) {
+        return der;
+    }
+    const tlv = (element) => der.slice(element.start, element.nextOffset);
+    return encodeAsn1Sequence([
+        encodeAsn1Integer(new Uint8Array([0])),
+        encodeAsn1Sequence([
+            encodeAsn1Oid(DSA_OID),
+            encodeAsn1Sequence([tlv(top[1]), tlv(top[2]), tlv(top[3])]),
+        ]),
+        encodeAsn1OctetString(tlv(top[5])),
+    ]);
 }
 
 const PSS_HASH_OIDS = {
@@ -5820,6 +6030,9 @@ export function createPrivateKey(key) {
                 throw new ERR_INVALID_ARG_TYPE('key.key', ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView'], innerKey);
             }
             const format = key.format || 'pem';
+            if (isRawKeyFormat(format)) {
+                return importRawKey(key, true);
+            }
             if (format === 'der' && key.type !== undefined && key.type !== 'pkcs1' && key.type !== 'pkcs8' && key.type !== 'sec1') {
                 // Node 26 names input encoding options after the `key` argument.
                 throw new ERR_INVALID_ARG_VALUE('key.type', key.type);
@@ -5928,6 +6141,12 @@ export function createPublicKey(key) {
                 throw new ERR_CRYPTO_INVALID_KEY_OBJECT_TYPE(key.key.type, 'private');
             }
             const format = key.format || 'pem';
+            if (format === 'raw-private') {
+                return createPublicKey(importRawKey(key, true));
+            }
+            if (isRawKeyFormat(format)) {
+                return importRawKey(key, false);
+            }
             const normalizedKeyData = normalizeAsymmetricKeyDataForEncoding(key.key, format, key.encoding);
             const normalizedPassphrase = normalizeAsymmetricPassphraseForEncoding(key.passphrase, key.encoding);
             return createPublicKeyFromData(normalizedKeyData, format, normalizedPassphrase);
@@ -7297,6 +7516,27 @@ export function createVerify(algorithm) {
     return new Verify(algorithm);
 }
 
+// Ed25519ctx/Ed448 context strings need OpenSSL 3.2 in Node.js; this
+// runtime has no context support, so only an empty context is accepted.
+function validateSignContext(options) {
+    if (options === null || typeof options !== 'object' || options.context === undefined) {
+        return;
+    }
+    if (!ArrayBuffer.isView(options.context)) {
+        throw new ERR_INVALID_ARG_TYPE('options.context', ['Buffer', 'TypedArray', 'DataView'], options.context);
+    }
+    if (options.context.byteLength > 255) {
+        const err = new RangeError('context string must be at most 255 bytes');
+        err.code = 'ERR_OUT_OF_RANGE';
+        throw err;
+    }
+    if (options.context.byteLength > 0) {
+        const err = new Error('Context parameter is unsupported');
+        err.code = 'ERR_CRYPTO_OPERATION_FAILED';
+        throw err;
+    }
+}
+
 export function sign(algorithm, data, key, callback) {
     const algo = algorithm !== null && algorithm !== undefined ? String(algorithm).toLowerCase() : null;
     if (algo !== null && !HASH_ALIASES[algo]) {
@@ -7305,6 +7545,7 @@ export function sign(algorithm, data, key, callback) {
         throw err;
     }
     const normalizedData = toBytes(data);
+    validateSignContext(key);
     const s = new Sign(algo);
     s.update(normalizedData);
     // A missing key fails synchronously, as in Node.js.
@@ -7322,10 +7563,16 @@ export function verify(algorithm, data, key, signature, callback) {
     v.update(normalizedData);
 
     // Match Node.js one-shot verify() validation order: signature type is
-    // validated before key parsing.
-    if (!ArrayBuffer.isView(signature)) {
-        throw new ERR_INVALID_ARG_TYPE('signature', ['Buffer', 'TypedArray', 'DataView'], signature);
+    // validated before key parsing. Node 26 also accepts strings (UTF-8) and
+    // ArrayBuffers, like getArrayBufferOrView().
+    if (typeof signature === 'string') {
+        signature = Buffer.from(signature, 'utf8');
+    } else if (isAnyArrayBuffer(signature)) {
+        signature = new Uint8Array(signature);
+    } else if (!ArrayBuffer.isView(signature)) {
+        throw new ERR_INVALID_ARG_TYPE('signature', ['string', 'ArrayBuffer', 'Buffer', 'TypedArray', 'DataView'], signature);
     }
+    validateSignContext(key);
 
     if (!callback || key === null || key === undefined) {
         return v.verify(key, signature);
