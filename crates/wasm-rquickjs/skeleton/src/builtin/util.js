@@ -418,10 +418,10 @@ function _exportKeyForCompare(key, keyType) {
         // Try a more explicit export signature.
     }
 
+    const formatType = keyType === 'public' ? 'spki' : 'pkcs8';
     try {
-        return key.export('der');
+        return key.export({ format: 'der', type: formatType });
     } catch (_) {
-        const formatType = keyType === 'public' ? 'spki' : 'pkcs8';
         try {
             return key.export('der', formatType, undefined);
         } catch (_) {

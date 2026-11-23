@@ -4032,131 +4032,6 @@
     "error": "Expected values to be strictly equal:"
    },
    {
-    "file": "parallel/test-crypto-async-sign-verify.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "error:06000068:public key routines::operation not supported for this keytype"
-   },
-   {
-    "file": "parallel/test-crypto-async-sign-verify.js",
-    "subtest": "block_02_block_02",
-    "baseline": true,
-    "previous": {},
-    "error": "error:0408006C:rsa routines::digest too big for rsa key"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_00_non_authenticating_mode",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_01_throw",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_04_test_that_users_can_manually_restrict_the_gcm_tag_length_to_",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_05_authentication_tag_length_has_been_specified",
-    "baseline": true,
-    "previous": {
-     "category": "runnable",
-     "reason": "carries 22.14.0 subtest block_04_authentication_tag_length_has_been_specified"
-    },
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_06_authentication_tag_length_has_been_specified",
-    "baseline": true,
-    "previous": {
-     "category": "runnable",
-     "reason": "carries 22.14.0 subtest block_05_authentication_tag_has_been_specified"
-    },
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_07_test_that_setaad_throws_if_an_invalid_plaintext_length_has_b",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_08_test_that_setaad_and_update_throw_if_the_plaintext_is_too_lo",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_09_been_specified",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_10_test_that_final_throws_in_ccm_mode_when_no_authentication_ta",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_11_test_that_setauthtag_does_not_throw_in_gcm_mode_when_called_",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_12_test_that_an_iv_length_of_11_does_not_overflow_max_message_s",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_14_test_that_setauthtag_can_only_be_called_once",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_15_https_www_openssl_org_news_secadv_20190306_txt",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_16_block_16",
-    "baseline": true,
-    "previous": {},
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input:"
-   },
-   {
     "file": "parallel/test-crypto-cipheriv-decipheriv.js",
     "subtest": "block_00_block_00",
     "baseline": true,
@@ -4246,34 +4121,6 @@
     "baseline": true,
     "previous": {},
     "error": "Missing expected exception (TypeError)."
-   },
-   {
-    "file": "parallel/test-crypto-encoding-validation-error.js",
-    "subtest": "block_00_block_00",
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly deep-equal:"
-   },
-   {
-    "file": "parallel/test-crypto-encoding-validation-error.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "Expected values to be strictly deep-equal:"
-   },
-   {
-    "file": "parallel/test-crypto-gcm-implicit-short-tag.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception."
-   },
-   {
-    "file": "parallel/test-crypto-hkdf.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception."
    },
    {
     "file": "parallel/test-crypto-key-objects.js",
@@ -4392,20 +4239,6 @@
     "baseline": true,
     "previous": {},
     "error": "Failed to export key"
-   },
-   {
-    "file": "parallel/test-crypto-keygen-eddsa.js",
-    "subtest": null,
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception (TypeError)."
-   },
-   {
-    "file": "parallel/test-crypto-keygen.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "Missing expected exception (TypeError)."
    },
    {
     "file": "parallel/test-crypto-sign-verify.js",
@@ -6012,109 +5845,11 @@
     "error": "Unhandled promise rejection (likely cause of mustCall failure): Error: Module status must not be unlinked or l"
    },
    {
-    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
-    "subtest": "block_00_test_aes_cbc_vectors",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
-    "subtest": "block_01_test_aes_ctr_vectors",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
-    "subtest": "block_02_test_aes_gcm_vectors",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
-    "subtest": "block_00_test_encrypt_decrypt_aes_ctr",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
-    "subtest": "block_01_test_encrypt_decrypt_aes_cbc",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
-    "subtest": "block_02_test_encrypt_decrypt_aes_gcm",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Expected values to be strictly"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_00_block_00",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_02_import_export_hmac_secret_key",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_03_import_export_aes_secret_key",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_04_import_export_rsa_key_pairs",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-export-import.js",
-    "subtest": "block_05_import_export_ec_key_pairs",
-    "baseline": true,
-    "previous": {},
-    "error": "Unhandled promise rejection (likely cause of mustCall failure): AssertionError: Missing expected rejection (Da"
-   },
-   {
-    "file": "parallel/test-webcrypto-random.js",
-    "subtest": "block_00_block_00",
-    "baseline": true,
-    "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
-   },
-   {
-    "file": "parallel/test-webcrypto-random.js",
-    "subtest": "block_01_block_01",
-    "baseline": true,
-    "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
-   },
-   {
     "file": "parallel/test-webcrypto-random.js",
     "subtest": "block_02_block_02",
     "baseline": true,
     "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
-   },
-   {
-    "file": "parallel/test-webcrypto-random.js",
-    "subtest": "block_03_block_03",
-    "baseline": true,
-    "previous": {},
-    "error": "The error is expected to be an instance of \"TypeError\". Received \"DOMException\""
+    "error": "QuotaExceededError is not defined"
    },
    {
     "file": "parallel/test-webstorage.js",
@@ -6259,15 +5994,6 @@
     "error": "Unhandled promise rejection: AssertionError: 'a\\rb' !== 'a\\nb'"
    },
    {
-    "file": "parallel/test-crypto-authenticated.js",
-    "subtest": "block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305",
-    "baseline": true,
-    "previous": {
-     "category": "unevaluated"
-    },
-    "error": "The input did not match the regular expression /Unsupported state or unable to authenticate data/. Input"
-   },
-   {
     "file": "parallel/test-sqlite.js",
     "subtest": "test_08_sql_apis_enabled_at_build_time",
     "baseline": true,
@@ -6308,6 +6034,198 @@
     "file": "parallel/test-process-release.js",
     "subtest": null,
     "fix": "process.release.lts reports 'Lithium', the LTS codename of 26.13.1 in the official dist index"
+   }
+  ],
+  "repaired": [
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_00_non_authenticating_mode",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_01_throw",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_03_test_that_gcm_can_produce_shorter_authentication_tags_than_1",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_04_test_that_users_can_manually_restrict_the_gcm_tag_length_to_",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_05_authentication_tag_length_has_been_specified",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_06_authentication_tag_length_has_been_specified",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_07_test_that_setaad_throws_if_an_invalid_plaintext_length_has_b",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_08_test_that_setaad_and_update_throw_if_the_plaintext_is_too_lo",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_09_been_specified",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_10_test_that_final_throws_in_ccm_mode_when_no_authentication_ta",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_11_test_that_setauthtag_does_not_throw_in_gcm_mode_when_called_",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_12_test_that_an_iv_length_of_11_does_not_overflow_max_message_s",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_14_test_that_setauthtag_can_only_be_called_once",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_15_https_www_openssl_org_news_secadv_20190306_txt",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_16_block_16",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-crypto-authenticated.js",
+    "subtest": "block_13_final_in_gcm_mode_ocb_mode_and_for_chacha20_poly1305",
+    "fix": "Decipheriv#final reports a missing or mismatched AEAD tag as Node does: Error 'Unsupported state or unable to authenticate data' without a code"
+   },
+   {
+    "file": "parallel/test-webcrypto-random.js",
+    "subtest": "block_00_block_00",
+    "fix": "crypto.getRandomValues rejects missing and non-ArrayBufferView arguments with Node's WebIDL TypeErrors (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE) and reports TypeMismatchError and QuotaExceededError with Node's messages"
+   },
+   {
+    "file": "parallel/test-webcrypto-random.js",
+    "subtest": "block_01_block_01",
+    "fix": "crypto.getRandomValues rejects missing and non-ArrayBufferView arguments with Node's WebIDL TypeErrors (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE) and reports TypeMismatchError and QuotaExceededError with Node's messages"
+   },
+   {
+    "file": "parallel/test-webcrypto-random.js",
+    "subtest": "block_03_block_03",
+    "fix": "crypto.getRandomValues rejects missing and non-ArrayBufferView arguments with Node's WebIDL TypeErrors (ERR_MISSING_ARGS, ERR_INVALID_ARG_TYPE) and reports TypeMismatchError and QuotaExceededError with Node's messages"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
+    "subtest": "block_00_test_encrypt_decrypt_aes_ctr",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
+    "subtest": "block_01_test_encrypt_decrypt_aes_cbc",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt.js",
+    "subtest": "block_02_test_encrypt_decrypt_aes_gcm",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
+    "subtest": "block_00_test_aes_cbc_vectors",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
+    "subtest": "block_01_test_aes_ctr_vectors",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-encrypt-decrypt-aes.js",
+    "subtest": "block_02_test_aes_gcm_vectors",
+    "fix": "SubtleCrypto encrypt/decrypt check the key algorithm before its usages and report 'Key algorithm mismatch' or 'Unable to use this key to <operation>' as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_00_block_00",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_02_import_export_hmac_secret_key",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_03_import_export_aes_secret_key",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_04_import_export_rsa_key_pairs",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-webcrypto-export-import.js",
+    "subtest": "block_05_import_export_ec_key_pairs",
+    "fix": "HMAC import reports Node's usage and zero-length messages, and WebCrypto HMAC JWKs export and validate the registered 'alg' value (none for SHA-3) as Node does"
+   },
+   {
+    "file": "parallel/test-crypto-gcm-implicit-short-tag.js",
+    "subtest": null,
+    "fix": "Decipheriv#setAuthTag accepts only a 16-byte GCM tag when authTagLength is not set, as Node 26 does after removing implicit short tags (DEP0182)"
+   },
+   {
+    "file": "parallel/test-crypto-hkdf.js",
+    "subtest": null,
+    "fix": "hkdf and hkdfSync read the info view's intrinsic byte range, so a user-defined byteLength cannot bypass the 1024-byte limit"
+   },
+   {
+    "file": "parallel/test-crypto-encoding-validation-error.js",
+    "subtest": "block_00_block_00",
+    "fix": "Cipheriv/Decipheriv report an output-encoding change as ERR_INVALID_ARG_VALUE \"The argument 'outputEncoding' cannot be changed from '<encoding>'\""
+   },
+   {
+    "file": "parallel/test-crypto-encoding-validation-error.js",
+    "subtest": "block_01_block_01",
+    "fix": "Cipheriv/Decipheriv report an output-encoding change as ERR_INVALID_ARG_VALUE \"The argument 'outputEncoding' cannot be changed from '<encoding>'\""
+   },
+   {
+    "file": "parallel/test-crypto-keygen-eddsa.js",
+    "subtest": null,
+    "fix": "generateKeyPair rejects unsupported key types synchronously with ERR_INVALID_ARG_VALUE, as generateKeyPairSync and Node do"
+   },
+   {
+    "file": "parallel/test-crypto-keygen.js",
+    "subtest": "block_01_block_01",
+    "fix": "generateKeyPair rejects unsupported key types synchronously with ERR_INVALID_ARG_VALUE, as generateKeyPairSync and Node do"
+   },
+   {
+    "file": "parallel/test-crypto-async-sign-verify.js",
+    "subtest": "block_01_block_01",
+    "fix": "One-shot sign() and verify() validate options and parse the key synchronously and deliver errors of the signing job itself (such as an RSA key too small for the digest or a non-signing x25519 key) to the callback, as Node does"
+   },
+   {
+    "file": "parallel/test-crypto-async-sign-verify.js",
+    "subtest": "block_02_block_02",
+    "fix": "One-shot sign() and verify() validate options and parse the key synchronously and deliver errors of the signing job itself (such as an RSA key too small for the digest or a non-signing x25519 key) to the callback, as Node does"
    }
   ]
  },
