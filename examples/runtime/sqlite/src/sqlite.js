@@ -317,3 +317,60 @@ export function testPrepareOptions() {
   }
   return true;
 }
+
+export function testTransactionState() {
+  const db = new DatabaseSync(':memory:', { open: false });
+  const closed = { code: 'ERR_INVALID_STATE', message: 'database is not open' };
+  assert.throws(() => db.isTransaction, closed);
+  try {
+    db.open();
+    assert.equal(db.isTransaction, false);
+    db.exec('CREATE TABLE values_test (n INTEGER)');
+    db.exec('BEGIN; INSERT INTO values_test VALUES (13)');
+    assert.equal(db.isTransaction, true);
+    db.exec('COMMIT');
+    assert.equal(db.isTransaction, false);
+    db.exec('BEGIN; INSERT INTO values_test VALUES (29)');
+    assert.equal(db.isTransaction, true);
+    db.exec('ROLLBACK');
+    assert.equal(db.isTransaction, false);
+    assert.deepEqual(db.prepare('SELECT n FROM values_test').all(), [{ __proto__: null, n: 13 }]);
+    db.close();
+    assert.throws(() => db.isTransaction, closed);
+    db.open();
+    assert.equal(db.isTransaction, false);
+  } finally {
+    if (db.isOpen) db.close();
+  }
+  return true;
+}
+
+export function testNumberBinding() {
+  const db = new DatabaseSync(':memory:');
+  try {
+    for (const readBigInts of [true, false]) {
+      const query = db.prepare('SELECT $n AS n, typeof($n) AS kind, $b AS b, typeof($b) AS bigint_kind', { readBigInts });
+      for (const n of [13, -7, 2 ** 40 + 1, Number.MAX_SAFE_INTEGER, 1.25, Infinity, -Infinity]) {
+        const expected = { __proto__: null, n, kind: 'real', b: readBigInts ? 29n : 29, bigint_kind: 'integer' };
+        assert.deepEqual(query.get({ n, b: 29n }), expected);
+        assert.deepEqual(query.all({ n, b: 29n }), [expected]);
+        assert.deepEqual([...query.iterate({ n, b: 29n })], [expected]);
+      }
+      assert.deepEqual(db.prepare('SELECT ? AS n, typeof(?) AS kind', { readBigInts }).get(NaN, NaN), {
+        __proto__: null, n: null, kind: 'null',
+      });
+    }
+    db.exec('CREATE TABLE affinity_test (i INTEGER, r REAL, untyped)');
+    const insert = db.prepare('INSERT INTO affinity_test VALUES (?, ?, ?)');
+    insert.run(13, 29n, -7);
+    assert.deepEqual(db.prepare('SELECT i, r, untyped, typeof(untyped) AS kind FROM affinity_test', {
+      readBigInts: true,
+    }).get(), { __proto__: null, i: 13n, r: 29, untyped: -7, kind: 'real' });
+    assert.deepEqual(db.prepare('SELECT ? AS n, typeof(?) AS kind', {
+      readBigInts: true,
+    }).get(-0, -0), { __proto__: null, n: -0, kind: 'real' });
+  } finally {
+    db.close();
+  }
+  return true;
+}

@@ -333,7 +333,7 @@ class _DatabaseSyncImpl {
     }
 
     get isTransaction() {
-        if (this.#connId === null) return false;
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         return !is_autocommit(this.#connId);
     }
 }

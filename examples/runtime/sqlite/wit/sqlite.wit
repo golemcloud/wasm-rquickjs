@@ -12,4 +12,6 @@ world sqlite {
   export test-autocommit-tracking: func() -> bool;
   export test-type-validation: func() -> bool;
   export test-prepare-options: func() -> bool;
+  export test-transaction-state: func() -> bool;
+  export test-number-binding: func() -> bool;
 }

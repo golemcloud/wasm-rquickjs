@@ -14987,7 +14987,7 @@
         "test_02_database_prototype_close": {},
         "test_03_database_prototype_prepare": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
         "test_04_database_prototype_exec": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
-        "test_05_database_prototype_istransaction": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_05_database_prototype_istransaction": {},
         "test_06_database_prototype_location": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
         "test_07_database_prototype_symbol_dispose": {}
       }
