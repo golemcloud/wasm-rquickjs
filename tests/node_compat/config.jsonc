@@ -8590,7 +8590,7 @@
       "subtests": {
         "test_00_named_parameters": {},
         "test_01_statement_prototype_setallowunknownnamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
-        "test_02_options_allowunknownnamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" }
+        "test_02_options_allowunknownnamedparameters": { "category": "runnable" }
       }
     },
     "parallel/test-sqlite-session.js": {
@@ -15035,9 +15035,9 @@
         "test_12_statement_prototype_all_with_array_output": {},
         "test_13_statement_prototype_iterate_with_array_output": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
         "test_14_statement_prototype_setallowbarenamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
-        "test_15_options_readbigints": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
-        "test_16_options_returnarrays": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
-        "test_17_options_allowbarenamedparameters": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
+        "test_15_options_readbigints": { "category": "runnable" },
+        "test_16_options_returnarrays": { "category": "runnable" },
+        "test_17_options_allowbarenamedparameters": { "category": "runnable" },
         "test_18_statement_prototype_close": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
         "test_19_statement_prototype_symbol_dispose": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },
         "test_20_options_persistent": { "category": "known-gap", "reason": "Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet" },

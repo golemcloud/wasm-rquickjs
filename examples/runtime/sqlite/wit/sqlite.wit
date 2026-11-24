@@ -11,4 +11,5 @@ world sqlite {
   export test-wal-mode-snapshot: func() -> bool;
   export test-autocommit-tracking: func() -> bool;
   export test-type-validation: func() -> bool;
+  export test-prepare-options: func() -> bool;
 }
