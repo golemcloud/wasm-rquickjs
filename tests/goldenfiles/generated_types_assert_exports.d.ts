@@ -13,4 +13,5 @@ declare module 'assert' {
   export function testStrictMode(): boolean;
   export function testAssertionError(): boolean;
   export function testEvalGeneratedMessage(): boolean;
+  export function testSubtestAfterEachOnce(): boolean;
 }

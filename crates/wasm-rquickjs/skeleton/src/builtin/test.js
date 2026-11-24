@@ -268,17 +268,22 @@ TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
     const runHooks = function (hooks) {
         for (let i = 0; i < hooks.length; i++) hooks[i].call(childCtx, childCtx);
     };
-    const succeed = function () {
+    // Like Node 26's runOnce-wrapped afterEach, teardown runs at most once: a hook that throws
+    // after the subtest succeeded must not run again when that error is handled as a failure.
+    let tornDown = false;
+    const teardown = function (rethrow) {
+        if (tornDown) return;
+        tornDown = true;
         try {
             runHooks(afterEachFns);
+        } catch (e) {
+            if (rethrow) throw e;
         } finally {
             childCtx.mock.restoreAll();
         }
     };
-    const fail = function () {
-        try { runHooks(afterEachFns); } catch (ignored) {}
-        childCtx.mock.restoreAll();
-    };
+    const succeed = function () { teardown(true); };
+    const fail = function () { teardown(false); };
 
     try {
         runHooks(beforeEachFns);

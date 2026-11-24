@@ -2,6 +2,7 @@ import assert from 'node:assert';
 import { AssertionError } from 'node:assert';
 import fs from 'node:fs';
 import { createRequire } from 'node:module';
+import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 
@@ -493,4 +494,53 @@ export const testEvalGeneratedMessage = () => {
     const message = require(filename);
     return message !== 'false == true' &&
         message.startsWith('The expression evaluated to a falsy value:');
+};
+
+// A throwing afterEach hook runs exactly once per subtest and the subtest's mocks are restored,
+// whether the subtest is synchronous, returns a promise or uses a done callback. Node reports
+// the hook failure through the parent and resolves t.test(); this runtime rejects t.test() with
+// the hook error, so either outcome is accepted, but no other error is.
+export const testSubtestAfterEachOnce = async () => {
+    try {
+        const hookError = new Error('afterEach failed');
+        const target = { method() { return 'original'; } };
+        const calls = [];
+        const outcomes = {};
+        const mockAndRecord = (st, kind) => {
+            st.mock.method(target, 'method', () => 'mocked');
+            calls.push(kind + ':' + target.method());
+        };
+        await test('afterEach once', async (t) => {
+            t.afterEach(() => {
+                calls.push('afterEach');
+                throw hookError;
+            });
+            const subtests = [
+                ['sync', (st) => { mockAndRecord(st, 'sync'); }],
+                ['promise', async (st) => { await null; mockAndRecord(st, 'promise'); }],
+                ['callback', (st, done) => { mockAndRecord(st, 'callback'); done(); }],
+            ];
+            for (const [kind, fn] of subtests) {
+                try {
+                    await t.test(kind, fn);
+                    outcomes[kind] = 'resolved';
+                } catch (e) {
+                    outcomes[kind] = e === hookError ? 'hook-error' : e;
+                }
+                calls.push(kind + ':' + target.method());
+            }
+        });
+        assert.deepStrictEqual(calls, [
+            'sync:mocked', 'afterEach', 'sync:original',
+            'promise:mocked', 'afterEach', 'promise:original',
+            'callback:mocked', 'afterEach', 'callback:original',
+        ]);
+        for (const kind of ['sync', 'promise', 'callback']) {
+            assert.ok(outcomes[kind] === 'resolved' || outcomes[kind] === 'hook-error', kind);
+        }
+        return true;
+    } catch (e) {
+        console.error(e);
+        return false;
+    }
 };
