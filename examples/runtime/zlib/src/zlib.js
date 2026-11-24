@@ -485,6 +485,46 @@ export async function testZstd() {
   assert.deepEqual(Buffer.concat(chunks), Buffer.concat([
     Buffer.from('Node 26 external vector: 13 + 29'), source, Buffer.from('Node 26 external vector: 13 + 29'),
   ]));
+  const frameResults = [];
+  for (const scenario of ['buffered-reset', 'next-frame', 'reset-pledge']) {
+    const compressor = zlib.createZstdCompress(
+      scenario === 'buffered-reset' ? {} : { pledgedSrcSize: 5 },
+    );
+    const chunks = [];
+    const completed = new Promise(resolve => {
+      compressor.on('data', chunk => chunks.push(chunk));
+      compressor.on('end', () => resolve(null));
+      compressor.on('error', resolve);
+    });
+    const write = data => new Promise((resolve, reject) => {
+      compressor.write(data, error => error ? reject(error) : resolve());
+    });
+    try {
+      await write('hello');
+      await new Promise((resolve, reject) => {
+        compressor.flush(constants.ZSTD_e_end, error => error ? reject(error) : resolve());
+      });
+      if (scenario === 'buffered-reset') {
+        const completedChunks = chunks.length;
+        await write('x');
+        assert.equal(chunks.length, completedChunks);
+        compressor.reset();
+        compressor.end('world');
+      } else {
+        if (scenario === 'reset-pledge') compressor.reset();
+        compressor.end('x');
+      }
+      const error = await completed;
+      if (error) throw error;
+      frameResults.push(zlib.zstdDecompressSync(Buffer.concat(chunks)).toString());
+    } catch (error) {
+      compressor.destroy();
+      frameResults.push({ code: error.code, errno: error.errno });
+    }
+  }
+  assert.deepEqual(frameResults, [
+    'helloworld', 'hellox', { code: 'ZSTD_error_srcSize_wrong', errno: 72 },
+  ]);
   return true;
 }
 

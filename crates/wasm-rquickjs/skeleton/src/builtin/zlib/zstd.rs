@@ -15,7 +15,7 @@ struct Stream {
     codec: Codec,
     complete: bool,
     emitted: bool,
-    input_size: u64,
+    input_size: Option<u64>,
     pending: Vec<u8>,
     garbage: bool,
     reject_garbage: bool,
@@ -92,6 +92,10 @@ pub(super) fn new(
         ctx.set_pledged_src_size(pledged).ok()?;
         Codec::Compress(ctx, pledged)
     };
+    let input_size = match &codec {
+        Codec::Compress(_, pledged) => pledged.map(|_| 0),
+        Codec::Decompress(_) => None,
+    };
     let id = super::next_id();
     STREAMS.lock().unwrap().insert(
         id,
@@ -99,7 +103,7 @@ pub(super) fn new(
             codec,
             complete: false,
             emitted: false,
-            input_size: 0,
+            input_size,
             pending: Vec::new(),
             garbage: false,
             reject_garbage,
@@ -138,14 +142,13 @@ pub(super) fn push(
         if stream.complete && bytes.is_empty() {
             return Ok(Vec::new());
         }
-        if stream.complete {
-            stream.input_size = 0;
-        }
-        stream.input_size += bytes.len() as u64;
-        // A single compressStream2(end) call infers the input size even when the
-        // caller supplied a pledge. Node validates that explicit contract too.
-        if flush == 2 && pledged.is_some_and(|size| size != stream.input_size) {
-            return Err((72, "Src size is incorrect".to_string()));
+        if let Some(input_size) = &mut stream.input_size {
+            *input_size += bytes.len() as u64;
+            // A single compressStream2(end) call infers the input size even when
+            // the caller supplied a pledge. Validate only the active pledge.
+            if flush == 2 && Some(*input_size) != pledged {
+                return Err((72, "Src size is incorrect".to_string()));
+            }
         }
     }
     let mut data = std::mem::take(&mut stream.pending);
@@ -200,6 +203,10 @@ pub(super) fn push(
             Codec::Compress(_, _) => {
                 stream.emitted |= written > 0;
                 stream.complete = flush == 2 && remaining == 0;
+                if stream.complete {
+                    stream.emitted = false;
+                    stream.input_size = None;
+                }
                 if input.pos == data.len() && (flush == 0 || remaining == 0) {
                     break;
                 }
@@ -238,7 +245,10 @@ pub(super) fn reset(id: u32) -> bool {
     };
     stream.complete = false;
     stream.emitted = false;
-    stream.input_size = 0;
+    stream.input_size = match stream.codec {
+        Codec::Compress(_, pledged) => pledged.map(|_| 0),
+        Codec::Decompress(_) => None,
+    };
     stream.garbage = false;
     stream.pending.clear();
     result.is_ok()
