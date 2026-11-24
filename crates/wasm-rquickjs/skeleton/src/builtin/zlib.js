@@ -17,6 +17,10 @@ import {
   brotli_stream_push,
   brotli_stream_pull,
   brotli_stream_close,
+  zstd_stream_new,
+  zstd_stream_push,
+  zstd_stream_reset,
+  zstd_stream_close,
 } from '__wasm_rquickjs_builtin/zlib_native';
 
 const setPrototypeOf = Object.setPrototypeOf;
@@ -193,7 +197,37 @@ const BROTLI_DECODER_ERROR_UNREACHABLE = -31;
 
 const ZLIB_VERNUM = 4816;
 
+const zstdConstants = {
+  ZSTD_COMPRESS: 10, ZSTD_DECOMPRESS: 11,
+  ZSTD_e_continue: 0, ZSTD_e_flush: 1, ZSTD_e_end: 2,
+  ZSTD_fast: 1, ZSTD_dfast: 2, ZSTD_greedy: 3, ZSTD_lazy: 4, ZSTD_lazy2: 5,
+  ZSTD_btlazy2: 6, ZSTD_btopt: 7, ZSTD_btultra: 8, ZSTD_btultra2: 9,
+  ZSTD_c_compressionLevel: 100, ZSTD_c_windowLog: 101, ZSTD_c_hashLog: 102,
+  ZSTD_c_chainLog: 103, ZSTD_c_searchLog: 104, ZSTD_c_minMatch: 105,
+  ZSTD_c_targetLength: 106, ZSTD_c_strategy: 107,
+  ZSTD_c_enableLongDistanceMatching: 160, ZSTD_c_ldmHashLog: 161,
+  ZSTD_c_ldmMinMatch: 162, ZSTD_c_ldmBucketSizeLog: 163, ZSTD_c_ldmHashRateLog: 164,
+  ZSTD_c_contentSizeFlag: 200, ZSTD_c_checksumFlag: 201, ZSTD_c_dictIDFlag: 202,
+  ZSTD_c_nbWorkers: 400, ZSTD_c_jobSize: 401, ZSTD_c_overlapLog: 402,
+  ZSTD_d_windowLogMax: 100, ZSTD_CLEVEL_DEFAULT: 3,
+  ZSTD_error_no_error: 0, ZSTD_error_GENERIC: 1, ZSTD_error_prefix_unknown: 10,
+  ZSTD_error_version_unsupported: 12, ZSTD_error_frameParameter_unsupported: 14,
+  ZSTD_error_frameParameter_windowTooLarge: 16, ZSTD_error_corruption_detected: 20,
+  ZSTD_error_checksum_wrong: 22, ZSTD_error_literals_headerWrong: 24,
+  ZSTD_error_dictionary_corrupted: 30, ZSTD_error_dictionary_wrong: 32,
+  ZSTD_error_dictionaryCreation_failed: 34, ZSTD_error_parameter_unsupported: 40,
+  ZSTD_error_parameter_combination_unsupported: 41, ZSTD_error_parameter_outOfBound: 42,
+  ZSTD_error_tableLog_tooLarge: 44, ZSTD_error_maxSymbolValue_tooLarge: 46,
+  ZSTD_error_maxSymbolValue_tooSmall: 48, ZSTD_error_stabilityCondition_notRespected: 50,
+  ZSTD_error_stage_wrong: 60, ZSTD_error_init_missing: 62,
+  ZSTD_error_memory_allocation: 64, ZSTD_error_workSpace_tooSmall: 66,
+  ZSTD_error_dstSize_tooSmall: 70, ZSTD_error_srcSize_wrong: 72,
+  ZSTD_error_dstBuffer_null: 74, ZSTD_error_noForwardProgress_destFull: 80,
+  ZSTD_error_noForwardProgress_inputEmpty: 82,
+};
+
 export const constants = Object.freeze({
+  ...zstdConstants,
   Z_NO_FLUSH,
   Z_PARTIAL_FLUSH,
   Z_SYNC_FLUSH,
@@ -1092,6 +1126,130 @@ export const Unzip = makeZlibWrapper(_Unzip);
 export const BrotliCompress = makeZlibWrapper(_BrotliCompress);
 export const BrotliDecompress = makeZlibWrapper(_BrotliDecompress);
 
+const zstdCleanup = new FinalizationRegistry(zstd_stream_close);
+
+class Zstd extends ZlibBase {
+  constructor(opts, decompress) {
+    opts = opts || {};
+    const params = [];
+    const seen = new Set();
+    for (const key of Object.keys(opts.params || {})) {
+      const number = +key;
+      if (!Number.isInteger(number) || number < 0 || number > (decompress ? 100 : 402) || seen.has(number)) {
+        throw makeRangeError('ERR_ZSTD_INVALID_PARAM', `${key} is not a valid zstd parameter`);
+      }
+      const value = opts.params[key];
+      if (typeof value !== 'number' && typeof value !== 'boolean') {
+        throw makeTypeError('ERR_INVALID_ARG_TYPE',
+          'The "options.params[key]" argument must be of type number.' + invalidArgTypeHelper(value));
+      }
+      if ((value | 0) !== -1) {
+        seen.add(number);
+        params.push([number, value | 0]);
+      }
+    }
+    const flush = opts.flush === undefined ? 0 : opts.flush;
+    const finishFlush = opts.finishFlush === undefined ? 2 : opts.finishFlush;
+    validateRangeInt(flush, 'options.flush', 0, 2);
+    validateRangeInt(finishFlush, 'options.finishFlush', 0, 2);
+    if (opts.chunkSize !== undefined) validateRangeInt(opts.chunkSize, 'options.chunkSize', Z_MIN_CHUNK, Infinity);
+    if (opts.maxOutputLength !== undefined) validateRangeInt(opts.maxOutputLength, 'options.maxOutputLength', 1, _getKMaxLength());
+    const pledged = opts.pledgedSrcSize;
+    if (pledged !== undefined) {
+      if (typeof pledged !== 'number') throw makeTypeError('ERR_INVALID_ARG_TYPE', 'pledgedSrcSize must be a number');
+      if (pledged < 0) throw makeRangeError('ERR_OUT_OF_RANGE', 'pledgedSrcSize must be non-negative');
+      if (!Number.isSafeInteger(pledged)) throw makeRangeError('ERR_OUT_OF_RANGE', 'pledgedSrcSize must be a safe integer');
+    }
+    let dictionary = opts.dictionary;
+    if (dictionary === undefined) dictionary = new Uint8Array(0);
+    else if (!isArrayBufferView(dictionary) && !(dictionary instanceof ArrayBuffer) &&
+             !(typeof SharedArrayBuffer !== 'undefined' && dictionary instanceof SharedArrayBuffer)) {
+      throw makeTypeError('ERR_INVALID_ARG_TYPE',
+        'The "options.dictionary" argument must be an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' + invalidArgTypeHelper(dictionary));
+    }
+    const rejectGarbage = opts.rejectGarbageAfterEnd;
+    if (rejectGarbage !== undefined && typeof rejectGarbage !== 'boolean') {
+      throw makeTypeError('ERR_INVALID_ARG_TYPE',
+        'The "options.rejectGarbageAfterEnd" property must be of type boolean.' + invalidArgTypeHelper(rejectGarbage));
+    }
+    const handle = zstd_stream_new(decompress, JSON.stringify(params), toUint8Array(toBuffer(dictionary)), pledged,
+      rejectGarbage === true);
+    if (handle == null) throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Setting parameter failed');
+    try { super(opts, decompress ? 11 : 10); }
+    catch (error) { zstd_stream_close(handle); throw error; }
+    this._finishFlush = finishFlush;
+    this._flushFlag = flush;
+    this._setNativeHandle(handle);
+    zstdCleanup.register(this, handle, this);
+  }
+
+  _closeNativeHandle() {
+    if (this._nativeHandle !== null) zstd_stream_close(this._nativeHandle);
+    zstdCleanup.unregister(this);
+    this._nativeHandle = null;
+  }
+
+  reset() {
+    if (this._nativeHandle !== null && !zstd_stream_reset(this._nativeHandle)) {
+      this.destroy(makeError('ERR_ZLIB_INCOMPLETE_FRAME', 'Cannot reset an incomplete zstd frame'));
+    }
+  }
+
+  flush(kind, callback) {
+    if (typeof kind === 'function') { callback = kind; kind = 1; }
+    if (kind === undefined) kind = 1;
+    validateRangeInt(kind, 'kind', 0, 2);
+    super.flush(kind, callback);
+  }
+
+  _processChunk(chunk, flush, limit = _getKMaxLength()) {
+    const data = toUint8Array(toBuffer(chunk));
+    this._bytesWritten += data.length;
+    const [bytes, message, errno] = zstd_stream_push(this._nativeHandle, data, flush, limit);
+    if (errno === -6) throw makeRangeError('ERR_BUFFER_TOO_LARGE', `Cannot create a Buffer larger than ${limit} bytes`);
+    if (errno === -7) throw makeTypeError('ERR_TRAILING_JUNK_AFTER_STREAM_END', message);
+    if (errno !== 0) {
+      const code = errno === -5 ? 'Z_BUF_ERROR' :
+        Object.keys(zstdConstants).find(key => key.startsWith('ZSTD_error_') && zstdConstants[key] === errno);
+      const error = makeError(code, message);
+      error.errno = errno;
+      throw error;
+    }
+    return bufferFromNativeBytes(bytes);
+  }
+
+  _transform(chunk, encoding, callback) {
+    try {
+      const flush = chunk.length === 0 && this._pendingFlushes.length > 0 ?
+        this._pendingFlushes.shift() : this._flushFlag;
+      const output = this._processChunk(chunk, flush);
+      if (output.length) this.push(output);
+      queueMicrotask(callback);
+    } catch (error) { callback(error); }
+  }
+
+  _flush(callback) {
+    try {
+      if (this._nativeHandle !== null) {
+        const output = this._processChunk(Buffer.alloc(0), this._finishFlush);
+        if (output.length) this.push(output);
+      }
+      this._closeHandle();
+      callback();
+    } catch (error) {
+      this._closeHandle();
+      callback(error);
+    }
+  }
+}
+
+export class ZstdCompress extends Zstd {
+  constructor(opts) { super(opts, false); }
+}
+export class ZstdDecompress extends Zstd {
+  constructor(opts) { super(opts, true); }
+}
+
 // ===== Factory functions =====
 
 export function createGzip(opts) { return new _Gzip(opts); }
@@ -1103,6 +1261,8 @@ export function createInflateRaw(opts) { return new _InflateRaw(opts); }
 export function createUnzip(opts) { return new _Unzip(opts); }
 export function createBrotliCompress(opts) { return new _BrotliCompress(opts); }
 export function createBrotliDecompress(opts) { return new _BrotliDecompress(opts); }
+export function createZstdCompress(opts) { return new ZstdCompress(opts); }
+export function createZstdDecompress(opts) { return new ZstdDecompress(opts); }
 
 // ===== Sync convenience functions =====
 
@@ -1230,6 +1390,27 @@ export function brotliDecompressSync(data, opts) {
 
 // ===== Async convenience functions =====
 
+function zstdSync(data, opts, engine) {
+  try {
+    const buffer = engine._processChunk(data, engine._finishFlush, opts?.maxOutputLength ?? _getKMaxLength());
+    return opts?.info ? { buffer, engine } : buffer;
+  } finally { engine._closeHandle(); }
+}
+
+export function zstdCompressSync(data, opts) { return zstdSync(data, opts, new ZstdCompress(opts)); }
+export function zstdDecompressSync(data, opts) { return zstdSync(data, opts, new ZstdDecompress(opts)); }
+
+function zstdAsync(data, opts, callback, Engine) {
+  if (typeof opts === 'function') { callback = opts; opts = {}; }
+  // Construction and input validation throw synchronously; codec failures go
+  // to the callback. Do not turn invalid options into asynchronous errors.
+  const engine = new Engine(opts);
+  try {
+    const input = toBuffer(data);
+    asyncConvenience(() => zstdSync(input, opts, engine), input, opts, callback);
+  } catch (error) { engine._closeHandle(); throw error; }
+}
+
 function asyncConvenience(syncFn, data, opts, callback) {
   if (typeof opts === 'function') {
     callback = opts;
@@ -1256,6 +1437,8 @@ export function inflateRaw(data, opts, callback) { asyncConvenience(inflateRawSy
 export function unzip(data, opts, callback) { asyncConvenience(unzipSync, data, opts, callback); }
 export function brotliCompress(data, opts, callback) { asyncConvenience(brotliCompressSync, data, opts, callback); }
 export function brotliDecompress(data, opts, callback) { asyncConvenience(brotliDecompressSync, data, opts, callback); }
+export function zstdCompress(data, opts, callback) { zstdAsync(data, opts, callback, ZstdCompress); }
+export function zstdDecompress(data, opts, callback) { zstdAsync(data, opts, callback, ZstdDecompress); }
 
 // ===== CRC32 =====
 
@@ -1295,6 +1478,8 @@ const _default = {
   Unzip,
   BrotliCompress,
   BrotliDecompress,
+  ZstdCompress,
+  ZstdDecompress,
 
   // Factory functions
   createGzip,
@@ -1306,6 +1491,8 @@ const _default = {
   createUnzip,
   createBrotliCompress,
   createBrotliDecompress,
+  createZstdCompress,
+  createZstdDecompress,
 
   // Sync
   gzipSync,
@@ -1317,6 +1504,8 @@ const _default = {
   unzipSync,
   brotliCompressSync,
   brotliDecompressSync,
+  zstdCompressSync,
+  zstdDecompressSync,
 
   // Async
   gzip,
@@ -1328,6 +1517,8 @@ const _default = {
   unzip,
   brotliCompress,
   brotliDecompress,
+  zstdCompress,
+  zstdDecompress,
 
   // Constants (directly accessible like Node.js)
   Z_NO_FLUSH,

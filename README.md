@@ -102,11 +102,11 @@ the user's WIT world:
 
 - `logging`: enables the `wasi:logging` import to be used for the JavaScript `console` API
 - `sqlite`: enables the `node:sqlite` module with an embedded SQLite database engine
-- `crypto`, `crypto-full`, `zlib`, `brotli`, `encoding`, `timezone`, `websocket` and `golem`
+- `crypto`, `crypto-full`, `zlib`, `brotli`, `zstd`, `encoding`, `timezone`, `websocket` and `golem`
   enable the corresponding builtin capabilities
 
 The default `normal-p3` tier enables `logging`, `crypto`, `zlib` and `encoding`; `full-p3` adds
-`crypto-full`, `brotli`, `sqlite` and `timezone`, and `full-no-logging-p3` is `full-p3` without
+`crypto-full`, `brotli`, `zstd`, `sqlite` and `timezone`, and `full-no-logging-p3` is `full-p3` without
 `logging`. `fetch` and `node:http` always use `wasi:http`. Keep the `p3` feature in custom feature
 lists: it enables the `wit-bindgen-p3` dependency, which a `--dependency wit-bindgen-p3=...`
 replacement must therefore declare with `optional = true`.
@@ -1257,11 +1257,13 @@ throws immediately. Environment-data APIs are unavailable.
 <details>
 <summary><strong><code>node:zlib</code></strong></summary>
 
-- **Classes:** `Deflate`, `Inflate`, `Gzip`, `Gunzip`, `DeflateRaw`, `InflateRaw`, `Unzip`, `BrotliCompress`, `BrotliDecompress`
-- **Factory:** `createGzip`, `createGunzip`, `createDeflate`, `createInflate`, `createDeflateRaw`, `createInflateRaw`, `createUnzip`, `createBrotliCompress`, `createBrotliDecompress`
-- **Async:** `gzip`, `gunzip`, `deflate`, `inflate`, `deflateRaw`, `inflateRaw`, `unzip`, `brotliCompress`, `brotliDecompress`
-- **Sync:** `gzipSync`, `gunzipSync`, `deflateSync`, `inflateSync`, `deflateRawSync`, `inflateRawSync`, `unzipSync`, `brotliCompressSync`, `brotliDecompressSync`
+- **Classes:** `Deflate`, `Inflate`, `Gzip`, `Gunzip`, `DeflateRaw`, `InflateRaw`, `Unzip`, `BrotliCompress`, `BrotliDecompress`, `ZstdCompress`, `ZstdDecompress`
+- **Factory:** `createGzip`, `createGunzip`, `createDeflate`, `createInflate`, `createDeflateRaw`, `createInflateRaw`, `createUnzip`, `createBrotliCompress`, `createBrotliDecompress`, `createZstdCompress`, `createZstdDecompress`
+- **Async:** `gzip`, `gunzip`, `deflate`, `inflate`, `deflateRaw`, `inflateRaw`, `unzip`, `brotliCompress`, `brotliDecompress`, `zstdCompress`, `zstdDecompress`
+- **Sync:** `gzipSync`, `gunzipSync`, `deflateSync`, `inflateSync`, `deflateRawSync`, `inflateRawSync`, `unzipSync`, `brotliCompressSync`, `brotliDecompressSync`, `zstdCompressSync`, `zstdDecompressSync`
 - `crc32`, `constants`, `codes`
+- Zstandard requires the optional `zstd` feature (included in the full tiers). It uses the reference
+  zstd codec with worker threads disabled for WASI; `normal-p3` does not include that codec.
 
 </details>
 

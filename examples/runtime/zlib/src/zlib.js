@@ -1,4 +1,6 @@
 import { Buffer } from 'node:buffer';
+import assert from 'node:assert/strict';
+import * as zlib from 'node:zlib';
 import {
   brotliCompressSync,
   brotliDecompressSync,
@@ -398,6 +400,99 @@ export async function testByteTransfer() {
   } finally {
     Object.setPrototypeOf = objectSetPrototypeOf;
     Buffer.prototype = bufferPrototype;
+  }
+  return true;
+}
+
+export async function testZstd() {
+  const external = Buffer.from('KLUv/SAgAQEATm9kZSAyNiBleHRlcm5hbCB2ZWN0b3I6IDEzICsgMjk=', 'base64');
+  assert.equal(zlib.zstdDecompressSync(external).toString(), 'Node 26 external vector: 13 + 29');
+  for (const create of [zlib.createZstdCompress, zlib.createZstdDecompress]) {
+    for (const rejectGarbageAfterEnd of [1, 'true', null]) {
+      assert.throws(() => create({ rejectGarbageAfterEnd }), {
+        name: 'TypeError', code: 'ERR_INVALID_ARG_TYPE',
+      });
+    }
+  }
+  const source = Buffer.from('Ω asymmetric compression: 13|29 '.repeat(3000));
+  for (const input of [Buffer.alloc(0), source, new DataView(source.buffer, source.byteOffset + 7, 29)]) {
+    const bytes = Buffer.isBuffer(input) ? input : Buffer.from(input.buffer, input.byteOffset, input.byteLength);
+    const compressed = zlib.zstdCompressSync(input, { params: { [constants.ZSTD_c_checksumFlag]: true } });
+    assert.deepEqual(zlib.zstdDecompressSync(compressed), bytes);
+    await new Promise((resolve, reject) => {
+      zlib.zstdCompress(input, (error, output) => {
+        if (error) return reject(error);
+        zlib.zstdDecompress(output, (error, result) => {
+          if (error) return reject(error);
+          try { assert.deepEqual(result, bytes); resolve(); } catch (error) { reject(error); }
+        });
+      });
+    });
+  }
+  const compressed = zlib.zstdCompressSync(source);
+  const trailingJunkError = { name: 'TypeError', code: 'ERR_TRAILING_JUNK_AFTER_STREAM_END' };
+  for (const trailing of [Buffer.from('junk'), compressed.subarray(0, 3)]) {
+    const withJunk = Buffer.concat([compressed, trailing]);
+    assert.deepEqual(zlib.zstdDecompressSync(withJunk), source);
+    assert.throws(() => zlib.zstdDecompressSync(withJunk, { rejectGarbageAfterEnd: true }), trailingJunkError);
+    await assert.rejects(new Promise((resolve, reject) => {
+      zlib.zstdDecompress(withJunk, { rejectGarbageAfterEnd: true }, (error, result) => {
+        if (error) reject(error); else resolve(result);
+      });
+    }), trailingJunkError);
+    for (const rejectGarbageAfterEnd of [false, true]) {
+      const decoder = zlib.createZstdDecompress({ rejectGarbageAfterEnd });
+      const chunks = [];
+      const done = new Promise((resolve, reject) => {
+        decoder.on('data', chunk => chunks.push(chunk));
+        decoder.on('end', resolve);
+        decoder.on('error', reject);
+      });
+      decoder.write(compressed);
+      decoder.end(trailing);
+      if (rejectGarbageAfterEnd) await assert.rejects(done, trailingJunkError);
+      else {
+        await done;
+        assert.deepEqual(Buffer.concat(chunks), source);
+      }
+    }
+  }
+  assert.throws(() => zlib.zstdDecompressSync(compressed.subarray(0, compressed.length - 1)), {
+    code: 'Z_BUF_ERROR', message: 'unexpected end of file',
+  });
+  const partial = zlib.zstdDecompressSync(compressed.subarray(0, compressed.length - 1), { finishFlush: 1 });
+  assert.deepEqual(partial, source.subarray(0, partial.length));
+  assert.throws(() => zlib.zstdCompressSync(source, { pledgedSrcSize: source.length - 1 }), {
+    code: 'ZSTD_error_srcSize_wrong', errno: 72,
+  });
+  assert.throws(() => zlib.zstdDecompressSync(compressed, { maxOutputLength: source.length - 1 }), {
+    code: 'ERR_BUFFER_TOO_LARGE',
+  });
+  const info = zlib.zstdCompressSync(source, { info: true });
+  assert.ok(info.engine instanceof zlib.ZstdCompress);
+  assert.deepEqual(zlib.zstdDecompressSync(info.buffer), source);
+  await streamRoundTrip(source, zlib.createZstdCompress(), zlib.createZstdDecompress());
+  const decoder = zlib.createZstdDecompress({ chunkSize: 64 });
+  const chunks = [];
+  const done = new Promise((resolve, reject) => {
+    decoder.on('data', chunk => chunks.push(chunk));
+    decoder.on('end', resolve);
+    decoder.on('error', reject);
+  });
+  for (const byte of Buffer.concat([external, compressed, external])) decoder.write(Buffer.from([byte]));
+  decoder.end();
+  await done;
+  assert.deepEqual(Buffer.concat(chunks), Buffer.concat([
+    Buffer.from('Node 26 external vector: 13 + 29'), source, Buffer.from('Node 26 external vector: 13 + 29'),
+  ]));
+  return true;
+}
+
+export function testZstdDisabled() {
+  const source = Buffer.from('normal tier: gzip stays available, zstd does not');
+  assert.deepEqual(gunzipSync(gzipSync(source)), source);
+  for (const operation of [zlib.zstdCompressSync, zlib.zstdDecompressSync]) {
+    assert.throws(() => operation(source), { code: 'ERR_ZLIB_INITIALIZATION_FAILED' });
   }
   return true;
 }

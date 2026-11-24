@@ -38,13 +38,14 @@ internal-test-execution = ["test-observability"]
 # Capability tiers (cumulative). The runtime ships its own `wasi:http@0.3` based fetch and
 # node:http unconditionally.
 normal-p3 = ["p3", "crypto", "zlib", "logging", "encoding"]
-full-p3 = ["normal-p3", "crypto-full", "brotli", "sqlite", "timezone"]
-full-no-logging-p3 = ["p3", "crypto", "zlib", "encoding", "crypto-full", "brotli", "sqlite", "timezone"]
+full-p3 = ["normal-p3", "crypto-full", "brotli", "zstd", "sqlite", "timezone"]
+full-no-logging-p3 = ["p3", "crypto", "zlib", "encoding", "crypto-full", "brotli", "zstd", "sqlite", "timezone"]
 
 logging = ["dep:wasi-logging"]
 encoding = ["dep:encoding_rs"]
 zlib = ["dep:flate2", "dep:crc32fast"]
 brotli = ["dep:brotli"]
+zstd = ["zlib", "dep:zstd-safe"]
 
 # Crypto: common subset
 crypto = [
@@ -152,6 +153,7 @@ sec1 = { version = "0.7", default-features = false, features = ["der", "alloc", 
 base64ct = { version = "1", features = ["alloc"] }
 flate2 = { version = "1", default-features = false, features = ["rust_backend"], optional = true }
 brotli = { version = "7", default-features = false, features = ["std"], optional = true }
+zstd-safe = { version = "7.2.4", default-features = false, features = ["std"], optional = true }
 crc32fast = { version = "1", optional = true }
 # WASI Preview 2 bindings for the residual synchronous interfaces (see the `p3` feature).
 wasip2 = "1.0"
