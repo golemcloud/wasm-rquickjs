@@ -160,6 +160,25 @@ pub async fn start_test_server() -> (u16, TestServerHandle) {
                 }),
             )
             .route(
+                "/echo-request",
+                axum::routing::any(
+                    async move |method: axum::http::Method, headers: HeaderMap, body: Bytes| {
+                        let header = |name: &str| {
+                            headers
+                                .get(name)
+                                .and_then(|h| h.to_str().ok())
+                                .map(str::to_string)
+                        };
+                        Json(serde_json::json!({
+                            "method": method.as_str(),
+                            "source": header("x-source"),
+                            "replacement": header("x-replacement"),
+                            "body": String::from_utf8_lossy(&body),
+                        }))
+                    },
+                ),
+            )
+            .route(
                 "/echo-form",
                 post(async move |mut multipart: Multipart| {
                     let mut parts = Vec::new();

@@ -26,6 +26,40 @@ function snapshotBufferSource(value) {
     return copy;
 }
 
+// RequestInit is a WebIDL dictionary: its members are read by name in lexicographic order, from
+// the object and its prototype chain whether enumerable or not, and undefined means absent.
+// Unknown members are never read. A defined method is converted to a string, so null is the
+// token "null" rather than a request to inherit.
+const requestInitMembers = [
+    'body', 'cache', 'credentials', 'duplex', 'headers', 'integrity', 'keepalive', 'method', 'mode',
+    'priority', 'redirect', 'referrer', 'referrerPolicy', 'signal', 'window',
+];
+
+function readRequestInit(options) {
+    const init = { __proto__: null };
+    if (options == null) {
+        return init;
+    }
+    for (const name of requestInitMembers) {
+        const value = options[name];
+        if (value !== undefined) {
+            init[name] = value;
+        }
+    }
+    if ('method' in init) {
+        init.method = normalizeFetchMethod(init.method);
+    }
+    return init;
+}
+
+// A GET or HEAD request cannot have a body, whether it comes from the init or from the input
+// Request, and even when it is empty. Check before the input body is consumed, tee'd or sent.
+function assertRequestBodyAllowed(method, hasBody) {
+    if (hasBody && (method === 'GET' || method === 'HEAD')) {
+        throw new TypeError('Request with GET/HEAD method cannot have body.');
+    }
+}
+
 // Defined as a plain (non-async) function so its prototype is
 // `Function.prototype` (not `AsyncFunction.prototype`) — which Node's vendored
 // `parallel/test-fetch.mjs` asserts. We deliberately do NOT use a
@@ -49,8 +83,12 @@ export function fetch(resource, options = {}) {
         let signal;
 
         if (typeof resource === 'object' && resource instanceof Request) {
-            method = normalizeFetchMethod(resource.method);
-            const headers = resource.headers;
+            const init = readRequestInit(options);
+            method = init.method ?? normalizeFetchMethod(resource.method);
+            const headers = new Headers('headers' in init ? init.headers : resource.headers);
+            // A null init body inherits the input body, like an absent one.
+            const replacementBody = init.body ?? null;
+            assertRequestBodyAllowed(method, replacementBody !== null || resource._body != null);
             if (!headers.has('Accept')) {
                 headers.set('Accept', '*/*');
             }
@@ -58,19 +96,24 @@ export function fetch(resource, options = {}) {
                 rawHeaders[name] = value;
             }
 
-            mode = options.mode || resource.mode;
-            referer = options.referrer || resource.referrer;
-            referrerPolicy = options.referrerPolicy || resource.referrerPolicy;
-            // let cache = options.cache || resource.cache; // cache not used in native yet
-            credentials = options.credentials || resource.credentials;
-            redirect = options.redirect || resource.redirect || 'follow';
-            signal = options.signal || resource.signal;
+            mode = init.mode ?? resource.mode;
+            referer = init.referrer ?? resource.referrer;
+            referrerPolicy = init.referrerPolicy ?? resource.referrerPolicy;
+            // let cache = init.cache ?? resource.cache; // cache not used in native yet
+            credentials = init.credentials ?? resource.credentials;
+            redirect = init.redirect ?? resource.redirect;
+            // A null signal detaches the request from the input's signal.
+            signal = 'signal' in init ? init.signal : resource.signal;
 
-            if (resource._bodyUsed) {
-                throw new TypeError("Request body is already used");
+            if (replacementBody !== null) {
+                body = replacementBody;
+            } else {
+                if (resource._bodyUsed) {
+                    throw new TypeError("Request body is already used");
+                }
+                resource._bodyUsed = true;
+                body = resource._body;
             }
-            resource._bodyUsed = true;
-            body = resource._body;
             url = resource.url;
         } else {
             method = normalizeFetchMethod(options.method || 'GET');
@@ -970,24 +1013,43 @@ export class Headers {
 export class Request {
     constructor(input, options = {}) {
         if (input instanceof Request) {
-            if (input._bodyUsed && input._body != null) {
-                throw new TypeError('Request body is already consumed');
+            const init = readRequestInit(options);
+            const method = init.method ?? input.method;
+            const headers = new Headers('headers' in init ? init.headers : input._headers);
+            // A null init body inherits the input body, like an absent one.
+            const replacementBody = init.body ?? null;
+            assertRequestBodyAllowed(method, replacementBody !== null || input._body != null);
+            if (replacementBody !== null) {
+                this._body = replacementBody instanceof ArrayBuffer || ArrayBuffer.isView(replacementBody)
+                    ? snapshotBufferSource(replacementBody)
+                    : replacementBody;
+            } else {
+                if (input._bodyUsed && input._body != null) {
+                    throw new TypeError('Request body is already consumed');
+                }
+                // Clone the request body. Buffered bodies have already been extracted from any mutable
+                // caller-owned BufferSource, so the internal value is replayable. A ReadableStream body
+                // has a single reader, so it is tee'd per the Fetch standard: the original keeps one
+                // branch and the clone gets the other.
+                if (input._body instanceof ReadableStream) {
+                    const [originalBranch, clonedBranch] = input._body.tee();
+                    input._body = originalBranch;
+                    this._body = clonedBranch;
+                } else {
+                    this._body = input._body;
+                }
             }
             this._url = input._url;
-            this._headers = new Headers(input._headers);
+            this._headers = headers;
             this._bodyUsed = false;
-            this._options = { ...input._options };
-            // Clone the request body. Buffered bodies have already been extracted from any mutable
-            // caller-owned BufferSource, so the internal value is replayable. A ReadableStream body
-            // has a single reader, so it is tee'd per the Fetch standard: the original keeps one
-            // branch and the clone gets the other.
-            if (input._body instanceof ReadableStream) {
-                const [originalBranch, clonedBranch] = input._body.tee();
-                input._body = originalBranch;
-                this._body = clonedBranch;
-            } else {
-                this._body = input._body;
+            const mergedOptions = { ...input._options };
+            for (const name in init) {
+                // A null signal detaches; other null members keep the input's value.
+                if (init[name] !== null || name === 'signal') {
+                    mergedOptions[name] = init[name];
+                }
             }
+            this._options = mergedOptions;
         } else {
             this._url = typeof input === 'string' ? input : String(input);
             this._headers = new Headers(options.headers || {});
