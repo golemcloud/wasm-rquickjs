@@ -12,4 +12,5 @@ world streams {
   export test-writable-from-web: func() -> string;
   export test-writable-to-web: func() -> string;
   export test-duplex-from-web: func() -> string;
+  export test-readable-stream-from-iterator: func() -> string;
 }

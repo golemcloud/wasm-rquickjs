@@ -10,4 +10,5 @@ declare module 'streams' {
   export function testWritableFromWeb(): string;
   export function testWritableToWeb(): string;
   export function testDuplexFromWeb(): string;
+  export function testReadableStreamFromIterator(): string;
 }

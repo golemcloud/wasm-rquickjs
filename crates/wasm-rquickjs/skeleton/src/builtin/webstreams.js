@@ -121,7 +121,7 @@ ReadableStream.from = function from(iterable) {
         ? asyncIteratorFactory.call(iterable)
         : iteratorFactory.call(iterable);
     if (iterator === null || (typeof iterator !== 'object' && typeof iterator !== 'function')) {
-        throw errInvalidState('The iterator method must return an object');
+        throw errInvalidState('Invalid state: The iterator method must return an object');
     }
     return new ReadableStream({
         async pull(controller) {
