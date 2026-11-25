@@ -1960,6 +1960,11 @@ There are a few important things to keep in mind when working on the project:
   creates fresh wasm memory, a fresh Wasmtime `Store` and component instance, a fresh WASI context and temporary
   directory, and fresh QuickJS runtime state. Do not group compatibility cases into one wasm instance.
 
+  The optimized harness builds binary-slot templates and passes current JavaScript as initializer input. With both
+  caches enabled, source-only edits reuse the wrapper and Wizer's native compilation, but produce a fresh snapshot.
+  Snapshot cache keys include all initializer sources, including additional modules. Unoptimized builds retain
+  embedded sources; explicit optimization of those components still exercises the initializer without source input.
+
   `WASM_RQUICKJS_TEST_DROP_CACHE=1` forces generated artifacts to be rebuilt and bypasses Wasmtime's filesystem cache.
   `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop.
   `WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE=1` reuses immutable prepared `Engine`/`Linker`/`Component` state on the

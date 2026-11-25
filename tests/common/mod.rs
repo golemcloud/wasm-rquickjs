@@ -4058,6 +4058,16 @@ pub struct CompiledTest {
 }
 
 impl CompiledTest {
+    fn example_modules(path: &Utf8Path, additional_modules: &[JsModuleSpec]) -> Vec<JsModuleSpec> {
+        let name = path.file_name().unwrap();
+        let mut modules = vec![JsModuleSpec {
+            name: name.to_string(),
+            mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
+        }];
+        modules.extend_from_slice(additional_modules);
+        modules
+    }
+
     pub async fn new(path: &Utf8Path, use_shared_target: bool) -> anyhow::Result<CompiledTest> {
         Self::new_with_features(path, use_shared_target, FeatureCombination::Normal).await
     }
@@ -4067,7 +4077,13 @@ impl CompiledTest {
         use_shared_target: bool,
         feature_combination: FeatureCombination,
     ) -> anyhow::Result<CompiledTest> {
-        Self::compile_with_features(path, use_shared_target, feature_combination, &[]).await
+        Self::compile_with_features(
+            path,
+            use_shared_target,
+            feature_combination,
+            &Self::example_modules(path, &[]),
+        )
+        .await
     }
 
     pub async fn new_with_features(
@@ -4090,17 +4106,25 @@ impl CompiledTest {
         feature_combination: FeatureCombination,
         additional_modules: &[JsModuleSpec],
     ) -> anyhow::Result<CompiledTest> {
-        let compiled = Self::compile_with_features(
-            path,
-            use_shared_target,
-            feature_combination,
-            additional_modules,
-        )
-        .await?;
-        let compiled = if test_unoptimized_enabled() {
-            compiled
+        let mut modules = Self::example_modules(path, additional_modules);
+        let sources = if test_unoptimized_enabled() {
+            None
         } else {
-            compiled.optimize().await?
+            let mut sources = Vec::new();
+            for module in &mut modules {
+                if let EmbeddingMode::EmbedFile(source) = &module.mode {
+                    sources.push(fs::read_to_string(source)?);
+                    module.mode = EmbeddingMode::BinarySlot;
+                }
+            }
+            Some(sources)
+        };
+        let compiled =
+            Self::compile_with_features(path, use_shared_target, feature_combination, &modules)
+                .await?;
+        let compiled = match sources {
+            Some(sources) => compiled.optimize_with_sources(Some(&sources)).await?,
+            None => compiled,
         };
         if truthy_env(TEST_PRECOMPILE_COMPONENT_ENV) {
             let started = Instant::now();
@@ -4119,7 +4143,7 @@ impl CompiledTest {
         path: &Utf8Path,
         use_shared_target: bool,
         feature_combination: FeatureCombination,
-        additional_modules: &[JsModuleSpec],
+        js_modules: &[JsModuleSpec],
     ) -> anyhow::Result<CompiledTest> {
         drop_test_artifact_cache_once();
         let component_profile = TestComponentProfile::from_env()?;
@@ -4140,7 +4164,7 @@ impl CompiledTest {
         let shared_target_name = shared_runtime_target_name(feature_combination);
         let shared_target = Utf8Path::new("..").join("..").join(&shared_target_name);
         let wasm_file_name = format!("{}.wasm", name.to_snake_case());
-        let compiled_wasm_path = if use_shared_target {
+        let cargo_wasm_path = if use_shared_target {
             Utf8Path::new("tmp")
                 .join(&shared_target_name)
                 .join("wasm32-wasip2")
@@ -4153,9 +4177,19 @@ impl CompiledTest {
                 .join(component_profile.cargo_output_directory())
                 .join(&wasm_file_name)
         };
-        let compile_cache_kind = format!("compile-{}", component_profile.label());
+        let source_input = js_modules.iter().any(|module| module.mode.is_binary_slot());
+        let embedding = if source_input { "slots" } else { "embedded" };
+        // Keep each published template separate from Cargo's mutable output and from
+        // the embedded variant. The wrapper-root lock covers compilation and copying.
+        let compiled_wasm_path =
+            wrapper_crate_root.join(format!("{}.{embedding}.wasm", name.to_snake_case()));
+        let compile_cache_kind = format!("compile-{}-{embedding}", component_profile.label());
         let compile_stamp = test_cache_stamp(name, feature_combination, &compile_cache_kind);
-        let compile_inputs = compile_cache_inputs(path);
+        let mut compile_inputs = compile_cache_inputs(&path.join("wit"));
+        compile_inputs.extend(js_modules.iter().filter_map(|module| match &module.mode {
+            EmbeddingMode::EmbedFile(source) => Some(source.clone()),
+            _ => None,
+        }));
         let compile_signature = cache_stamp_signature(
             name,
             feature_combination,
@@ -4175,7 +4209,7 @@ impl CompiledTest {
                     }
                     .to_string(),
                 ),
-                ("additional_modules", format!("{additional_modules:?}")),
+                ("js_modules", format!("{js_modules:?}")),
             ],
         );
 
@@ -4224,12 +4258,7 @@ impl CompiledTest {
         rewrite_wit_exports_async(&path.join("wit"), &wit_dir)?;
 
         println!("Generating wrapper create for example '{name}' to {wrapper_crate_root}");
-        let mut js_modules = vec![JsModuleSpec {
-            name: name.to_string(),
-            mode: EmbeddingMode::EmbedFile(path.join("src").join(format!("{name}.js"))),
-        }];
-        js_modules.extend_from_slice(additional_modules);
-        generate_wrapper_crate(&wit_dir, &js_modules, &wrapper_crate_root, None)?;
+        generate_wrapper_crate(&wit_dir, js_modules, &wrapper_crate_root, None)?;
         use_local_golem_websocket(&wrapper_crate_root)?;
 
         println!("Compiling wrapper crate in {wrapper_crate_root}");
@@ -4277,6 +4306,9 @@ impl CompiledTest {
             .into());
         }
 
+        let pending = NamedUtf8TempFile::new_in(&wrapper_crate_root)?;
+        fs::copy(&cargo_wasm_path, pending.path())?;
+        pending.persist(&compiled_wasm_path)?;
         if test_artifact_cache_enabled() {
             refresh_cache_stamp(&compile_stamp, &compile_signature)?;
         }
@@ -4289,12 +4321,24 @@ impl CompiledTest {
     /// Run Wizer pre-initialization on the compiled component.
     /// Returns a new `CompiledTest` pointing to the optimized wasm file.
     pub async fn optimize(&self) -> anyhow::Result<CompiledTest> {
+        self.optimize_with_sources(None).await
+    }
+
+    async fn optimize_with_sources(
+        &self,
+        sources: Option<&[String]>,
+    ) -> anyhow::Result<CompiledTest> {
         drop_test_artifact_cache_once();
 
         let input = self.wasm_path();
         let optimized = input.with_extension("optimized.wasm");
         let optimize_stamp = input.with_extension("optimized.stamp");
         let optimize_inputs = optimize_cache_inputs(input);
+        let mut source_hash = blake3::Hasher::new();
+        for source in sources.into_iter().flatten() {
+            source_hash.update(&(source.len() as u64).to_le_bytes());
+            source_hash.update(source.as_bytes());
+        }
         let optimize_signature = cache_stamp_signature(
             input.file_stem().unwrap_or("component"),
             FeatureCombination::Normal,
@@ -4302,7 +4346,10 @@ impl CompiledTest {
             &[
                 ("input", input.to_string()),
                 ("init_func", "wizer-initialize".to_string()),
-                ("optimizer", "wasm_rquickjs::optimize_component".to_string()),
+                (
+                    "initializer_sources",
+                    format!("{}:{}", sources.is_some(), source_hash.finalize()),
+                ),
             ],
         );
         if test_artifact_cache_enabled()
@@ -4348,7 +4395,24 @@ impl CompiledTest {
         // Readers outlive the build lock. Publish a complete component instead of truncating
         // the shared output while another worker may be loading it.
         let pending = NamedUtf8TempFile::new_in(optimized.parent().unwrap())?;
-        wasm_rquickjs::optimize_component(input, pending.path(), "wizer-initialize").await?;
+        let cache_config = test_wasmtime_cache_enabled().then(wasmtime::CacheConfig::new);
+        let result = wasm_rquickjs::optimize_component_with_options(
+            input,
+            pending.path(),
+            "wizer-initialize",
+            &wasm_rquickjs::OptimizeOptions {
+                sources,
+                cache_config: cache_config.as_ref(),
+                ..Default::default()
+            },
+        )
+        .await?;
+        if let Some(stats) = result.compilation_cache {
+            println!(
+                "Optimizer native cache: {} hit(s), {} miss(es)",
+                stats.hits, stats.misses
+            );
+        }
         pending.persist(&optimized)?;
         if test_artifact_cache_enabled() {
             refresh_cache_stamp(&optimize_stamp, &optimize_signature)?;
@@ -4372,8 +4436,7 @@ impl CompiledTest {
 ///
 /// The wire format is just the **absolute** wasm path. The parent compiles
 /// the wrapper crate once (via the existing `CompiledTest::new*` ctors) into
-/// a stable on-disk location under `tmp/<example>/<features>/...` (or the
-/// shared `tmp/rt-target/...` tree when `use_shared_target = true`) — these
+/// a stable on-disk location under `tmp/<example>/<features>/...` — these
 /// paths outlive both the dep value and the suite. Each worker simply receives
 /// the path and reconstructs a `Precompiled(...)` `CompiledTest` that points
 /// at the same on-disk artifact.
