@@ -7837,10 +7837,11 @@ function validateKeyAlgorithm(key, algorithmName) {
 
 // WebIDL `[EnforceRange] unsigned long?`, as Node.js 24 and 26 apply it to deriveBits:
 // null and undefined stay null, fractions truncate toward zero, and non-finite or
-// out-of-range values throw.
+// out-of-range values throw. Unary plus is ToNumber, which throws for BigInt values,
+// unlike Number().
 function toNullableUnsignedLong(value) {
     if (value === null || value === undefined) return null;
-    const number = Number(value);
+    const number = +value;
     if (!Number.isFinite(number)) {
         throw new TypeError('The length is not a finite number');
     }

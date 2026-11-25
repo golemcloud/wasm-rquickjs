@@ -459,7 +459,8 @@ export async function cfrg448Vectors() {
     };
     out.subtleLengths = {};
     for (const [label, length] of [['0', 0], ['1', 1], ['12', 12], ['12.9', 12.9], ['null', null],
-        ['-8', -8], ['NaN', NaN], ['2^32', 2 ** 32], ['456', 456]]) {
+        ['-8', -8], ['NaN', NaN], ['2^32', 2 ** 32], ['456', 456], ["'16'", '16'],
+        ['valueOf 16', { valueOf: () => 16 }], ['128n', 128n], ['valueOf 128n', { valueOf: () => 128n }]]) {
         out.subtleLengths[label] = await bitsHex(length);
     }
 

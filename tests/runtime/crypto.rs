@@ -1125,6 +1125,34 @@ async fn crypto_cfrg448_vectors(
     let shared = "07fff4181ac6cc95ec1c16a94a0f74d12da232ce40a77552281d282bb60c0b56fd2464c335543936521c24403085d59a449a5037514a879d";
     // RFC 8032, section 7.4, "1 octet".
     let ed_signature = "26b8f91727bd62897af15e41eb43c377efb9c610d48f2335cb0bd0087810f4352541b143c4b981b7e18f62de8ccdf633fc1bf037ab7cd779805e0dbcc0aae1cbcee1afb2e027df36bc04dcecbf154336c19f0af7e0a6472905e799f1953d2a0ff3348ab21aa4adafd1d234441cf807c03a00";
+    // What Node.js 24.22.3 and 26.13.1 return; 22.14.0 accepted the
+    // negative, NaN, 2^32 and object-to-BigInt lengths.
+    let subtle_lengths = serde_json::json!({
+        "0": "",
+        "1": "00",
+        "12": "07f0",
+        "12.9": "07f0",
+        "null": shared,
+        "-8": "TypeError",
+        "NaN": "TypeError",
+        "2^32": "TypeError",
+        "456": "OperationError",
+        "'16'": "07ff",
+        "valueOf 16": "07ff",
+        "128n": "TypeError",
+        "valueOf 128n": "TypeError",
+    });
+    let subtle_key_checks = serde_json::json!({
+        "deriveKeyOnlyBits": "InvalidAccessError",
+        "deriveKeyOnlyKey": "ok",
+        "deriveBitsOnlyKey": "InvalidAccessError",
+        "algorithmNameMismatch": "InvalidAccessError",
+        "peerAlgorithmMismatch": "InvalidAccessError",
+        "publicBaseKey": "InvalidAccessError",
+        "privatePeerKey": "InvalidAccessError",
+        "notCryptoKeyPeer": "TypeError",
+        "curveMismatch": "InvalidAccessError",
+    });
     assert_eq!(
         actual,
         serde_json::json!({
@@ -1155,30 +1183,8 @@ async fn crypto_cfrg448_vectors(
             "ed448GeneratedRoundTrip": true,
             "subtleECDHMatchesNode": true,
             "subtleX25519MatchesNode": true,
-            // What Node.js 24.22.3 and 26.13.1 return; 22.14.0 accepted the
-            // negative, NaN and 2^32 lengths.
-            "subtleLengths": {
-                "0": "",
-                "1": "00",
-                "12": "07f0",
-                "12.9": "07f0",
-                "null": shared,
-                "-8": "TypeError",
-                "NaN": "TypeError",
-                "2^32": "TypeError",
-                "456": "OperationError",
-            },
-            "subtleKeyChecks": {
-                "deriveKeyOnlyBits": "InvalidAccessError",
-                "deriveKeyOnlyKey": "ok",
-                "deriveBitsOnlyKey": "InvalidAccessError",
-                "algorithmNameMismatch": "InvalidAccessError",
-                "peerAlgorithmMismatch": "InvalidAccessError",
-                "publicBaseKey": "InvalidAccessError",
-                "privatePeerKey": "InvalidAccessError",
-                "notCryptoKeyPeer": "TypeError",
-                "curveMismatch": "InvalidAccessError",
-            },
+            "subtleLengths": subtle_lengths,
+            "subtleKeyChecks": subtle_key_checks,
         })
     );
     Ok(())
