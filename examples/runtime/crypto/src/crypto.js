@@ -447,6 +447,49 @@ export async function cfrg448Vectors() {
         const bits = Buffer.from(await subtle.deriveBits({ name, public: peer }, priv, 256));
         out['subtle' + name + 'MatchesNode'] = bits.equals(diffieHellman({ privateKey: one.privateKey, publicKey: two.publicKey }));
     }
+
+    // deriveBits lengths: null keeps the whole secret, fractions truncate, and
+    // negative, non-finite or too-long lengths are rejected.
+    const bitsHex = async (length) => {
+        try {
+            return Buffer.from(await subtle.deriveBits({ name: 'X448', public: bp }, a, length)).toString('hex');
+        } catch (e) {
+            return e.name;
+        }
+    };
+    out.subtleLengths = {};
+    for (const [label, length] of [['0', 0], ['1', 1], ['12', 12], ['12.9', 12.9], ['null', null],
+        ['-8', -8], ['NaN', NaN], ['2^32', 2 ** 32], ['456', 456]]) {
+        out.subtleLengths[label] = await bitsHex(length);
+    }
+
+    // deriveBits and deriveKey check the key's usage, type and algorithm before deriving.
+    const errorName = async (promise) => {
+        try {
+            await promise;
+            return 'ok';
+        } catch (e) {
+            return e.name;
+        }
+    };
+    const bitsOnly = await subtle.generateKey({ name: 'X25519' }, false, ['deriveBits']);
+    const keyOnly = await subtle.generateKey({ name: 'X25519' }, false, ['deriveKey']);
+    const otherX448 = await subtle.generateKey({ name: 'X448' }, false, ['deriveBits']);
+    const p256 = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveBits']);
+    const p384 = await subtle.generateKey({ name: 'ECDH', namedCurve: 'P-384' }, false, ['deriveBits']);
+    const aes = { name: 'AES-GCM', length: 128 };
+    const x25519 = (pub) => ({ name: 'X25519', public: pub });
+    out.subtleKeyChecks = {
+        deriveKeyOnlyBits: await errorName(subtle.deriveBits(x25519(bitsOnly.publicKey), keyOnly.privateKey, 128)),
+        deriveKeyOnlyKey: await errorName(subtle.deriveKey(x25519(bitsOnly.publicKey), keyOnly.privateKey, aes, false, ['encrypt'])),
+        deriveBitsOnlyKey: await errorName(subtle.deriveKey(x25519(keyOnly.publicKey), bitsOnly.privateKey, aes, false, ['encrypt'])),
+        algorithmNameMismatch: await errorName(subtle.deriveBits({ name: 'X448', public: keyOnly.publicKey }, bitsOnly.privateKey, 128)),
+        peerAlgorithmMismatch: await errorName(subtle.deriveBits(x25519(otherX448.publicKey), bitsOnly.privateKey, 128)),
+        publicBaseKey: await errorName(subtle.deriveBits(x25519(keyOnly.publicKey), bitsOnly.publicKey, 128)),
+        privatePeerKey: await errorName(subtle.deriveBits(x25519(keyOnly.privateKey), bitsOnly.privateKey, 128)),
+        notCryptoKeyPeer: await errorName(subtle.deriveBits(x25519({}), bitsOnly.privateKey, 128)),
+        curveMismatch: await errorName(subtle.deriveBits({ name: 'ECDH', public: p384.publicKey }, p256.privateKey, 128)),
+    };
     return JSON.stringify(out);
 }
 

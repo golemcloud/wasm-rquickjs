@@ -7835,10 +7835,26 @@ function validateKeyAlgorithm(key, algorithmName) {
     }
 }
 
+// WebIDL `[EnforceRange] unsigned long?`, as Node.js 24 and 26 apply it to deriveBits:
+// null and undefined stay null, fractions truncate toward zero, and non-finite or
+// out-of-range values throw.
+function toNullableUnsignedLong(value) {
+    if (value === null || value === undefined) return null;
+    const number = Number(value);
+    if (!Number.isFinite(number)) {
+        throw new TypeError('The length is not a finite number');
+    }
+    const truncated = Math.trunc(number);
+    if (truncated < 0 || truncated > 4294967295) {
+        throw new TypeError('The length is outside the expected range of 0 to 4294967295');
+    }
+    return truncated;
+}
+
 // WebCrypto ECDH/X25519/X448 deriveBits: a null length returns the whole secret; a
 // shorter length keeps its leading bits and zeroes the unused low bits of the last byte.
 function truncateDerivedBits(secret, length) {
-    if (length === null || length === undefined) {
+    if (length === null) {
         return new Uint8Array(secret).buffer;
     }
     if (length > secret.length * 8) {
@@ -7850,6 +7866,59 @@ function truncateDerivedBits(secret, length) {
         out[out.length - 1] &= (0xff << unused) & 0xff;
     }
     return out.buffer;
+}
+
+// Shared by deriveBits and deriveKey; `usage` is the key usage the caller requires.
+function deriveSecretBits(algorithm, baseKey, length, usage) {
+    const algoName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+    if (!algoName) throw new TypeError('Algorithm must be a string or an object with a name property');
+    const name = algoName.toUpperCase();
+
+    if (name === 'PBKDF2') {
+        const hashAlgo = algorithm.hash;
+        const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+        const salt = toBytes(algorithm.salt);
+        const secret = baseKey._keyObject.export();
+        const out = pbkdf2Sync(secret, salt, algorithm.iterations, length / 8, hashName);
+        return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
+    }
+
+    if (name === 'HKDF') {
+        const hashAlgo = algorithm.hash;
+        const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+        const normalized = normalizeHashAlgorithm(hashName);
+        const salt = toBytes(algorithm.salt);
+        const info = toBytes(algorithm.info);
+        const ikm = baseKey._keyObject.export();
+        const out = hkdfSync(normalized, ikm, salt, info, length / 8);
+        return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
+    }
+
+    if (name === 'ECDH' || name === 'X25519' || name === 'X448') {
+        const peerKey = algorithm.public;
+        const bitLength = toNullableUnsignedLong(length);
+        if (!cryptoKeyBrand.has(baseKey) || !cryptoKeyBrand.has(peerKey)) {
+            throw new TypeError(name + ' requires CryptoKey base and public keys');
+        }
+        validateKeyUsage(baseKey, usage);
+        validateKeyAlgorithm(baseKey, name);
+        if (baseKey._type !== 'private' || peerKey._type !== 'public') {
+            throw new DOMException(name + ' requires a private base key and a public key', 'InvalidAccessError');
+        }
+        validateKeyAlgorithm(peerKey, name);
+        if (name === 'ECDH' && peerKey._algorithm.namedCurve !== baseKey._algorithm.namedCurve) {
+            throw new DOMException('Named curve mismatch', 'InvalidAccessError');
+        }
+        let secret;
+        try {
+            secret = toBytes(diffieHellman({ privateKey: baseKey._keyObject, publicKey: peerKey._keyObject }));
+        } catch (_err) {
+            throw new DOMException(name + ' deriveBits failed', 'OperationError');
+        }
+        return truncateDerivedBits(secret, bitLength);
+    }
+
+    throw new Error('Unsupported algorithm for deriveBits: ' + algoName);
 }
 
 class SubtleCrypto {
@@ -8510,45 +8579,7 @@ class SubtleCrypto {
 
     async deriveBits(algorithm, baseKey, length) {
         assertSubtleCrypto(this);
-        const algoName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
-        if (!algoName) throw new TypeError('Algorithm must be a string or an object with a name property');
-        const name = algoName.toUpperCase();
-
-        if (name === 'PBKDF2') {
-            const hashAlgo = algorithm.hash;
-            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
-            const salt = toBytes(algorithm.salt);
-            const secret = baseKey._keyObject.export();
-            const out = pbkdf2Sync(secret, salt, algorithm.iterations, length / 8, hashName);
-            return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
-        }
-
-        if (name === 'HKDF') {
-            const hashAlgo = algorithm.hash;
-            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
-            const normalized = normalizeHashAlgorithm(hashName);
-            const salt = toBytes(algorithm.salt);
-            const info = toBytes(algorithm.info);
-            const ikm = baseKey._keyObject.export();
-            const out = hkdfSync(normalized, ikm, salt, info, length / 8);
-            return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
-        }
-
-        if (name === 'ECDH' || name === 'X25519' || name === 'X448') {
-            const peerKey = algorithm.public;
-            if (!peerKey || peerKey._type !== 'public') {
-                throw new DOMException(name + ' requires a public key', 'InvalidAccessError');
-            }
-            let secret;
-            try {
-                secret = toBytes(diffieHellman({ privateKey: baseKey._keyObject, publicKey: peerKey._keyObject }));
-            } catch (_err) {
-                throw new DOMException(name + ' deriveBits failed', 'OperationError');
-            }
-            return truncateDerivedBits(secret, length);
-        }
-
-        throw new Error('Unsupported algorithm for deriveBits: ' + algoName);
+        return deriveSecretBits(algorithm, baseKey, length, 'deriveBits');
     }
 
     async deriveKey(algorithm, baseKey, derivedKeyAlgorithm, extractable, keyUsages) {
@@ -8573,7 +8604,7 @@ class SubtleCrypto {
             derivedLength = derivedKeyAlgorithm.length;
         }
 
-        const bits = await SubtleCrypto.prototype.deriveBits.call(this, algorithm, baseKey, derivedLength);
+        const bits = deriveSecretBits(algorithm, baseKey, derivedLength, 'deriveKey');
         const keyObject = createSecretKey(new Uint8Array(bits));
         return keyObject.toCryptoKey(derivedKeyAlgorithm, extractable, keyUsages);
     }

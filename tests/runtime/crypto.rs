@@ -1155,6 +1155,30 @@ async fn crypto_cfrg448_vectors(
             "ed448GeneratedRoundTrip": true,
             "subtleECDHMatchesNode": true,
             "subtleX25519MatchesNode": true,
+            // What Node.js 24.22.3 and 26.13.1 return; 22.14.0 accepted the
+            // negative, NaN and 2^32 lengths.
+            "subtleLengths": {
+                "0": "",
+                "1": "00",
+                "12": "07f0",
+                "12.9": "07f0",
+                "null": shared,
+                "-8": "TypeError",
+                "NaN": "TypeError",
+                "2^32": "TypeError",
+                "456": "OperationError",
+            },
+            "subtleKeyChecks": {
+                "deriveKeyOnlyBits": "InvalidAccessError",
+                "deriveKeyOnlyKey": "ok",
+                "deriveBitsOnlyKey": "InvalidAccessError",
+                "algorithmNameMismatch": "InvalidAccessError",
+                "peerAlgorithmMismatch": "InvalidAccessError",
+                "publicBaseKey": "InvalidAccessError",
+                "privatePeerKey": "InvalidAccessError",
+                "notCryptoKeyPeer": "TypeError",
+                "curveMismatch": "InvalidAccessError",
+            },
         })
     );
     Ok(())
