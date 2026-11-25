@@ -278,6 +278,9 @@ restore-safe pre-init stdio and guest diagnostics.
 
 Importing these builtins, embedded/data modules and explicitly supplied module
 sources remains supported. Logging and pure computation remain available.
+A call to any other import that the optimizer does not provide, such as a Golem
+host function, traps and fails the build. The error names the fully qualified
+import, for example `golem:agent/host@2.0.0#get-config-value`.
 `process.cwd()` is the logical `/` during pre-initialization and refreshes from the
 runtime environment after restoration. `wasm-rquickjs:execution` may be imported,
 but `runJavaScript()` and `startJavaScript()` are runtime-only, including for pure

@@ -291,3 +291,69 @@ fn optimizer_reports_native_exception_origins() -> anyhow::Result<()> {
     }
     Ok(())
 }
+
+#[tokio::test]
+async fn unknown_import_traps_name_the_qualified_import() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let input = temp.path().join("input.wasm");
+    let output = temp.path().join("output.wasm");
+    // Both interfaces export `get`; one stub is synchronous and one concurrent,
+    // so only the interface and version distinguish the two traps.
+    std::fs::write(
+        &input,
+        wat::parse_str(
+            r#"(component
+            (import "golem:agent/host@2.0.0" (instance $host
+                (export "get-config-value" (func))
+                (export "get" (func async))))
+            (import "wasi:config/store@0.2.0-draft" (instance $store
+                (export "get" (func))))
+            (alias export $host "get-config-value" (func $host-get-config-value))
+            (alias export $host "get" (func $host-get))
+            (alias export $store "get" (func $store-get))
+            (core func $host-get-config-value (canon lower (func $host-get-config-value)))
+            (core func $host-get (canon lower (func $host-get)))
+            (core func $store-get (canon lower (func $store-get)))
+            (core instance $imports
+                (export "host-get-config-value" (func $host-get-config-value))
+                (export "host-get" (func $host-get))
+                (export "store-get" (func $store-get)))
+            (core module $m
+                (import "imports" "host-get-config-value" (func $host-get-config-value))
+                (import "imports" "host-get" (func $host-get))
+                (import "imports" "store-get" (func $store-get))
+                (memory (export "memory") 1)
+                (func (export "host-get-config-value") call $host-get-config-value)
+                (func (export "host-get") call $host-get)
+                (func (export "store-get") call $store-get))
+            (core instance $i (instantiate $m (with "imports" (instance $imports))))
+            (func (export "init-host-get-config-value") (canon lift (core func $i "host-get-config-value")))
+            (func (export "init-host-get") (canon lift (core func $i "host-get")))
+            (func (export "init-store-get") (canon lift (core func $i "store-get"))))"#,
+        )?,
+    )?;
+    let imports = [
+        "golem:agent/host@2.0.0#get-config-value",
+        "golem:agent/host@2.0.0#get",
+        "wasi:config/store@0.2.0-draft#get",
+    ];
+    for (init_func, expected) in [
+        ("init-host-get-config-value", imports[0]),
+        ("init-host-get", imports[1]),
+        ("init-store-get", imports[2]),
+    ] {
+        let failure = optimize_component(&input, &output, init_func)
+            .await
+            .unwrap_err();
+        let text = format!("{failure:#}");
+        for import in imports {
+            assert_eq!(
+                text.contains(&format!("unknown import `{import}`")),
+                import == expected,
+                "{init_func}: {text}"
+            );
+        }
+        assert!(!output.exists());
+    }
+    Ok(())
+}
