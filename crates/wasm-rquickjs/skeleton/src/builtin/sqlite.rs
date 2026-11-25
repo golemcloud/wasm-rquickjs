@@ -1362,7 +1362,11 @@ fn stmt_iterate_return_impl<'js>(
         unsafe {
             rusqlite::ffi::sqlite3_reset(iter.state.raw.get());
         }
-        iter.state.cursor.set(false);
+        // Node resets even for a stale iterator, but it must not clear the
+        // recovery guard owned by a newer, still-live iterator.
+        if iter.generation == iter.state.generation.get() {
+            iter.state.cursor.set(false);
+        }
         iter.done.set(true);
         take_pending_js_exception(&ctx);
     }

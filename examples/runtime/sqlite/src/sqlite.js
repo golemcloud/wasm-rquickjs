@@ -456,7 +456,15 @@ export function testStatementRecovery() {
       allowUnknownNamedParameters: true,
     });
     assert.deepEqual(query.all({ $pick: 1, ignored: 2 }), [[13n], [29n]]);
+    const stale = query.iterate({ $pick: 1 });
+    assert.deepEqual(stale.next().value, [13n]);
     const cursor = query.iterate({ $pick: 1 });
+    assert.deepEqual(cursor.next().value, [13n]);
+    stale.return();
+    // Node 26 resets the shared statement even for an older iterator's return.
+    // Recovery must nevertheless reject while the newer iterator remains live.
+    assert.throws(() => restoreDatabaseSync(db, image), { code: 'ERR_INVALID_STATE' });
+    assert.deepEqual(db.prepare('SELECT old FROM items ORDER BY old').all().map(row => row.old), [13, 29]);
     assert.deepEqual(cursor.next().value, [13n]);
     assert.throws(() => restoreDatabaseSync(db, image), { code: 'ERR_INVALID_STATE' });
     assert.deepEqual(cursor.next().value, [29n]);
@@ -471,6 +479,13 @@ export function testStatementRecovery() {
     query.setReturnArrays(false);
     assert.deepEqual(query.get({ $pick: 1 }), { __proto__: null, replacement: 41n, label: 'pear' });
     assert.equal(db.prepare('SELECT twice(replacement) AS n FROM items ORDER BY replacement').get().n, 82);
+    const completedQuery = db.prepare('SELECT replacement FROM items ORDER BY replacement');
+    const older = completedQuery.iterate();
+    assert.equal(older.next().value.replacement, 41);
+    assert.deepEqual([...completedQuery.iterate()].map(row => row.replacement), [41, 53]);
+    older.return();
+    // A stale return must not resurrect a cursor after the newer one drained.
+    restoreDatabaseSync(db, image);
     // The attempted image must differ from live state, so rejection alone
     // cannot hide a recovery that mutated the database before throwing.
     db.exec('UPDATE items SET replacement = replacement + 100');
