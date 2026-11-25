@@ -26,7 +26,7 @@ env:
   WASM_RQUICKJS_TEST_WASMTIME_CACHE: "1"
   WASM_RQUICKJS_TEST_PREPARED_COMPONENT_CACHE: "1"
   WASM_RQUICKJS_TEST_PRECOMPILE_COMPONENT: "1"
-  # The `build` and `test-other` jobs build and test against Golem's wasmtime
+  # The `build`, `test-other`, and fork optimizer jobs use Golem's wasmtime
   # fork — see .github/scripts/enable-wasmtime-fork.sh for the rationale. They
   # run that script (which uncomments the [patch.crates-io] block in
   # Cargo.toml) and pass --features use-golem-wasmtime via this variable.
@@ -104,6 +104,7 @@ jobs:
         with:
           cache-key: fork
           wasmtime-fork: "true"
+          component-cache-key: fork-other
       - name: Test performance-report currentness selection
         run: tools/performance-report-currentness.sh self-test
       - name: Select agentic TypeScript currentness inputs
@@ -143,17 +144,64 @@ jobs:
         env:
           WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
         run: cargo test --test p3_invocation_tasks $CI_WASMTIME_FORK_FEATURES -- --test-threads 2
-      - name: Optimizer copy budget contracts (Golem fork)
-        # Full guest templates spawn Cargo/Wasmtime compiler pools. Reuse only
-        # build artifacts and bound competing cases; runtime state stays fresh.
-        env:
-          WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
-        run: cargo test --test optimize $CI_WASMTIME_FORK_FEATURES -- --test-threads 2
       - name: Collect Test Report
         uses: ./.github/actions/collect-test-report
         if: always()
         with:
           name: test-other
+
+  test-optimize:
+    needs: [quick-checks]
+    runs-on: blacksmith-16vcpu-ubuntu-2404
+    strategy:
+      fail-fast: false
+      matrix:
+        host: [stock, fork]
+        shard: [guest-io, state]
+    env:
+      WASM_RQUICKJS_TEST_ARTIFACT_CACHE: "1"
+      # Select the expensive denial scenarios and their exact complement, so
+      # new optimizer tests are included without maintaining an allowlist.
+      OPTIMIZER_IO_FILTER: preinit_tests::optimizer_rejects_
+      HOST: ${{ matrix.host }}
+      SHARD: ${{ matrix.shard }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+      - uses: ./.github/actions/setup
+        with:
+          cache-key: ${{ matrix.host }}
+          wasmtime-fork: ${{ matrix.host == 'fork' }}
+          component-cache-key: ${{ matrix.host }}-optimizer-${{ matrix.shard }}
+      - name: Optimizer tests
+        # Each case can launch Cargo/Wasmtime compiler pools. Keep both hosts
+        # bounded; only build artifacts are shared, never guest runtime state.
+        shell: bash
+        env:
+          OPTIMIZER_LOG: ${{ runner.temp }}/optimizer-tests.log
+        run: |
+          features=()
+          if [[ "$HOST" == fork ]]; then
+            read -ra features <<< "$CI_WASMTIME_FORK_FEATURES"
+          fi
+          filter=("$OPTIMIZER_IO_FILTER")
+          if [[ "$SHARD" == state ]]; then
+            filter=(--skip "$OPTIMIZER_IO_FILTER")
+          fi
+          set -o pipefail
+          /usr/bin/time -v cargo test --test optimize "${features[@]}" -- \
+            --test-threads 2 "${filter[@]}" 2>&1 | tee "$OPTIMIZER_LOG"
+      # libtest does not produce test-r's CTRF reports. Preserve full compiler,
+      # test, wall-time and peak-RSS evidence without using the CTRF collector.
+      - name: Preserve optimizer evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: optimizer-${{ matrix.host }}-${{ matrix.shard }}-attempt${{ github.run_attempt }}
+          path: ${{ runner.temp }}/optimizer-tests.log
+          retention-days: 35
+          if-no-files-found: warn
 
   test-p3:
     needs: [quick-checks]
@@ -164,7 +212,7 @@ jobs:
         suite: [generation, async-values]
         include:
           - suite: generation
-            test_args: --test p3_generation --test p3_exported_resource --test optimize
+            test_args: --test p3_generation --test p3_exported_resource
           - suite: async-values
             # Each case creates its own Tokio runtime and compiles a Wasmtime
             # component inside the timeout. Bound competing compiler/runtime pools.
@@ -332,7 +380,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   release-binaries:
-    needs: [build, test-other, test-runtime, test-node-compat, test-p3]
+    needs: [build, test-other, test-optimize, test-runtime, test-node-compat, test-p3]
     if: "startsWith(github.ref, 'refs/tags/v')"
     strategy:
       matrix:
@@ -407,7 +455,7 @@ jobs:
           files: ${{ env.ARCHIVE }}
 
   publish:
-    needs: [build, test-other, test-runtime, test-node-compat, test-p3]
+    needs: [build, test-other, test-optimize, test-runtime, test-node-compat, test-p3]
     if: "startsWith(github.ref, 'refs/tags/v')"
     runs-on: blacksmith-16vcpu-ubuntu-2404
     steps:

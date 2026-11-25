@@ -1093,20 +1093,7 @@ fn p3_generated_crate_builds_with_wasi_system_clock_import() -> anyhow::Result<(
 
     generate_p3(temp.path())?;
 
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        output.status.success(),
-        "P3 generated crate with a wasi:clocks/system-clock import should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    build_p3_with_features(temp.path(), "clock", None)?;
     Ok(())
 }
 
@@ -1152,20 +1139,7 @@ fn p3_generated_crate_builds_with_multiple_wasi_package_versions() -> anyhow::Re
 
     generate_p3(temp.path())?;
 
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        output.status.success(),
-        "P3 generated crate with multiple versions of a WASI package should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    build_p3_with_features(temp.path(), "multiple_wasi_versions", None)?;
     Ok(())
 }
 
@@ -1421,20 +1395,7 @@ fn p3_generated_crate_builds_with_async_result_export() -> anyhow::Result<()> {
 
     generate_p3(temp.path())?;
 
-    let build = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        build.status.success(),
-        "P3 generated crate with an async result export should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr)
-    );
+    build_p3_with_features(temp.path(), "result_export", None)?;
     Ok(())
 }
 
@@ -1463,20 +1424,7 @@ fn p3_generated_crate_builds_with_node_builtin_imports() -> anyhow::Result<()> {
 
     generate_p3(temp.path())?;
 
-    let build = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        build.status.success(),
-        "P3 generated crate with Node.js builtin imports should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr)
-    );
+    build_p3_with_features(temp.path(), "p3_builtins", None)?;
     Ok(())
 }
 

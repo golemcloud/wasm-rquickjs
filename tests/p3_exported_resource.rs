@@ -33,6 +33,8 @@ use wasmtime::{Config, Engine, Result, Store};
 use wasmtime_wasi::{WasiCtxBuilder, WasiCtxView};
 use wasmtime_wasi_http::{WasiHttpCtx, WasiHttpCtxView, WasiHttpView};
 
+mod p3_build;
+
 bindgen!({
     world: "exported-res",
     path: "examples/p3/exported-resource/wit",
@@ -346,7 +348,10 @@ fn generate_and_build(temp: &Utf8TempDir) -> anyhow::Result<Utf8PathBuf> {
         GenerationTarget::WasiP3,
     )?;
 
-    let build = Command::new("cargo")
+    let cache = p3_build::BuildCache::new()?;
+    let mut build_cmd = Command::new("cargo");
+    cache.configure(&mut build_cmd);
+    let build = build_cmd
         .arg("build")
         .arg("--manifest-path")
         .arg(out.join("Cargo.toml"))
@@ -363,7 +368,9 @@ fn generate_and_build(temp: &Utf8TempDir) -> anyhow::Result<Utf8PathBuf> {
         String::from_utf8_lossy(&build.stderr)
     );
 
-    let metadata = Command::new("cargo")
+    let mut metadata_cmd = Command::new("cargo");
+    cache.configure(&mut metadata_cmd);
+    let metadata = metadata_cmd
         .arg("metadata")
         .arg("--no-deps")
         .arg("--format-version")
@@ -371,16 +378,25 @@ fn generate_and_build(temp: &Utf8TempDir) -> anyhow::Result<Utf8PathBuf> {
         .arg("--manifest-path")
         .arg(out.join("Cargo.toml"))
         .output()?;
-    assert!(metadata.status.success(), "cargo metadata should succeed");
+    assert!(
+        metadata.status.success(),
+        "cargo metadata should succeed; stdout:\n{}\nstderr:\n{}",
+        String::from_utf8_lossy(&metadata.stdout),
+        String::from_utf8_lossy(&metadata.stderr)
+    );
     let metadata: serde_json::Value = serde_json::from_slice(&metadata.stdout)?;
     let target_dir = metadata["target_directory"]
         .as_str()
         .ok_or_else(|| anyhow::anyhow!("missing target_directory in cargo metadata"))?;
 
-    Ok(Utf8PathBuf::from(target_dir)
+    let wasm = Utf8PathBuf::from(target_dir)
         .join("wasm32-wasip2")
         .join("debug")
-        .join("exported_res.wasm"))
+        .join("exported_res.wasm");
+    Ok(
+        Utf8PathBuf::from_path_buf(cache.finish(wasm.as_std_path(), out.as_std_path())?)
+            .expect("generated paths are UTF-8"),
+    )
 }
 
 /// Runs `fut` on a fresh multi-thread tokio runtime, failing the test if it does not complete
