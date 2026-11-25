@@ -12,6 +12,9 @@ fn initializer_sources_reuse_compilation_without_reusing_guest_state() -> anyhow
         root,
         GenerationTarget::WasiP3,
         "p3,encoding",
+        // Cargo's shared target directory must distinguish this module layout
+        // from the single-slot preinit-probe package.
+        "source-input-probe",
         &[
             JsModuleSpec {
                 name: "module".into(),
