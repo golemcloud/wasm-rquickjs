@@ -264,17 +264,23 @@ not a hard disk quota. Only native compilation is shared; each operation creates
 a fresh engine, store, instance and WASI context. Use `init_func = "wizer-initialize"`
 with source input; custom initializers remain available without source input.
 
-**External I/O during pre-initialization is rejected.** Top-level filesystem
-probes (including `existsSync` and module/package lookup), socket/DNS/HTTP/WebSocket
-acquisition, SQLite opens (including `:memory:`), execution-job creation, and
-`process.chdir()` fail the
-build immediately. Catching a JavaScript exception cannot suppress this failure.
+**The filesystem is unavailable during pre-initialization.** Path-based file
+operations report catchable `ENOENT` errors; existence probes return `false`, and
+filesystem-backed module/package lookup follows its normal not-found behavior.
+These results are synthesized before touching the build host, WASI preopens,
+libc filesystem state or runtime loader caches. Optional imports and file probes
+may catch this absence; an uncaught exception still fails the build. Values
+computed from caught absence remain frozen in the snapshot, so perform any
+filesystem-dependent work again after restoration when needed.
+
+Socket/DNS/HTTP/WebSocket acquisition, SQLite opens (including `:memory:`),
+execution-job creation, and `process.chdir()` still fail the build immediately.
+Catching a JavaScript exception cannot suppress these policy failures.
 The diagnostic identifies the operation and recommends moving it into an exported
-function or lazy initialization after restoration. This avoids saving unavailable
-build-time capabilities or false filesystem results in the snapshot. The optimizer
+function or lazy initialization after restoration. The optimizer
 also traps filesystem preopens, network acquisition and outgoing HTTP for older
-templates and custom initializers. Rebuild templates to get native guards,
-restore-safe pre-init stdio and guest diagnostics.
+templates and custom initializers. Rebuild templates to get catchable filesystem
+absence, native guards, restore-safe pre-init stdio and guest diagnostics.
 
 Importing these builtins, embedded/data modules and explicitly supplied module
 sources remains supported. Logging and pure computation remain available.
@@ -288,9 +294,8 @@ must implement this standard WASI import; `none` retains `/`. A supplied cwd mus
 be an accessible directory, or runtime initialization fails. Owned jobs retain
 their separate cwd.
 
-Supplied CommonJS reexports that require filesystem analysis are still rejected
-during pre-initialization, even if a loader could supply the child at runtime.
-Defer those chains to runtime until loader-aware reexport analysis is supported.
+CommonJS named-reexport analysis that depends on filesystem-only children remains
+unavailable during pre-initialization. Defer those imports to runtime.
 Defer SQLite connections with `new DatabaseSync(path, { open: false })`, then call `.open()` after restoration.
 Applications that require top-level external I/O should skip `optimize` and
 initialize at runtime instead.

@@ -29,6 +29,20 @@ pub(crate) fn is_active() -> bool {
     ACTIVE.load(Ordering::Relaxed)
 }
 
+/// Filesystem absence is catchable, but must be synthesized before libc/preopen
+/// discovery or loader caches can observe the optimizer's empty filesystem.
+#[inline]
+pub(crate) fn filesystem() -> std::io::Result<()> {
+    if is_active() {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            "ENOENT during Wizer pre-initialization",
+        ))
+    } else {
+        Ok(())
+    }
+}
+
 /// Check before touching libc caches, host resources or runtime filesystem
 /// caches. `target` must contain only native strings/numbers, never JS values.
 #[inline]

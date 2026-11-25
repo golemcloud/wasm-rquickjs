@@ -199,54 +199,64 @@ fn optimize_guest_failure(input: &Utf8Path, output: &Utf8Path) -> anyhow::Result
 }
 
 #[test]
-fn optimizer_rejects_guest_io_filesystem() -> anyhow::Result<()> {
-    check_guest_denials(&[
-        ("import fs from 'node:fs'; fs.existsSync('/');", "fs.exists"),
+fn optimizer_rejects_uncaught_filesystem_errors() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let template = build_preinit_template(
+        temp.path(),
+        wasm_rquickjs::GenerationTarget::WasiP3,
+        "full-p3",
+    )?;
+    let input = temp.path().join("input.wasm");
+    let output = temp.path().join("optimized.wasm");
+    for (source, expected) in [
+        ("import fs from 'node:fs'; fs.readFileSync('/x');", "ENOENT"),
         (
-            "import fs from 'node:fs'; try { fs.statSync('/'); } catch {} await new Promise(() => {});",
-            "fs.stat",
-        ),
-        (
-            "import fs from 'node:fs/promises'; await fs.readFile('/x').catch(() => {});",
-            "fs.open",
+            "import fs from 'node:fs/promises'; await fs.readFile('/x');",
+            "ENOENT",
         ),
         (
             "import fs from 'node:fs'; fs.writeFileSync('/x', 'x');",
-            "fs.open",
+            "ENOENT",
         ),
         (
             "import fs from 'node:fs'; fs.openSync('/x', 'r');",
-            "fs.open",
-        ),
-        (
-            "import {runInNewContext} from 'node:vm'; import fs from 'node:fs'; runInNewContext('fs.existsSync(\"/\")', {fs});",
-            "fs.exists",
-        ),
-        (
-            "import fs from 'node:fs'; fs.statSync('/missing', {throwIfNoEntry:false});",
-            "fs.stat",
-        ),
-        (
-            "import fs from 'node:fs'; fs.exists('/', () => {});",
-            "fs.exists",
+            "ENOENT",
         ),
         (
             "import fs from 'node:fs'; fs.mkdirSync('/new-dir');",
-            "fs.mkdir",
+            "ENOENT",
         ),
         (
             "import fs from 'node:fs'; fs.appendFileSync('/new-file', 'x');",
-            "fs.open",
+            "ENOENT",
         ),
         (
             "import fs from 'node:fs'; fs.unlinkSync('/old-file');",
-            "fs.unlink",
+            "ENOENT",
         ),
+        ("import fs from 'node:fs'; fs.readdirSync('/');", "ENOENT"),
+        ("import fs from 'node:fs'; fs.accessSync('/');", "ENOENT"),
+        ("import fs from 'node:fs'; fs.realpathSync('/');", "ENOENT"),
         (
-            "import fs from 'node:fs'; setImmediate(() => fs.existsSync('/'));",
-            "fs.exists",
+            "import fs from 'node:fs'; fs.realpathSync.native('/');",
+            "ENOENT",
         ),
-    ])
+        ("await import('/runtime-only.mjs');", "ERR_MODULE_NOT_FOUND"),
+        (
+            "import {createRequire} from 'node:module'; createRequire('/app/main.cjs')('./optional.cjs');",
+            "Cannot find module './optional.cjs'",
+        ),
+    ] {
+        let source = format!(
+            "{source}\nexport function ready() {{ return ''; }} export function run() {{ return ''; }}"
+        );
+        wasm_rquickjs::inject_js_into_component(&template, &input, &[&source])?;
+        let failure = optimize_guest_failure(&input, &output)?;
+        assert!(failure.contains(expected), "{source}: {failure}");
+        assert!(!failure.contains("WRQJS_PREINITIALIZATION_IO"), "{failure}");
+        assert!(!output.exists());
+    }
+    Ok(())
 }
 
 // Keep the filesystem and host-service denials independently schedulable. Each
@@ -259,7 +269,6 @@ fn optimizer_rejects_guest_io_host_services() -> anyhow::Result<()> {
             "WebSocket connection",
         ),
         ("process.chdir('/');", "process.chdir"),
-        ("await import('/runtime-only.mjs');", "module path probe"),
         (
             "import {DatabaseSync} from 'node:sqlite'; new DatabaseSync(':memory:');",
             "SQLite database open",
@@ -304,8 +313,8 @@ fn optimizer_rejects_execution_jobs_during_preinit() -> anyhow::Result<()> {
 #[test]
 fn optimizer_retains_stderr_tail_after_overflow() -> anyhow::Result<()> {
     check_guest_denials(&[(
-        "import fs from 'node:fs'; process.stderr.write('x'.repeat(70 * 1024)); fs.existsSync('/overflow-tail');",
-        "fs.exists",
+        "process.stderr.write('x'.repeat(70 * 1024)); process.chdir('/overflow-tail');",
+        "process.chdir",
     )])
 }
 
@@ -313,49 +322,12 @@ fn optimizer_retains_stderr_tail_after_overflow() -> anyhow::Result<()> {
 fn optimizer_rejects_additional_guest_io() -> anyhow::Result<()> {
     check_guest_denials(&[
         (
-            "import fs from 'node:fs'; fs.readdirSync('/');",
-            "fs.readdir",
-        ),
-        ("import fs from 'node:fs'; fs.accessSync('/');", "fs.access"),
-        (
-            "import fs from 'node:fs'; fs.realpathSync('/');",
-            "fs.lstat",
-        ),
-        (
-            "import fs from 'node:fs'; fs.realpathSync.native('/');",
-            "fs.realpath",
-        ),
-        (
-            "import {createRequire} from 'node:module'; createRequire('/app/main.cjs')('./optional.cjs');",
-            "module path probe",
-        ),
-        (
-            "import {findPackageJSON} from 'node:module'; findPackageJSON('./package.json', 'file:///app/main.mjs');",
-            "package.json",
-        ),
-        (
             "import net from 'node:net'; net.createServer().listen(0);",
             "TCP listener creation",
         ),
         (
             "import http from 'node:http'; http.createServer().listen(0);",
             "TCP listener creation",
-        ),
-        (
-            r#"import {register} from 'node:module';
-                register('data:text/javascript,' + encodeURIComponent(`
-                    export function resolve(s,c,n) {
-                        if (s === 'chain:root') return {shortCircuit:true,url:'file:///chain/root.cjs',format:'commonjs'};
-                        if (s === './child.cjs') return {shortCircuit:true,url:'file:///chain/child.cjs',format:'commonjs'};
-                        return n(s,c);
-                    }
-                    export function load(u,c,n) {
-                        if (u === 'file:///chain/root.cjs') return {shortCircuit:true,format:'commonjs',source:'module.exports = require("./child.cjs");'};
-                        if (u === 'file:///chain/child.cjs') return {shortCircuit:true,format:'commonjs',source:'exports.answer=1;'};
-                        return n(u,c);
-                    }
-                `)); await import('chain:root');"#,
-            "module path probe",
         ),
     ])
 }
@@ -396,7 +368,7 @@ fn check_guest_denials(cases: &[(&str, &str)]) -> anyhow::Result<()> {
             &template,
             &input,
             &[
-                "import fs from 'node:fs'; fs.existsSync('/diagnostic-path'); export function run() { return ''; } export function ready() { return ''; }",
+                "process.chdir('/diagnostic-path'); export function run() { return ''; } export function ready() { return ''; }",
             ],
         )?;
         let failure = runtime
@@ -404,7 +376,7 @@ fn check_guest_denials(cases: &[(&str, &str)]) -> anyhow::Result<()> {
             .unwrap_err();
         let failure = format!("{failure:#}");
         assert!(failure.contains("WRQJS_PREINITIALIZATION_IO"), "{failure}");
-        assert!(failure.contains("fs.exists"), "{failure}");
+        assert!(failure.contains("process.chdir"), "{failure}");
         assert!(failure.contains("/diagnostic-path"), "{failure}");
     }
     Ok(())
@@ -472,6 +444,156 @@ fn optimizer_preserves_console_stdio_after_preinit() -> anyhow::Result<()> {
                 "{tier}: UTF-8 output changed"
             );
         }
+    }
+    Ok(())
+}
+
+#[test]
+fn optimizer_preserves_caught_filesystem_absence() -> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    let root = temp.path();
+    let host_file = root.join("host-only.txt");
+    std::fs::write(&host_file, "build-host-secret")?;
+    let template =
+        build_preinit_template(root, wasm_rquickjs::GenerationTarget::WasiP3, "full-p3")?;
+    let input = root.join("input.wasm");
+    let output = root.join("optimized.wasm");
+    let source = r#"
+        import assert from 'node:assert/strict';
+        import fs from 'node:fs';
+        import fsp from 'node:fs/promises';
+        import {createRequire, findPackageJSON, register} from 'node:module';
+        import {runInNewContext} from 'node:vm';
+        const require = createRequire('/app/probe.cjs');
+        for (const call of [
+            () => fs.readFileSync('/app/value.txt'),
+            () => fs.openSync('/app/value.txt', 'r'),
+            () => fs.statSync('/app/value.txt'),
+            () => fs.lstatSync('/app/value.txt'),
+            () => fs.readdirSync('/app'),
+            () => fs.accessSync('/app/value.txt'),
+            () => fs.realpathSync('/app/value.txt'),
+            () => fs.realpathSync.native('/app/value.txt'),
+            () => fs.mkdirSync('/app/new-dir'),
+            () => fs.appendFileSync('/app/value.txt', 'x'),
+            () => fs.unlinkSync('/app/value.txt'),
+            () => fs.renameSync('/app/value.txt', '/app/other.txt'),
+            () => fs.copyFileSync('/app/value.txt', '/app/other.txt'),
+            () => fs.linkSync('/app/value.txt', '/app/other.txt'),
+            () => fs.symlinkSync('value.txt', '/app/link'),
+            () => fs.readlinkSync('/app/link'),
+            () => fs.truncateSync('/app/value.txt'),
+            () => fs.chmodSync('/app/value.txt', 0o600),
+            () => fs.chownSync('/app/value.txt', 0, 0),
+            () => fs.lchownSync('/app/value.txt', 0, 0),
+            () => fs.utimesSync('/app/value.txt', 1, 2),
+            () => fs.lutimesSync('/app/value.txt', 1, 2),
+            () => fs.rmdirSync('/app'),
+            () => fs.rmSync('/app/value.txt'),
+            () => fs.mkdtempSync('/app/temp-'),
+            () => fs.readFileSync(HOST_FILE),
+            () => fs.writeFileSync(HOST_FILE, 'must-not-write'),
+        ]) assert.throws(call, {code:'ENOENT'});
+        assert.equal(fs.existsSync(HOST_FILE), false);
+        assert.equal(fs.existsSync('/app/value.txt'), false);
+        assert.equal(fs.statSync('/app/value.txt', {throwIfNoEntry:false}), undefined);
+        fs.rmSync('/app/value.txt', {force:true});
+        assert.equal(findPackageJSON('./package.json', 'file:///app/main.mjs'), undefined);
+        let deferredAbsent = false;
+        setImmediate(() => {
+            assert.equal(fs.existsSync('/app/value.txt'), false); deferredAbsent = true;
+        });
+        await assert.rejects(fsp.readFile('/app/value.txt'), {code:'ENOENT'});
+        await new Promise(resolve => fs.exists('/app/value.txt', exists => {
+            assert.equal(exists, false); resolve();
+        }));
+        assert.equal(runInNewContext('fs.existsSync("/app/value.txt")', {fs}), false);
+        // Supplied sources must not acquire a filesystem dependency.
+        register('data:text/javascript,' + encodeURIComponent(`
+            export function resolve(s,c,n) {
+                if (s === 'supplied:optional') return {shortCircuit:true,url:'file:///provided/optional.mjs'};
+                if (s === 'chain:root') return {shortCircuit:true,url:'file:///chain/root.cjs',format:'commonjs'};
+                if (s === './child.cjs') return {shortCircuit:true,url:'file:///chain/child.cjs',format:'commonjs'};
+                return n(s,c);
+            }
+            export function load(u,c,n) {
+                if (u === 'file:///provided/optional.mjs') return {shortCircuit:true,format:'module',source:'export default 73'};
+                if (u === 'file:///chain/root.cjs') return {shortCircuit:true,format:'commonjs',source:'module.exports = require("./child.cjs");'};
+                if (u === 'file:///chain/child.cjs') return {shortCircuit:true,format:'commonjs',source:'exports.answer=1;'};
+                return n(u,c);
+            }
+        `));
+        const supplied = await import('supplied:optional');
+        assert.equal(supplied.default, 73);
+        assert.equal((await import('chain:root')).default.answer, 1);
+        // Keep the loader registration unchanged across absence and restore.
+        for (const name of ['./optional.cjs', 'optional-package']) {
+            assert.throws(() => require(name), {code:'MODULE_NOT_FOUND'});
+            assert.throws(() => require.resolve(name), {code:'MODULE_NOT_FOUND'});
+        }
+        await assert.rejects(import('/app/optional.mjs'), {code:'ERR_MODULE_NOT_FOUND'});
+        await assert.rejects(import('optional-package'), {code:'ERR_MODULE_NOT_FOUND'});
+        export function ready() { return 'ready'; }
+        export async function run() {
+            assert.equal(deferredAbsent, true);
+            const value = fs.readFileSync('/app/value.txt', 'utf8');
+            assert.equal(fs.existsSync('/app/value.txt'), true);
+            assert.equal(await fsp.readFile('/app/value.txt', 'utf8'), value);
+            assert.equal(fs.realpathSync('/app/value.txt'), '/app/value.txt');
+            assert.equal(fs.statSync('/app/value.txt').isFile(), true);
+            fs.writeFileSync('/app/after.txt', value + '-written');
+            assert.equal(fs.readFileSync('/app/after.txt', 'utf8'), value + '-written');
+            assert.equal(require('./optional.cjs').value, 'cjs-' + value);
+            assert.equal(require('optional-package').value, 'package-' + value);
+            assert.equal((await import('/app/optional.mjs')).value, 'esm-' + value);
+            // Bare imports resolve from their module, not the restored cwd.
+            assert.equal((await import('/app/package-probe.mjs')).default.value, 'package-' + value);
+            return value;
+        }
+    "#
+    .replace("HOST_FILE", &serde_json::to_string(host_file.as_str())?);
+    wasm_rquickjs::inject_js_into_component(&template, &input, &[&source])?;
+    let runtime = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()?;
+    runtime.block_on(optimize_component(&input, &output, "wizer-initialize"))?;
+    assert_eq!(std::fs::read_to_string(&host_file)?, "build-host-secret");
+    for value in ["first-17", "second-29"] {
+        let filesystem = root.join(value);
+        let app = filesystem.join("app");
+        let package = app.join("node_modules/optional-package");
+        std::fs::create_dir_all(&package)?;
+        std::fs::write(app.join("value.txt"), value)?;
+        std::fs::write(
+            app.join("optional.cjs"),
+            format!("exports.value = 'cjs-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("optional.mjs"),
+            format!("export const value = 'esm-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("package-probe.mjs"),
+            "export { default } from 'optional-package';",
+        )?;
+        std::fs::write(package.join("package.json"), r#"{"main":"index.cjs"}"#)?;
+        std::fs::write(
+            package.join("index.cjs"),
+            format!("exports.value = 'package-{value}';"),
+        )?;
+        let result = runtime
+            .block_on(run_probe_inner(
+                &output,
+                false,
+                Some(&filesystem),
+                Some("/app"),
+            ))?
+            .unwrap();
+        assert_eq!(result.json, value);
+        assert_eq!(
+            std::fs::read_to_string(app.join("after.txt"))?,
+            format!("{value}-written")
+        );
     }
     Ok(())
 }
