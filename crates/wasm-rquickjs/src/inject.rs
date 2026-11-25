@@ -191,8 +191,10 @@ impl Reencode for MarkerRewriter {
             self.max_data_end = self.max_data_end.max(end);
         }
 
-        // Check if this segment contains a marker and record its module index
-        if let Some(marker_offset) = find_marker_in_data(datum.data) {
+        // The linker can put multiple slot markers in one data segment.
+        let mut offset = 0;
+        while let Some(relative_offset) = find_marker_in_data(&datum.data[offset..]) {
+            let marker_offset = offset + relative_offset;
             let module_index = marker_module_index(datum.data, marker_offset);
             if self.markers_found.contains(&module_index) {
                 return Err(Error::UserError(anyhow!(
@@ -200,6 +202,7 @@ impl Reencode for MarkerRewriter {
                 )));
             }
             self.markers_found.push(module_index);
+            offset = marker_offset + MARKER_SIZE;
         }
 
         // Emit segment unchanged — the marker's JS_OFFSET stays 0 for now.

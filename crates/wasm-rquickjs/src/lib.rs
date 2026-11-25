@@ -61,7 +61,10 @@ mod wit;
 
 pub use inject::{SLOT_END_MAGIC, SLOT_MAGIC, create_marker_file, inject_js_into_component};
 #[cfg(feature = "optimize")]
-pub use optimize::{OptimizeOptions, optimize_component, optimize_component_with_options};
+pub use optimize::{
+    CompilationCacheStats, OptimizeOptions, OptimizeResult, optimize_component,
+    optimize_component_with_options,
+};
 
 /// Write `contents` to `path` only if the file doesn't exist or its current content differs.
 /// This preserves file timestamps when content hasn't changed, avoiding unnecessary recompilation.
@@ -268,8 +271,12 @@ pub fn generate_wrapper_crate_with_options(
     }
 
     // Add wizer-initialize export for pre-initialization support.
-    add_wizer_init_export(&context.output.join("wit"), world)
-        .context("Failed to add wizer-initialize export to the WIT world")?;
+    add_wizer_init_export(
+        &context.output.join("wit"),
+        world,
+        js_modules.iter().any(|module| module.mode.is_binary_slot()),
+    )
+    .context("Failed to add wizer-initialize export to the WIT world")?;
 
     // Re-resolve the WIT package after modifications (wizer-initialize export was added)
     let modified_wit = output.join("wit");

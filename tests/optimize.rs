@@ -7,6 +7,8 @@ mod diagnostics_tests;
 mod p3_build;
 #[path = "optimize/preinit.rs"]
 mod preinit_tests;
+#[path = "optimize/source_input.rs"]
+mod source_input_tests;
 
 // Initialization mutates the last byte, so verifying the optimized component
 // checks that snapshot extraction retained memory, not just that Wizer returned.
@@ -347,8 +349,27 @@ fn build_preinit_template(
     target: wasm_rquickjs::GenerationTarget,
     tier: &str,
 ) -> anyhow::Result<camino::Utf8PathBuf> {
+    build_preinit_template_with_modules(
+        root,
+        target,
+        tier,
+        "preinit-probe",
+        &[wasm_rquickjs::JsModuleSpec {
+            name: "module".into(),
+            mode: wasm_rquickjs::EmbeddingMode::BinarySlot,
+        }],
+    )
+}
+
+fn build_preinit_template_with_modules(
+    root: &Utf8Path,
+    target: wasm_rquickjs::GenerationTarget,
+    tier: &str,
+    world: &str,
+    modules: &[wasm_rquickjs::JsModuleSpec],
+) -> anyhow::Result<camino::Utf8PathBuf> {
     use std::process::Command;
-    use wasm_rquickjs::{EmbeddingMode, GenerationTarget, JsModuleSpec};
+    use wasm_rquickjs::GenerationTarget;
     std::fs::create_dir_all(root.join("wit"))?;
     let async_keyword = if target == GenerationTarget::WasiP3 {
         "async "
@@ -358,15 +379,12 @@ fn build_preinit_template(
     std::fs::write(
         root.join("wit/world.wit"),
         format!(
-            "package test:preinit; world preinit-probe {{ export run: {async_keyword}func() -> string; export ready: {async_keyword}func() -> string; }}"
+            "package test:preinit; world {world} {{ export run: {async_keyword}func() -> string; export ready: {async_keyword}func() -> string; }}"
         ),
     )?;
     wasm_rquickjs::generate_wrapper_crate_with_target(
         &root.join("wit"),
-        &[JsModuleSpec {
-            name: "module".into(),
-            mode: EmbeddingMode::BinarySlot,
-        }],
+        modules,
         &root.join("out"),
         None,
         target,
@@ -413,8 +431,10 @@ fn build_preinit_template(
         .output()?;
     assert!(result.status.success());
     let metadata: serde_json::Value = serde_json::from_slice(&result.stdout)?;
-    let wasm = Utf8Path::new(metadata["target_directory"].as_str().unwrap())
-        .join("wasm32-wasip2/debug/preinit_probe.wasm");
+    let wasm = Utf8Path::new(metadata["target_directory"].as_str().unwrap()).join(format!(
+        "wasm32-wasip2/debug/{}.wasm",
+        world.replace('-', "_")
+    ));
     let template = cache.finish(wasm.as_std_path(), root.as_std_path())?;
     let template = camino::Utf8PathBuf::from_path_buf(template).unwrap();
     Ok(template)
@@ -556,6 +576,9 @@ fn optimizer_restores_live_services_after_deterministic_preinit() -> anyhow::Res
 #[cfg(feature = "use-golem-wasmtime")]
 #[tokio::test]
 async fn optimizer_copy_budget_controls_snapshot_extraction() -> anyhow::Result<()> {
+    use futures::FutureExt;
+    use std::panic::AssertUnwindSafe;
+
     let temp = Utf8TempDir::new()?;
     let input = temp.path().join("input.wasm");
     let output = temp.path().join("output.wasm");
@@ -568,24 +591,19 @@ async fn optimizer_copy_budget_controls_snapshot_extraction() -> anyhow::Result<
         (129 * 16, Some(128 * 1024 * 1024)),
     ] {
         write_component(&input, pages)?;
-        let input = input.clone();
-        let task_output = output.clone();
-        let failure = tokio::spawn(async move {
-            optimize_component_with_options(
-                &input,
-                &task_output,
-                "wizer-initialize",
-                &OptimizeOptions {
-                    hostcall_fuel: fuel,
-                },
-            )
-            .await
-        })
+        let failure = AssertUnwindSafe(optimize_component_with_options(
+            &input,
+            &output,
+            "wizer-initialize",
+            &OptimizeOptions {
+                hostcall_fuel: fuel,
+                ..Default::default()
+            },
+        ))
+        .catch_unwind()
         .await
         .expect_err("Wizer currently panics when snapshot extraction exhausts fuel");
-        assert!(failure.is_panic());
-        let panic = failure.into_panic();
-        let message = panic.downcast_ref::<String>().expect("panic message");
+        let message = failure.downcast_ref::<String>().expect("panic message");
         assert!(message.contains("fuel allocated for hostcalls has been exhausted"));
         assert!(!output.exists());
     }
@@ -595,6 +613,7 @@ async fn optimizer_copy_budget_controls_snapshot_extraction() -> anyhow::Result<
         "wizer-initialize",
         &OptimizeOptions {
             hostcall_fuel: Some(512 * 1024 * 1024),
+            ..Default::default()
         },
     )
     .await?;
@@ -612,6 +631,7 @@ async fn optimizer_rejects_unsupported_copy_budget_before_io() {
             "wizer-initialize",
             &OptimizeOptions {
                 hostcall_fuel: Some(fuel),
+                ..Default::default()
             },
         )
         .await
