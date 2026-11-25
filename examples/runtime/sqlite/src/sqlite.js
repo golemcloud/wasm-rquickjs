@@ -374,3 +374,167 @@ export function testNumberBinding() {
   }
   return true;
 }
+
+export function testStatementLifetime() {
+  const db = new DatabaseSync(':memory:');
+  try {
+    assert.throws(() => db.prepare('SELECT missing FROM absent'), { code: 'ERR_SQLITE_ERROR' });
+    db.exec('CREATE TABLE entries (n); INSERT INTO entries VALUES (13), (29), (41)');
+    const query = db.prepare('SELECT n FROM entries ORDER BY n');
+    const iterator = query.iterate();
+    assert.deepEqual(iterator.next(), {
+      __proto__: null, done: false, value: { __proto__: null, n: 13 },
+    });
+    query.get();
+    assert.throws(() => iterator.next(), { code: 'ERR_INVALID_STATE', message: 'iterator was invalidated' });
+    const second = query.iterate();
+    assert.equal(second.next().value.n, 13);
+    assert.deepEqual(second.return(), { __proto__: null, done: true, value: null });
+    assert.deepEqual(second.next(), { __proto__: null, done: true, value: null });
+    assert.deepEqual(query.all().map(row => row.n), [13, 29, 41]);
+    assert.equal(query.close(), undefined);
+    const finalized = { code: 'ERR_INVALID_STATE', message: 'statement has been finalized' };
+    for (const action of [() => query.get(), () => query.sourceSQL, () => query.expandedSQL,
+      () => query.close(), () => query.setReadBigInts(false), () => second.next()]) {
+      assert.throws(action, finalized);
+    }
+    query[Symbol.dispose]();
+    const beforeClose = db.prepare('SELECT 7 AS n');
+    db.close();
+    assert.throws(() => beforeClose.get(), finalized);
+    db.open();
+    assert.throws(() => beforeClose.get(), finalized);
+    assert.equal(db.prepare('SELECT 11 AS n').get().n, 11);
+  } finally {
+    if (db.isOpen) db.close();
+  }
+  return true;
+}
+
+export function testStatementStatistics() {
+  const db = new DatabaseSync(':memory:');
+  try {
+    db.exec('CREATE TABLE entries (id INTEGER PRIMARY KEY, value TEXT); INSERT INTO entries VALUES (13, \'pear\'), (29, \'plum\'), (41, \'pear\')');
+    const scan = db.prepare('SELECT * FROM entries WHERE value = ?');
+    const indexed = db.prepare('SELECT * FROM entries WHERE id = ?');
+    assert.equal(scan.stat('run'), 0);
+    assert.equal(scan.stat('vmStep'), 0);
+    assert.deepEqual(scan.all('pear').map(row => row.id), [13, 41]);
+    assert.equal(scan.stat('run'), 1);
+    assert.ok(scan.stat('vmStep') > 0);
+    assert.ok(scan.stat('fullscanStep') > 0);
+    assert.equal(indexed.get(29).value, 'plum');
+    assert.equal(indexed.stat('fullscanStep'), 0);
+    const memory = scan.stat('memused');
+    assert.ok(memory > 0);
+    const steps = scan.stat('vmStep');
+    assert.equal(scan.stat('vmStep'), steps);
+    scan.resetStats();
+    assert.equal(scan.stat('run'), 0);
+    assert.equal(scan.stat('vmStep'), 0);
+    assert.equal(scan.stat('memused'), memory);
+    scan.all('plum');
+    assert.equal(scan.stat('run'), 1);
+    assert.throws(() => scan.stat(1), { code: 'ERR_INVALID_ARG_TYPE' });
+    assert.throws(() => scan.stat('unknown'), { code: 'ERR_INVALID_ARG_VALUE' });
+  } finally {
+    db.close();
+  }
+  return true;
+}
+
+export function testStatementRecovery() {
+  const db = new DatabaseSync(':memory:');
+  const source = new DatabaseSync(':memory:');
+  try {
+    db.exec('CREATE TABLE items (old INTEGER); INSERT INTO items VALUES (13), (29)');
+    source.exec("CREATE TABLE items (replacement INTEGER, label TEXT); INSERT INTO items VALUES (41, 'pear'), (53, 'plum')");
+    const image = serializeDatabaseSync(source);
+    db.function('twice', n => n * 2);
+    const query = db.prepare('SELECT * FROM items WHERE $pick IS NOT NULL ORDER BY 1', {
+      readBigInts: true, returnArrays: true, allowBareNamedParameters: false,
+      allowUnknownNamedParameters: true,
+    });
+    assert.deepEqual(query.all({ $pick: 1, ignored: 2 }), [[13n], [29n]]);
+    const cursor = query.iterate({ $pick: 1 });
+    assert.deepEqual(cursor.next().value, [13n]);
+    assert.throws(() => restoreDatabaseSync(db, image), { code: 'ERR_INVALID_STATE' });
+    assert.deepEqual(cursor.next().value, [29n]);
+    assert.deepEqual(db.prepare('SELECT old FROM items ORDER BY old').all().map(row => row.old), [13, 29]);
+    cursor.return();
+    restoreDatabaseSync(db, image);
+    assert.equal(db.isOpen, true);
+    assert.deepEqual(query.all({ $pick: 1, ignored: 2 }), [[41n, 'pear'], [53n, 'plum']]);
+    assert.equal(query.get({ pick: 1 }), undefined);
+    query.setAllowUnknownNamedParameters(false);
+    assert.throws(() => query.get({ pick: 1 }), { code: 'ERR_INVALID_STATE' });
+    query.setReturnArrays(false);
+    assert.deepEqual(query.get({ $pick: 1 }), { __proto__: null, replacement: 41n, label: 'pear' });
+    assert.equal(db.prepare('SELECT twice(replacement) AS n FROM items ORDER BY replacement').get().n, 82);
+    // The attempted image must differ from live state, so rejection alone
+    // cannot hide a recovery that mutated the database before throwing.
+    db.exec('UPDATE items SET replacement = replacement + 100');
+    let calls = 0;
+    db.function('try_restore', () => {
+      calls++;
+      assert.throws(() => restoreDatabaseSync(db, image), { code: 'ERR_INVALID_STATE' });
+      return 7;
+    });
+    assert.deepEqual(db.prepare('SELECT replacement, try_restore() AS n FROM items ORDER BY replacement').all()
+      .map(row => [row.replacement, row.n]), [[141, 7], [153, 7]]);
+    assert.equal(calls, 2);
+    assert.deepEqual(db.prepare('SELECT replacement FROM items ORDER BY replacement').all()
+      .map(row => row.replacement), [141, 153]);
+  } finally {
+    db.close();
+    source.close();
+  }
+  return true;
+}
+
+export function testStatementDeserialize() {
+  const db = new DatabaseSync(':memory:');
+  const source = new DatabaseSync(':memory:');
+  try {
+    db.exec('CREATE TABLE items (n); INSERT INTO items VALUES (13), (29)');
+    source.exec('CREATE TABLE items (n); INSERT INTO items VALUES (41), (53)');
+    const image = serializeDatabaseSync(source);
+    let byteLengthReads = 0;
+    Object.defineProperty(image, 'byteLength', { get() {
+      byteLengthReads++;
+      throw new Error('deserialize must read the intrinsic byte length');
+    } });
+    const idle = db.prepare('SELECT n FROM items');
+    const cursor = db.prepare('SELECT n FROM items').iterate();
+    assert.equal(cursor.next().value.n, 13);
+    db.deserialize(image);
+    assert.equal(byteLengthReads, 0);
+    const finalized = { code: 'ERR_INVALID_STATE', message: 'statement has been finalized' };
+    assert.throws(() => idle.get(), finalized);
+    assert.throws(() => cursor.next(), finalized);
+    assert.deepEqual(db.prepare('SELECT n FROM items ORDER BY n').all().map(row => row.n), [41, 53]);
+    const beforeFailure = db.prepare('SELECT 17 AS n');
+    assert.throws(() => db.deserialize(image, { dbName: 'missing' }), { code: 'ERR_SQLITE_ERROR' });
+    assert.throws(() => beforeFailure.get(), finalized);
+    let running;
+    const independent = db.prepare('SELECT 19 AS n');
+    db.function('reenter', () => {
+      assert.throws(() => running.get(), { code: 'ERR_INVALID_STATE' });
+      assert.throws(() => running.close(), { code: 'ERR_INVALID_STATE' });
+      assert.throws(() => db.deserialize(image), { code: 'ERR_INVALID_STATE' });
+      assert.throws(() => db.close(), { code: 'ERR_INVALID_STATE' });
+      return independent.get().n;
+    });
+    running = db.prepare('SELECT reenter() AS n');
+    assert.equal(running.get().n, 19);
+    const sentinel = new Error('loop body');
+    const live = independent.iterate();
+    assert.throws(() => { for (const row of live) { assert.equal(row.n, 19); throw sentinel; } }, error => error === sentinel);
+    assert.deepEqual(live.next(), { __proto__: null, done: true, value: null });
+    assert.equal(independent.get().n, 19);
+  } finally {
+    db.close();
+    source.close();
+  }
+  return true;
+}

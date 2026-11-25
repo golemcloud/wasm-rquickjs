@@ -1,17 +1,20 @@
 import {
     open_database, close_database, exec_sql, is_open, is_autocommit,
-    stmt_run, stmt_get, stmt_all, stmt_expanded_sql, stmt_columns,
+    prepare_statement, stmt_run, stmt_get, stmt_all, stmt_expanded_sql, stmt_columns,
     stmt_iterate_init, stmt_iterate_next, stmt_iterate_return,
     register_function, register_aggregate,
     create_session, session_changeset, session_patchset, session_close,
     apply_changeset,
     get_constants,
     enable_defensive, location, set_authorizer, native_backup,
-    serialize_database, restore_database
+    serialize_database, restore_database, deserialize_database, check_database_idle
 } from '__wasm_rquickjs_builtin/sqlite_native';
 
 export const constants = get_constants();
 const _connIdSymbol = Symbol('connId');
+const typedArrayPrototype = Object.getPrototypeOf(Uint8Array.prototype);
+const typedArrayTag = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(typedArrayPrototype, Symbol.toStringTag).get);
+const typedArrayByteLength = Function.prototype.call.bind(Object.getOwnPropertyDescriptor(typedArrayPrototype, 'byteLength').get);
 
 function assertBoolean(value, name) {
     if (typeof value !== 'boolean') {
@@ -142,6 +145,36 @@ class _DatabaseSyncImpl {
         // An option getter can close the database while validation runs.
         if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         return new Statement(_stmtSecret, this.#connId, sql, stmtOptions);
+    }
+
+    deserialize(buffer, options) {
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
+        check_database_idle(this.#connId);
+        if (typedArrayTag(buffer) !== 'Uint8Array') {
+            throw Object.assign(new TypeError('The "buffer" argument must be a Uint8Array.'), { code: 'ERR_INVALID_ARG_TYPE' });
+        }
+        const length = typedArrayByteLength(buffer);
+        if (length === 0) {
+            throw Object.assign(new TypeError('The "buffer" argument must not be empty.'), { code: 'ERR_INVALID_ARG_VALUE' });
+        }
+        let dbName = 'main';
+        if (options !== undefined) {
+            if (options === null || (typeof options !== 'object' && typeof options !== 'function')) {
+                throw Object.assign(new TypeError('The "options" argument must be an object.'), { code: 'ERR_INVALID_ARG_TYPE' });
+            }
+            const value = options.dbName;
+            if (value !== undefined) {
+                if (typeof value !== 'string') {
+                    throw Object.assign(new TypeError('The "options.dbName" argument must be a string.'), { code: 'ERR_INVALID_ARG_TYPE' });
+                }
+                dbName = value;
+            }
+        }
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
+        if (typedArrayByteLength(buffer) !== length) {
+            throw Object.assign(new Error('The "buffer" argument was resized while reading "options"'), { code: 'ERR_INVALID_STATE' });
+        }
+        deserialize_database(this.#connId, buffer, dbName);
     }
 
     function(name, optionsOrFn, maybeFn) {
@@ -395,10 +428,8 @@ export class Session {
 const _stmtSecret = Symbol('stmtSecret');
 
 export class Statement {
-    #connId;
-    #sql;
+    #handle;
     #options;
-    #lastParams = null;
 
     constructor(secret, connId, sql, options) {
         if (secret !== _stmtSecret) {
@@ -406,8 +437,7 @@ export class Statement {
             err.code = 'ERR_ILLEGAL_CONSTRUCTOR';
             throw err;
         }
-        this.#connId = connId;
-        this.#sql = sql;
+        this.#handle = prepare_statement(connId, sql);
         this.#options = options;
     }
 
@@ -430,18 +460,18 @@ export class Statement {
     }
 
     run(...args) {
+        this.#handle.check();
         const params = this.#processParams(args);
-        this.#lastParams = params;
-        return stmt_run(this.#connId, this.#sql, params,
+        return stmt_run(this.#handle, params,
             this.#options.allowBareNamedParameters,
             this.#options.allowUnknownNamedParameters,
             this.#options.readBigInts);
     }
 
     get(...args) {
+        this.#handle.check();
         const params = this.#processParams(args);
-        this.#lastParams = params;
-        return stmt_get(this.#connId, this.#sql, params,
+        return stmt_get(this.#handle, params,
             this.#options.allowBareNamedParameters,
             this.#options.allowUnknownNamedParameters,
             this.#options.readBigInts,
@@ -449,9 +479,9 @@ export class Statement {
     }
 
     all(...args) {
+        this.#handle.check();
         const params = this.#processParams(args);
-        this.#lastParams = params;
-        return stmt_all(this.#connId, this.#sql, params,
+        return stmt_all(this.#handle, params,
             this.#options.allowBareNamedParameters,
             this.#options.allowUnknownNamedParameters,
             this.#options.readBigInts,
@@ -459,26 +489,25 @@ export class Statement {
     }
 
     columns() {
-        return stmt_columns(this.#connId, this.#sql);
+        return stmt_columns(this.#handle);
     }
 
     iterate(...args) {
+        this.#handle.check();
         const params = this.#processParams(args);
-        this.#lastParams = params;
-        const iterId = stmt_iterate_init(this.#connId, this.#sql, params,
+        const iterId = stmt_iterate_init(this.#handle, params,
             this.#options.allowBareNamedParameters,
             this.#options.allowUnknownNamedParameters);
-        const readBigInts = this.#options.readBigInts;
-        const returnArrays = this.#options.returnArrays;
+        const options = this.#options;
 
         return {
             [Symbol.iterator]() { return this; },
             next() {
-                return stmt_iterate_next(iterId, readBigInts, returnArrays);
+                return stmt_iterate_next(iterId, options.readBigInts, options.returnArrays);
             },
             return() {
                 stmt_iterate_return(iterId);
-                return { value: undefined, done: true };
+                return { __proto__: null, value: null, done: true };
             },
             toArray() {
                 const result = [];
@@ -492,30 +521,43 @@ export class Statement {
     }
 
     get sourceSQL() {
-        return this.#sql;
+        return this.#handle.source();
     }
 
     get expandedSQL() {
-        if (this.#lastParams !== null && this.#lastParams !== undefined) {
-            return stmt_expanded_sql(this.#connId, this.#sql, this.#lastParams,
-                this.#options.allowBareNamedParameters);
-        }
-        return this.#sql;
+        return stmt_expanded_sql(this.#handle);
     }
 
+    close() { this.#handle.close(); }
+    [Symbol.dispose]() { this.#handle.dispose(); }
+
+    stat(counter) {
+        this.#handle.check();
+        if (typeof counter !== 'string') {
+            throw Object.assign(new TypeError('The "counter" argument must be a string.'), { code: 'ERR_INVALID_ARG_TYPE' });
+        }
+        return this.#handle.stat(counter);
+    }
+
+    resetStats() { this.#handle.resetStats(); }
+
     setReadBigInts(enabled) {
+        this.#handle.check();
         assertBoolean(enabled, 'readBigInts');
         this.#options.readBigInts = enabled;
     }
     setReturnArrays(enabled) {
+        this.#handle.check();
         assertBoolean(enabled, 'returnArrays');
         this.#options.returnArrays = enabled;
     }
     setAllowBareNamedParameters(enabled) {
+        this.#handle.check();
         assertBoolean(enabled, 'allowBareNamedParameters');
         this.#options.allowBareNamedParameters = enabled;
     }
     setAllowUnknownNamedParameters(enabled) {
+        this.#handle.check();
         assertBoolean(enabled, 'allowUnknownNamedParameters');
         this.#options.allowUnknownNamedParameters = enabled;
     }

@@ -1,7 +1,8 @@
 use std::cell::{Cell, RefCell};
 use std::collections::HashMap;
 use std::panic::{RefUnwindSafe, UnwindSafe};
-use std::sync::{Arc, LazyLock, Mutex};
+use std::rc::{Rc, Weak as StatementWeak};
+use std::sync::{Arc, LazyLock, Mutex, Weak};
 use std::time::Duration;
 
 use rquickjs::qjs;
@@ -15,7 +16,7 @@ const MIN_SAFE_INTEGER: i64 = -9007199254740991;
 use rusqlite::ffi::sqlite3_errstr;
 
 struct ConnectionTable {
-    connections: HashMap<u32, rusqlite::Connection>,
+    connections: HashMap<u32, Arc<SqliteConnection>>,
     next_id: u32,
 }
 
@@ -30,35 +31,384 @@ impl ConnectionTable {
     fn insert(&mut self, conn: rusqlite::Connection) -> u32 {
         let id = self.next_id;
         self.next_id += 1;
-        self.connections.insert(id, conn);
+        self.connections.insert(
+            id,
+            Arc::new(SqliteConnection {
+                conn,
+                statements: RefCell::new(Vec::new()),
+                in_authorizer: Cell::new(false),
+                mutating: Cell::new(false),
+            }),
+        );
         id
     }
 }
 
-struct IteratorState {
-    col_names: Vec<String>,
-    values: Vec<Vec<rusqlite::types::Value>>,
-    position: usize,
+struct SqliteConnection {
+    conn: rusqlite::Connection,
+    statements: RefCell<Vec<StatementWeak<StatementState>>>,
+    in_authorizer: Cell<bool>,
+    mutating: Cell<bool>,
 }
 
-struct IteratorTable {
-    iterators: HashMap<u32, IteratorState>,
-    next_id: u32,
+// SAFETY: Like the session and JS callback tables below, this registry is only
+// accessed by the single-threaded WASM runtime. No connection crosses threads.
+unsafe impl Send for SqliteConnection {}
+unsafe impl Sync for SqliteConnection {}
+
+impl std::ops::Deref for SqliteConnection {
+    type Target = rusqlite::Connection;
+
+    fn deref(&self) -> &Self::Target {
+        &self.conn
+    }
 }
 
-impl IteratorTable {
-    fn new() -> Self {
-        Self {
-            iterators: HashMap::new(),
-            next_id: 1,
+struct StatementState {
+    connection: Weak<SqliteConnection>,
+    raw: Cell<*mut rusqlite::ffi::sqlite3_stmt>,
+    executing: Cell<bool>,
+    cursor: Cell<bool>,
+    generation: Cell<u64>,
+}
+
+impl StatementState {
+    fn pointer<'js>(
+        &self,
+        ctx: &rquickjs::Ctx<'js>,
+    ) -> rquickjs::Result<*mut rusqlite::ffi::sqlite3_stmt> {
+        let ptr = self.raw.get();
+        if ptr.is_null() {
+            return Err(throw_coded_error(
+                ctx,
+                "Error",
+                "statement has been finalized",
+                "ERR_INVALID_STATE",
+            ));
+        }
+        Ok(ptr)
+    }
+
+    fn finalize(&self) {
+        let ptr = self.raw.replace(std::ptr::null_mut());
+        self.cursor.set(false);
+        if !ptr.is_null() {
+            // SAFETY: only this state owns the handle; the connection's weak
+            // registry finalizes it before dropping the connection.
+            unsafe {
+                rusqlite::ffi::sqlite3_finalize(ptr);
+            }
+        }
+    }
+}
+
+impl Drop for StatementState {
+    fn drop(&mut self) {
+        // SQLite can invoke aggregate xFinal while finalizing. A GC finalizer
+        // must not call JS, even if collection happens inside a SQLite callback.
+        let _guard = JsCtxGuard::new(std::ptr::null_mut());
+        self.finalize();
+    }
+}
+
+#[derive(rquickjs::class::Trace, rquickjs::JsLifetime)]
+#[rquickjs::class]
+pub struct NativeStatement {
+    #[qjs(skip_trace)]
+    state: Rc<StatementState>,
+}
+
+#[derive(rquickjs::class::Trace, rquickjs::JsLifetime)]
+#[rquickjs::class]
+pub struct NativeIterator {
+    #[qjs(skip_trace)]
+    state: Rc<StatementState>,
+    generation: u64,
+    #[qjs(skip_trace)]
+    done: Cell<bool>,
+}
+
+impl Drop for NativeIterator {
+    fn drop(&mut self) {
+        if !self.done.get()
+            && self.generation == self.state.generation.get()
+            && !self.state.raw.get().is_null()
+            && !self.state.executing.get()
+        {
+            let _guard = JsCtxGuard::new(std::ptr::null_mut());
+            unsafe {
+                rusqlite::ffi::sqlite3_reset(self.state.raw.get());
+            }
+            self.state.cursor.set(false);
+        }
+    }
+}
+
+struct StatementGuard<'a> {
+    state: &'a StatementState,
+    conn: Arc<SqliteConnection>,
+    _js: JsCtxGuard,
+}
+
+struct FlagGuard<'a>(&'a Cell<bool>);
+impl Drop for FlagGuard<'_> {
+    fn drop(&mut self) {
+        self.0.set(false);
+    }
+}
+
+impl Drop for StatementGuard<'_> {
+    fn drop(&mut self) {
+        self.state.executing.set(false);
+    }
+}
+
+impl StatementState {
+    fn enter<'a, 'js>(&'a self, ctx: &rquickjs::Ctx<'js>) -> rquickjs::Result<StatementGuard<'a>> {
+        self.pointer(ctx)?;
+        let conn = self.connection.upgrade().ok_or_else(|| {
+            throw_coded_error(
+                ctx,
+                "Error",
+                "statement has been finalized",
+                "ERR_INVALID_STATE",
+            )
+        })?;
+        if self.executing.get() || conn.in_authorizer.get() || conn.mutating.get() {
+            return Err(throw_coded_error(
+                ctx,
+                "Error",
+                if conn.in_authorizer.get() {
+                    "database cannot be accessed from an authorizer callback"
+                } else {
+                    "statement is already being executed"
+                },
+                "ERR_INVALID_STATE",
+            ));
+        }
+        self.executing.set(true);
+        Ok(StatementGuard {
+            state: self,
+            conn,
+            _js: JsCtxGuard::new(ctx.as_raw().as_ptr()),
+        })
+    }
+
+    fn begin<'js>(
+        &self,
+        ctx: &rquickjs::Ctx<'js>,
+        params: &rquickjs::Value<'js>,
+        bare: bool,
+        unknown: bool,
+    ) -> rquickjs::Result<()> {
+        self.generation.set(self.generation.get().wrapping_add(1));
+        self.cursor.set(false);
+        let rc = unsafe { rusqlite::ffi::sqlite3_reset(self.raw.get()) };
+        let conn = self.connection.upgrade().unwrap();
+        check_sqlite(ctx, &conn, rc)?;
+        bind_params(ctx, self.raw.get(), params, bare, unknown)
+    }
+
+    fn step<'js>(
+        &self,
+        ctx: &rquickjs::Ctx<'js>,
+        conn: &SqliteConnection,
+    ) -> rquickjs::Result<bool> {
+        let rc = unsafe { rusqlite::ffi::sqlite3_step(self.raw.get()) };
+        match rc {
+            rusqlite::ffi::SQLITE_ROW => Ok(true),
+            rusqlite::ffi::SQLITE_DONE => Ok(false),
+            _ => {
+                check_sqlite(ctx, conn, rc)?;
+                unreachable!()
+            }
         }
     }
 
-    fn insert(&mut self, state: IteratorState) -> u32 {
-        let id = self.next_id;
-        self.next_id += 1;
-        self.iterators.insert(id, state);
-        id
+    fn finish<'js, T>(
+        &self,
+        ctx: &rquickjs::Ctx<'js>,
+        conn: &SqliteConnection,
+        outcome: rquickjs::Result<T>,
+    ) -> rquickjs::Result<T> {
+        self.cursor.set(false);
+        let rc = unsafe { rusqlite::ffi::sqlite3_reset(self.raw.get()) };
+        match outcome {
+            Ok(value) => {
+                check_sqlite(ctx, conn, rc)?;
+                Ok(value)
+            }
+            Err(error) => {
+                take_pending_js_exception(ctx);
+                Err(error)
+            }
+        }
+    }
+}
+
+fn check_sqlite<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    conn: &SqliteConnection,
+    rc: i32,
+) -> rquickjs::Result<()> {
+    if rc == rusqlite::ffi::SQLITE_OK {
+        return Ok(());
+    }
+    let message = unsafe { std::ffi::CStr::from_ptr(rusqlite::ffi::sqlite3_errmsg(conn.handle())) }
+        .to_string_lossy()
+        .into_owned();
+    Err(map_sqlite_or_udf_error(
+        ctx,
+        rusqlite::Error::SqliteFailure(rusqlite::ffi::Error::new(rc), Some(message)),
+    ))
+}
+
+fn prepare_statement_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    conn_id: u32,
+    sql: String,
+) -> rquickjs::Result<NativeStatement> {
+    let conn = connection(&ctx, conn_id)?;
+    if conn.in_authorizer.get() {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "database is busy",
+            "ERR_INVALID_STATE",
+        ));
+    }
+    let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
+    let sql = std::ffi::CString::new(sql).map_err(|_| {
+        throw_coded_error(
+            &ctx,
+            "Error",
+            "SQL text contains a null byte",
+            "ERR_INVALID_ARG_VALUE",
+        )
+    })?;
+    let mut raw = std::ptr::null_mut();
+    let rc = unsafe {
+        rusqlite::ffi::sqlite3_prepare_v2(
+            conn.handle(),
+            sql.as_ptr(),
+            -1,
+            &mut raw,
+            std::ptr::null_mut(),
+        )
+    };
+    if rc != rusqlite::ffi::SQLITE_OK {
+        if !raw.is_null() {
+            unsafe {
+                rusqlite::ffi::sqlite3_finalize(raw);
+            }
+        }
+        check_sqlite(&ctx, &conn, rc)?;
+    }
+    if raw.is_null() {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "SQL text contains no statements",
+            "ERR_INVALID_ARG_VALUE",
+        ));
+    }
+    let state = Rc::new(StatementState {
+        connection: Arc::downgrade(&conn),
+        raw: Cell::new(raw),
+        executing: Cell::new(false),
+        cursor: Cell::new(false),
+        generation: Cell::new(0),
+    });
+    let mut statements = conn.statements.borrow_mut();
+    statements.retain(|s| s.strong_count() > 0);
+    statements.push(Rc::downgrade(&state));
+    Ok(NativeStatement { state })
+}
+
+#[rquickjs::methods]
+impl NativeStatement {
+    pub fn check<'js>(&self, ctx: rquickjs::Ctx<'js>) -> rquickjs::Result<()> {
+        self.state.pointer(&ctx).map(|_| ())
+    }
+
+    pub fn close<'js>(&self, ctx: rquickjs::Ctx<'js>) -> rquickjs::Result<()> {
+        let ptr = self.state.pointer(&ctx)?;
+        let conn = self.state.connection.upgrade().unwrap();
+        if self.state.executing.get() || conn.mutating.get() {
+            return Err(throw_coded_error(
+                &ctx,
+                "Error",
+                "statement is already being executed",
+                "ERR_INVALID_STATE",
+            ));
+        }
+        if conn.in_authorizer.get() && unsafe { rusqlite::ffi::sqlite3_stmt_busy(ptr) } != 0 {
+            return Err(throw_coded_error(
+                &ctx,
+                "Error",
+                "database cannot be accessed from an authorizer callback",
+                "ERR_INVALID_STATE",
+            ));
+        }
+        self.state.executing.set(true);
+        let _guard = StatementGuard {
+            state: &self.state,
+            conn,
+            _js: JsCtxGuard::new(ctx.as_raw().as_ptr()),
+        };
+        self.state.finalize();
+        Ok(())
+    }
+
+    pub fn dispose<'js>(&self, ctx: rquickjs::Ctx<'js>) -> rquickjs::Result<()> {
+        if self.state.raw.get().is_null() {
+            return Ok(());
+        }
+        self.close(ctx)
+    }
+
+    pub fn source<'js>(&self, ctx: rquickjs::Ctx<'js>) -> rquickjs::Result<String> {
+        let ptr = self.state.pointer(&ctx)?;
+        Ok(
+            unsafe { std::ffi::CStr::from_ptr(rusqlite::ffi::sqlite3_sql(ptr)) }
+                .to_string_lossy()
+                .into_owned(),
+        )
+    }
+
+    pub fn stat<'js>(&self, ctx: rquickjs::Ctx<'js>, counter: String) -> rquickjs::Result<i32> {
+        let ptr = self.state.pointer(&ctx)?;
+        let id = match counter.as_str() {
+            "fullscanStep" => 1,
+            "sort" => 2,
+            "autoindex" => 3,
+            "vmStep" => 4,
+            "reprepare" => 5,
+            "run" => 6,
+            "filterMiss" => 7,
+            "filterHit" => 8,
+            "memused" => 99,
+            _ => {
+                return Err(throw_coded_error(
+                    &ctx,
+                    "TypeError",
+                    "The \"counter\" argument is not a valid statistic name.",
+                    "ERR_INVALID_ARG_VALUE",
+                ));
+            }
+        };
+        Ok(unsafe { rusqlite::ffi::sqlite3_stmt_status(ptr, id, 0) })
+    }
+
+    #[qjs(rename = "resetStats")]
+    pub fn reset_stats<'js>(&self, ctx: rquickjs::Ctx<'js>) -> rquickjs::Result<()> {
+        let ptr = self.state.pointer(&ctx)?;
+        for id in 1..=8 {
+            unsafe {
+                rusqlite::ffi::sqlite3_stmt_status(ptr, id, 1);
+            }
+        }
+        Ok(())
     }
 }
 
@@ -93,9 +443,6 @@ impl SessionTable {
 
 static CONN_TABLE: LazyLock<Mutex<ConnectionTable>> =
     LazyLock::new(|| Mutex::new(ConnectionTable::new()));
-
-static ITER_TABLE: LazyLock<Mutex<IteratorTable>> =
-    LazyLock::new(|| Mutex::new(IteratorTable::new()));
 
 static SESSION_TABLE: LazyLock<Mutex<SessionTable>> =
     LazyLock::new(|| Mutex::new(SessionTable::new()));
@@ -415,28 +762,59 @@ fn create_null_proto_object<'js>(
 
 fn row_to_js<'js>(
     ctx: &rquickjs::Ctx<'js>,
-    col_names: &[String],
-    row: &rusqlite::Row,
+    stmt: *mut rusqlite::ffi::sqlite3_stmt,
     return_arrays: bool,
     read_big_ints: bool,
 ) -> rquickjs::Result<rquickjs::Value<'js>> {
-    if return_arrays {
-        let arr = rquickjs::Array::new(ctx.clone())?;
-        for i in 0..col_names.len() {
-            let val = row.get_ref(i).map_err(|e| sqlite_error(ctx, &e))?;
-            let js_val = sqlite_value_to_js(ctx, &val, read_big_ints, i)?;
-            arr.set(i, js_val)?;
+    use rusqlite::{ffi, types::Value};
+    let mut names = Vec::new();
+    let mut values = Vec::new();
+    // SAFETY: the caller has stepped to SQLITE_ROW and holds the statement
+    // execution guard. Copy all SQLite bytes before any JS allocation/property
+    // creation can run user code or GC finalizers.
+    unsafe {
+        for i in 0..ffi::sqlite3_column_count(stmt) {
+            names.push(
+                std::ffi::CStr::from_ptr(ffi::sqlite3_column_name(stmt, i))
+                    .to_string_lossy()
+                    .into_owned(),
+            );
+            values.push(match ffi::sqlite3_column_type(stmt, i) {
+                ffi::SQLITE_INTEGER => Value::Integer(ffi::sqlite3_column_int64(stmt, i)),
+                ffi::SQLITE_FLOAT => Value::Real(ffi::sqlite3_column_double(stmt, i)),
+                ffi::SQLITE_TEXT => {
+                    let ptr = ffi::sqlite3_column_text(stmt, i);
+                    let len = ffi::sqlite3_column_bytes(stmt, i) as usize;
+                    let bytes = if len == 0 {
+                        &[]
+                    } else {
+                        std::slice::from_raw_parts(ptr, len)
+                    };
+                    Value::Text(
+                        std::str::from_utf8(bytes)
+                            .map_err(|_| {
+                                rquickjs::Exception::throw_message(
+                                    ctx,
+                                    "Invalid UTF-8 in SQLite TEXT value",
+                                )
+                            })?
+                            .to_string(),
+                    )
+                }
+                ffi::SQLITE_BLOB => {
+                    let ptr = ffi::sqlite3_column_blob(stmt, i);
+                    let len = ffi::sqlite3_column_bytes(stmt, i) as usize;
+                    Value::Blob(if len == 0 {
+                        Vec::new()
+                    } else {
+                        std::slice::from_raw_parts(ptr.cast::<u8>(), len).to_vec()
+                    })
+                }
+                _ => Value::Null,
+            });
         }
-        Ok(arr.into_value())
-    } else {
-        let obj = create_null_proto_object(ctx)?;
-        for (i, name) in col_names.iter().enumerate() {
-            let val = row.get_ref(i).map_err(|e| sqlite_error(ctx, &e))?;
-            let js_val = sqlite_value_to_js(ctx, &val, read_big_ints, i)?;
-            obj.set(name.as_str(), js_val)?;
-        }
-        Ok(obj.into_value())
     }
+    owned_row_to_js(ctx, &names, &values, return_arrays, read_big_ints)
 }
 
 fn owned_row_to_js<'js>(
@@ -471,12 +849,68 @@ fn lock_conn_table<'js>(
     })
 }
 
+fn connection<'js>(ctx: &rquickjs::Ctx<'js>, id: u32) -> rquickjs::Result<Arc<SqliteConnection>> {
+    let conn = lock_conn_table(ctx)?
+        .connections
+        .get(&id)
+        .cloned()
+        .ok_or_else(|| {
+            throw_coded_error(ctx, "Error", "database is not open", "ERR_INVALID_STATE")
+        })?;
+    if conn.mutating.get() {
+        return Err(throw_coded_error(
+            ctx,
+            "Error",
+            "database is busy",
+            "ERR_INVALID_STATE",
+        ));
+    }
+    Ok(conn)
+}
+
+fn check_idle_connection<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    conn: &Arc<SqliteConnection>,
+    message: &str,
+) -> rquickjs::Result<()> {
+    // The table and the current operation own the only strong references when
+    // no SQLite call is on the stack. Statements retain weak connection links.
+    if Arc::strong_count(conn) > 2 || conn.in_authorizer.get() {
+        return Err(throw_coded_error(
+            ctx,
+            "Error",
+            message,
+            "ERR_INVALID_STATE",
+        ));
+    }
+    Ok(())
+}
+
+fn finalize_statements(conn: &SqliteConnection) {
+    let statements: Vec<_> = conn
+        .statements
+        .borrow_mut()
+        .drain(..)
+        .filter_map(|s| s.upgrade())
+        .collect();
+    // No registry borrow survives sqlite3_finalize (aggregate cleanup can call JS).
+    for stmt in statements {
+        stmt.finalize();
+    }
+}
+
 fn bind_params<'js>(
     ctx: &rquickjs::Ctx<'js>,
-    stmt: &mut rusqlite::Statement,
+    stmt: *mut rusqlite::ffi::sqlite3_stmt,
     params: &rquickjs::Value<'js>,
     allow_bare_named: bool,
+    allow_unknown_named: bool,
 ) -> rquickjs::Result<()> {
+    use rusqlite::ffi;
+    // SAFETY: the caller owns a live statement and holds its execution guard.
+    unsafe {
+        ffi::sqlite3_clear_bindings(stmt);
+    }
     if params.is_null() || params.is_undefined() {
         return Ok(());
     }
@@ -484,117 +918,104 @@ fn bind_params<'js>(
     if let Some(arr) = params.as_array() {
         for i in 0..arr.len() {
             let val: rquickjs::Value<'js> = arr.get(i)?;
-            let sql_val = js_value_to_sqlite(ctx, &val, i + 1)?;
-            stmt.raw_bind_parameter(i + 1, sql_val)
-                .map_err(|e| sqlite_error(ctx, &e))?;
+            bind_value(ctx, stmt, i + 1, &val)?;
         }
     } else if params.is_object() {
         let obj = params.as_object().ok_or_else(|| {
             rquickjs::Exception::throw_message(ctx, "expected object for named parameters")
         })?;
-        let count = stmt.parameter_count();
-        for idx in 1..=count {
-            if let Some(name) = stmt.parameter_name(idx) {
-                let val: rquickjs::Value<'js> = obj
-                    .get::<_, rquickjs::Value<'js>>(name)
-                    .unwrap_or_else(|_| rquickjs::Value::new_null(ctx.clone()));
-
-                let val = if (val.is_undefined() || val.is_null())
-                    && allow_bare_named
-                    && name.len() > 1
-                    && matches!(name.as_bytes()[0], b':' | b'@' | b'$')
-                {
-                    let bare = &name[1..];
-                    obj.get::<_, rquickjs::Value<'js>>(bare)
-                        .unwrap_or_else(|_| rquickjs::Value::new_null(ctx.clone()))
-                } else {
-                    val
-                };
-
-                // For named params, treat undefined as NULL (unbound)
-                let val = if val.is_undefined() {
-                    rquickjs::Value::new_null(ctx.clone())
-                } else {
-                    val
-                };
-
-                let sql_val = js_value_to_sqlite(ctx, &val, idx)?;
-                stmt.raw_bind_parameter(idx, sql_val)
-                    .map_err(|e| sqlite_error(ctx, &e))?;
+        let mut bare_names = HashMap::new();
+        if allow_bare_named {
+            for idx in 1..=unsafe { ffi::sqlite3_bind_parameter_count(stmt) } {
+                let ptr = unsafe { ffi::sqlite3_bind_parameter_name(stmt, idx) };
+                if ptr.is_null() {
+                    continue;
+                }
+                let name = unsafe { std::ffi::CStr::from_ptr(ptr) }
+                    .to_string_lossy()
+                    .into_owned();
+                let bare = name[1..].to_string();
+                if let Some((other, _)) = bare_names.insert(bare.clone(), (name.clone(), idx)) {
+                    return Err(throw_coded_error(
+                        ctx,
+                        "Error",
+                        &format!(
+                            "Cannot create bare named parameter '{}' because of conflicting names '{}' and '{}'.",
+                            bare, other, name
+                        ),
+                        "ERR_INVALID_STATE",
+                    ));
+                }
             }
         }
-    }
-
-    Ok(())
-}
-
-fn validate_named_params<'js>(
-    ctx: &rquickjs::Ctx<'js>,
-    stmt: &rusqlite::Statement,
-    params: &rquickjs::Value<'js>,
-    allow_bare_named: bool,
-    allow_unknown_named: bool,
-) -> rquickjs::Result<()> {
-    if params.is_null() || params.is_undefined() {
-        return Ok(());
-    }
-    if params.as_array().is_some() {
-        return Ok(());
-    }
-    let obj = match params.as_object() {
-        Some(o) => o,
-        None => return Ok(()),
-    };
-
-    let props = obj.props::<String, rquickjs::Value>();
-    for entry in props {
-        let (key, _) = entry?;
-
-        // Check if key directly matches a SQL parameter name
-        let direct_match = (1..=stmt.parameter_count())
-            .any(|idx| stmt.parameter_name(idx).is_some_and(|name| name == key));
-        if direct_match {
-            continue;
-        }
-
-        // Check bare name matching if enabled
-        if allow_bare_named {
-            let matching_names: Vec<String> = (1..=stmt.parameter_count())
-                .filter_map(|idx| stmt.parameter_name(idx))
-                .filter(|name| {
-                    name.len() > 1
-                        && matches!(name.as_bytes()[0], b':' | b'@' | b'$')
-                        && name[1..] == key
-                })
-                .map(String::from)
-                .collect();
-
-            if matching_names.len() > 1 {
+        // Enumerate keys without reading values: ignored unknown keys must not
+        // invoke getters, and recognized getters run exactly once.
+        let keys: Vec<String> = obj
+            .own_keys(rquickjs::object::Filter::new().string())
+            .collect::<rquickjs::Result<_>>()?;
+        for key in keys {
+            let name = std::ffi::CString::new(key.as_str()).ok();
+            let mut idx = name.as_ref().map_or(0, |name| unsafe {
+                ffi::sqlite3_bind_parameter_index(stmt, name.as_ptr())
+            });
+            if idx == 0 && allow_bare_named {
+                idx = bare_names.get(&key).map_or(0, |(_, idx)| *idx);
+            }
+            if idx == 0 {
+                if allow_unknown_named {
+                    continue;
+                }
                 return Err(throw_coded_error(
                     ctx,
                     "Error",
-                    &format!(
-                        "Cannot create bare named parameter '{}' because of conflicting names '{}' and '{}'.",
-                        key, matching_names[0], matching_names[1]
-                    ),
+                    &format!("Unknown named parameter '{}'", key),
                     "ERR_INVALID_STATE",
                 ));
             }
-
-            if !matching_names.is_empty() {
-                continue;
-            }
+            let val = obj.get(key)?;
+            bind_value(ctx, stmt, idx as usize, &val)?;
         }
+    }
+    Ok(())
+}
 
-        // No match found
-        if !allow_unknown_named {
-            return Err(throw_coded_error(
-                ctx,
-                "Error",
-                &format!("Unknown named parameter '{}'", key),
-                "ERR_INVALID_STATE",
-            ));
+fn bind_value<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    stmt: *mut rusqlite::ffi::sqlite3_stmt,
+    index: usize,
+    val: &rquickjs::Value<'js>,
+) -> rquickjs::Result<()> {
+    use rusqlite::{ffi, types::Value};
+    let value = js_value_to_sqlite(ctx, val, index)?;
+    // SAFETY: handle is live/guarded; SQLite copies string/blob bytes before the
+    // owned Rust value is dropped, including empty blobs (a non-null slice ptr).
+    let rc = unsafe {
+        match value {
+            Value::Null => ffi::sqlite3_bind_null(stmt, index as i32),
+            Value::Integer(i) => ffi::sqlite3_bind_int64(stmt, index as i32, i),
+            Value::Real(f) => ffi::sqlite3_bind_double(stmt, index as i32, f),
+            Value::Text(s) => ffi::sqlite3_bind_text64(
+                stmt,
+                index as i32,
+                s.as_ptr().cast(),
+                s.len() as u64,
+                ffi::SQLITE_TRANSIENT(),
+                ffi::SQLITE_UTF8 as u8,
+            ),
+            Value::Blob(b) => ffi::sqlite3_bind_blob64(
+                stmt,
+                index as i32,
+                b.as_ptr().cast(),
+                b.len() as u64,
+                ffi::SQLITE_TRANSIENT(),
+            ),
         }
+    };
+    if rc != ffi::SQLITE_OK {
+        return Err(sqlite_error(
+            ctx,
+            &rusqlite::Error::SqliteFailure(ffi::Error::new(rc), None),
+        ));
     }
     Ok(())
 }
@@ -662,6 +1083,12 @@ fn open_database_impl<'js>(
 }
 
 fn close_database_impl<'js>(ctx: rquickjs::Ctx<'js>, conn_id: u32) -> rquickjs::Result<()> {
+    let conn = connection(&ctx, conn_id)?;
+    check_idle_connection(&ctx, &conn, "database cannot be closed while in a callback")?;
+    let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
+    conn.mutating.set(true);
+    let _mutation = FlagGuard(&conn.mutating);
+    finalize_statements(&conn);
     // Clean up sessions associated with this connection first
     if let Ok(mut session_table) = SESSION_TABLE.lock() {
         session_table
@@ -681,11 +1108,15 @@ fn close_database_impl<'js>(ctx: rquickjs::Ctx<'js>, conn_id: u32) -> rquickjs::
 
 fn exec_sql_impl<'js>(ctx: rquickjs::Ctx<'js>, conn_id: u32, sql: String) -> rquickjs::Result<()> {
     let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
+    if conn.in_authorizer.get() {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "database is busy",
+            "ERR_INVALID_STATE",
+        ));
+    }
     conn.execute_batch(&sql)
         .map_err(|e| sqlite_error(&ctx, &e))?;
     Ok(())
@@ -708,40 +1139,22 @@ fn is_autocommit_impl(conn_id: u32) -> bool {
 
 fn stmt_run_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    conn_id: u32,
-    sql: String,
+    stmt: &NativeStatement,
     params: rquickjs::Value<'js>,
     allow_bare_named: bool,
     allow_unknown_named: bool,
     read_big_ints: bool,
 ) -> rquickjs::Result<rquickjs::Object<'js>> {
-    let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
-
-    {
-        let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-        validate_named_params(&ctx, &stmt, &params, allow_bare_named, allow_unknown_named)?;
-        bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
-
-        if stmt.column_count() > 0 {
-            let mut rows = stmt.raw_query();
-            while rows
-                .next()
-                .map_err(|e| map_sqlite_or_udf_error(&ctx, e))?
-                .is_some()
-            {}
-        } else {
-            stmt.raw_execute()
-                .map_err(|e| map_sqlite_or_udf_error(&ctx, e))?;
-        }
-    }
-
-    let changes = conn.changes();
-    let last_rowid = conn.last_insert_rowid();
+    let guard = stmt.state.enter(&ctx)?;
+    let outcome = (|| {
+        stmt.state
+            .begin(&ctx, &params, allow_bare_named, allow_unknown_named)?;
+        while stmt.state.step(&ctx, &guard.conn)? {}
+        Ok(())
+    })();
+    stmt.state.finish(&ctx, &guard.conn, outcome)?;
+    let changes = guard.conn.changes();
+    let last_rowid = guard.conn.last_insert_rowid();
 
     let result = rquickjs::Object::new(ctx.clone())?;
     if read_big_ints {
@@ -766,125 +1179,108 @@ struct StatementResultOptions {
 
 fn stmt_get_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    conn_id: u32,
-    sql: String,
+    stmt: &NativeStatement,
     params: rquickjs::Value<'js>,
     options: StatementResultOptions,
 ) -> rquickjs::Result<rquickjs::Value<'js>> {
-    let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
-
-    let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-    validate_named_params(
-        &ctx,
-        &stmt,
-        &params,
-        options.allow_bare_named,
-        options.allow_unknown_named,
-    )?;
-    bind_params(&ctx, &mut stmt, &params, options.allow_bare_named)?;
-
-    let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
-    let mut rows = stmt.raw_query();
-
-    match rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))? {
-        Some(row) => row_to_js(
+    let guard = stmt.state.enter(&ctx)?;
+    let outcome = (|| {
+        stmt.state.begin(
             &ctx,
-            &col_names,
-            row,
-            options.return_arrays,
-            options.read_big_ints,
-        ),
-        None => Ok(rquickjs::Value::new_undefined(ctx.clone())),
-    }
+            &params,
+            options.allow_bare_named,
+            options.allow_unknown_named,
+        )?;
+        if stmt.state.step(&ctx, &guard.conn)? {
+            row_to_js(
+                &ctx,
+                stmt.state.raw.get(),
+                options.return_arrays,
+                options.read_big_ints,
+            )
+        } else {
+            Ok(rquickjs::Value::new_undefined(ctx.clone()))
+        }
+    })();
+    stmt.state.finish(&ctx, &guard.conn, outcome)
 }
 
 fn stmt_all_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    conn_id: u32,
-    sql: String,
+    stmt: &NativeStatement,
     params: rquickjs::Value<'js>,
     options: StatementResultOptions,
 ) -> rquickjs::Result<rquickjs::Array<'js>> {
-    let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
-
-    let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-    validate_named_params(
-        &ctx,
-        &stmt,
-        &params,
-        options.allow_bare_named,
-        options.allow_unknown_named,
-    )?;
-    bind_params(&ctx, &mut stmt, &params, options.allow_bare_named)?;
-
-    let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
-    let mut rows = stmt.raw_query();
-    let result = rquickjs::Array::new(ctx.clone())?;
-    let mut idx = 0u32;
-
-    while let Some(row) = rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))? {
-        let val = row_to_js(
+    let guard = stmt.state.enter(&ctx)?;
+    let outcome = (|| {
+        stmt.state.begin(
             &ctx,
-            &col_names,
-            row,
-            options.return_arrays,
-            options.read_big_ints,
+            &params,
+            options.allow_bare_named,
+            options.allow_unknown_named,
         )?;
-        result.set(idx as usize, val)?;
-        idx += 1;
-    }
-
-    Ok(result)
+        let result = rquickjs::Array::new(ctx.clone())?;
+        let mut idx = 0;
+        while stmt.state.step(&ctx, &guard.conn)? {
+            result.set(
+                idx,
+                row_to_js(
+                    &ctx,
+                    stmt.state.raw.get(),
+                    options.return_arrays,
+                    options.read_big_ints,
+                )?,
+            )?;
+            idx += 1;
+        }
+        Ok(result)
+    })();
+    stmt.state.finish(&ctx, &guard.conn, outcome)
 }
 
 fn stmt_expanded_sql_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    conn_id: u32,
-    sql: String,
-    params: rquickjs::Value<'js>,
-    allow_bare_named: bool,
+    stmt: &NativeStatement,
 ) -> rquickjs::Result<String> {
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
-
-    let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-    bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
-
-    Ok(stmt.expanded_sql().unwrap_or(sql))
+    let ptr = stmt.state.pointer(&ctx)?;
+    let text = unsafe { rusqlite::ffi::sqlite3_expanded_sql(ptr) };
+    if text.is_null() {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "Expanded SQL text would exceed configured limits",
+            "ERR_SQLITE_ERROR",
+        ));
+    }
+    let result = unsafe { std::ffi::CStr::from_ptr(text) }
+        .to_string_lossy()
+        .into_owned();
+    unsafe {
+        rusqlite::ffi::sqlite3_free(text.cast());
+    }
+    Ok(result)
 }
 
 fn stmt_columns_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    conn_id: u32,
-    sql: String,
+    stmt: &NativeStatement,
 ) -> rquickjs::Result<rquickjs::Array<'js>> {
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
-
-    let stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-    let col_count = stmt.column_count();
+    let ptr = stmt.state.pointer(&ctx)?;
+    let col_count = unsafe { rusqlite::ffi::sqlite3_column_count(ptr) };
+    // Copy all SQLite-owned strings before allocating JS objects or invoking
+    // inherited setters, which can finalize this statement through reentry.
+    let names: Vec<String> = (0..col_count)
+        .map(|i| {
+            unsafe { std::ffi::CStr::from_ptr(rusqlite::ffi::sqlite3_column_name(ptr, i)) }
+                .to_string_lossy()
+                .into_owned()
+        })
+        .collect();
     let result = rquickjs::Array::new(ctx.clone())?;
 
-    for i in 0..col_count {
+    for (i, name) in names.iter().enumerate() {
         let info = rquickjs::Object::new(ctx.clone())?;
-        let name = stmt.column_name(i).map_err(|e| sqlite_error(&ctx, &e))?;
-        info.set("name", name)?;
+        info.set("name", name.as_str())?;
         info.set("column", rquickjs::Value::new_null(ctx.clone()))?;
         info.set("table", rquickjs::Value::new_null(ctx.clone()))?;
         info.set("database", rquickjs::Value::new_null(ctx.clone()))?;
@@ -897,93 +1293,79 @@ fn stmt_columns_impl<'js>(
 
 fn stmt_iterate_init_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    conn_id: u32,
-    sql: String,
+    stmt: &NativeStatement,
     params: rquickjs::Value<'js>,
     allow_bare_named: bool,
     allow_unknown_named: bool,
-) -> rquickjs::Result<u32> {
-    let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
-
-    let state = {
-        let table = lock_conn_table(&ctx)?;
-        let conn = table
-            .connections
-            .get(&conn_id)
-            .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
-
-        let mut stmt = conn.prepare(&sql).map_err(|e| sqlite_error(&ctx, &e))?;
-        validate_named_params(&ctx, &stmt, &params, allow_bare_named, allow_unknown_named)?;
-        bind_params(&ctx, &mut stmt, &params, allow_bare_named)?;
-
-        let col_names: Vec<String> = stmt.column_names().into_iter().map(String::from).collect();
-        let mut rows = stmt.raw_query();
-        let mut all_values = Vec::new();
-
-        while let Some(row) = rows.next().map_err(|e| map_sqlite_or_udf_error(&ctx, e))? {
-            let mut row_vals = Vec::with_capacity(col_names.len());
-            for i in 0..col_names.len() {
-                let val = row.get_ref(i).map_err(|e| sqlite_error(&ctx, &e))?;
-                row_vals.push(rusqlite::types::Value::from(val));
-            }
-            all_values.push(row_vals);
-        }
-
-        IteratorState {
-            col_names,
-            values: all_values,
-            position: 0,
-        }
-    };
-
-    let mut iter_table = ITER_TABLE
-        .lock()
-        .map_err(|_| rquickjs::Exception::throw_message(&ctx, "iterator table lock poisoned"))?;
-    let id = iter_table.insert(state);
-    Ok(id)
+) -> rquickjs::Result<NativeIterator> {
+    let guard = stmt.state.enter(&ctx)?;
+    if let Err(error) = stmt
+        .state
+        .begin(&ctx, &params, allow_bare_named, allow_unknown_named)
+    {
+        return stmt.state.finish(&ctx, &guard.conn, Err(error));
+    }
+    stmt.state.cursor.set(true);
+    Ok(NativeIterator {
+        state: stmt.state.clone(),
+        generation: stmt.state.generation.get(),
+        done: Cell::new(false),
+    })
 }
 
 fn stmt_iterate_next_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
-    iter_id: u32,
+    iter: &NativeIterator,
     read_big_ints: bool,
     return_arrays: bool,
 ) -> rquickjs::Result<rquickjs::Object<'js>> {
-    let mut iter_table = ITER_TABLE
-        .lock()
-        .map_err(|_| rquickjs::Exception::throw_message(&ctx, "iterator table lock poisoned"))?;
-
-    let state = iter_table
-        .iterators
-        .get_mut(&iter_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "invalid iterator id"))?;
-
-    let result = rquickjs::Object::new(ctx.clone())?;
-    if state.position < state.values.len() {
-        let row_val = owned_row_to_js(
+    iter.state.pointer(&ctx)?;
+    let result = create_null_proto_object(&ctx)?;
+    if iter.done.get() {
+        result.set("value", rquickjs::Value::new_null(ctx.clone()))?;
+        result.set("done", true)?;
+        return Ok(result);
+    }
+    let guard = iter.state.enter(&ctx)?;
+    if iter.generation != iter.state.generation.get() {
+        return Err(throw_coded_error(
             &ctx,
-            &state.col_names,
-            &state.values[state.position],
-            return_arrays,
-            read_big_ints,
+            "Error",
+            "iterator was invalidated",
+            "ERR_INVALID_STATE",
+        ));
+    }
+    if iter.state.step(&ctx, &guard.conn)? {
+        result.set(
+            "value",
+            row_to_js(&ctx, iter.state.raw.get(), return_arrays, read_big_ints)?,
         )?;
-        state.position += 1;
-        result.set("value", row_val)?;
         result.set("done", false)?;
     } else {
-        // Clean up exhausted iterator to prevent leaks
-        iter_table.iterators.remove(&iter_id);
-        result.set("value", rquickjs::Value::new_undefined(ctx.clone()))?;
+        iter.done.set(true);
+        iter.state.finish(&ctx, &guard.conn, Ok(()))?;
+        result.set("value", rquickjs::Value::new_null(ctx.clone()))?;
         result.set("done", true)?;
     }
     Ok(result)
 }
 
-fn stmt_iterate_return_impl<'js>(ctx: rquickjs::Ctx<'js>, iter_id: u32) -> rquickjs::Result<()> {
-    let mut iter_table = ITER_TABLE
-        .lock()
-        .map_err(|_| rquickjs::Exception::throw_message(&ctx, "iterator table lock poisoned"))?;
-    iter_table.iterators.remove(&iter_id);
+fn stmt_iterate_return_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    iter: &NativeIterator,
+) -> rquickjs::Result<()> {
+    iter.state.pointer(&ctx)?;
+    if !iter.done.get() {
+        let _guard = iter.state.enter(&ctx)?;
+        // Return must not replace a pending loop-body exception with reset's
+        // deferred SQLite error. Invalidation still prevents next() afterwards.
+        unsafe {
+            rusqlite::ffi::sqlite3_reset(iter.state.raw.get());
+        }
+        iter.state.cursor.set(false);
+        iter.done.set(true);
+        take_pending_js_exception(&ctx);
+    }
     Ok(())
 }
 
@@ -1126,11 +1508,7 @@ fn register_function_impl<'js>(
         options.num_args
     };
 
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
 
     conn.create_scalar_function(&*name, n_arg, flags, move |fctx| {
         // SAFETY: The UDF closure is called synchronously during statement
@@ -1336,11 +1714,7 @@ fn register_aggregate_impl<'js>(
         use_big_int_args: options.use_big_int_args,
     };
 
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
 
     conn.create_aggregate_function(&*name, n_arg, flags, aggr)
         .map_err(|e| sqlite_error(&ctx, &e))?;
@@ -1354,18 +1728,14 @@ fn create_session_impl<'js>(
     table_name: rquickjs::Value<'js>,
     db_name: String,
 ) -> rquickjs::Result<u32> {
-    let conn_table = lock_conn_table(&ctx)?;
-    let conn = conn_table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
 
     // SAFETY: Session internally stores raw pointers, not references. The
     // PhantomData<&'conn Connection> lifetime is a compile-time-only constraint.
     // We transmute to 'static because we guarantee the connection outlives the
     // session by tracking conn_id and cleaning up sessions when connections close.
     let mut session = unsafe {
-        let s = rusqlite::session::Session::new_with_name(conn, db_name.as_str())
+        let s = rusqlite::session::Session::new_with_name(&conn, db_name.as_str())
             .map_err(|e| sqlite_error(&ctx, &e))?;
         std::mem::transmute::<rusqlite::session::Session<'_>, rusqlite::session::Session<'static>>(
             s,
@@ -1382,8 +1752,6 @@ fn create_session_impl<'js>(
             .attach(Some(name.as_str()))
             .map_err(|e| sqlite_error(&ctx, &e))?;
     }
-
-    drop(conn_table);
 
     let state = SessionState { session, conn_id };
     let mut session_table = SESSION_TABLE
@@ -1463,11 +1831,7 @@ fn apply_changeset_impl<'js>(
 ) -> rquickjs::Result<bool> {
     let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
 
-    let conn_table = lock_conn_table(&ctx)?;
-    let conn = conn_table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
 
     let bytes = crate::wrappers::copy_typed_array_bytes(&changeset)
         .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "detached TypedArray buffer"))?;
@@ -1652,11 +2016,7 @@ fn enable_defensive_impl<'js>(
     conn_id: u32,
     active: bool,
 ) -> rquickjs::Result<()> {
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
     conn.set_db_config(
         rusqlite::config::DbConfig::SQLITE_DBCONFIG_DEFENSIVE,
         active,
@@ -1688,11 +2048,15 @@ fn set_authorizer_impl<'js>(
     conn_id: u32,
     callback: rquickjs::Value<'js>,
 ) -> rquickjs::Result<()> {
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
+    if conn.in_authorizer.get() {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "database is busy",
+            "ERR_INVALID_STATE",
+        ));
+    }
 
     if callback.is_null() || callback.is_undefined() {
         let _ = conn.authorizer(
@@ -1705,9 +2069,15 @@ fn set_authorizer_impl<'js>(
         rquickjs::Exception::throw_message(&ctx, "callback must be a function or null")
     })?;
     let persistent_fn = SendPersistent(rquickjs::Persistent::save(&ctx, func.clone()));
+    let weak_connection = Arc::downgrade(&conn);
 
     let _ = conn.authorizer(Some(
         move |auth_ctx: rusqlite::hooks::AuthContext<'_>| -> rusqlite::hooks::Authorization {
+            let Some(connection) = weak_connection.upgrade() else {
+                return rusqlite::hooks::Authorization::Deny;
+            };
+            connection.in_authorizer.set(true);
+            let _guard = FlagGuard(&connection.in_authorizer);
             let js_ctx = match unsafe { get_udf_js_ctx() } {
                 Ok(ctx) => ctx,
                 Err(_) => return rusqlite::hooks::Authorization::Deny,
@@ -1866,11 +2236,7 @@ fn serialize_database_impl<'js>(
     ctx: rquickjs::Ctx<'js>,
     conn_id: u32,
 ) -> rquickjs::Result<rquickjs::Value<'js>> {
-    let table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
 
     let data = conn
         .serialize(rusqlite::MAIN_DB)
@@ -1888,11 +2254,26 @@ fn restore_database_impl<'js>(
     bytes: rquickjs::TypedArray<'js, u8>,
 ) -> rquickjs::Result<()> {
     crate::internal::preinit::check("SQLite database restore", "in-memory database");
-    let mut table = lock_conn_table(&ctx)?;
-    let conn = table
-        .connections
-        .get_mut(&conn_id)
-        .ok_or_else(|| rquickjs::Exception::throw_message(&ctx, "database is not open"))?;
+    let conn = connection(&ctx, conn_id)?;
+    check_idle_connection(
+        &ctx,
+        &conn,
+        "cannot restore database during active execution",
+    )?;
+    if conn
+        .statements
+        .borrow()
+        .iter()
+        .filter_map(StatementWeak::upgrade)
+        .any(|s| s.cursor.get())
+    {
+        return Err(throw_coded_error(
+            &ctx,
+            "Error",
+            "cannot restore database with an active cursor",
+            "ERR_INVALID_STATE",
+        ));
+    }
 
     if conn
         .is_readonly(rusqlite::MAIN_DB)
@@ -1928,13 +2309,83 @@ fn restore_database_impl<'js>(
         .deserialize_read_exact(rusqlite::MAIN_DB, data, data.len(), false)
         .map_err(|e| sqlite_error(&ctx, &e))?;
 
-    let backup =
-        rusqlite::backup::Backup::new(&temp_conn, conn).map_err(|e| sqlite_error(&ctx, &e))?;
-    backup
-        .run_to_completion(100, Duration::ZERO, None)
-        .map_err(|e| sqlite_error(&ctx, &e))?;
+    // SAFETY: both connections are rooted, no execution/cursor is active, and
+    // backup invokes no JS. Unlike deserialize this preserves idle handles and
+    // connection-local UDFs. SQLite expires prepared statements after backup.
+    unsafe {
+        let backup = rusqlite::ffi::sqlite3_backup_init(
+            conn.handle(),
+            c"main".as_ptr(),
+            temp_conn.handle(),
+            c"main".as_ptr(),
+        );
+        if backup.is_null() {
+            return check_sqlite(&ctx, &conn, rusqlite::ffi::sqlite3_errcode(conn.handle()));
+        }
+        let rc = rusqlite::ffi::sqlite3_backup_step(backup, -1);
+        let finished = rusqlite::ffi::sqlite3_backup_finish(backup);
+        check_sqlite(
+            &ctx,
+            &conn,
+            if rc == rusqlite::ffi::SQLITE_DONE {
+                finished
+            } else {
+                rc
+            },
+        )
+    }
+}
 
-    Ok(())
+fn deserialize_database_impl<'js>(
+    ctx: rquickjs::Ctx<'js>,
+    conn_id: u32,
+    bytes: rquickjs::TypedArray<'js, u8>,
+    name: String,
+) -> rquickjs::Result<()> {
+    crate::internal::preinit::check("SQLite database deserialize", "in-memory database");
+    let conn = connection(&ctx, conn_id)?;
+    check_idle_connection(
+        &ctx,
+        &conn,
+        "database cannot be deserialized while in a callback",
+    )?;
+    let name = std::ffi::CString::new(name).map_err(|_| {
+        throw_coded_error(&ctx, "Error", "invalid database name", "ERR_SQLITE_ERROR")
+    })?;
+    let data = unsafe { bytes.as_bytes() }.ok_or_else(|| {
+        throw_coded_error(
+            &ctx,
+            "Error",
+            "The \"buffer\" argument was resized while reading \"options\"",
+            "ERR_INVALID_STATE",
+        )
+    })?;
+    // SQLite takes ownership only of its own allocator's copy. Finalize before
+    // the deserialize attempt, not before validation/allocation, as Node does.
+    unsafe {
+        let buffer = rusqlite::ffi::sqlite3_malloc64(data.len() as u64).cast::<u8>();
+        if buffer.is_null() {
+            return Err(rquickjs::Exception::throw_message(
+                &ctx,
+                "memory allocation failed",
+            ));
+        }
+        std::ptr::copy_nonoverlapping(data.as_ptr(), buffer, data.len());
+        let _guard = JsCtxGuard::new(ctx.as_raw().as_ptr());
+        conn.mutating.set(true);
+        let _mutation = FlagGuard(&conn.mutating);
+        finalize_statements(&conn);
+        let rc = rusqlite::ffi::sqlite3_deserialize(
+            conn.handle(),
+            name.as_ptr(),
+            buffer,
+            data.len() as i64,
+            data.len() as i64,
+            (rusqlite::ffi::SQLITE_DESERIALIZE_FREEONCLOSE
+                | rusqlite::ffi::SQLITE_DESERIALIZE_RESIZEABLE) as u32,
+        );
+        check_sqlite(&ctx, &conn, rc)
+    }
 }
 
 fn native_backup_impl<'js>(
@@ -1974,7 +2425,36 @@ fn native_backup_impl<'js>(
 
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::{Array, Ctx, Object, Value};
+    use super::{NativeIterator, NativeStatement};
+    use rquickjs::{Array, Class, Ctx, Object, Value};
+
+    #[rquickjs::function]
+    pub fn prepare_statement<'js>(
+        ctx: Ctx<'js>,
+        conn_id: u32,
+        sql: String,
+    ) -> rquickjs::Result<NativeStatement> {
+        super::prepare_statement_impl(ctx, conn_id, sql)
+    }
+
+    #[rquickjs::function]
+    pub fn deserialize_database<'js>(
+        ctx: Ctx<'js>,
+        conn_id: u32,
+        bytes: rquickjs::TypedArray<'js, u8>,
+        name: String,
+    ) -> rquickjs::Result<()> {
+        super::deserialize_database_impl(ctx, conn_id, bytes, name)
+    }
+
+    #[rquickjs::function]
+    pub fn check_database_idle<'js>(ctx: Ctx<'js>, conn_id: u32) -> rquickjs::Result<()> {
+        super::check_idle_connection(
+            &ctx,
+            &super::connection(&ctx, conn_id)?,
+            "database cannot be deserialized while in a callback",
+        )
+    }
 
     #[rquickjs::function]
     pub fn open_database<'js>(
@@ -2018,8 +2498,7 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn stmt_run<'js>(
         ctx: Ctx<'js>,
-        conn_id: u32,
-        sql: String,
+        stmt: Class<'js, NativeStatement>,
         params: Value<'js>,
         allow_bare_named: bool,
         allow_unknown_named: bool,
@@ -2027,8 +2506,7 @@ pub mod native_module {
     ) -> rquickjs::Result<Object<'js>> {
         super::stmt_run_impl(
             ctx,
-            conn_id,
-            sql,
+            &stmt.borrow(),
             params,
             allow_bare_named,
             allow_unknown_named,
@@ -2041,8 +2519,7 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn stmt_get<'js>(
         ctx: Ctx<'js>,
-        conn_id: u32,
-        sql: String,
+        stmt: Class<'js, NativeStatement>,
         params: Value<'js>,
         allow_bare_named: bool,
         allow_unknown_named: bool,
@@ -2051,8 +2528,7 @@ pub mod native_module {
     ) -> rquickjs::Result<Value<'js>> {
         super::stmt_get_impl(
             ctx,
-            conn_id,
-            sql,
+            &stmt.borrow(),
             params,
             super::StatementResultOptions {
                 allow_bare_named,
@@ -2068,8 +2544,7 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn stmt_all<'js>(
         ctx: Ctx<'js>,
-        conn_id: u32,
-        sql: String,
+        stmt: Class<'js, NativeStatement>,
         params: Value<'js>,
         allow_bare_named: bool,
         allow_unknown_named: bool,
@@ -2078,8 +2553,7 @@ pub mod native_module {
     ) -> rquickjs::Result<Array<'js>> {
         super::stmt_all_impl(
             ctx,
-            conn_id,
-            sql,
+            &stmt.borrow(),
             params,
             super::StatementResultOptions {
                 allow_bare_named,
@@ -2093,36 +2567,30 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn stmt_expanded_sql<'js>(
         ctx: Ctx<'js>,
-        conn_id: u32,
-        sql: String,
-        params: Value<'js>,
-        allow_bare_named: bool,
+        stmt: Class<'js, NativeStatement>,
     ) -> rquickjs::Result<String> {
-        super::stmt_expanded_sql_impl(ctx, conn_id, sql, params, allow_bare_named)
+        super::stmt_expanded_sql_impl(ctx, &stmt.borrow())
     }
 
     #[rquickjs::function]
     pub fn stmt_columns<'js>(
         ctx: Ctx<'js>,
-        conn_id: u32,
-        sql: String,
+        stmt: Class<'js, NativeStatement>,
     ) -> rquickjs::Result<Array<'js>> {
-        super::stmt_columns_impl(ctx, conn_id, sql)
+        super::stmt_columns_impl(ctx, &stmt.borrow())
     }
 
     #[rquickjs::function]
     pub fn stmt_iterate_init<'js>(
         ctx: Ctx<'js>,
-        conn_id: u32,
-        sql: String,
+        stmt: Class<'js, NativeStatement>,
         params: Value<'js>,
         allow_bare_named: bool,
         allow_unknown_named: bool,
-    ) -> rquickjs::Result<u32> {
+    ) -> rquickjs::Result<NativeIterator> {
         super::stmt_iterate_init_impl(
             ctx,
-            conn_id,
-            sql,
+            &stmt.borrow(),
             params,
             allow_bare_named,
             allow_unknown_named,
@@ -2132,16 +2600,19 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn stmt_iterate_next<'js>(
         ctx: Ctx<'js>,
-        iter_id: u32,
+        iter: Class<'js, NativeIterator>,
         read_big_ints: bool,
         return_arrays: bool,
     ) -> rquickjs::Result<Object<'js>> {
-        super::stmt_iterate_next_impl(ctx, iter_id, read_big_ints, return_arrays)
+        super::stmt_iterate_next_impl(ctx, &iter.borrow(), read_big_ints, return_arrays)
     }
 
     #[rquickjs::function]
-    pub fn stmt_iterate_return<'js>(ctx: Ctx<'js>, iter_id: u32) -> rquickjs::Result<()> {
-        super::stmt_iterate_return_impl(ctx, iter_id)
+    pub fn stmt_iterate_return<'js>(
+        ctx: Ctx<'js>,
+        iter: Class<'js, NativeIterator>,
+    ) -> rquickjs::Result<()> {
+        super::stmt_iterate_return_impl(ctx, &iter.borrow())
     }
 
     // These positional arguments are the public rquickjs bridge ABI consumed by sqlite.js.

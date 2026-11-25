@@ -1114,10 +1114,12 @@ TCP sockets and servers built on WASI sockets.
 
 Requires the `sqlite` feature flag. Provides a synchronous SQLite database API with an embedded SQLite engine.
 
-- `DatabaseSync` — `prepare`, `exec`, `close`, `open`, `isOpen`, `isTransaction`, `createSession`, `applyChangeset`, `enableLoadExtension`, `function`, `aggregate`, `backup`
-- `StatementSync` — `run`, `get`, `all`, `iterate`, `columns`, `setReadBigInts`, `setAllowBareNamedParameters`, `sourceSQL`, `expandedSQL`
+- `DatabaseSync` — `prepare`, `exec`, `close`, `open`, `isOpen`, `isTransaction`, `createSession`, `applyChangeset`, `enableLoadExtension`, `function`, `aggregate`, `backup`, `deserialize`
+- `StatementSync` — `run`, `get`, `all`, `iterate`, `columns`, `close`, `Symbol.dispose`, `stat`, `resetStats`, `setReadBigInts`, `setAllowBareNamedParameters`, `sourceSQL`, `expandedSQL`
 - `Session` — `changeset`, `patchset`, `close`
 - Constants: `SQLITE_CHANGESET_OMIT`, `SQLITE_CHANGESET_REPLACE`, `SQLITE_CHANGESET_ABORT`
+
+Statements retain their prepared SQLite handles until finalized by `close()`, disposal, garbage collection, database close, or `deserialize()`. Statistics read the actual SQLite statement counters. `deserialize()` finalizes existing statements before attempting replacement, including when that attempt fails. The separate `restoreDatabaseSync()` recovery extension preserves the connection, registered functions and idle statements; it rejects active execution or cursors before changing the database.
 
 **Not supported:** `loadExtension()` (throws — native extensions cannot be loaded in WASM).
 
