@@ -156,6 +156,17 @@ wasm-rquickjs generate-wrapper-crate ... \
 Both options can be repeated. The native module's crate must use the
 same `rquickjs` version as the generated crate; the crate's `[patch.crates-io]` applies to it.
 
+#### Draining before the return
+
+With the skeleton's `post-return-drain` feature, an async export returns its result as soon as
+the JavaScript body produces it, and its remaining timers, promise jobs and adopted work run on
+the call's task after the return. A host that stops driving a call at its return loses that work.
+`--drain-before-return <namespace:package/interface>` makes the async exports of one exported
+interface drain before they return, as they do without the feature. An unversioned name selects
+every exported version, `namespace:package/interface@version` one version; the option can be
+repeated. As without the feature, a draining call still returns before its work while a JavaScript
+producer of any invocation feeds a component future or stream.
+
 ### Generating TypeScript module definitions
 
 The `generate-dts` command generates TypeScript module definitions for all the exported and imported interfaces:

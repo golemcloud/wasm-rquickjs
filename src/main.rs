@@ -19,6 +19,7 @@ fn main() {
             target,
             native_module,
             dependency,
+            drain_before_return,
         } => {
             let modules = if let Some(js) = maybe_js {
                 vec![JsModuleSpec {
@@ -32,6 +33,7 @@ fn main() {
             let options = WrapperCrateOptions {
                 native_modules: native_module.iter().map(|arg| arg.0.clone()).collect(),
                 dependencies: dependency.iter().map(|arg| arg.0.clone()).collect(),
+                drain_before_return: drain_before_return.clone(),
             };
             if let Err(err) = generate_wrapper_crate_with_options(
                 wit,
