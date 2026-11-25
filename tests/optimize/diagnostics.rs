@@ -273,6 +273,10 @@ fn optimizer_reports_native_exception_origins() -> anyhow::Result<()> {
                 .unwrap_err();
             let text = format!("{failure:#}");
             assert!(text.contains(expected), "{tier}: {text}");
+            // The guest reports the JavaScript diagnostic without Rust panic framing.
+            for noise in ["panicked at", "RUST_BACKTRACE"] {
+                assert!(!text.contains(noise), "{tier}: {text}");
+            }
             if let Some(origin) = origin {
                 assert!(
                     text.contains(&format!("{origin} (module:")),
