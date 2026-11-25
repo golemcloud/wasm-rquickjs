@@ -1,6 +1,7 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
 import * as zlib from 'node:zlib';
+import { finished } from 'node:stream/promises';
 import {
   brotliCompressSync,
   brotliDecompressSync,
@@ -533,6 +534,84 @@ export function testZstdDisabled() {
   assert.deepEqual(gunzipSync(gzipSync(source)), source);
   for (const operation of [zlib.zstdCompressSync, zlib.zstdDecompressSync]) {
     assert.throws(() => operation(source), { code: 'ERR_ZLIB_INITIALIZATION_FAILED' });
+  }
+  return true;
+}
+
+export async function testTrailingInput() {
+  const firstText = 'first-17';
+  const secondText = 'second-29';
+  const trailingError = { code: 'ERR_TRAILING_JUNK_AFTER_STREAM_END', name: 'TypeError' };
+  const codecs = [
+    [zlib.deflateSync, zlib.inflateSync, zlib.createInflate, false],
+    [zlib.deflateRawSync, zlib.inflateRawSync, zlib.createInflateRaw, false],
+    [zlib.gzipSync, zlib.gunzipSync, zlib.createGunzip, true],
+    [zlib.gzipSync, zlib.unzipSync, zlib.createUnzip, true],
+    [zlib.brotliCompressSync, zlib.brotliDecompressSync, zlib.createBrotliDecompress, false],
+    [zlib.zstdCompressSync, zlib.zstdDecompressSync, zlib.createZstdDecompress, true],
+  ];
+  async function collect(create, options, chunks) {
+    const stream = create(options);
+    const output = [];
+    stream.on('data', chunk => output.push(chunk));
+    const done = finished(stream);
+    for (const chunk of chunks) stream.write(chunk);
+    stream.end();
+    await done;
+    return Buffer.concat(output);
+  }
+  for (const [compress, decode, create, concatenated] of codecs) {
+    const first = compress(firstText);
+    const joined = Buffer.concat([first, compress(secondText)]);
+    for (const rejectGarbageAfterEnd of [false, true]) {
+      const options = { rejectGarbageAfterEnd };
+      // Zstd accepts valid later frames even in strict mode, unlike gzip.
+      const rejects = rejectGarbageAfterEnd && decode !== zlib.zstdDecompressSync;
+      const expected = concatenated ? firstText + secondText : firstText;
+      if (rejects) assert.throws(() => decode(joined, options), trailingError);
+      else assert.equal(decode(joined, options).toString(), expected);
+      assert.equal(decode(first, options).toString(), firstText);
+      // Every boundary includes splits inside the gzip trailer and at stream end.
+      for (let split = 0; split <= joined.length; split++) {
+        const result = collect(create, options, [joined.subarray(0, split), joined.subarray(split)]);
+        if (rejects) await assert.rejects(result, trailingError);
+        else assert.equal((await result).toString(), expected);
+      }
+      const bytes = Array.from(first, byte => Buffer.from([byte]));
+      assert.equal((await collect(create, options, bytes)).toString(), firstText);
+    }
+    for (const value of [null, 1, 'true']) {
+      assert.throws(() => decode(first, { rejectGarbageAfterEnd: value }), {
+        code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError',
+      });
+      assert.throws(() => create({ rejectGarbageAfterEnd: value }), {
+        code: 'ERR_INVALID_ARG_TYPE', name: 'TypeError',
+      });
+    }
+    if (decode !== zlib.brotliDecompressSync && decode !== zlib.zstdDecompressSync) {
+      const stream = create({ rejectGarbageAfterEnd: true });
+      const output = [];
+      stream.on('data', chunk => output.push(chunk));
+      const done = finished(stream);
+      await new Promise((resolve, reject) => {
+        stream.write(first, error => error ? reject(error) : resolve());
+      });
+      stream.reset();
+      stream.end(compress(secondText));
+      await done;
+      assert.equal(Buffer.concat(output).toString(), firstText + secondText);
+    }
+  }
+  // Brotli must retain its decoder and input offset across bounded output pulls.
+  const large = Buffer.alloc(100003);
+  for (let i = 0; i < large.length; i++) large[i] = (i * 13 + (i >>> 8)) & 255;
+  const compressed = zlib.brotliCompressSync(large);
+  for (const rejectGarbageAfterEnd of [false, true]) {
+    const options = { rejectGarbageAfterEnd, highWaterMark: 64 };
+    assert.deepEqual(await collect(zlib.createBrotliDecompress, options, [compressed]), large);
+    const result = collect(zlib.createBrotliDecompress, options, [Buffer.concat([compressed, Buffer.from([42])])]);
+    if (rejectGarbageAfterEnd) await assert.rejects(result, trailingError);
+    else assert.deepEqual(await result, large);
   }
   return true;
 }

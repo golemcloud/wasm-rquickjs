@@ -16835,8 +16835,6 @@
     "parallel/test-zlib-decode-strings.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-zlib-negative-zero.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-zlib-reject-garbage-after-end.js": {
-      "category": "known-gap",
-      "reason": "shared non-zstd rejectGarbageAfterEnd assertions fail before complete subtest qualification",
       "split": true,
       "subtests": {
         "test_00_zstd_decompresses_concatenated_frames_regardless_of_chunking": {},

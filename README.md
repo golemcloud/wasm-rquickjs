@@ -1264,6 +1264,8 @@ throws immediately. Environment-data APIs are unavailable.
 - `crc32`, `constants`, `codes`
 - Zstandard requires the optional `zstd` feature (included in the full tiers). It uses the reference
   zstd codec with worker threads disabled for WASI; `normal-p3` does not include that codec.
+- Decompression supports the boolean `rejectGarbageAfterEnd` option. Strict gzip/unzip rejects
+  input after the first member; strict zstd still accepts valid concatenated frames.
 
 </details>
 
