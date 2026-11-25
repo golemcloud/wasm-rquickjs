@@ -39,7 +39,7 @@ license = "BSD-3-Clause"
 
 [[curve25519-dalek.clarify.files]]
 path = "LICENSE"
-checksum = "cca0bd3c4fcdba74145ef9d49c62337e2c9fbf9368288f11d0547f1b0273219f"
+checksum = "403c53069750101aeb9df7e15f127056ceaf7e4e92d0b919a1f4c084afd5f1d4"
 
 [encoding_rs.clarify]
 license = "(Apache-2.0 OR MIT) AND BSD-3-Clause"
