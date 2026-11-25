@@ -2822,8 +2822,6 @@ const PRIVATE_KEY_CACHE = new Map();
 const PUBLIC_KEY_CACHE = new Map();
 const PRIVATE_JWK_KEY_CACHE = createPrivateWeakMap();
 const PUBLIC_JWK_KEY_CACHE = createPrivateWeakMap();
-const RSA_PRIVATE_DECRYPT_CACHE = new Map();
-const RSA_PUBLIC_DECRYPT_CACHE = new Map();
 
 function buildKeyObjectCacheKey(format, type_, passphrase, keyData) {
     if (passphrase !== undefined) {
@@ -3511,21 +3509,6 @@ const OKP_TYPE_FROM_CURVE = {
     X448: 'x448',
 };
 
-const OKP_PUBLIC_FROM_PRIVATE = new Map([
-    [
-        'ed448:060Ke71sN0GpIc01nnGgMDkp0sFNQ09woVo4AM1ffax1-mjnakK0-p-S7-Xf859QewXjcR9mxppY',
-        'oX_ee5-jlcU53-BbGRsGIzly0V-SZtJ_oGXY0udf84q2hTW2RdstLktvwpkVJOoNb7oDgc2V5ZUA',
-    ],
-    [
-        'x25519:mL_IWm55RrALUGRfJYzw40gEYWMvtRkesP9mj8o8Omc',
-        'aSb8Q-RndwfNnPeOYGYPDUN3uhAPnMLzXyfi-mqfhig',
-    ],
-    [
-        'x448:tMNtrO_q8dlY6Y4NDeSTxNQ5CACkHiPvmukidPnNIuX_EkcryLEXt_7i6j6YZMKsrWyS0jlSYJk',
-        'ioHSHVpTs6hMvghosEJDIR7ceFiE3-Xccxati64oOVJ7NWjfozE7ae31PXIUFq6cVYgvSKsDFPA',
-    ],
-]);
-
 function concatBytes(first, second) {
     const a = normalizeBytes(first);
     const b = normalizeBytes(second);
@@ -3556,13 +3539,25 @@ function encodeDerAsPem(label, derBytes) {
     return pem;
 }
 
+const OKP_NATIVE_PUBLIC_FROM_PRIVATE = {
+    x25519: (privateBytes) => webCryptoNative.x25519_public_key(privateBytes),
+    x448: (privateBytes) => webCryptoNative.x448_public_key(privateBytes),
+    ed448: (privateBytes) => webCryptoNative.ed448_public_key(privateBytes),
+};
+
 function getOkpPublicFromPrivate(keyType, privateBytes) {
-    const key = keyType + ':' + bytesToBase64Url(privateBytes);
-    const publicValue = OKP_PUBLIC_FROM_PRIVATE.get(key);
-    if (!publicValue) {
+    const derive = OKP_NATIVE_PUBLIC_FROM_PRIVATE[keyType];
+    if (!derive || !privateBytes) {
         return undefined;
     }
-    return base64UrlToBytes(publicValue);
+    const publicKey = derive(toBytes(privateBytes));
+    return publicKey ? new Uint8Array(publicKey) : undefined;
+}
+
+function createOkpUnsupportedError() {
+    const err = new Error('Unsupported crypto operation');
+    err.code = 'ERR_CRYPTO_UNSUPPORTED_OPERATION';
+    return err;
 }
 
 function parseOkpPrivateRaw(bytes) {
@@ -4809,54 +4804,6 @@ function exportEdwardsCustomKeyObject(keyObject, options) {
     throw new Error('Failed to export key');
 }
 
-function exportEcFallbackCustomKeyObject(keyObject, options) {
-    if (options === undefined || options === null || typeof options !== 'object') {
-        throw new ERR_INVALID_ARG_TYPE('options', 'object', options);
-    }
-    const ecData = keyObject._customData.ec;
-    const format = options.format || (options.type ? 'pem' : 'der');
-    if (format === 'jwk') {
-        const publicBytes = ecData.publicKey;
-        if (!publicBytes || publicBytes[0] !== 0x04) {
-            throw new Error('Failed to export key as JWK');
-        }
-        const fieldLen = (publicBytes.length - 1) / 2;
-        const x = publicBytes.slice(1, 1 + fieldLen);
-        const y = publicBytes.slice(1 + fieldLen);
-        const jwk = { kty: 'EC', crv: ecData.namedCurve, x: bytesToBase64Url(x), y: bytesToBase64Url(y) };
-        if (keyObject.type === 'private' && ecData.privateKey) {
-            jwk.d = bytesToBase64Url(ecData.privateKey);
-        }
-        return jwk;
-    }
-    if (keyObject.type === 'private') {
-        const publicBytes = ecData.publicKey;
-        if (!publicBytes || publicBytes[0] !== 0x04) {
-            throw new Error('Failed to export key');
-        }
-        const fieldLen = (publicBytes.length - 1) / 2;
-        const x = publicBytes.slice(1, 1 + fieldLen);
-        const y = publicBytes.slice(1 + fieldLen);
-        const jwk = { kty: 'EC', crv: ecData.namedCurve, x: bytesToBase64Url(x), y: bytesToBase64Url(y), d: bytesToBase64Url(ecData.privateKey) };
-        const der = buildEcPrivatePkcs8Der(jwk);
-        if (format === 'pem') return encodeDerAsPem('PRIVATE KEY', der);
-        if (format === 'der') return toBinaryOutput(der);
-    } else {
-        const publicBytes = ecData.publicKey;
-        if (!publicBytes || publicBytes[0] !== 0x04) {
-            throw new Error('Failed to export key');
-        }
-        const fieldLen = (publicBytes.length - 1) / 2;
-        const x = publicBytes.slice(1, 1 + fieldLen);
-        const y = publicBytes.slice(1 + fieldLen);
-        const jwk = { kty: 'EC', crv: ecData.namedCurve, x: bytesToBase64Url(x), y: bytesToBase64Url(y) };
-        const der = buildEcPublicSpkiDer(jwk);
-        if (format === 'pem') return encodeDerAsPem('PUBLIC KEY', der);
-        if (format === 'der') return toBinaryOutput(der);
-    }
-    return undefined;
-}
-
 const DSA_OID = '1.2.840.10040.4.1';
 const RSA_PSS_OID = '1.2.840.113549.1.1.10';
 const RSA_OID = '1.2.840.113549.1.1.1';
@@ -5237,9 +5184,6 @@ function tryExportCustomKeyObject(keyObject, options) {
     }
     if (keyObject._customData && keyObject._customData.ec && keyObject._customData.ec.jwk) {
         return exportEcCustomKeyObject(keyObject, options);
-    }
-    if (keyObject._customData && keyObject._customData.ec) {
-        return exportEcFallbackCustomKeyObject(keyObject, options);
     }
     if (keyObject._customData && keyObject._customData.dsa) {
         return exportDsaCustomKeyObject(keyObject, options);
@@ -6030,52 +5974,27 @@ function createOkpPublicKeyObject(keyType, publicKey) {
     });
 }
 
-function createEcFallbackKeyObject(type_, namedCurve, privateKey, publicKey) {
-    return new KeyObject(null, type_, {
-        asymmetricKeyType: 'ec',
-        asymmetricKeyDetails: {},
-        ec: {
-            namedCurve,
-            privateKey: privateKey ? cloneBytes(privateKey) : undefined,
-            publicKey: publicKey ? cloneBytes(publicKey) : undefined,
-        },
-    });
-}
-
-function deriveMontgomerySharedSecret(privateKey, publicKey, outputLength) {
-    const a = normalizeBytes(privateKey);
-    const b = normalizeBytes(publicKey);
-    const ordered = [];
-    let isLess = false;
-    if (a.length !== b.length) {
-        isLess = a.length < b.length;
-    } else {
-        for (let i = 0; i < a.length; i++) {
-            if (a[i] !== b[i]) {
-                isLess = a[i] < b[i];
-                break;
-            }
-        }
-    }
-    ordered.push(isLess ? a : b);
-    ordered.push(isLess ? b : a);
-    let material = createHash('sha512').update(ordered[0]).update(ordered[1]).digest();
-    while (material.length < outputLength) {
-        material = Buffer.concat([material, createHash('sha512').update(material).digest()]);
-    }
-    return material.subarray(0, outputLength);
-}
-
 function computeMontgomeryDiffieHellman(type_, privateKey, publicKey) {
-    const privateMaterial = privateKey._customData && privateKey._customData.montgomery;
-    const publicMaterial = publicKey._customData && publicKey._customData.montgomery;
+    const privateData = privateKey._customData;
+    const publicData = publicKey._customData;
+    const privateMaterial = privateData && (privateData.montgomery || privateData.okp);
+    const publicMaterial = publicData && (publicData.montgomery || publicData.okp);
     if (!privateMaterial || !publicMaterial || !privateMaterial.privateKey || !publicMaterial.publicKey) {
         const err = new Error('Invalid key material');
         err.code = 'ERR_CRYPTO_INVALID_KEYTYPE';
         throw err;
     }
-    const outputLength = type_ === 'x25519' ? 32 : 56;
-    return deriveMontgomerySharedSecret(privateMaterial.privateKey, publicMaterial.publicKey, outputLength);
+    const derive = type_ === 'x25519' ? webCryptoNative.x25519_shared_secret : webCryptoNative.x448_shared_secret;
+    const secret = derive(toBytes(privateMaterial.privateKey), toBytes(publicMaterial.publicKey));
+    if (!secret) {
+        if (type_ === 'x448' && !webCryptoNative.x448_public_key(new Uint8Array(56))) {
+            throw createOkpUnsupportedError();
+        }
+        const err = new Error('error:1C8000A4:Provider routines::failed during derivation');
+        err.code = 'ERR_OSSL_FAILED_DURING_DERIVATION';
+        throw err;
+    }
+    return Buffer.from(secret);
 }
 
 export function diffieHellman(options) {
@@ -6199,7 +6118,10 @@ function generateDhKeyPair(options) {
 function generateMontgomeryKeyPair(type_, options) {
     const keyLength = type_ === 'x25519' ? 32 : 56;
     const privateKeyBytes = toBytes(randomBytes(keyLength));
-    const publicKeyBytes = cloneBytes(privateKeyBytes);
+    const publicKeyBytes = getOkpPublicFromPrivate(type_, privateKeyBytes);
+    if (!publicKeyBytes) {
+        throw createOkpUnsupportedError();
+    }
     const privateKey = createMontgomeryKeyObject('private', type_, privateKeyBytes, publicKeyBytes);
     const publicKey = createMontgomeryKeyObject('public', type_, undefined, publicKeyBytes);
     return {
@@ -6211,26 +6133,12 @@ function generateMontgomeryKeyPair(type_, options) {
 function generateEdwardsKeyPair(type_, options) {
     const keyLength = type_ === 'ed25519' ? 32 : 57;
     const privateKeyBytes = toBytes(randomBytes(keyLength));
-    const publicKeyBytes = cloneBytes(privateKeyBytes);
+    const publicKeyBytes = getOkpPublicFromPrivate(type_, privateKeyBytes);
+    if (!publicKeyBytes) {
+        throw createOkpUnsupportedError();
+    }
     const privateKey = createEdwardsKeyObject('private', type_, privateKeyBytes, publicKeyBytes);
     const publicKey = createEdwardsKeyObject('public', type_, undefined, publicKeyBytes);
-    return {
-        publicKey: maybeApplyGeneratedKeyEncoding(publicKey, options.publicKeyEncoding),
-        privateKey: maybeApplyGeneratedKeyEncoding(privateKey, options.privateKeyEncoding),
-    };
-}
-
-function generateEcFallbackKeyPair(namedCurve, options) {
-    const privateLength = namedCurve === 'P-521' ? 66 : 48;
-    const privateKeyBytes = toBytes(randomBytes(privateLength));
-    const publicKeyBytes = new Uint8Array(1 + (privateLength * 2));
-    publicKeyBytes[0] = 0x04;
-    publicKeyBytes.set(toBytes(randomBytes(privateLength)), 1);
-    publicKeyBytes.set(toBytes(randomBytes(privateLength)), 1 + privateLength);
-
-    const privateKey = createEcFallbackKeyObject('private', namedCurve, privateKeyBytes, publicKeyBytes);
-    const publicKey = createEcFallbackKeyObject('public', namedCurve, undefined, publicKeyBytes);
-
     return {
         publicKey: maybeApplyGeneratedKeyEncoding(publicKey, options.publicKeyEncoding),
         privateKey: maybeApplyGeneratedKeyEncoding(privateKey, options.privateKeyEncoding),
@@ -6253,23 +6161,10 @@ const EC_KEYGEN_KNOWN_CURVES = new Set([
     'p224',
 ]);
 
-const EC_KEYGEN_FALLBACK_CURVES = new Set([
-    'secp521r1',
-    'P-521',
-    'p521',
-]);
-
 function createInvalidEcCurveNameError() {
     const err = new TypeError('Invalid EC curve name');
     err.code = 'ERR_CRYPTO_INVALID_CURVE';
     return err;
-}
-
-function normalizeEcFallbackCurveName(namedCurve) {
-    if (namedCurve === 'secp521r1' || namedCurve === 'p521') {
-        return 'P-521';
-    }
-    return namedCurve;
 }
 
 function isJwkEncodingOption(encodingOption) {
@@ -6580,9 +6475,6 @@ export function generateKeyPairSync(type_, options) {
     const divisorLength = type_ === 'dsa' ? (options.divisorLength || null) : null;
     const result = webCryptoNative.generate_key_pair(algorithm, namedCurve, modulusLength, publicExponent, divisorLength);
     if (result === null || result === undefined) {
-        if (type_ === 'ec' && EC_KEYGEN_FALLBACK_CURVES.has(namedCurve)) {
-            return generateEcFallbackKeyPair(normalizeEcFallbackCurveName(namedCurve), options);
-        }
         if (type_ === 'ec' && namedCurve) {
             const stubPublic = new KeyObject(null, 'public', {
                 asymmetricKeyType: 'ec',
@@ -6745,9 +6637,6 @@ export function generateKey(type_, options, callback) {
 
 // ===== Sign / Verify classes =====
 
-const ED448_SIGNATURE_LENGTH = 114;
-const ED448_PUBLIC_KEY_LENGTH = 57;
-
 function collectPendingDataBytes(pendingData) {
     if (!pendingData || pendingData.length === 0) {
         return new Uint8Array(0);
@@ -6775,7 +6664,7 @@ function collectPendingDataBytes(pendingData) {
     return combined;
 }
 
-function isEd448FallbackKeyObject(keyObj) {
+function isEd448KeyObject(keyObj) {
     const customData = keyObj && keyObj._customData;
     if (!customData || customData.asymmetricKeyType !== 'ed448') {
         return false;
@@ -6783,78 +6672,49 @@ function isEd448FallbackKeyObject(keyObj) {
     return !!(customData.okp || customData.edwards);
 }
 
-function expandDeterministicBytes(prefix, publicBytes, dataBytes, length) {
-    const result = new Uint8Array(length);
-    let offset = 0;
-    let counter = 0;
-    while (offset < length) {
-        const digest = toBytes(
-            createHash('sha512')
-                .update(prefix)
-                .update(publicBytes)
-                .update(dataBytes)
-                .update(String(counter))
-                .digest()
-        );
-        const chunkLength = Math.min(digest.length, length - offset);
-        result.set(digest.subarray(0, chunkLength), offset);
-        offset += chunkLength;
-        counter += 1;
-    }
-    return result;
-}
-
-function getEd448PublicBytes(keyObj) {
+function getEd448Material(keyObj) {
     const customData = keyObj && keyObj._customData;
     if (!customData || customData.asymmetricKeyType !== 'ed448') {
         return null;
     }
-
-    if (customData.okp) {
-        const okp = customData.okp;
-        if (okp.publicKey) {
-            return toBytes(okp.publicKey);
-        }
-        if (okp.privateKey) {
-            const derived = getOkpPublicFromPrivate('ed448', okp.privateKey);
-            if (derived) {
-                return toBytes(derived);
-            }
-            return expandDeterministicBytes('ed448-public-fallback-v1', toBytes(okp.privateKey), new Uint8Array(0), ED448_PUBLIC_KEY_LENGTH);
-        }
-        return null;
-    }
-
-    if (customData.edwards) {
-        const edwards = customData.edwards;
-        if (edwards.publicKey) {
-            return toBytes(edwards.publicKey);
-        }
-        if (edwards.privateKey) {
-            return expandDeterministicBytes('ed448-public-edwards-fallback-v1', toBytes(edwards.privateKey), new Uint8Array(0), ED448_PUBLIC_KEY_LENGTH);
-        }
-    }
-
-    return null;
+    return customData.okp || customData.edwards || null;
 }
 
-function signWithEd448Fallback(keyObj, dataBytes) {
-    const publicBytes = getEd448PublicBytes(keyObj);
-    if (!publicBytes) {
-        const err = new Error('Sign key has no usable Ed448 public key');
+function getEd448PublicBytes(keyObj) {
+    const material = getEd448Material(keyObj);
+    if (!material) {
+        return null;
+    }
+    if (material.publicKey) {
+        return toBytes(material.publicKey);
+    }
+    return getOkpPublicFromPrivate('ed448', material.privateKey) || null;
+}
+
+function signWithEd448(keyObj, dataBytes) {
+    const material = getEd448Material(keyObj);
+    if (!material || !material.privateKey) {
+        const err = new Error('Sign key has no Ed448 private key');
         err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
         throw err;
     }
-    return expandDeterministicBytes('ed448-sign-fallback-v1', publicBytes, dataBytes, ED448_SIGNATURE_LENGTH);
+    const signature = webCryptoNative.ed448_sign(toBytes(material.privateKey), dataBytes);
+    if (!signature) {
+        throw createOkpUnsupportedError();
+    }
+    return new Uint8Array(signature);
 }
 
-function verifyWithEd448Fallback(keyObj, dataBytes, signatureBytes) {
-    if (signatureBytes.length !== ED448_SIGNATURE_LENGTH) {
-        return false;
+function verifyWithEd448(keyObj, dataBytes, signatureBytes) {
+    const publicBytes = getEd448PublicBytes(keyObj);
+    if (!publicBytes) {
+        throw createOkpUnsupportedError();
     }
-    const expected = signWithEd448Fallback(keyObj, dataBytes);
-    const isEqual = webCryptoNative.timing_safe_equal(signatureBytes, expected);
-    return isEqual === true;
+    const result = webCryptoNative.ed448_verify(publicBytes, dataBytes, toBytes(signatureBytes));
+    if (result === null || result === undefined) {
+        throw createOkpUnsupportedError();
+    }
+    return result === true;
 }
 
 function throwInvalidDigestForEd448() {
@@ -6915,6 +6775,22 @@ function Sign(algorithm, options) {
 Object.setPrototypeOf(Sign.prototype, Transform.prototype);
 Object.setPrototypeOf(Sign, Transform);
 
+// Node's `dsaEncoding` option for DSA and ECDSA signatures: DER by default, or IEEE P1363 (r || s).
+function getDsaSignatureEncoding(options) {
+    if (options === null || typeof options !== 'object') {
+        return 'der';
+    }
+    const { dsaEncoding = 'der' } = options;
+    if (dsaEncoding !== 'der' && dsaEncoding !== 'ieee-p1363') {
+        throw new ERR_INVALID_ARG_VALUE('options.dsaEncoding', dsaEncoding);
+    }
+    return dsaEncoding;
+}
+
+function usesDsaSignatureEncoding(keyObj) {
+    return keyObj && (keyObj.asymmetricKeyType === 'ec' || keyObj.asymmetricKeyType === 'dsa');
+}
+
 function getSignVerifyIntOption(optionName, options) {
     const value = options[optionName];
     if (value !== undefined) {
@@ -6958,6 +6834,7 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
     let keyObj;
     let padding;
     let saltLength;
+    const dsaEncoding = getDsaSignatureEncoding(privateKey);
     if (privateKey instanceof KeyObject) {
         keyObj = privateKey;
     } else if (typeof privateKey === 'object' && privateKey !== null && privateKey.key !== undefined) {
@@ -6987,13 +6864,13 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
     }
 
     if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
-        if (isEd448FallbackKeyObject(keyObj)) {
+        if (isEd448KeyObject(keyObj)) {
             if (this._algorithmNormalized !== null && this._algorithmNormalized !== undefined) {
                 throwInvalidDigestForEd448();
             }
             const dataBytes = collectPendingDataBytes(this._pendingData);
             this._pendingData = null;
-            const signature = signWithEd448Fallback(keyObj, dataBytes);
+            const signature = signWithEd448(keyObj, dataBytes);
             return encodeOutput(signature, outputEncoding);
         }
         if (keyObj.asymmetricKeyType === 'dsa') {
@@ -7090,7 +6967,16 @@ Sign.prototype.sign = function(privateKey, outputEncoding) {
         err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
         throw err;
     }
-    const sig = new Uint8Array(result);
+    let sig = new Uint8Array(result);
+    if (dsaEncoding === 'ieee-p1363' && usesDsaSignatureEncoding(keyObj)) {
+        const converted = webCryptoNative.dsa_signature_der_to_p1363(keyObj._handle, sig);
+        if (converted === null || converted === undefined) {
+            const err = new Error('Sign failed');
+            err.code = 'ERR_CRYPTO_SIGN_KEY_REQUIRED';
+            throw err;
+        }
+        sig = new Uint8Array(converted);
+    }
     return encodeOutput(sig, outputEncoding);
 };
 
@@ -7155,6 +7041,7 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     let keyObj;
     let padding;
     let saltLength;
+    const dsaEncoding = getDsaSignatureEncoding(publicKey);
     if (publicKey instanceof KeyObject) {
         keyObj = publicKey;
     } else if (typeof publicKey === 'object' && publicKey !== null && publicKey.key !== undefined) {
@@ -7173,7 +7060,7 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
         keyObj = createPublicKey(publicKey);
     }
 
-    const sigBytes = toBytes(signature, signatureEncoding);
+    let sigBytes = toBytes(signature, signatureEncoding);
 
     if (keyObj) {
         const keyType = keyObj.asymmetricKeyType;
@@ -7190,13 +7077,13 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
     }
 
     if (keyObj && (keyObj._handle === null || keyObj._handle === undefined)) {
-        if (isEd448FallbackKeyObject(keyObj)) {
+        if (isEd448KeyObject(keyObj)) {
             if (this._algorithmNormalized !== null && this._algorithmNormalized !== undefined) {
                 throwInvalidDigestForEd448();
             }
             const dataBytes = collectPendingDataBytes(this._pendingData);
             this._pendingData = null;
-            return verifyWithEd448Fallback(keyObj, dataBytes, sigBytes);
+            return verifyWithEd448(keyObj, dataBytes, sigBytes);
         }
         if (keyObj.asymmetricKeyType === 'dsa') {
             const dataBytes = collectPendingDataBytes(this._pendingData);
@@ -7234,6 +7121,16 @@ Verify.prototype.verify = function(publicKey, signature, signatureEncoding) {
         }
 
         return rsaPssVerifyDigest(digest, encodedMessage, hashAlgorithm, modulusBits, effectiveSaltLength);
+    }
+
+    if (dsaEncoding === 'ieee-p1363' && usesDsaSignatureEncoding(keyObj)) {
+        // A wrong length or a zero or out-of-range r or s cannot be a valid signature.
+        const der = webCryptoNative.dsa_signature_p1363_to_der(keyObj._handle, sigBytes);
+        if (der === null || der === undefined) {
+            this._pendingData = null;
+            return false;
+        }
+        sigBytes = new Uint8Array(der);
     }
 
     if (this._handle === null) {
@@ -7306,10 +7203,6 @@ export function verify(algorithm, data, key, signature, callback) {
         return;
     }
     return result;
-}
-
-function rsaCacheKey(bytes, padding) {
-    return String(padding) + ':' + bytesToBase64Url(bytes);
 }
 
 function hashOneShotBytes(algorithm, data) {
@@ -7519,6 +7412,82 @@ function createRsaOaepDecodingError() {
     return err;
 }
 
+function createRsaDataTooLargeForModulusError() {
+    const err = new Error('error:02000084:rsa routines::data too large for modulus');
+    err.code = 'ERR_OSSL_RSA_DATA_TOO_LARGE_FOR_MODULUS';
+    err.library = 'rsa routines';
+    err.reason = 'data too large for modulus';
+    return err;
+}
+
+function createRsaInvalidPaddingError() {
+    const err = new Error('error:0200008A:rsa routines::invalid padding');
+    err.code = 'ERR_OSSL_RSA_INVALID_PADDING';
+    err.library = 'rsa routines';
+    err.reason = 'invalid padding';
+    return err;
+}
+
+function createRsaRoutinesError(opensslCode, reason) {
+    const err = new Error(`error:${opensslCode}:rsa routines::${reason}`);
+    err.code = 'ERR_OSSL_RSA_' + reason.toUpperCase().replace(/ /g, '_');
+    err.library = 'rsa routines';
+    err.reason = reason;
+    return err;
+}
+
+// An RSA input whose integer value is not below the modulus fails before any private-key use,
+// so reporting it reveals nothing beyond the public key.
+function throwIfRsaInputExceedsModulus(keyObj, data) {
+    if (webCryptoNative.rsa_input_exceeds_modulus(keyObj._handle, data)) {
+        throw createRsaDataTooLargeForModulusError();
+    }
+}
+
+// Like OpenSSL, decryption rejects an input longer than the modulus before using the key.
+function throwIfRsaInputLongerThanModulus(keyObj, data) {
+    const modulusSize = getRsaModulusSizeBytes(keyObj);
+    if (modulusSize && data.length > modulusSize) {
+        throw createRsaRoutinesError('0200006C', 'data greater than mod len');
+    }
+}
+
+// RSA_NO_PADDING encryption needs an input of exactly the modulus length, as in OpenSSL.
+function throwIfRsaNoPaddingInputLengthInvalid(keyObj, data) {
+    const modulusSize = getRsaModulusSizeBytes(keyObj);
+    if (modulusSize && data.length > modulusSize) {
+        throw createRsaDataTooLargeForKeySizeError();
+    }
+    if (modulusSize && data.length < modulusSize) {
+        throw createRsaRoutinesError('0200007A', 'data too small for key size');
+    }
+}
+
+// The error OpenSSL reports for an invalid PKCS#1 type 1 block, checked in its order. The block
+// is recovered with the public key, so the error reveals nothing beyond it.
+function getRsaPkcs1Type1BlockError(block) {
+    if (block[0] !== 0) {
+        return createRsaInvalidPaddingError();
+    }
+    if (block[1] !== 1) {
+        return createRsaRoutinesError('0200006A', 'block type is not 01');
+    }
+    let separator = 2;
+    while (separator < block.length && block[separator] === 0xff) {
+        separator++;
+    }
+    if (separator === block.length) {
+        return createRsaRoutinesError('02000071', 'null before block missing');
+    }
+    if (block[separator] !== 0) {
+        return createRsaRoutinesError('02000066', 'bad fixed header decrypt');
+    }
+    if (separator - 2 < 8) {
+        return createRsaRoutinesError('02000067', 'bad pad byte count');
+    }
+    return null;
+}
+
 function createRsaDataTooLargeForKeySizeError() {
     const err = new Error('error:0200006E:rsa routines::data too large for key size');
     err.code = 'ERR_OSSL_RSA_DATA_TOO_LARGE_FOR_KEY_SIZE';
@@ -7651,12 +7620,16 @@ export function publicEncrypt(key, buffer) {
         return new Uint8Array(result);
     }
 
+    if (padding === constants.RSA_NO_PADDING) {
+        throwIfRsaNoPaddingInputLengthInvalid(keyObj, data);
+    }
     const result = webCryptoNative.public_encrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
+        if (padding === constants.RSA_NO_PADDING) {
+            throwIfRsaInputExceedsModulus(keyObj, data);
+        }
         throw new Error('Public encrypt failed');
     }
-    const resultBytes = result instanceof Uint8Array ? result : new Uint8Array(result);
-    RSA_PRIVATE_DECRYPT_CACHE.set(rsaCacheKey(resultBytes, padding), cloneBytes(data));
     if (typeof Buffer !== 'undefined') {
         return Buffer.from(result);
     }
@@ -7696,8 +7669,20 @@ export function privateDecrypt(key, buffer) {
     }
 
     const data = toBytes(buffer, encoding);
+    throwIfRsaInputLongerThanModulus(keyObj, data);
+    if (padding === constants.RSA_PKCS1_OAEP_PADDING && !oaepHash.startsWith('shake')) {
+        const decoded = webCryptoNative.private_decrypt_oaep(keyObj._handle, data, oaepHash, oaepLabel || new Uint8Array(0));
+        if (decoded === null || decoded === undefined) {
+            throwIfRsaInputExceedsModulus(keyObj, data);
+            throw createRsaOaepDecodingError();
+        }
+        return typeof Buffer !== 'undefined' ? Buffer.from(decoded) : new Uint8Array(decoded);
+    }
     if (padding === constants.RSA_PKCS1_OAEP_PADDING) {
-        const rawResult = webCryptoNative.private_decrypt(keyObj._handle, data, constants.RSA_NO_PADDING);
+        // SHAKE OAEP decodes in JS and keeps requiring a modulus-length ciphertext.
+        const rawResult = data.length === getRsaModulusSizeBytes(keyObj)
+            ? webCryptoNative.private_decrypt(keyObj._handle, data, constants.RSA_NO_PADDING)
+            : null;
         if (rawResult === null || rawResult === undefined) {
             throw createRsaOaepDecodingError();
         }
@@ -7712,15 +7697,9 @@ export function privateDecrypt(key, buffer) {
         return decoded;
     }
 
-    const cached = RSA_PRIVATE_DECRYPT_CACHE.get(rsaCacheKey(data, padding));
-    if (cached) {
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(cached);
-        }
-        return cloneBytes(cached);
-    }
     const result = webCryptoNative.private_decrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
+        throwIfRsaInputExceedsModulus(keyObj, data);
         throw new Error('Private decrypt failed');
     }
     if (typeof Buffer !== 'undefined') {
@@ -7748,12 +7727,16 @@ export function privateEncrypt(key, buffer) {
     }
 
     const data = toBytes(buffer, encoding);
+    if (padding === constants.RSA_NO_PADDING) {
+        throwIfRsaNoPaddingInputLengthInvalid(keyObj, data);
+    }
     const result = webCryptoNative.private_encrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
+        if (padding === constants.RSA_NO_PADDING) {
+            throwIfRsaInputExceedsModulus(keyObj, data);
+        }
         throw new Error('Private encrypt failed');
     }
-    const resultBytes = result instanceof Uint8Array ? result : new Uint8Array(result);
-    RSA_PUBLIC_DECRYPT_CACHE.set(rsaCacheKey(resultBytes, padding), cloneBytes(data));
     if (typeof Buffer !== 'undefined') {
         return Buffer.from(result);
     }
@@ -7779,15 +7762,17 @@ export function publicDecrypt(key, buffer) {
     }
 
     const data = toBytes(buffer, encoding);
-    const cached = RSA_PUBLIC_DECRYPT_CACHE.get(rsaCacheKey(data, padding));
-    if (cached) {
-        if (typeof Buffer !== 'undefined') {
-            return Buffer.from(cached);
-        }
-        return cloneBytes(cached);
-    }
+    throwIfRsaInputLongerThanModulus(keyObj, data);
     const result = webCryptoNative.public_decrypt(keyObj._handle, data, padding);
     if (result === null || result === undefined) {
+        throwIfRsaInputExceedsModulus(keyObj, data);
+        if (padding === constants.RSA_PKCS1_PADDING) {
+            const block = webCryptoNative.public_decrypt(keyObj._handle, data, constants.RSA_NO_PADDING);
+            const error = block && block.length > 0 ? getRsaPkcs1Type1BlockError(new Uint8Array(block)) : null;
+            if (error) {
+                throw error;
+            }
+        }
         throw new Error('Public decrypt failed');
     }
     if (typeof Buffer !== 'undefined') {
@@ -7848,6 +7833,93 @@ function validateKeyAlgorithm(key, algorithmName) {
     if (!key || !key._algorithm || key._algorithm.name.toUpperCase() !== algorithmName.toUpperCase()) {
         throwInvalidAccessError();
     }
+}
+
+// WebIDL `[EnforceRange] unsigned long?`, as Node.js 24 and 26 apply it to deriveBits:
+// null and undefined stay null, fractions truncate toward zero, and non-finite or
+// out-of-range values throw. Unary plus is ToNumber, which throws for BigInt values,
+// unlike Number().
+function toNullableUnsignedLong(value) {
+    if (value === null || value === undefined) return null;
+    const number = +value;
+    if (!Number.isFinite(number)) {
+        throw new TypeError('The length is not a finite number');
+    }
+    const truncated = Math.trunc(number);
+    if (truncated < 0 || truncated > 4294967295) {
+        throw new TypeError('The length is outside the expected range of 0 to 4294967295');
+    }
+    return truncated;
+}
+
+// WebCrypto ECDH/X25519/X448 deriveBits: a null length returns the whole secret; a
+// shorter length keeps its leading bits and zeroes the unused low bits of the last byte.
+function truncateDerivedBits(secret, length) {
+    if (length === null) {
+        return new Uint8Array(secret).buffer;
+    }
+    if (length > secret.length * 8) {
+        throw new DOMException('derived bit length is too long', 'OperationError');
+    }
+    const out = new Uint8Array(secret.subarray(0, Math.ceil(length / 8)));
+    const unused = out.length * 8 - length;
+    if (unused > 0) {
+        out[out.length - 1] &= (0xff << unused) & 0xff;
+    }
+    return out.buffer;
+}
+
+// Shared by deriveBits and deriveKey; `usage` is the key usage the caller requires.
+function deriveSecretBits(algorithm, baseKey, length, usage) {
+    const algoName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
+    if (!algoName) throw new TypeError('Algorithm must be a string or an object with a name property');
+    const name = algoName.toUpperCase();
+
+    if (name === 'PBKDF2') {
+        const hashAlgo = algorithm.hash;
+        const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+        const salt = toBytes(algorithm.salt);
+        const secret = baseKey._keyObject.export();
+        const out = pbkdf2Sync(secret, salt, algorithm.iterations, length / 8, hashName);
+        return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
+    }
+
+    if (name === 'HKDF') {
+        const hashAlgo = algorithm.hash;
+        const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
+        const normalized = normalizeHashAlgorithm(hashName);
+        const salt = toBytes(algorithm.salt);
+        const info = toBytes(algorithm.info);
+        const ikm = baseKey._keyObject.export();
+        const out = hkdfSync(normalized, ikm, salt, info, length / 8);
+        return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
+    }
+
+    if (name === 'ECDH' || name === 'X25519' || name === 'X448') {
+        const peerKey = algorithm.public;
+        const bitLength = toNullableUnsignedLong(length);
+        if (!cryptoKeyBrand.has(baseKey) || !cryptoKeyBrand.has(peerKey)) {
+            throw new TypeError(name + ' requires CryptoKey base and public keys');
+        }
+        validateKeyUsage(baseKey, usage);
+        validateKeyAlgorithm(baseKey, name);
+        if (baseKey._type !== 'private' || peerKey._type !== 'public') {
+            throw new DOMException(name + ' requires a private base key and a public key', 'InvalidAccessError');
+        }
+        validateKeyAlgorithm(peerKey, name);
+        if (name === 'ECDH' && peerKey._algorithm.namedCurve !== baseKey._algorithm.namedCurve) {
+            throw new DOMException('Named curve mismatch', 'InvalidAccessError');
+        }
+        let secret;
+        try {
+            secret = toBytes(diffieHellman({ privateKey: baseKey._keyObject, publicKey: peerKey._keyObject }));
+        } catch (_err) {
+            throw new DOMException(name + ' deriveBits failed', 'OperationError');
+        }
+        return truncateDerivedBits(secret, bitLength);
+    }
+
+    throw new Error('Unsupported algorithm for deriveBits: ' + algoName);
 }
 
 class SubtleCrypto {
@@ -8130,7 +8202,8 @@ class SubtleCrypto {
             const normalized = normalizeHashAlgorithm(hashName);
             const sign = createSign(normalized);
             sign.update(bytes);
-            const sig = sign.sign(key._keyObject);
+            // WebCrypto ECDSA signatures are IEEE P1363 (r || s), not DER.
+            const sig = sign.sign({ key: key._keyObject, dsaEncoding: 'ieee-p1363' });
             return (sig instanceof Uint8Array ? sig : new Uint8Array(sig)).buffer;
         } else if (name === 'HMAC') {
             const hashAlgo = key._algorithm.hash;
@@ -8185,7 +8258,7 @@ class SubtleCrypto {
             const normalized = normalizeHashAlgorithm(hashName);
             const verify = createVerify(normalized);
             verify.update(dataBytes);
-            return verify.verify(key._keyObject, sigBytes);
+            return verify.verify({ key: key._keyObject, dsaEncoding: 'ieee-p1363' }, sigBytes);
         } else if (name === 'HMAC') {
             const hashAlgo = key._algorithm.hash;
             const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
@@ -8507,65 +8580,7 @@ class SubtleCrypto {
 
     async deriveBits(algorithm, baseKey, length) {
         assertSubtleCrypto(this);
-        const algoName = typeof algorithm === 'string' ? algorithm : algorithm?.name;
-        if (!algoName) throw new TypeError('Algorithm must be a string or an object with a name property');
-        const name = algoName.toUpperCase();
-
-        if (name === 'PBKDF2') {
-            const hashAlgo = algorithm.hash;
-            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
-            const salt = toBytes(algorithm.salt);
-            const secret = baseKey._keyObject.export();
-            const out = pbkdf2Sync(secret, salt, algorithm.iterations, length / 8, hashName);
-            return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
-        }
-
-        if (name === 'HKDF') {
-            const hashAlgo = algorithm.hash;
-            const hashName = typeof hashAlgo === 'string' ? hashAlgo : hashAlgo.name;
-            const normalized = normalizeHashAlgorithm(hashName);
-            const salt = toBytes(algorithm.salt);
-            const info = toBytes(algorithm.info);
-            const ikm = baseKey._keyObject.export();
-            const out = hkdfSync(normalized, ikm, salt, info, length / 8);
-            return (out instanceof Uint8Array ? out : new Uint8Array(out)).buffer;
-        }
-
-        if (name === 'ECDH') {
-            const peerKey = algorithm.public;
-            if (!peerKey || peerKey._type !== 'public') {
-                throw new DOMException('ECDH requires a public key', 'InvalidAccessError');
-            }
-            // Use the ECDH class to compute shared secret
-            const curve = baseKey._algorithm.namedCurve;
-            const curveMap = { 'P-256': 'prime256v1', 'P-384': 'secp384r1', 'P-521': 'secp521r1' };
-            const nativeCurve = curveMap[curve] || curve;
-            // Export private key bytes and peer public key bytes
-            const privKeyBytes = baseKey._keyObject.export({ format: 'der', type: 'pkcs8' });
-            const pubKeyBytes = peerKey._keyObject.export({ format: 'der', type: 'spki' });
-            // Use native ECDH
-            const result = webCryptoNative.ecdh_derive_bits(nativeCurve, toBytes(privKeyBytes), toBytes(pubKeyBytes), length / 8);
-            if (result === null || result === undefined) {
-                throw new DOMException('ECDH deriveBits failed', 'OperationError');
-            }
-            return new Uint8Array(result).buffer;
-        }
-
-        if (name === 'X25519' || name === 'X448') {
-            const peerKey = algorithm.public;
-            if (!peerKey || peerKey._type !== 'public') {
-                throw new DOMException(name + ' requires a public key', 'InvalidAccessError');
-            }
-            const privKeyBytes = baseKey._keyObject.export({ format: 'der', type: 'pkcs8' });
-            const pubKeyBytes = peerKey._keyObject.export({ format: 'der', type: 'spki' });
-            const result = webCryptoNative.cfrg_derive_bits(name.toLowerCase(), toBytes(privKeyBytes), toBytes(pubKeyBytes), length / 8);
-            if (result === null || result === undefined) {
-                throw new DOMException(name + ' deriveBits failed', 'OperationError');
-            }
-            return new Uint8Array(result).buffer;
-        }
-
-        throw new Error('Unsupported algorithm for deriveBits: ' + algoName);
+        return deriveSecretBits(algorithm, baseKey, length, 'deriveBits');
     }
 
     async deriveKey(algorithm, baseKey, derivedKeyAlgorithm, extractable, keyUsages) {
@@ -8590,7 +8605,7 @@ class SubtleCrypto {
             derivedLength = derivedKeyAlgorithm.length;
         }
 
-        const bits = await SubtleCrypto.prototype.deriveBits.call(this, algorithm, baseKey, derivedLength);
+        const bits = deriveSecretBits(algorithm, baseKey, derivedLength, 'deriveKey');
         const keyObject = createSecretKey(new Uint8Array(bits));
         return keyObject.toCryptoKey(derivedKeyAlgorithm, extractable, keyUsages);
     }
