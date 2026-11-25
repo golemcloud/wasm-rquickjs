@@ -20,7 +20,8 @@ use std::sync::{Arc, Mutex};
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 use wasm_rquickjs::{
-    EmbeddingMode, GenerationTarget, JsModuleSpec, generate_wrapper_crate_with_target,
+    EmbeddingMode, GenerationTarget, JsModuleSpec, WrapperCrateOptions,
+    generate_wrapper_crate_with_options,
 };
 use wasmtime::component::{
     Accessor, Component, Func, HasSelf, Linker, Source, StreamConsumer, StreamReader, StreamResult,
@@ -301,13 +302,17 @@ async fn call_sync_timer(
         .await
 }
 
-fn build_component(temp: &Utf8TempDir, features: &str) -> anyhow::Result<Utf8PathBuf> {
+fn build_component(
+    temp: &Utf8TempDir,
+    features: &str,
+    drain_before_return: &[&str],
+) -> anyhow::Result<Utf8PathBuf> {
     let example_dir = Utf8PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("examples")
         .join("p3")
         .join("invocation-tasks");
     let out = temp.path().join("out");
-    generate_wrapper_crate_with_target(
+    generate_wrapper_crate_with_options(
         &example_dir.join("wit"),
         &[JsModuleSpec {
             name: "module".to_string(),
@@ -316,6 +321,13 @@ fn build_component(temp: &Utf8TempDir, features: &str) -> anyhow::Result<Utf8Pat
         &out,
         None,
         GenerationTarget::WasiP3,
+        &WrapperCrateOptions {
+            drain_before_return: drain_before_return
+                .iter()
+                .map(|name| name.to_string())
+                .collect(),
+            ..Default::default()
+        },
     )?;
 
     let cache = p3_build::BuildCache::new()?;
@@ -382,8 +394,12 @@ fn component() -> (Utf8TempDir, Utf8PathBuf) {
 }
 
 fn component_with_features(features: &str) -> (Utf8TempDir, Utf8PathBuf) {
+    component_with(features, &[])
+}
+
+fn component_with(features: &str, drain_before_return: &[&str]) -> (Utf8TempDir, Utf8PathBuf) {
     let temp = Utf8TempDir::new().expect("temp dir");
-    let wasm = build_component(&temp, features).expect("generate + build");
+    let wasm = build_component(&temp, features, drain_before_return).expect("generate + build");
     (temp, wasm)
 }
 
@@ -552,6 +568,66 @@ fn a_call_returns_before_its_background_work_and_its_task_exits_after_it() {
     assert!(at(&events, "finish:a") > a_timer_job, "{events:#?}");
 }
 
+/// A host that stops driving a call at its return, such as for Golem tool exports, loses work
+/// that runs after the return. The exports of an interface generated with `--drain-before-return`
+/// drain before they return also with `post-return-drain`, while the other exports keep returning
+/// first.
+#[test]
+fn a_drain_before_return_interface_drains_before_it_returns_with_post_return_drain() {
+    let (_temp, wasm) = component_with("post-return-drain", &["test:invocation-tasks/drained"]);
+    let events = block_on_with_timeout(async {
+        let Instance {
+            mut store,
+            bindings,
+            attribution,
+            ..
+        } = instantiate(&wasm).await?;
+        store
+            .run_concurrent(async |accessor| -> Result<()> {
+                attribution.arm("a");
+                attribution.arm("b");
+                let (a, b) = futures::join!(
+                    async {
+                        let a = bindings
+                            .test_invocation_tasks_drained()
+                            .call_start_timer(accessor, "a".into(), 300)
+                            .await;
+                        attribution.result("a");
+                        a
+                    },
+                    async {
+                        let b = bindings.call_start_timer(accessor, "b".into(), 300).await;
+                        attribution.result("b");
+                        b
+                    },
+                );
+                assert_eq!(a?, "a");
+                assert_eq!(b?, "b");
+                wait_for_finish(&attribution, &["a", "b"]).await;
+                Ok(())
+            })
+            .await??;
+        Ok(attribution.events())
+    });
+
+    assert_attributed(&events, "a", &["returning", "timer", "timer-job"]);
+    assert_attributed(&events, "b", &["returning", "timer", "timer-job"]);
+    // The drained export returns only after its timer's job.
+    assert!(
+        at(&events, "result:a") > at(&events, "record:a:timer-job"),
+        "{events:#?}"
+    );
+    // The world export still returns before its timer and drains on its task afterwards.
+    assert!(
+        at(&events, "result:b") < at(&events, "record:b:timer"),
+        "{events:#?}"
+    );
+    assert!(
+        at(&events, "finish:b") > at(&events, "record:b:timer-job"),
+        "{events:#?}"
+    );
+}
+
 #[test]
 fn without_post_return_drain_a_call_drains_only_its_own_work_before_it_returns() {
     let (_temp, wasm) = component_with_features("");
@@ -676,6 +752,60 @@ fn without_post_return_drain_a_call_drains_the_work_it_adopts_before_it_returns(
     );
     assert!(
         at(&events, "result:b") > at(&events, "record:a:timer"),
+        "{events:#?}"
+    );
+}
+
+#[test]
+fn with_post_return_drain_a_drain_before_return_call_drains_the_work_it_adopts_before_it_returns() {
+    let (_temp, wasm) = component_with("post-return-drain", &["test:invocation-tasks/drained"]);
+    let events = block_on_with_timeout(async {
+        let Instance {
+            mut store,
+            bindings,
+            sync_timer,
+            attribution,
+            ..
+        } = instantiate(&wasm).await?;
+        store
+            .run_concurrent(async |accessor| -> Result<()> {
+                attribution.arm("a");
+                call_sync_timer(accessor, sync_timer, "a", 300).await?;
+                attribution.arm("b");
+                let b = bindings
+                    .test_invocation_tasks_drained()
+                    .call_start_timer(accessor, "b".into(), 0)
+                    .await?;
+                attribution.result("b");
+                assert_eq!(b, "b");
+                wait_for_finish(&attribution, &["a", "b"]).await;
+
+                attribution.arm("c");
+                call_sync_timer(accessor, sync_timer, "c", 300).await?;
+                attribution.arm("d");
+                let d = bindings.call_quick(accessor, "d".into()).await?;
+                attribution.result("d");
+                assert_eq!(d, "d");
+                wait_for_finish(&attribution, &["c", "d"]).await;
+                Ok(())
+            })
+            .await??;
+        Ok(attribution.events())
+    });
+
+    assert_eq!(
+        attributions(&events, "a:timer"),
+        [("a:timer".to_string(), "b".to_string())],
+        "{events:#?}"
+    );
+    // The listed call returns only after the work it adopted.
+    assert!(
+        at(&events, "result:b") > at(&events, "record:a:timer"),
+        "{events:#?}"
+    );
+    // An unlisted call returns before the work it adopts.
+    assert!(
+        at(&events, "result:d") < at(&events, "record:c:timer"),
         "{events:#?}"
     );
 }

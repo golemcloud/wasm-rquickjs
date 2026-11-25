@@ -413,6 +413,7 @@ fn generate_exported_function_impl(
 ) -> anyhow::Result<TokenStream> {
     let rust_fn = RustWitFunction::new(context, name, function);
     let func_name = rust_fn.function_name_ident();
+    let invocation = invocation_ident(context, interface);
 
     if matches!(function.kind, FunctionKind::Freestanding)
         && function
@@ -537,7 +538,7 @@ fn generate_exported_function_impl(
         } else {
             Ok(quote! {
                 async fn #func_name(#(#func_arg_list),*) -> #reader_type {
-                    crate::internal::invocation(async move { #body }).await
+                    crate::internal::#invocation(async move { #body }).await
                 }
             })
         };
@@ -568,7 +569,7 @@ fn generate_exported_function_impl(
     let func_impl = if is_async {
         quote! {
            async fn #func_name(#(#func_arg_list),*) -> #original_result {
-               crate::internal::invocation(async move { #body }).await
+               crate::internal::#invocation(async move { #body }).await
             }
         }
     } else {
@@ -579,6 +580,22 @@ fn generate_exported_function_impl(
         }
     };
     Ok(func_impl)
+}
+
+/// The skeleton function that runs an async export of `interface` as an invocation.
+fn invocation_ident(
+    context: &GeneratorContext<'_>,
+    interface: Option<(&str, &Interface, InterfaceId)>,
+) -> Ident {
+    let drains = interface.is_some_and(|(_, _, id)| context.drains_before_return(id));
+    Ident::new(
+        if drains {
+            "invocation_draining_before_return"
+        } else {
+            "invocation"
+        },
+        Span::call_site(),
+    )
 }
 
 /// Generates one trait method implementation for an exported freestanding function
@@ -593,6 +610,7 @@ fn generate_exported_resource_function_impl(
 
     let rust_fn = RustWitFunction::new(context, &func_name, function);
     let func_name_ident = rust_fn.function_name_ident();
+    let invocation = invocation_ident(context, interface);
 
     if !matches!(
         function.kind,
@@ -779,7 +797,7 @@ fn generate_exported_resource_function_impl(
             if is_async {
                 quote! {
                    async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       crate::internal::invocation(async move { #body }).await
+                       crate::internal::#invocation(async move { #body }).await
                    }
                 }
             } else {
@@ -817,7 +835,7 @@ fn generate_exported_resource_function_impl(
             if is_async {
                 quote! {
                    async fn #func_name_ident(#(#func_arg_list),*) -> #original_result {
-                       crate::internal::invocation(async move { #body }).await
+                       crate::internal::#invocation(async move { #body }).await
                    }
                 }
             } else {

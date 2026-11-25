@@ -6,7 +6,7 @@ use crate::skeleton::{
     copy_component_licenses, copy_skeleton_lock, copy_skeleton_sources, generate_cargo_toml,
 };
 use crate::wit::{GET_SCRIPT_IMPORT, add_get_script_import, add_wizer_init_export};
-use anyhow::{Context, anyhow};
+use anyhow::{Context, anyhow, bail};
 use camino::{Utf8Path, Utf8PathBuf};
 use heck::{ToLowerCamelCase, ToSnakeCase, ToUpperCamelCase};
 use proc_macro2::{Ident, Span};
@@ -157,6 +157,10 @@ pub struct DependencySpec {
 pub struct WrapperCrateOptions {
     pub native_modules: Vec<NativeModuleSpec>,
     pub dependencies: Vec<DependencySpec>,
+    /// Exported interfaces, as `namespace:package/interface`, whose async exports drain their
+    /// JavaScript work before they return, also with the `post-return-drain` feature. Use it for
+    /// exports whose host stops driving the call at the return.
+    pub drain_before_return: Vec<String>,
 }
 
 /// Generates a Rust wrapper crate for a combination of a WIT package and a JavaScript module.
@@ -273,7 +277,8 @@ pub fn generate_wrapper_crate_with_options(
 
     // Re-resolve the WIT package after modifications (wizer-initialize export was added)
     let modified_wit = output.join("wit");
-    let context = GeneratorContext::new(output, &modified_wit, world)?;
+    let mut context = GeneratorContext::new(output, &modified_wit, world)?;
+    context.set_drain_before_return(&options.drain_before_return)?;
 
     // Copying the JavaScript module to the output directory
     copy_js_modules(js_modules, context.output)
@@ -352,6 +357,7 @@ struct GeneratorContext<'a> {
     visited_types: RefCell<BTreeSet<TypeId>>,
     world_name: String,
     types: wit_bindgen_core::Types,
+    drain_before_return: BTreeSet<InterfaceId>,
 }
 
 impl<'a> GeneratorContext<'a> {
@@ -398,6 +404,7 @@ impl<'a> GeneratorContext<'a> {
             visited_types: RefCell::new(BTreeSet::new()),
             world_name,
             types,
+            drain_before_return: BTreeSet::new(),
         })
     }
 
@@ -415,6 +422,63 @@ impl<'a> GeneratorContext<'a> {
             .exports
             .iter()
             .any(|(_, item)| matches!(item, WorldItem::Interface { id, .. } if id == &interface_id))
+    }
+
+    /// Selects the exported interfaces whose async exports drain their work before they return.
+    /// A name `namespace:package/interface` selects every exported version of the interface, and
+    /// `namespace:package/interface@version` selects one version. Every name must select an
+    /// exported interface.
+    fn set_drain_before_return(&mut self, names: &[String]) -> anyhow::Result<()> {
+        let exported = self.resolve.worlds[self.world]
+            .exports
+            .values()
+            .filter_map(|export| match export {
+                WorldItem::Interface { id, .. } => Some(*id),
+                _ => None,
+            })
+            .filter_map(|id| Some((id, self.interface_names(id)?)))
+            .collect::<Vec<_>>();
+        for name in names {
+            let selected = exported
+                .iter()
+                .filter(|(_, (unversioned, versioned))| name == unversioned || name == versioned)
+                .map(|(id, _)| *id)
+                .collect::<Vec<_>>();
+            if selected.is_empty() {
+                let candidates = exported
+                    .iter()
+                    .map(|(_, (unversioned, _))| unversioned.as_str())
+                    .collect::<Vec<_>>()
+                    .join(", ");
+                bail!(
+                    "--drain-before-return {name} is not an exported interface of the world; \
+                     the exported interfaces are: {candidates}"
+                );
+            }
+            self.drain_before_return.extend(selected);
+        }
+        Ok(())
+    }
+
+    /// The unversioned and the versioned name of a named interface.
+    fn interface_names(&self, id: InterfaceId) -> Option<(String, String)> {
+        let interface = &self.resolve.interfaces[id];
+        let package = &self.resolve.packages[interface.package?].name;
+        let unversioned = format!(
+            "{}:{}/{}",
+            package.namespace,
+            package.name,
+            interface.name.as_ref()?
+        );
+        let versioned = match &package.version {
+            Some(version) => format!("{unversioned}@{version}"),
+            None => unversioned.clone(),
+        };
+        Some((unversioned, versioned))
+    }
+
+    fn drains_before_return(&self, id: InterfaceId) -> bool {
+        self.drain_before_return.contains(&id)
     }
 
     fn exported_interface_js_name(
@@ -939,6 +1003,7 @@ mod tests {
                 &WrapperCrateOptions {
                     native_modules: modules,
                     dependencies: vec![],
+                    ..Default::default()
                 },
             )
             .unwrap_err();
@@ -953,6 +1018,7 @@ mod tests {
             &WrapperCrateOptions {
                 native_modules: vec![native("x", "not a path")],
                 dependencies: vec![],
+                ..Default::default()
             },
         )
         .unwrap_err();
@@ -985,6 +1051,7 @@ mod tests {
                         value: replacement.to_string(),
                     },
                 ],
+                ..Default::default()
             },
         )?;
 
@@ -1030,6 +1097,7 @@ mod tests {
                     key: "x".to_string(),
                     value: "[1, 2]".to_string(),
                 }],
+                ..Default::default()
             },
         )
         .unwrap_err();
