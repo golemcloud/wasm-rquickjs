@@ -1262,7 +1262,7 @@ class Zstd extends ZlibBase {
 
   _processStep(data, flush, capacity) {
     const [bytes, message, errno, consumed, done] = zstd_stream_push(this._nativeHandle, data, flush, capacity);
-    if (errno === -7) throw makeTypeError('ERR_TRAILING_JUNK_AFTER_STREAM_END', message);
+    if (errno === -7) throw trailingJunkError();
     if (errno !== 0) {
       const code = errno === -5 ? 'Z_BUF_ERROR' : zstdErrorCodes[errno];
       const error = makeError(code, message);
@@ -1474,6 +1474,8 @@ export function brotliDecompressSync(data, opts) {
     validated.finishFlush,
     validated.rejectGarbage,
   );
+  // Native sync trailing input uses -7 with no message; a named -7 is
+  // BROTLI_DECODER_ERROR_FORMAT_HUFFMAN_SPACE, not trailing input.
   if (errno === -7 && errorMessage == null) throw trailingJunkError();
   if (errno !== 0) {
     throw typeof errorMessage === 'string' && stringStartsWith(errorMessage, 'ERR_')
