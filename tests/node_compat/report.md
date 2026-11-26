@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3191/4485 (71.1%)
+**Primary compatibility (CI-enforced):** 3228/4523 (71.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3191 | 71.1% | 33.2% | 29.6% |
-| 🧩 known gap | 1294 | 28.9% | 13.5% | 12.0% |
+| ✅ passing (runnable) | 3228 | 71.4% | 33.4% | 29.9% |
+| 🧩 known gap | 1295 | 28.6% | 13.4% | 12.0% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
-| ❔ unevaluated (excluded) | 3817 | — | 39.7% | 35.4% |
-| 🔒 Node.js internals (excluded) | 1177 | — | — | 10.9% |
+| ❔ unevaluated (excluded) | 3816 | — | 39.5% | 35.4% |
+| 🔒 Node.js internals (excluded) | 1140 | — | — | 10.6% |
 | **Total** | **10794** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3191/9617 (33.2%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3228/9654 (33.4%)**.
 
 ## Inventory by Module
 
@@ -73,7 +73,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | snapshot | 61 | 0 | 0 | 0 | 57 | 4 | 0 | 0.0% | 0.0% |
 | sqlite | 117 | 32 | 27 | 0 | 0 | 58 | 0 | 54.2% | 27.4% |
 | stdio | 23 | 12 | 7 | 3 | 0 | 0 | 1 | 63.2% | 54.5% |
-| stream | 872 | 686 | 30 | 2 | 0 | 113 | 41 | 95.8% | 82.6% |
+| stream | 872 | 720 | 31 | 2 | 0 | 112 | 7 | 95.9% | 83.2% |
 | string_decoder | 5 | 3 | 0 | 0 | 0 | 2 | 0 | 100.0% | 60.0% |
 | test_runner | 338 | 88 | 32 | 21 | 1 | 187 | 9 | 73.3% | 26.7% |
 | timers | 111 | 47 | 3 | 0 | 0 | 20 | 41 | 94.0% | 67.1% |
@@ -81,7 +81,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | trace_events | 35 | 12 | 7 | 5 | 0 | 8 | 3 | 63.2% | 37.5% |
 | tty | 5 | 0 | 3 | 0 | 0 | 0 | 2 | 0.0% | 0.0% |
 | url | 51 | 19 | 10 | 0 | 0 | 21 | 1 | 65.5% | 38.0% |
-| util | 235 | 83 | 14 | 0 | 0 | 20 | 118 | 85.6% | 70.9% |
+| util | 235 | 86 | 14 | 0 | 0 | 20 | 115 | 86.0% | 71.7% |
 | v8 | 57 | 14 | 1 | 0 | 30 | 12 | 0 | 93.3% | 24.6% |
 | vm | 173 | 73 | 39 | 3 | 13 | 45 | 0 | 65.2% | 42.2% |
 | webcrypto | 175 | 44 | 21 | 1 | 0 | 62 | 47 | 67.7% | 34.4% |
@@ -760,7 +760,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-stream-error-once.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-event-names.js` | 6 | 6 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-filter.js` | 12 | 12 | 0 | 0 | 0 | 0 | 0 |
-| `test-stream-finished.js` | 43 | 1 | 7 | 0 | 0 | 1 | 34 |
+| `test-stream-finished.js` | 43 | 35 | 8 | 0 | 0 | 0 | 0 |
 | `test-stream-flatMap.js` | 8 | 8 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-forEach.js` | 11 | 11 | 0 | 0 | 0 | 0 | 0 |
 | `test-stream-iter-validation.js` | 19 | 0 | 0 | 0 | 0 | 19 | 0 |
@@ -860,7 +860,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-urlpattern.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-util-callbackify.js` | 9 | 9 | 0 | 0 | 0 | 0 | 0 |
 | `test-util-convert-signal-to-exit-code.mjs` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
-| `test-util-deprecate.js` | 4 | 0 | 0 | 0 | 0 | 1 | 3 |
+| `test-util-deprecate.js` | 4 | 3 | 0 | 0 | 0 | 1 | 0 |
 | `test-util-exception-with-host-port.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
 | `test-util-format.js` | 9 | 0 | 9 | 0 | 0 | 0 | 0 |
 | `test-util-getcallsites-sourcemap.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
@@ -1090,7 +1090,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1294)
+### known gap (1295)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1317,6 +1317,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | MessagePort util.inspect output/shape is not Node-compatible | 1 | `parallel/test-worker-message-port-inspect-during-init-hook.js` |
 | NODE_OPTIONS behavior via --env-file is incomplete in execPath child emulation | 1 | `parallel/test-dotenv-node-options.js` |
 | NODE_V8_COVERAGE warning behavior in child_process execPath emulation is incomplete | 1 | `parallel/test-coverage-with-inspector-disabled.js` |
+| Node 26.13.1 gap: HTTP response aborted/error callbacks after serverRes.destroy() time out | 1 | `parallel/test-stream-finished.js#block_35_block_35` |
 | OKP (Ed/X) key import/export compatibility is incomplete | 1 | `parallel/test-webcrypto-export-import-cfrg.js` |
 | OutgoingMessage implicit Content-Length/Transfer-Encoding and Connection header behavior is not Node-compatible | 1 | `parallel/test-http-content-length.js` |
 | OutgoingMessage.getHeaders() shape is not Node-compatible (null-prototype object expected) | 1 | `parallel/test-http-mutable-headers.js` |
@@ -1956,14 +1957,14 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-createcacheddata.js` |
 | vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host | 1 | `parallel/test-vm-module-referrer-realm.mjs` |
 
-### unevaluated (3817)
+### unevaluated (3816)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | newly discovered, not yet evaluated | 3615 | `es-module/test-cjs-defer-static-import-eval.mjs`, `es-module/test-defer-import-builtin-module.mjs`, `es-module/test-defer-import-eval-with-tla.mjs`, ... (+3612) |
-| newly discovered subtest, not yet evaluated | 202 | `es-module/test-esm-json.mjs#test_01_should_load_json_with_import_calls`, `parallel/test-assert-deep.js#test_01_loose_deepequal`, `parallel/test-assert-deep.js#test_08_deepstrictequal_handles_shared_expected_array_elements_after`, ... (+199) |
+| newly discovered subtest, not yet evaluated | 201 | `es-module/test-esm-json.mjs#test_01_should_load_json_with_import_calls`, `parallel/test-assert-deep.js#test_01_loose_deepequal`, `parallel/test-assert-deep.js#test_08_deepstrictequal_handles_shared_expected_array_elements_after`, ... (+198) |
 
-### Node.js internals (1177)
+### Node.js internals (1140)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1972,7 +1973,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | requires --expose-internals plus internal/test/binding internalBinding('js_stream'/'util') | 61 | `parallel/test-util-inspect.js#block_00_special_function_inspection`, `parallel/test-util-inspect.js#block_01_block_01`, `parallel/test-util-inspect.js#block_02_block_02`, ... (+58) |
 | requires --expose-internals and internal/webstreams/adapters | 60 | `parallel/test-whatwg-webstreams-adapters-streambase.js#block_00_block_00`, `parallel/test-whatwg-webstreams-adapters-streambase.js#block_01_block_01`, `parallel/test-whatwg-webstreams-adapters-streambase.js#block_02_block_02`, ... (+57) |
 | inherited: requires --expose-internals, inspect integration, and internal EventTarget APIs | 53 | `parallel/test-eventtarget.js#block_00_first_test_event`, `parallel/test-eventtarget.js#block_01_block_01`, `parallel/test-eventtarget.js#block_02_block_02`, ... (+50) |
-| missing reason | 43 | `parallel/test-cli-node-options-disallowed.js`, `parallel/test-fs-syncwritestream.js`, `parallel/test-fs-watch-abort-signal.js#block_00_block_00`, ... (+40) |
 | uses --expose-internals with internal/test/binding (internalBinding('uv')) | 32 | `parallel/test-fs-copyfile.js`, `parallel/test-fs-error-messages.js#block_00_stat`, `parallel/test-fs-error-messages.js#block_01_lstat`, ... (+29) |
 | requires internal/test/binding and internalBinding('js_stream') | 28 | `parallel/test-util-types.js#block_00_block_00`, `parallel/test-util-types.js#block_01_block_01`, `parallel/test-util-types.js#block_02_block_02`, ... (+25) |
 | requires --expose-internals and internal/crypto/webidl | 24 | `parallel/test-webcrypto-webidl.js#block_00_required_arguments_length`, `parallel/test-webcrypto-webidl.js#block_01_boolean`, `parallel/test-webcrypto-webidl.js#block_02_https_webidl_spec_whatwg_org_abstract_opdef_converttoint`, ... (+21) |
@@ -2009,6 +2009,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | uses --expose-internals and require('internal/http2/util') | 7 | `parallel/test-http2-client-socket-destroy.js`, `parallel/test-http2-create-client-secure-session.js`, `parallel/test-http2-server-http1-client.js`, ... (+4) |
 | uses internal/test/binding UV constants and watcher._handle internals | 7 | `parallel/test-fs-watch-enoent.js#block_00_block_00`, `parallel/test-fs-watch-enoent.js#block_01_block_01`, `parallel/test-fs-watch-enoent.js#block_02_block_02`, ... (+4) |
 | inherited: uses --expose-internals, internal/test/binding, and internal/dgram handle internals | 6 | `parallel/test-handle-wrap-hasref.js#block_00_child_process`, `parallel/test-handle-wrap-hasref.js#block_01_dgram_ipv4`, `parallel/test-handle-wrap-hasref.js#block_02_dgram_ipv6`, ... (+3) |
+| missing reason | 6 | `parallel/test-cli-node-options-disallowed.js`, `parallel/test-fs-syncwritestream.js`, `parallel/test-fs-watch-abort-signal.js#block_00_block_00`, ... (+3) |
 | requires --expose-internals, internal/fs/utils, and internal/test/binding constants.fs | 6 | `parallel/test-fs-utils-get-dirents.js#block_04_block_04`, `parallel/test-fs-utils-get-dirents.js#block_05_getdirent`, `parallel/test-fs-utils-get-dirents.js#block_06_block_06`, ... (+3) |
 | requires internal/timers | 6 | `parallel/test-timers-refresh.js#block_00_unref_d_timer`, `parallel/test-timers-refresh.js#block_01_should_throw_with_non_functions`, `parallel/test-timers-refresh.js#block_02_unref_pooled_timer`, ... (+3) |
 | uses --expose-internals and internal/errors SystemError | 6 | `parallel/test-errors-systemerror-frozen-intrinsics.js`, `parallel/test-errors-systemerror-stackTraceLimit-custom-setter.js`, `parallel/test-errors-systemerror-stackTraceLimit-deleted-and-Error-sealed.js`, ... (+3) |
@@ -2221,7 +2222,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Config Hygiene
 
-43 non-runnable entries are missing a reason.
+6 non-runnable entries are missing a reason.
 
 <details>
 <summary>Entries missing reasons</summary>
@@ -2230,43 +2231,6 @@ Secondary full-public compatibility, including public tests that are currently e
 - `parallel/test-fs-syncwritestream.js` (Node.js internals)
 - `parallel/test-fs-watch-abort-signal.js#block_00_block_00` (Node.js internals)
 - `parallel/test-fs-watch-abort-signal.js#block_01_block_01` (Node.js internals)
-- `parallel/test-stream-finished.js#block_00_block_00` (Node.js internals)
-- `parallel/test-stream-finished.js#block_01_block_01` (Node.js internals)
-- `parallel/test-stream-finished.js#block_02_block_02` (Node.js internals)
-- `parallel/test-stream-finished.js#block_03_block_03` (Node.js internals)
-- `parallel/test-stream-finished.js#block_04_block_04` (Node.js internals)
-- `parallel/test-stream-finished.js#block_05_block_05` (Node.js internals)
-- `parallel/test-stream-finished.js#block_06_block_06` (Node.js internals)
-- `parallel/test-stream-finished.js#block_07_block_07` (Node.js internals)
-- `parallel/test-stream-finished.js#block_09_block_09` (Node.js internals)
-- `parallel/test-stream-finished.js#block_10_block_10` (Node.js internals)
-- `parallel/test-stream-finished.js#block_11_block_11` (Node.js internals)
-- `parallel/test-stream-finished.js#block_12_block_12` (Node.js internals)
-- `parallel/test-stream-finished.js#block_13_block_13` (Node.js internals)
-- `parallel/test-stream-finished.js#block_14_test_faulty_input_values_and_options` (Node.js internals)
-- `parallel/test-stream-finished.js#block_15_test_that_calling_returned_function_removes_listeners` (Node.js internals)
-- `parallel/test-stream-finished.js#block_16_block_16` (Node.js internals)
-- `parallel/test-stream-finished.js#block_17_block_17` (Node.js internals)
-- `parallel/test-stream-finished.js#block_18_block_18` (Node.js internals)
-- `parallel/test-stream-finished.js#block_19_block_19` (Node.js internals)
-- `parallel/test-stream-finished.js#block_20_block_20` (Node.js internals)
-- `parallel/test-stream-finished.js#block_25_block_25` (Node.js internals)
-- `parallel/test-stream-finished.js#block_26_block_26` (Node.js internals)
-- `parallel/test-stream-finished.js#block_27_block_27` (Node.js internals)
-- `parallel/test-stream-finished.js#block_28_block_28` (Node.js internals)
-- `parallel/test-stream-finished.js#block_29_block_29` (Node.js internals)
-- `parallel/test-stream-finished.js#block_30_block_30` (Node.js internals)
-- `parallel/test-stream-finished.js#block_31_block_31` (Node.js internals)
-- `parallel/test-stream-finished.js#block_32_block_32` (Node.js internals)
-- `parallel/test-stream-finished.js#block_33_block_33` (Node.js internals)
-- `parallel/test-stream-finished.js#block_35_block_35` (Node.js internals)
-- `parallel/test-stream-finished.js#block_37_block_37` (Node.js internals)
-- `parallel/test-stream-finished.js#block_38_block_38` (Node.js internals)
-- `parallel/test-stream-finished.js#block_39_block_39` (Node.js internals)
-- `parallel/test-stream-finished.js#block_41_block_41` (Node.js internals)
-- `parallel/test-util-deprecate.js#block_00_emits_deprecation_only_once_if_same_function_is_called` (Node.js internals)
-- `parallel/test-util-deprecate.js#block_01_emits_deprecation_twice_for_different_functions` (Node.js internals)
-- `parallel/test-util-deprecate.js#block_02_functions` (Node.js internals)
 - `parallel/test-webcrypto-derivebits.js#block_01_test_hkdf_bit_derivation` (Node.js internals)
 - `parallel/test-webcrypto-derivebits.js#block_02_test_pbkdf2_bit_derivation` (Node.js internals)
 

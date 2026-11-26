@@ -73,6 +73,14 @@ pub enum Command {
         /// skeleton's `Cargo.lock` is not copied; a lock already in the output directory is kept
         #[arg(long)]
         dependency: Vec<DependencySpecArg>,
+
+        /// An exported interface, as `namespace:package/interface` (every exported version) or
+        /// `namespace:package/interface@version`, whose async exports drain
+        /// their JavaScript work before they return, also with the skeleton's
+        /// `post-return-drain` feature. Use it for exports whose host stops driving the call at
+        /// the return
+        #[arg(long)]
+        drain_before_return: Vec<String>,
     },
     /// Generate TypeScript module definitions
     GenerateDTS {
@@ -106,6 +114,11 @@ pub enum Command {
         /// Initialization function name
         #[arg(long, default_value = "wizer-initialize")]
         init_func: String,
+
+        /// Source file(s) for binary slots in slot order. Pass an unmodified
+        /// template as input; sources are supplied during initialization.
+        #[arg(long)]
+        js: Vec<Utf8PathBuf>,
     },
     /// Inject JavaScript source into a compiled WASM component template
     InjectJs {

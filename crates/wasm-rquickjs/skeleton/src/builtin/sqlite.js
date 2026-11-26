@@ -129,7 +129,7 @@ class _DatabaseSyncImpl {
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
-        const stmtOptions = {};
+        const stmtOptions = { __proto__: null };
         for (const key of ['returnArrays', 'readBigInts', 'allowBareNamedParameters', 'allowUnknownNamedParameters']) {
             const value = options[key];
             if (value !== undefined && typeof value !== 'boolean') {
