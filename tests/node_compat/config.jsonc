@@ -16832,7 +16832,7 @@
         "test_01_brotlidecompress_reset_preserves_its_dictionary": {}
       }
     },
-    "parallel/test-zlib-decode-strings.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-zlib-decode-strings.js": {},
     "parallel/test-zlib-negative-zero.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-zlib-reject-garbage-after-end.js": {
       "category": "known-gap",

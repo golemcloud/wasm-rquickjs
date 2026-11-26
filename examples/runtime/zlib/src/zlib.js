@@ -1,5 +1,6 @@
 import { Buffer } from 'node:buffer';
 import assert from 'node:assert/strict';
+import { getEventListeners } from 'node:events';
 import * as zlib from 'node:zlib';
 import {
   brotliCompressSync,
@@ -525,6 +526,250 @@ export async function testZstd() {
   assert.deepEqual(frameResults, [
     'helloworld', 'hellox', { code: 'ZSTD_error_srcSize_wrong', errno: 72 },
   ]);
+  return true;
+}
+
+export async function testZstdContracts() {
+  const failures = [];
+  for (const [name, check] of [
+    ['callback source pledge', async () => {
+      const bytes = Buffer.from('héllo wörld 🚀 '.repeat(1000));
+      const padded = Buffer.concat([Buffer.alloc(7), bytes, Buffer.alloc(11)]);
+      const mismatches = [];
+      for (const [input, options, normalized] of [
+        ['', {}, Buffer.alloc(0)],
+        ['hello', {}, Buffer.from('hello')],
+        [bytes.toString(), {}, bytes],
+        [new DataView(padded.buffer, padded.byteOffset + 7, bytes.length), {}, bytes],
+        [Buffer.alloc(131073, 65), { chunkSize: 64 }, Buffer.alloc(131073, 65)],
+        [bytes.toString(), { defaultEncoding: 'utf-8' }, bytes],
+      ]) {
+        const opts = { ...options, params: { [zlib.constants.ZSTD_c_compressionLevel]: 9 } };
+        const compressed = await new Promise((resolve, reject) => zlib.zstdCompress(input, opts,
+          (error, output) => error ? reject(error) : resolve(output)));
+        const expected = zlib.zstdCompressSync(normalized, opts);
+        console.log(`pledge ${normalized.length}: ${compressed.toString('hex')} sync: ${expected.toString('hex')}`);
+        if (!compressed.equals(expected)) mismatches.push(`${typeof input}/${normalized.length}`);
+        assert.equal(opts.pledgedSrcSize, undefined);
+      }
+      const latin1 = await new Promise((resolve, reject) => zlib.zstdCompress('é',
+        { defaultEncoding: 'latin1', params: { [zlib.constants.ZSTD_c_compressionLevel]: 9 } },
+        (error, output) => error ? reject(error) : resolve(output)));
+      // Node deliberately leaves non-UTF-8 strings unpledged; their frame is
+      // not byte-identical to synchronous compression of the encoded bytes.
+      console.log(`latin1 unpledged: ${latin1.toString('hex')}`);
+      assert.equal(latin1[4] & 0xe0, 0);
+      assert.deepEqual(zlib.zstdDecompressSync(latin1), Buffer.from([0xe9]));
+      const mismatch = await new Promise(resolve => zlib.zstdCompress(Buffer.from('hello'),
+        { pledgedSrcSize: 1 }, error => resolve(error)));
+      assert.equal(mismatch?.code, 'ZSTD_error_srcSize_wrong');
+      assert.equal(mismatch?.errno, 72);
+      assert.deepEqual(mismatches, []);
+    }],
+    ['constructor option ownership', async () => {
+      let reads = 0;
+      const compressor = zlib.createZstdCompress({
+        get chunkSize() {
+          if (++reads > 2) throw new Error('unowned third chunkSize read');
+          return 64;
+        },
+      });
+      await streamRoundTrip(Buffer.from('constructor ownership 13|29'), compressor, zlib.createZstdDecompress());
+      assert.throws(() => zlib.createZstdCompress({ signal: {} }), { code: 'ERR_INVALID_ARG_TYPE' });
+    }],
+    ['error intrinsic capture', async () => {
+      const original = String.prototype.startsWith;
+      try {
+        String.prototype.startsWith = () => { throw new Error('mutable startsWith'); };
+        assert.throws(() => zlib.zstdDecompressSync(Buffer.from([1, 2, 3, 4])),
+          { code: 'ZSTD_error_prefix_unknown', errno: 10 });
+      } finally { String.prototype.startsWith = original; }
+    }],
+    ['callback encoding', async () => {
+      for (const pledgedSrcSize of [undefined, 1]) {
+        const compressed = await new Promise((resolve, reject) => {
+          zlib.zstdCompress('é', { defaultEncoding: 'latin1', pledgedSrcSize },
+            (error, result) => error ? reject(error) : resolve(result));
+        });
+        assert.deepEqual(zlib.zstdDecompressSync(compressed), Buffer.from([0xe9]));
+      }
+    }],
+    ['shared dictionaries', async () => {
+      const shared = new SharedArrayBuffer(128);
+      const dictionary = Buffer.from('dictionary asymmetric 13|29 '.repeat(3));
+      new Uint8Array(shared).set(dictionary, 7);
+      const source = Buffer.from('dictionary asymmetric 13|29 '.repeat(100));
+      for (const value of [shared, new Uint8Array(shared, 7, dictionary.length),
+        new DataView(shared, 7, dictionary.length)]) {
+        const compressed = zlib.zstdCompressSync(source, { dictionary: value });
+        assert.deepEqual(zlib.zstdDecompressSync(compressed, { dictionary: value }), source);
+        await streamRoundTrip(source, zlib.createZstdCompress({ dictionary: value }),
+          zlib.createZstdDecompress({ dictionary: value }));
+      }
+    }],
+    ['numeric parameters', async () => {
+      for (const value of [-2, 3, 100]) {
+        assert.throws(() => zlib.createZstdCompress({ params: { 160: value } }),
+          { code: 'ERR_ZLIB_INITIALIZATION_FAILED' });
+      }
+      const source = Buffer.from('numeric control 13|29');
+      for (const value of [0, 1, 2]) {
+        assert.deepEqual(zlib.zstdDecompressSync(zlib.zstdCompressSync(source, { params: { 160: value } })), source);
+      }
+      for (const key of [200, 201, 202]) {
+        const enabled = zlib.zstdCompressSync(source, { params: { [key]: 1 } });
+        for (const value of [-2, 2, 3, 100]) {
+          assert.deepEqual(zlib.zstdCompressSync(source, { params: { [key]: value } }), enabled);
+        }
+      }
+    }],
+    ['stream backpressure', async () => {
+      assert.throws(() => zlib.createZstdDecompress({ chunkSize: Number.MAX_SAFE_INTEGER + 1 }),
+        { code: 'ERR_OUT_OF_RANGE' });
+      const source = Buffer.alloc(1024 * 1024, 0x61);
+      const decoder = zlib.createZstdDecompress({ chunkSize: 64, readableHighWaterMark: 64 });
+      const chunks = [];
+      let written = false;
+      const done = new Promise((resolve, reject) => {
+        decoder.on('error', reject);
+        decoder.on('end', resolve);
+      });
+      decoder.write(zlib.zstdCompressSync(source), error => {
+        if (error) decoder.destroy(error);
+        written = true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const buffered = decoder.readableLength;
+      const writeCompleted = written;
+      decoder.on('data', chunk => chunks.push(chunk));
+      decoder.end();
+      await done;
+      assert.deepEqual(Buffer.concat(chunks), source);
+      assert.equal(writeCompleted, false);
+      assert.ok(buffered <= 64, `paused decoder buffered ${buffered} bytes`);
+      assert.ok(chunks.every(chunk => chunk.length <= 64), 'output exceeds chunkSize');
+
+      const random = Buffer.alloc(300000);
+      let seed = 0x12345678;
+      for (let i = 0; i < random.length; i++) {
+        seed ^= seed << 13; seed ^= seed >>> 17; seed ^= seed << 5;
+        random[i] = seed & 255;
+      }
+      const encoder = zlib.createZstdCompress({ chunkSize: 64, readableHighWaterMark: 64 });
+      const encoded = [];
+      const encodedDone = new Promise((resolve, reject) => {
+        encoder.on('error', reject); encoder.on('end', resolve);
+      });
+      encoder.write(random);
+      encoder.end();
+      await new Promise(resolve => setTimeout(resolve, 0));
+      const encodedBuffered = encoder.readableLength;
+      encoder.on('data', chunk => encoded.push(chunk));
+      await encodedDone;
+      assert.ok(encodedBuffered <= 64, `paused encoder buffered ${encodedBuffered} bytes`);
+      assert.ok(encoded.every(chunk => chunk.length <= 64), 'encoded output exceeds chunkSize');
+      assert.deepEqual(zlib.zstdDecompressSync(Buffer.concat(encoded)), random);
+
+      const frame = zlib.zstdCompressSync(source);
+      assert.deepEqual(zlib.zstdDecompressSync(frame, { chunkSize: 64, maxOutputLength: source.length }), source);
+      assert.throws(() => zlib.zstdDecompressSync(frame, { chunkSize: 64, maxOutputLength: source.length - 1 }),
+        { code: 'ERR_BUFFER_TOO_LARGE' });
+    }],
+    ['paused stream destruction', async () => {
+      const decoder = zlib.createZstdDecompress({ chunkSize: 64, readableHighWaterMark: 64 });
+      const failure = new Error('cancel paused decoder');
+      let callbacks = 0;
+      const closed = new Promise(resolve => decoder.on('close', resolve));
+      decoder.on('error', error => assert.equal(error, failure));
+      decoder.write(zlib.zstdCompressSync(Buffer.alloc(1024 * 1024)), () => callbacks++);
+      await new Promise(resolve => setTimeout(resolve, 0));
+      decoder.destroy(failure);
+      await closed;
+      await new Promise(resolve => setTimeout(resolve, 0));
+      assert.equal(decoder.destroyed, true);
+      assert.ok(callbacks <= 1);
+    }],
+    ['stream string encodings', async () => {
+      const source = Buffer.from('base64 decoder control 13|29');
+      const frame = zlib.zstdCompressSync(source);
+      for (const [decode, input, encoding, defaultEncoding, expected] of [
+        [false, 'é', 'latin1', undefined, Buffer.from([0xe9])],
+        [false, 'é', undefined, 'latin1', Buffer.from([0xe9])],
+        [true, frame.toString('base64'), 'base64', undefined, source],
+      ]) {
+        const engine = decode ? zlib.createZstdDecompress({ decodeStrings: false }) :
+          zlib.createZstdCompress({ decodeStrings: false, defaultEncoding });
+        const chunks = [];
+        const done = new Promise((resolve, reject) => {
+          engine.on('error', reject); engine.on('end', resolve);
+        });
+        engine.on('data', chunk => chunks.push(chunk));
+        engine.end(input, encoding);
+        await done;
+        const output = Buffer.concat(chunks);
+        assert.deepEqual(decode ? output : zlib.zstdDecompressSync(output), expected);
+      }
+    }],
+    ['finalizer method capture', async () => {
+      const { register, unregister } = FinalizationRegistry.prototype;
+      try {
+        FinalizationRegistry.prototype.register = () => { throw new Error('mutable register'); };
+        FinalizationRegistry.prototype.unregister = () => { throw new Error('mutable unregister'); };
+        const source = Buffer.from('captured cleanup methods 13|29');
+        assert.deepEqual(zlib.zstdDecompressSync(zlib.zstdCompressSync(source)), source);
+        await streamRoundTrip(source, zlib.createZstdCompress(), zlib.createZstdDecompress());
+      } finally {
+        FinalizationRegistry.prototype.register = register;
+        FinalizationRegistry.prototype.unregister = unregister;
+      }
+    }],
+    ['callback cancellation and completion', async () => {
+      const source = Buffer.from('callback lifecycle control 13|29');
+      const frame = zlib.zstdCompressSync(source);
+      const aborted = new AbortController();
+      aborted.abort();
+      for (const create of [zlib.createZstdCompress, zlib.createZstdDecompress]) {
+        const engine = create({ signal: aborted.signal });
+        const closed = new Promise(resolve => engine.on('close', resolve));
+        const error = await new Promise(resolve => engine.on('error', resolve));
+        await closed;
+        assert.equal(error.code, 'ABORT_ERR');
+      }
+      assert.deepEqual(zlib.zstdDecompressSync(zlib.zstdCompressSync(source,
+        { signal: aborted.signal }), { signal: aborted.signal }), source);
+      for (const [operation, input] of [[zlib.zstdCompress, source], [zlib.zstdDecompress, frame]]) {
+        for (const initiallyAborted of [false, true]) {
+          const controller = new AbortController();
+          if (initiallyAborted) controller.abort();
+          let callbacks = 0;
+          const done = new Promise(resolve => operation(input, { signal: controller.signal }, error => {
+            callbacks++; resolve(error);
+          }));
+          if (!initiallyAborted) controller.abort();
+          assert.equal((await done)?.code, 'ABORT_ERR');
+          await new Promise(resolve => setTimeout(resolve, 0));
+          assert.equal(callbacks, 1);
+          assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+        }
+        const controller = new AbortController();
+        const result = await new Promise((resolve, reject) => operation(input,
+          { signal: controller.signal, info: true }, (error, value) => error ? reject(error) : resolve(value)));
+        assert.ok(Buffer.isBuffer(result.buffer));
+        assert.deepEqual(operation === zlib.zstdCompress ? zlib.zstdDecompressSync(result.buffer) : result.buffer, source);
+        await new Promise(resolve => setTimeout(resolve, 0));
+        assert.equal(getEventListeners(controller.signal, 'abort').length, 0);
+      }
+      const error = await new Promise(resolve => zlib.zstdDecompress(frame,
+        { maxOutputLength: source.length - 1 }, error => resolve(error)));
+      assert.equal(error?.code, 'ERR_BUFFER_TOO_LARGE');
+      const invalid = await new Promise(resolve => zlib.zstdDecompress(Buffer.from([1, 2]), error => resolve(error)));
+      assert.ok(invalid);
+    }],
+  ]) {
+    try { await check(); console.log(`${name}: PASS`); }
+    catch (error) { failures.push(name); console.log(`${name}: FAIL ${error.message}`); }
+  }
+  assert.deepEqual(failures, []);
   return true;
 }
 

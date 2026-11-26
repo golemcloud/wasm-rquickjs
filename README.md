@@ -1264,6 +1264,9 @@ throws immediately. Environment-data APIs are unavailable.
 - `crc32`, `constants`, `codes`
 - Zstandard requires the optional `zstd` feature (included in the full tiers). It uses the reference
   zstd codec with worker threads disabled for WASI; `normal-p3` does not include that codec.
+  The APIs remain discoverable without the feature, but calls throw `ERR_ZLIB_INITIALIZATION_FAILED`.
+  This generic initialization error can also indicate invalid codec parameters; check the build's
+  enabled features before diagnosing a parameter failure.
 
 </details>
 
