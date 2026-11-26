@@ -3,6 +3,8 @@
 
 use std::fmt::Write;
 
+mod loader;
+use loader::BuiltinSourceLoader;
 mod sync_exports;
 use sync_exports::SyncableBuiltinLoaderExt;
 
@@ -316,8 +318,8 @@ pub fn add_module_resolvers(
 /// internal helper modules.
 pub fn module_loader() -> (
     rquickjs::loader::ModuleLoader,
-    rquickjs::loader::BuiltinLoader,
-    rquickjs::loader::BuiltinLoader,
+    BuiltinSourceLoader,
+    BuiltinSourceLoader,
 ) {
     let native_loader = rquickjs::loader::ModuleLoader::default()
         .with_module(
@@ -422,7 +424,7 @@ pub fn module_loader() -> (
         websocket::js_native_module,
     );
 
-    let builtin_loader = rquickjs::loader::BuiltinLoader::default()
+    let builtin_loader = BuiltinSourceLoader::default()
         .with_module(
             "__wasm_rquickjs_builtin/abort_controller",
             abort_controller::ABORT_CONTROLLER_JS,

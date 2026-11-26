@@ -1,7 +1,10 @@
+use std::collections::HashMap;
 use std::fmt::Write;
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, LazyLock, Mutex};
 
-use rquickjs::loader::{BuiltinLoader, BuiltinResolver};
+use rquickjs::loader::BuiltinResolver;
+
+use super::loader::BuiltinSourceLoader;
 
 use crate::internal::module_loading::{
     collect_static_esm_export_names, has_static_esm_star_reexport,
@@ -104,7 +107,7 @@ pub(super) fn canonical_public_builtin_name(name: &str) -> Option<&'static str> 
         .or_else(|| canonical_public_builtin_alias(name))
 }
 
-fn implementation_name(name: &str) -> String {
+pub(super) fn implementation_name(name: &str) -> String {
     format!("{IMPLEMENTATION_PREFIX}{name}")
 }
 
@@ -132,12 +135,40 @@ fn export_name_source(name: &str) -> String {
     }
 }
 
-fn facade_source(name: &str, implementation: &str, exports_source: &str) -> Vec<u8> {
+pub(super) struct FacadeExports {
+    names: Vec<String>,
+    has_star_reexport: bool,
+}
+
+impl FacadeExports {
+    pub(super) fn for_source(source: &'static str) -> Arc<Self> {
+        type ExportsBySource = HashMap<(usize, usize), Arc<FacadeExports>>;
+        static EXPORTS: LazyLock<Mutex<ExportsBySource>> =
+            LazyLock::new(|| Mutex::new(HashMap::new()));
+        // Static sources never move or expire. Identity avoids hashing the full
+        // JavaScript source again when a fresh execution job registers builtins.
+        let key = (source.as_ptr() as usize, source.len());
+        let mut exports = EXPORTS
+            .lock()
+            .expect("builtin export metadata cache poisoned");
+        exports
+            .entry(key)
+            .or_insert_with(|| {
+                Arc::new(Self {
+                    names: collect_static_esm_export_names(source),
+                    has_star_reexport: has_static_esm_star_reexport(source),
+                })
+            })
+            .clone()
+    }
+}
+
+pub(super) fn facade_source(name: &str, implementation: &str, exports: &FacadeExports) -> Vec<u8> {
     assert!(
-        !has_static_esm_star_reexport(exports_source),
+        !exports.has_star_reexport,
         "syncable builtin {name} uses an unresolved export *; pass its concrete implementation as exports_source"
     );
-    let export_names = collect_static_esm_export_names(exports_source);
+    let export_names = &exports.names;
 
     let mut source = format!(
         "import __wasmRquickjsDefault, * as __wasmRquickjsNamespace from {implementation:?};\n\
@@ -150,7 +181,7 @@ const __wasmRquickjsKeys = globalThis.__wasm_rquickjs_builtin_facade_object_keys
         "if (typeof __wasmRquickjsDefault === 'function' ||\n\
     (typeof __wasmRquickjsDefault === 'object' && __wasmRquickjsDefault !== null)) {\n",
     );
-    for export_name in &export_names {
+    for export_name in export_names {
         writeln!(
             source,
             "  if (!__wasmRquickjsHasOwn(__wasmRquickjsDefault, {export_name:?}) && __wasmRquickjsHasOwn(__wasmRquickjsNamespace, {export_name:?})) __wasmRquickjsDefineProperty(__wasmRquickjsDefault, {export_name:?}, {{ value: __wasmRquickjsNamespace[{export_name:?}], writable: true, configurable: true, enumerable: true }});"
@@ -184,7 +215,7 @@ const __wasmRquickjsExportSet = __wasmRquickjsCreate(null);\n\
 const __wasmRquickjsSyncOrder = [];\n\
 const __wasmRquickjsSeen = __wasmRquickjsCreate(null);\n",
     );
-    for export_name in &export_names {
+    for export_name in export_names {
         writeln!(source, "__wasmRquickjsExportSet[{export_name:?}] = true;").unwrap();
     }
     source.push_str(
@@ -197,7 +228,7 @@ for (let __wasmRquickjsIndex = 0; __wasmRquickjsIndex < __wasmRquickjsDefaultKey
   }\n\
 }\n",
     );
-    for export_name in &export_names {
+    for export_name in export_names {
         writeln!(
             source,
             "if (!__wasmRquickjsSeen[{export_name:?}]) __wasmRquickjsSyncOrder[__wasmRquickjsSyncOrder.length] = {export_name:?};"
@@ -227,19 +258,6 @@ for (let __wasmRquickjsIndex = 0; __wasmRquickjsIndex < __wasmRquickjsDefaultKey
     source.into_bytes()
 }
 
-fn cached_facade_source(name: &'static str, implementation: &str, exports_source: &str) -> Vec<u8> {
-    static FACADES: OnceLock<Mutex<std::collections::HashMap<&'static str, Vec<u8>>>> =
-        OnceLock::new();
-    let facades = FACADES.get_or_init(|| Mutex::new(std::collections::HashMap::new()));
-    let mut facades = facades
-        .lock()
-        .expect("syncable builtin facade cache poisoned");
-    facades
-        .entry(name)
-        .or_insert_with(|| facade_source(name, implementation, exports_source))
-        .clone()
-}
-
 pub(super) trait SyncableBuiltinLoaderExt {
     fn with_syncable_module(self, name: &'static str, source: &'static str) -> Self;
 
@@ -251,7 +269,7 @@ pub(super) trait SyncableBuiltinLoaderExt {
     ) -> Self;
 }
 
-impl SyncableBuiltinLoaderExt for BuiltinLoader {
+impl SyncableBuiltinLoaderExt for BuiltinSourceLoader {
     fn with_syncable_module(self, name: &'static str, source: &'static str) -> Self {
         self.with_syncable_module_exports(name, source, source)
     }
@@ -263,12 +281,8 @@ impl SyncableBuiltinLoaderExt for BuiltinLoader {
         exports_source: &'static str,
     ) -> Self {
         let implementation = implementation_name(name);
-        // The component creates a fresh QuickJS runtime for each execution job.
-        // Cache immutable generated sources so those jobs clone the small facade
-        // instead of rescanning every builtin implementation.
-        let facade = cached_facade_source(name, &implementation, exports_source);
         self.with_module(implementation, source)
-            .with_module(name, facade)
+            .with_facade(name, exports_source)
     }
 }
 
@@ -288,7 +302,7 @@ mod tests {
         let source = String::from_utf8(facade_source(
             "node:default-only",
             "__implementation",
-            "export default {};",
+            &FacadeExports::for_source("export default {};"),
         ))
         .unwrap();
         assert!(source.contains("export {\n};"));
@@ -300,7 +314,9 @@ mod tests {
         let source = String::from_utf8(facade_source(
             "node:quoted-export",
             "__implementation",
-            "const value = 1; export { value as 'not-an-identifier' }; export default {};",
+            &FacadeExports::for_source(
+                "const value = 1; export { value as 'not-an-identifier' }; export default {};",
+            ),
         ))
         .unwrap();
         assert!(source.contains("as \"not-an-identifier\","));
@@ -331,7 +347,7 @@ mod tests {
         let source = String::from_utf8(facade_source(
             "node:sample",
             "__implementation",
-            "export const value = 1; export default { value };",
+            &FacadeExports::for_source("export const value = 1; export default { value };"),
         ))
         .unwrap();
 
