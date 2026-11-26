@@ -15,12 +15,25 @@ pub(crate) fn begin() {
     }
     VIOLATED.store(false, Ordering::Relaxed);
     FIRST_VIOLATION.lock().unwrap().take();
+    // The optimizer forwards guest stderr to the build output. A failed
+    // initialization panics with the JavaScript diagnostic; print only that
+    // message, without the runtime's thread name, source location and
+    // backtrace note.
+    std::panic::set_hook(Box::new(|info| {
+        let mut stderr = std::io::stderr();
+        let _ = match info.payload_as_str() {
+            Some(message) => std::io::Write::write_fmt(&mut stderr, format_args!("{message}\n")),
+            None => std::io::Write::write_fmt(&mut stderr, format_args!("{info}\n")),
+        };
+    }));
 }
 
 pub(crate) fn complete() {
     if VIOLATED.load(Ordering::Relaxed) {
         trap();
     }
+    // Restore the default hook so the snapshot and restored agents keep it.
+    drop(std::panic::take_hook());
     ACTIVE.store(false, Ordering::Relaxed);
 }
 
