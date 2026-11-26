@@ -1001,6 +1001,7 @@ struct BrotliStream {
     kind: BrotliStreamKind,
     bytes_written: u32,
     reject_garbage: bool,
+    allow_incomplete: bool,
     trailing: bool,
 }
 
@@ -1033,7 +1034,12 @@ static BROTLI_STREAMS: LazyLock<Mutex<HashMap<u32, BrotliStream>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(feature = "brotli")]
-fn brotli_stream_new_impl(mode: u8, params_json: &str, reject_garbage: bool) -> Option<u32> {
+fn brotli_stream_new_impl(
+    mode: u8,
+    params_json: &str,
+    reject_garbage: bool,
+    allow_incomplete: bool,
+) -> Option<u32> {
     let kind = match mode {
         0 => {
             let quality = parse_brotli_quality(params_json);
@@ -1059,6 +1065,7 @@ fn brotli_stream_new_impl(mode: u8, params_json: &str, reject_garbage: bool) -> 
             kind,
             bytes_written: 0,
             reject_garbage,
+            allow_incomplete,
             trailing: false,
         },
     );
@@ -1170,6 +1177,11 @@ fn brotli_stream_read(stream: &mut BrotliStream, max_bytes: usize) -> Option<Vec
                     stream.trailing |= stream.reject_garbage && available_in > 0;
                 }
                 brotli::BrotliResult::NeedsMoreOutput => {}
+                // Match the reader API: return decoded bytes before EOF.
+                brotli::BrotliResult::NeedsMoreInput if output_offset > 0 => {}
+                brotli::BrotliResult::NeedsMoreInput if stream.allow_incomplete => {
+                    *finished = true;
+                }
                 _ => return None,
             }
             chunk.truncate(output_offset);
@@ -1195,7 +1207,12 @@ fn brotli_stream_bytes_written_impl(id: u32) -> u32 {
 }
 
 #[cfg(not(feature = "brotli"))]
-fn brotli_stream_new_impl(_mode: u8, _params_json: &str, _reject_garbage: bool) -> Option<u32> {
+fn brotli_stream_new_impl(
+    _mode: u8,
+    _params_json: &str,
+    _reject_garbage: bool,
+    _allow_incomplete: bool,
+) -> Option<u32> {
     None
 }
 
@@ -1378,8 +1395,13 @@ pub mod native_module {
     // ===== Brotli streaming functions =====
 
     #[rquickjs::function]
-    pub fn brotli_stream_new(mode: u8, params_json: String, reject_garbage: bool) -> Option<u32> {
-        super::brotli_stream_new_impl(mode, &params_json, reject_garbage)
+    pub fn brotli_stream_new(
+        mode: u8,
+        params_json: String,
+        reject_garbage: bool,
+        allow_incomplete: bool,
+    ) -> Option<u32> {
+        super::brotli_stream_new_impl(mode, &params_json, reject_garbage, allow_incomplete)
     }
 
     #[rquickjs::function]

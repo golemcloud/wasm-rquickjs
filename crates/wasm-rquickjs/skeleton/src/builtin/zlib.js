@@ -1039,7 +1039,7 @@ class _BrotliCompress extends ZlibBase {
   _initHandle() {
     if (this._nativeHandle !== null) return;
     const paramsJson = brotliParamsToJson(this._brotliParams);
-    this._setNativeHandle(brotli_stream_new(0, paramsJson, false));
+    this._setNativeHandle(brotli_stream_new(0, paramsJson, false, false));
   }
 }
 
@@ -1055,7 +1055,9 @@ class _BrotliDecompress extends ZlibBase {
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(brotli_stream_new(1, '{}', this._rejectGarbage));
+    this._setNativeHandle(brotli_stream_new(
+      1, '{}', this._rejectGarbage, this._finishFlush !== BROTLI_OPERATION_FINISH,
+    ));
   }
   _flush(callback) {
     if (this._nativeHandle === null) {
@@ -1086,7 +1088,8 @@ class _BrotliDecompress extends ZlibBase {
     try {
       while (this._nativeHandle !== null) {
         const chunk = brotli_stream_pull(this._nativeHandle, Z_DEFAULT_CHUNK);
-        if (!chunk || chunk.length === 0) {
+        if (chunk == null) throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error');
+        if (chunk.length === 0) {
           this._closeHandle();
           callback();
           return;
@@ -1397,7 +1400,7 @@ export function brotliDecompressSync(data, opts) {
     validated.finishFlush,
     validated.rejectGarbage,
   );
-  if (errno === -7) throw trailingJunkError();
+  if (errno === -7 && errorMessage == null) throw trailingJunkError();
   if (errno !== 0) {
     throw typeof errorMessage === 'string' && stringStartsWith(errorMessage, 'ERR_')
       ? makeBrotliError(errorMessage, errno)
