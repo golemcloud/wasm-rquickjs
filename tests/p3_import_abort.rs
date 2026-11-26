@@ -317,8 +317,38 @@ async fn run(
     );
     let bindings = ImportAbort::instantiate_async(&mut store, &component, &linker).await?;
     let started = std::time::Instant::now();
-    let result = store
-        .run_concurrent(async |accessor| bindings.call_run(accessor).await)
+    let (result, overlapping) = store
+        .run_concurrent(async |accessor| -> Result<_> {
+            let result = bindings.call_run(accessor).await?;
+            // Three overlapping exported calls, each with its own signal. The second signal
+            // aborts once all three host calls are in flight.
+            let (first, second, third, aborted) = futures::join!(
+                bindings.call_overlapping(accessor, "overlap-first".into(), 1000),
+                bindings.call_overlapping(accessor, "overlap-second".into(), 10000),
+                bindings.call_overlapping(accessor, "overlap-third".into(), 1000),
+                async {
+                    wait_for_records(
+                        &records,
+                        &[
+                            "start:overlap-first",
+                            "start:overlap-second",
+                            "start:overlap-third",
+                        ],
+                    )
+                    .await;
+                    bindings
+                        .call_abort_overlapping(accessor, "overlap-second".into())
+                        .await
+                },
+            );
+            let overlapping = serde_json::json!({
+                "overlap-first": serde_json::from_str::<serde_json::Value>(&first?)?,
+                "overlap-second": serde_json::from_str::<serde_json::Value>(&second?)?,
+                "overlap-third": serde_json::from_str::<serde_json::Value>(&third?)?,
+                "aborted": aborted?,
+            });
+            Ok((result, overlapping))
+        })
         .await??;
     // Each aborted import would otherwise wait 10 seconds.
     let elapsed = started.elapsed();
@@ -329,7 +359,31 @@ async fn run(
     );
     let stderr = String::from_utf8_lossy(&store.data().stderr.contents()).into_owned();
     let records = records.lock().unwrap().clone();
-    Ok((serde_json::from_str(&result)?, records, stderr))
+    let mut outcomes: serde_json::Value = serde_json::from_str(&result)?;
+    outcomes["overlapping"] = overlapping;
+    Ok((outcomes, records, stderr))
+}
+
+/// Waits until the host recorded every record in `expected`.
+async fn wait_for_records(records: &Records, expected: &[&str]) {
+    let deadline = std::time::Instant::now() + Duration::from_secs(30);
+    loop {
+        let found = {
+            let records = records.lock().unwrap();
+            expected
+                .iter()
+                .all(|record| records.iter().any(|candidate| candidate == record))
+        };
+        if found {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{expected:?} were not recorded: {:#?}",
+            records.lock().unwrap()
+        );
+        tokio::time::sleep(Duration::from_millis(5)).await;
+    }
 }
 
 #[test]
@@ -483,6 +537,27 @@ fn p3_import_abort_cancels_the_signalled_imports() {
     );
     assert_eq!(conversion_error["after"], 0, "{context}");
     assert!(!has("start:count-bad-future"), "{context}");
+
+    // Overlapping exported calls each keep the signal they passed to `withSignal`, though the
+    // other calls made their own signals current before and after it: aborting the signal of
+    // the second call cancels only its host call, while the other two are still in flight.
+    let overlapping = &outcomes["overlapping"];
+    assert_eq!(overlapping["aborted"], true, "{context}");
+    assert_eq!(
+        overlapping["overlap-second"]["error"], "stop-overlap-second",
+        "{context}"
+    );
+    assert!(has("cancelled:overlap-second"), "{context}");
+    assert!(!has("done:overlap-second"), "{context}");
+    let position = |record: &str| records.iter().position(|candidate| candidate == record);
+    for label in ["overlap-first", "overlap-third"] {
+        assert_eq!(overlapping[label]["value"], label, "{label}\n{context}");
+        assert!(!has(&format!("cancelled:{label}")), "{label}\n{context}");
+        assert!(
+            position("cancelled:overlap-second") < position(&format!("done:{label}")),
+            "{label} finished before the abort\n{context}"
+        );
+    }
 }
 
 #[test]

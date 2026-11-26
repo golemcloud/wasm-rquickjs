@@ -264,3 +264,26 @@ export async function run() {
 
     return JSON.stringify(outcomes);
 }
+
+// The signals of pending `overlapping` calls, by label.
+const overlappingSignals = new Map();
+
+export async function overlapping(label, delayMs) {
+    const controller = new AbortController();
+    overlappingSignals.set(label, controller);
+    try {
+        const call = withSignal(controller.signal, () => wait(label, delayMs));
+        return JSON.stringify(await settle(call));
+    } finally {
+        overlappingSignals.delete(label);
+    }
+}
+
+export async function abortOverlapping(label) {
+    const controller = overlappingSignals.get(label);
+    if (controller === undefined) {
+        return false;
+    }
+    controller.abort(new Error(`stop-${label}`));
+    return true;
+}
