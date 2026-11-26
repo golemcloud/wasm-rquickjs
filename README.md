@@ -269,9 +269,13 @@ operations report catchable `ENOENT` errors; existence probes return `false`, an
 filesystem-backed module/package lookup follows its normal not-found behavior.
 These results are synthesized before touching the build host, WASI preopens,
 libc filesystem state or runtime loader caches. Optional imports and file probes
-may catch this absence; an uncaught exception still fails the build. Values
-computed from caught absence remain frozen in the snapshot, so perform any
-filesystem-dependent work again after restoration when needed.
+may catch this absence. Pre-initialization now also rejects uncaught deferred
+exceptions and unhandled promise rejections, including non-filesystem errors;
+it no longer snapshots initialization after silently dropping those failures.
+Registered loaders retry synthetic filesystem failures after restoration without
+discarding ordinary loader errors or successful modules. Values computed from
+caught absence remain frozen in the snapshot, so perform any filesystem-dependent
+work again after restoration when needed.
 
 Socket/DNS/HTTP/WebSocket acquisition, SQLite opens (including `:memory:`),
 execution-job creation, and `process.chdir()` still fail the build immediately.

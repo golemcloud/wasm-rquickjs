@@ -209,6 +209,30 @@ fn optimizer_rejects_uncaught_filesystem_errors() -> anyhow::Result<()> {
     let input = temp.path().join("input.wasm");
     let output = temp.path().join("optimized.wasm");
     for (source, expected) in [
+        (
+            "import fs from 'node:fs'; process.setUncaughtExceptionCaptureCallback(error => { throw error; }); setImmediate(() => fs.readFileSync('/x'));",
+            "ENOENT",
+        ),
+        (
+            "setImmediate(() => { throw new Error('uncaught deferred error'); });",
+            "uncaught deferred error",
+        ),
+        (
+            "Promise.reject(new Error('unhandled initialization rejection'));",
+            "unhandled initialization rejection",
+        ),
+        (
+            "import fs from 'node:fs'; fs.readFile('/x', error => { if (error) throw error; });",
+            "ENOENT",
+        ),
+        (
+            "import fs from 'node:fs/promises'; fs.readFile('/x').then(() => {});",
+            "ENOENT",
+        ),
+        (
+            "import fs from 'node:fs'; setImmediate(() => fs.readFileSync('/x'));",
+            "ENOENT",
+        ),
         ("import fs from 'node:fs'; fs.readFileSync('/x');", "ENOENT"),
         (
             "import fs from 'node:fs/promises'; await fs.readFile('/x');",
@@ -458,7 +482,7 @@ fn optimizer_preserves_caught_filesystem_absence() -> anyhow::Result<()> {
         build_preinit_template(root, wasm_rquickjs::GenerationTarget::WasiP3, "full-p3")?;
     let input = root.join("input.wasm");
     let output = root.join("optimized.wasm");
-    let source = r#"
+    let source = r##"
         import assert from 'node:assert/strict';
         import fs from 'node:fs';
         import fsp from 'node:fs/promises';
@@ -504,19 +528,52 @@ fn optimizer_preserves_caught_filesystem_absence() -> anyhow::Result<()> {
             assert.equal(fs.existsSync('/app/value.txt'), false); deferredAbsent = true;
         });
         await assert.rejects(fsp.readFile('/app/value.txt'), {code:'ENOENT'});
+        await new Promise(resolve => fs.readFile('/app/value.txt', error => {
+            assert.equal(error.code, 'ENOENT'); resolve();
+        }));
         await new Promise(resolve => fs.exists('/app/value.txt', exists => {
             assert.equal(exists, false); resolve();
         }));
         assert.equal(runInNewContext('fs.existsSync("/app/value.txt")', {fs}), false);
         // Supplied sources must not acquire a filesystem dependency.
         register('data:text/javascript,' + encodeURIComponent(`
+            import fs from 'node:fs';
             export function resolve(s,c,n) {
+                if (s === 'optional:read') return {shortCircuit:true,url:'file:///app/loader-read.mjs'};
+                if (s === 'optional:static') return {shortCircuit:true,url:'file:///app/loader-static.mjs'};
+                if (s === 'supplied:parent') return {shortCircuit:true,url:'file:///provided/parent.mjs'};
+                if (s === 'supplied:default-parent') return {shortCircuit:true,url:'file:///app/default-parent.mjs'};
+                if (s === 'supplied:map-parent') return {shortCircuit:true,url:'file:///app/map-parent.mjs'};
+                if (s === 'supplied:conditions-parent') return {shortCircuit:true,url:'file:///app/conditions-parent.mjs'};
+                if (s === 'ordinary:conditions') {
+                    const conditions = ['import'];
+                    Object.defineProperty(conditions, 0, {get() {
+                        throw Object.assign(new Error('ordinary resolve miss'), {code:'ERR_MODULE_NOT_FOUND'});
+                    }});
+                    return n('optional-package', {...c, conditions});
+                }
+                if (s === 'optional:copy') return {shortCircuit:true,url:'file:///provided/copy.mjs'};
+                if (s === 'optional:copy-excl') return {shortCircuit:true,url:'file:///provided/copy-excl.mjs'};
+                if (s === 'ordinary:error') return {shortCircuit:true,url:'file:///provided/error.mjs'};
                 if (s === 'supplied:optional') return {shortCircuit:true,url:'file:///provided/optional.mjs'};
                 if (s === 'chain:root') return {shortCircuit:true,url:'file:///chain/root.cjs',format:'commonjs'};
                 if (s === './child.cjs') return {shortCircuit:true,url:'file:///chain/child.cjs',format:'commonjs'};
                 return n(s,c);
             }
             export function load(u,c,n) {
+                if (u === 'file:///app/loader-read.mjs') return {shortCircuit:true,format:'module',source:fs.readFileSync('/app/loader-read.mjs','utf8')};
+                if (u === 'file:///app/loader-static.mjs') return {shortCircuit:true,format:'module',source:fs.readFileSync('/app/loader-static.mjs','utf8')};
+                if (u === 'file:///provided/parent.mjs') return {shortCircuit:true,format:'module',source:'export { value } from "optional:static";'};
+                if (u === 'file:///app/default-parent.mjs') return {shortCircuit:true,format:'module',source:'export { value } from "file:///app/default-child.mjs"; export {value as packageValue} from "optional-package";'};
+                if (u === 'file:///app/map-parent.mjs') return {shortCircuit:true,format:'module',source:'export { value } from "#child";'};
+                if (u === 'file:///app/conditions-parent.mjs') return {shortCircuit:true,format:'module',source:'export { value } from "ordinary:conditions";'};
+                if (u === 'file:///provided/copy.mjs' || u === 'file:///provided/copy-excl.mjs') {
+                    const exclusive = u.endsWith('copy-excl.mjs');
+                    const target = exclusive ? '/app/copy-excl.mjs' : '/app/copy.mjs';
+                    fs.copyFileSync('/app/copy-source.mjs', target, exclusive ? fs.constants.COPYFILE_EXCL : 0);
+                    return {shortCircuit:true,format:'module',source:fs.readFileSync(target,'utf8')};
+                }
+                if (u === 'file:///provided/error.mjs') throw Object.assign(new Error('ordinary loader error'), {code:'ENOENT'});
                 if (u === 'file:///provided/optional.mjs') return {shortCircuit:true,format:'module',source:'export default 73'};
                 if (u === 'file:///chain/root.cjs') return {shortCircuit:true,format:'commonjs',source:'module.exports = require("./child.cjs");'};
                 if (u === 'file:///chain/child.cjs') return {shortCircuit:true,format:'commonjs',source:'exports.answer=1;'};
@@ -533,9 +590,29 @@ fn optimizer_preserves_caught_filesystem_absence() -> anyhow::Result<()> {
         }
         await assert.rejects(import('/app/optional.mjs'), {code:'ERR_MODULE_NOT_FOUND'});
         await assert.rejects(import('optional-package'), {code:'ERR_MODULE_NOT_FOUND'});
+        await assert.rejects(import('optional:read'), {code:'ENOENT'});
+        await assert.rejects(import('supplied:parent'), {code:'ENOENT'});
+        await assert.rejects(import('supplied:default-parent'), {code:'ERR_MODULE_NOT_FOUND'});
+        await assert.rejects(import('optional:copy'), {code:'ENOENT'});
+        await assert.rejects(import('optional:copy-excl'), {code:'ENOENT'});
+        await assert.rejects(import('supplied:map-parent'), {code:'ERR_PACKAGE_IMPORT_NOT_DEFINED'});
+        const ordinaryResolveError = await import('supplied:conditions-parent').catch(error => error);
+        assert.equal(ordinaryResolveError.message, 'ordinary resolve miss');
+        const ordinaryError = await import('ordinary:error').catch(error => error);
+        assert.equal(ordinaryError.message, 'ordinary loader error');
+        let handledAsyncErrors = 0;
+        function handleAsyncError(error) {
+            assert.equal(error.code, 'ENOENT'); handledAsyncErrors++;
+        }
+        process.on('uncaughtException', handleAsyncError);
+        queueMicrotask(() => fs.readFileSync('/app/value.txt'));
+        setImmediate(() => fs.readFileSync('/app/value.txt'));
+        fsp.readFile('/app/value.txt').then(() => {});
         export function ready() { return 'ready'; }
         export async function run() {
             assert.equal(deferredAbsent, true);
+            assert.equal(handledAsyncErrors, 3);
+            process.off('uncaughtException', handleAsyncError);
             const value = fs.readFileSync('/app/value.txt', 'utf8');
             assert.equal(fs.existsSync('/app/value.txt'), true);
             assert.equal(await fsp.readFile('/app/value.txt', 'utf8'), value);
@@ -546,11 +623,24 @@ fn optimizer_preserves_caught_filesystem_absence() -> anyhow::Result<()> {
             assert.equal(require('./optional.cjs').value, 'cjs-' + value);
             assert.equal(require('optional-package').value, 'package-' + value);
             assert.equal((await import('/app/optional.mjs')).value, 'esm-' + value);
+            assert.equal((await import('optional:read')).value, 'loader-' + value);
+            assert.equal((await import('supplied:parent')).value, 'static-' + value);
+            const retries = await Promise.all(['supplied:default-parent', 'optional:copy', 'optional:copy-excl'].map(
+                specifier => import(specifier).then(module => module.value, error => error.code)
+            ));
+            assert.deepEqual(retries, ['default-' + value, 'copy-' + value, 'copy-' + value]);
+            assert.equal((await import('supplied:default-parent')).packageValue, 'package-' + value);
+            const mapResult = await import('supplied:map-parent').then(module => module.value, error => error.code);
+            const ordinaryResolveRetry = await import('supplied:conditions-parent').catch(error => error);
+            assert.deepEqual({mapResult, ordinarySame: ordinaryResolveRetry === ordinaryResolveError},
+                {mapResult: 'mapped-' + value, ordinarySame: true});
+            assert.equal(await import('ordinary:error').catch(error => error), ordinaryError);
+            assert.equal(await import('supplied:optional'), supplied);
             // Bare imports resolve from their module, not the restored cwd.
             assert.equal((await import('/app/package-probe.mjs')).default.value, 'package-' + value);
             return value;
         }
-    "#
+    "##
     .replace("HOST_FILE", &serde_json::to_string(host_file.as_str())?);
     wasm_rquickjs::inject_js_into_component(&template, &input, &[&source])?;
     let runtime = tokio::runtime::Builder::new_current_thread()
@@ -571,6 +661,30 @@ fn optimizer_preserves_caught_filesystem_absence() -> anyhow::Result<()> {
         std::fs::write(
             app.join("optional.mjs"),
             format!("export const value = 'esm-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("loader-read.mjs"),
+            format!("export const value = 'loader-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("loader-static.mjs"),
+            format!("export const value = 'static-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("default-child.mjs"),
+            format!("export const value = 'default-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("copy-source.mjs"),
+            format!("export const value = 'copy-{value}';"),
+        )?;
+        std::fs::write(
+            app.join("package.json"),
+            r##"{"imports":{"#child":"./mapped.mjs"}}"##,
+        )?;
+        std::fs::write(
+            app.join("mapped.mjs"),
+            format!("export const value = 'mapped-{value}';"),
         )?;
         std::fs::write(
             app.join("package-probe.mjs"),

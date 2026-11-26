@@ -12,6 +12,7 @@ import {
     describeType,
     getSystemErrorDescription,
     createSystemError,
+    markPreinitFilesystemError,
     validateInteger,
     validateMode,
     parseMkdirOptions as _parseMkdirOptions,
@@ -434,6 +435,7 @@ function createCopyFileError(code, errno, description, src, dest) {
     err.syscall = 'copyfile';
     err.path = src;
     err.dest = dest;
+    if (code === 'ENOENT') markPreinitFilesystemError(err);
     return err;
 }
 

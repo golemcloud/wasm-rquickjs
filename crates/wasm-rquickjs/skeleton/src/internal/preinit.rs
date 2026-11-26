@@ -29,6 +29,20 @@ pub(crate) fn is_active() -> bool {
     ACTIVE.load(Ordering::Relaxed)
 }
 
+#[cold]
+pub(crate) fn uncaught_error(error: &str) -> ! {
+    if !VIOLATED.swap(true, Ordering::Relaxed) {
+        let mut bounded = DiagnosticTarget::default();
+        let _ = write!(&mut bounded, "{error}");
+        *FIRST_VIOLATION.lock().unwrap() = Some(format!(
+            "WRQJS_PREINITIALIZATION_ERROR: uncaught JavaScript error during Wizer \
+             pre-initialization: {}",
+            bounded.text
+        ));
+    }
+    trap()
+}
+
 /// Filesystem absence is catchable, but must be synthesized before libc/preopen
 /// discovery or loader caches can observe the optimizer's empty filesystem.
 #[inline]

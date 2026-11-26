@@ -9,7 +9,7 @@ import * as diagnostics_channel from 'node:diagnostics_channel';
 import * as internalHttp from '__wasm_rquickjs_builtin/internal/http';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
 import * as internalErrors from '__wasm_rquickjs_builtin/internal/errors';
-import { createSystemError as createFsSystemError } from '__wasm_rquickjs_builtin/internal/fs/shared';
+import { createSystemError as createFsSystemError, markPreinitFilesystemError, isStalePreinitFilesystemError } from '__wasm_rquickjs_builtin/internal/fs/shared';
 import * as internalFsUtils from '__wasm_rquickjs_builtin/internal/fs/utils';
 import * as internalUrl from '__wasm_rquickjs_builtin/internal/url';
 import * as internalUtil from '__wasm_rquickjs_builtin/internal/util';
@@ -2880,7 +2880,7 @@ function resultForEsmFileUrl(url, parentURL) {
     const filename = nodeUrl.fileURLToPath(url);
     const stat = _stat(filename);
     if (stat === 1) throw makeEsmUnsupportedDirImportError(filename);
-    if (stat !== 0) throw makeEsmModuleNotFoundError(url.href);
+    if (stat !== 0) throw markPreinitFilesystemError(makeEsmModuleNotFoundError(url.href));
     if (shouldPreserveSymlinks(false)) {
         return registeredLoaderUrlFormatResult(url.href, defaultLoaderFormatForFilename(url.pathname));
     }
@@ -2959,17 +2959,23 @@ function registeredLoaderBuiltinResolve(specifier, cjsMode) {
     }
 
     function resolvePackageDefaultForLoader(specifier, parentURL, context, defaultConditions, mode, mapNotFoundToCjs) {
+        // Loader-controlled getters may throw ordinary errors with these codes.
+        // Only classify absence after entering the native filesystem resolver.
+        const conditions = packageConditionArrayForLoaderResolve(context, defaultConditions);
         try {
             return resolvePackageWithRustBridge(
                 parentURL,
                 specifier,
-                packageConditionArrayForLoaderResolve(context, defaultConditions),
+                conditions,
                 mode,
                 'Internal package resolver provider is not initialized',
             );
         } catch (err) {
             if (mapNotFoundToCjs && err && err.code === 'ERR_MODULE_NOT_FOUND') {
-                throw makeModuleNotFoundError(specifier);
+                throw markPreinitFilesystemError(makeModuleNotFoundError(specifier));
+            }
+            if (err && (err.code === 'ERR_MODULE_NOT_FOUND' || err.code === 'ERR_PACKAGE_IMPORT_NOT_DEFINED')) {
+                markPreinitFilesystemError(err);
             }
             throw err;
         }
@@ -4904,7 +4910,7 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
             const packageResolved = resolveEsmPackageDefaultForLoader(preprocessedSpecifier, internalParentURL, context);
             if (packageResolved) return packageResolved;
             if (missingAsUndefined) return undefined;
-            throw makeEsmModuleNotFoundError(preprocessedSpecifier);
+            throw markPreinitFilesystemError(makeEsmModuleNotFoundError(preprocessedSpecifier));
         }
         if (missingAsUndefined) return undefined;
 
@@ -5011,6 +5017,10 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         if (cacheRegisteredLoaderLoad) {
             const loadCacheKey = registeredLoaderLoadCacheKey(resolvedState);
             let cacheEntry = registeredLoaderLoadCache[loadCacheKey];
+            if (cacheEntry && isStalePreinitFilesystemError(cacheEntry.error)) {
+                delete registeredLoaderLoadCache[loadCacheKey];
+                cacheEntry = undefined;
+            }
             if (!cacheEntry) {
                 cacheEntry = {
                     materialized: Object.create(null),
@@ -5031,7 +5041,12 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
                     );
                 })();
             }
-            result = await cacheEntry.promise;
+            try {
+                result = await cacheEntry.promise;
+            } catch (error) {
+                cacheEntry.error = error;
+                throw error;
+            }
         } else {
             const loaded = await runLoad(
                 entries.length - 1,
@@ -5464,6 +5479,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
     function staticRegisteredLoaderCacheEntry(parentUrl, specifier, attrs, edgeReturn, publicParentUrl) {
         const key = staticRegisteredLoaderCacheKey(parentUrl, specifier, attrs);
         const cache = wasmRquickjsModuleGlobalThis.__wasm_rquickjs_static_registered_loader_cache;
+        if (cache[key] && isStalePreinitFilesystemError(cache[key].error)) {
+            delete cache[key];
+        }
         if (Object.prototype.hasOwnProperty.call(cache, key)) {
             return { cached: cache[key], created: false };
         }
@@ -5586,6 +5604,9 @@ if (typeof globalThis.__wasm_rquickjs_run_registered_loaders !== 'function') {
         const parts = staticRegisteredLoaderCacheParts(specifier);
         const attrs = parts.typeValue === '' ? undefined : { typeValue: parts.typeValue };
         const key = staticRegisteredLoaderCacheKey(baseUrl, parts.specifier, attrs);
+        if (cache && cache[key] && isStalePreinitFilesystemError(cache[key].error)) {
+            delete cache[key];
+        }
         if (cache && Object.prototype.hasOwnProperty.call(cache, key)) {
             const cached = cache[key];
             if (cached.error) throw cached.error;
