@@ -70,6 +70,8 @@ and of each surviving subtest:
   changed. Otherwise it keeps the metadata of the previous subtest with the same
   name, or of the one with the same unique description. A new subtest starts
   `unevaluated` unless the file is already excluded from the runner.
+  Source matching is byte-exact, including whitespace inside and outside literals;
+  reformatting can therefore require a mapping or positional decision.
 - A changed subtest with a generated name keeps the metadata of the previous
   subtest at its position only as a proposal. The report lists every such subtest
   under `matchedByPosition`, including excluded ones, and the run fails until each
@@ -84,7 +86,9 @@ It never deletes an entry. Configured files without a source, removed subtests,
 undecided unsplits, positional subtests without an accepted decision and unused
 decisions are written to `target/node-compat-migration-report.json` (override with
 `NODE_COMPAT_MIGRATION_REPORT`), and the run fails until each one is mapped by
-reading both versions. The tool's contract tests run with
+reading both versions. `config.jsonc` is written only when no review decisions
+remain unresolved; a run with unresolved decisions writes only the report and
+leaves the authoritative config untouched for the next attempt. The tool's contract tests run with
 `cargo test --test migrate_config_split -- ':tag:migration_contract'`.
 
 ### Mapping decisions for subtests matched by position

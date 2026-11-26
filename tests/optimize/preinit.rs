@@ -199,7 +199,7 @@ fn optimize_guest_failure(input: &Utf8Path, output: &Utf8Path) -> anyhow::Result
 }
 
 #[test]
-fn optimizer_rejects_guest_io() -> anyhow::Result<()> {
+fn optimizer_rejects_guest_io_filesystem() -> anyhow::Result<()> {
     check_guest_denials(&[
         ("import fs from 'node:fs'; fs.existsSync('/');", "fs.exists"),
         (
@@ -246,6 +246,14 @@ fn optimizer_rejects_guest_io() -> anyhow::Result<()> {
             "import fs from 'node:fs'; setImmediate(() => fs.existsSync('/'));",
             "fs.exists",
         ),
+    ])
+}
+
+// Keep the filesystem and host-service denials independently schedulable. Each
+// invocation still builds a private template and creates fresh optimizer state.
+#[test]
+fn optimizer_rejects_guest_io_host_services() -> anyhow::Result<()> {
+    check_guest_denials(&[
         (
             "new WebSocket('ws://example.invalid/');",
             "WebSocket connection",
