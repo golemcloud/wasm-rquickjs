@@ -1073,8 +1073,16 @@ function _innerDeep(a, b, strict, memo) {
 }
 
 export function innerDeepEqual(a, b, strict, memo) {
+    const previousCount = _deepCallCount;
     _deepCallCount = 0;
-    return _innerDeep(a, b, strict, memo);
+    const previous = _deepSkipPrototype;
+    _deepSkipPrototype = false;
+    try {
+        return _innerDeep(a, b, strict, memo);
+    } finally {
+        _deepCallCount = previousCount;
+        _deepSkipPrototype = previous;
+    }
 }
 
 // Node 26 util.isDeepStrictEqual(val1, val2, skipPrototype): strict comparison that
@@ -1082,12 +1090,14 @@ export function innerDeepEqual(a, b, strict, memo) {
 let _deepSkipPrototype = false;
 
 export function isDeepStrictEqual(val1, val2, skipPrototype) {
+    const previousCount = _deepCallCount;
     _deepCallCount = 0;
     const previous = _deepSkipPrototype;
     _deepSkipPrototype = !!skipPrototype;
     try {
         return _innerDeep(val1, val2, true, undefined);
     } finally {
+        _deepCallCount = previousCount;
         _deepSkipPrototype = previous;
     }
 }

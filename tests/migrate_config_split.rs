@@ -8,10 +8,11 @@
 //! `target/node-compat-migration-report.json`) and fails when an entry needs a manual mapping:
 //! a configured file whose source is gone, a subtest that disappeared, or a split file that can
 //! no longer be split and whose subtests had different metadata.
+//! The authoritative config is written only when no review decisions remain unresolved.
 //!
 //! When a split file's subtests changed, the previous vendored suite is required as
 //! `NODE_COMPAT_MIGRATION_PREVIOUS_SUITE`: a subtest keeps the metadata of the previous subtest
-//! with identical source, so an unchanged block that moved to another index (and therefore another
+//! with byte-identical source, so an unchanged block that moved to another index (and therefore another
 //! generated name such as `block_05_block_05`) keeps its own classification.
 //!
 //! A changed subtest with a generated name keeps the metadata of the previous subtest at its
@@ -338,14 +339,9 @@ fn format_split(meta: &Map<String, Value>, subtests: &[(String, Value)]) -> Stri
     lines.join("\n")
 }
 
-/// Subtest names with their source text, whitespace-normalised.
+/// Subtest names with their exact source text, including whitespace inside literals.
 fn discovered_subtests(discovery: &SubtestDiscovery, source: &str) -> Vec<(String, String)> {
-    let text = |(start, end): (u32, u32)| {
-        source[start as usize..end as usize]
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-    };
+    let text = |(start, end): (u32, u32)| source[start as usize..end as usize].to_string();
     match discovery {
         SubtestDiscovery::None => Vec::new(),
         SubtestDiscovery::Block(blocks) => blocks
@@ -1257,7 +1253,6 @@ fn migrate_config_split() -> anyhow::Result<()> {
         previous_suite.as_deref().map(Path::new),
         decisions.as_deref(),
     )?;
-    fs::write(config_path, migrated)?;
     if let Some(parent) = Path::new(&report_path).parent() {
         fs::create_dir_all(parent)?;
     }
@@ -1302,6 +1297,7 @@ fn migrate_config_split() -> anyhow::Result<()> {
             report.needs_review()
         );
     }
+    fs::write(config_path, migrated)?;
     Ok(())
 }
 
@@ -1760,6 +1756,101 @@ mod contract {
         );
         assert_eq!(subtests["block_02_block_02"], json!({}));
         assert_eq!(migration.report.needs_review(), 0);
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn literal_whitespace_changes_need_a_decision() {
+        for (previous, current) in [
+            (r#"{ check("a  b"); }"#, r#"{ check("a b"); }"#),
+            ("{ check(`a  b`); }", "{ check(`a b`); }"),
+            ("{ check(/a  b/); }", "{ check(/a b/); }"),
+        ] {
+            let fixture = Fixture::new();
+            fixture
+                .previous(
+                    "parallel/test-a.js",
+                    &format!("{previous}\n{{ stable(); }}\n"),
+                )
+                .source(
+                    "parallel/test-a.js",
+                    &format!("{current}\n{{ stable(); }}\n"),
+                );
+            let migration = fixture.migrate(
+                r#"    "parallel/test-a.js": { "split": true, "subtests": { "block_00_block_00": { "category": "runnable" }, "block_01_block_01": {} } }"#,
+            );
+            assert_eq!(
+                migration.report.needs_review(),
+                1,
+                "{previous} -> {current}"
+            );
+        }
+    }
+
+    #[test]
+    #[test_r::tag(migration_contract)]
+    fn unresolved_migration_preserves_config_on_retry() {
+        let fixture = Fixture::new();
+        let root = fixture.temp.path();
+        let config_path = root.join("tests/node_compat/config.jsonc");
+        fixture.source("tests/node_compat/suite/parallel/test-a.js", TWO_TESTS);
+        fixture.previous(
+            "parallel/test-a.js",
+            &node_tests(&["alpha", "beta", "gone"]),
+        );
+        let original = config(
+            r#"    "parallel/test-a.js": { "split": true, "subtests": { "test_00_alpha": {}, "test_01_beta": {}, "test_02_gone": { "category": "runnable" } } }"#,
+        );
+        fs::write(&config_path, &original).unwrap();
+        let report_path = root.join("report.json");
+        for attempt in 0..3 {
+            if report_path.exists() {
+                fs::remove_file(&report_path).unwrap();
+            }
+            // Unlike the pure migrate() contracts, exercise the documented command's
+            // persistence boundary: a rejected proposal must not overwrite its input.
+            let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+            command
+                .current_dir(root)
+                .args(["--exact", "migrate_config_split"])
+                .env("NODE_COMPAT_MIGRATION_REPORT", &report_path)
+                .env_remove("NODE_COMPAT_MIGRATION_PREVIOUS_SUITE")
+                .env_remove("NODE_COMPAT_MIGRATION_DECISIONS");
+            if attempt != 1 {
+                command.env(
+                    "NODE_COMPAT_MIGRATION_PREVIOUS_SUITE",
+                    fixture.previous.path(),
+                );
+            }
+            let output = command.output().unwrap();
+            assert!(!output.status.success(), "migration unexpectedly succeeded");
+            assert_eq!(fs::read_to_string(&config_path).unwrap(), original);
+            if attempt == 1 {
+                assert!(
+                    !report_path.exists(),
+                    "no proposal was computed without the previous suite"
+                );
+                let diagnostics = format!(
+                    "{}{}",
+                    String::from_utf8_lossy(&output.stdout),
+                    String::from_utf8_lossy(&output.stderr)
+                );
+                assert!(
+                    diagnostics.contains("NODE_COMPAT_MIGRATION_PREVIOUS_SUITE"),
+                    "{diagnostics}"
+                );
+                continue;
+            }
+            assert!(
+                report_path.exists(),
+                "{}\n{}",
+                String::from_utf8_lossy(&output.stdout),
+                String::from_utf8_lossy(&output.stderr)
+            );
+            let report: Value =
+                serde_json::from_str(&fs::read_to_string(&report_path).unwrap()).unwrap();
+            assert_eq!(report["removedSubtests"][0]["subtest"], "test_02_gone");
+        }
     }
 
     /// Three blocks: the first two change, the third does not.

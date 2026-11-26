@@ -29,6 +29,146 @@ export async function postJsonAndGet(port) {
 
     await dumpResponse(response1);
     await dumpResponse(response2);
+
+    const request3 = new Request(`http://localhost:${port}/echo`, {
+        method: "POST",
+        body: "original"
+    });
+    const response3 = await fetch(request3, { body: "overridden" });
+    console.log(`Override bodyUsed: ${request3.bodyUsed}`);
+    console.log(`Override body: ${await response3.text()}`);
+
+    const request4 = new Request(request3, { body: "overridden-in-request" });
+    const response4 = await fetch(request4);
+    console.log(`Request override method: ${request4.method}`);
+    console.log(`Request override body: ${await response4.text()}`);
+
+    await requestInitPrecedence(port);
+}
+
+// RequestInit members override a Request input in both `new Request(input, init)` and
+// `fetch(input, init)`. Each case logs its result, or the error name if it threw.
+async function requestInitPrecedence(port) {
+    const url = `http://localhost:${port}/echo-request`;
+    const source = () => new Request(url, { method: "POST", headers: { "x-source": "a" }, body: "original" });
+    const wire = async (response) => {
+        const r = await response.json();
+        return `${r.method} source=${r.source} replacement=${r.replacement} body=${r.body}`;
+    };
+    const check = async (name, run) => {
+        let result;
+        try {
+            result = await run();
+        } catch (error) {
+            result = `threw ${error.name}`;
+        }
+        console.log(`RequestInit ${name}: ${JSON.stringify(result)}`);
+    };
+
+    // Asymmetric method and header overrides: replacement headers drop the input's, and the
+    // input itself keeps its own method, headers and body.
+    await check("constructor override", async () => {
+        const input = source();
+        const request = new Request(input, { method: "PUT", headers: { "x-replacement": "b" }, body: "replaced" });
+        const sent = await wire(await fetch(request));
+        return `${sent} input=${input.method}/${input.headers.has("x-replacement")}/${input.bodyUsed}`;
+    });
+    await check("constructor retain", async () => wire(await fetch(new Request(source(), { method: "PUT" }))));
+    await check("fetch override", async () => {
+        const input = source();
+        const sent = await wire(await fetch(input, { method: "PUT", headers: { "x-replacement": "b" }, body: "replaced" }));
+        return `${sent} input=${input.headers.has("accept")}/${input.bodyUsed}`;
+    });
+    await check("fetch retain", async () => {
+        const input = source();
+        const sent = await wire(await fetch(input, { method: "PUT" }));
+        return `${sent} used=${input.bodyUsed}`;
+    });
+
+    // Body boundaries: undefined and null inherit, an empty string replaces.
+    await check("constructor undefined body", async () => new Request(source(), { body: undefined }).text());
+    await check("constructor null body", async () => new Request(source(), { body: null }).text());
+    await check("constructor empty body", async () => new Request(source(), { body: "" }).text());
+    await check("fetch null body", async () => wire(await fetch(source(), { body: null })));
+    await check("fetch empty body", async () => wire(await fetch(source(), { body: "" })));
+    await check("used input replacement", async () => {
+        const input = source();
+        await input.text();
+        const replaced = await new Request(input, { body: "fresh" }).text();
+        return `${replaced} ${await wire(await fetch(input, { body: "fresh" }))}`;
+    });
+    await check("used input null constructor", async () => {
+        const input = source();
+        await input.text();
+        return new Request(input, { body: null }).method;
+    });
+    await check("used input null fetch", async () => {
+        const input = source();
+        await input.text();
+        return wire(await fetch(input, { body: null }));
+    });
+    await check("offset view snapshot", async () => {
+        const bytes = new TextEncoder().encode("xxabcxx");
+        const request = new Request(source(), { body: bytes.subarray(2, 5) });
+        bytes[2] = 90;
+        return request.text();
+    });
+
+    // RequestInit is a dictionary: inherited and non-enumerable members count, unknown ones are not read.
+    await check("constructor inherited members", async () => {
+        const request = new Request(source(), Object.create({ method: "PUT", body: "proto" }));
+        return `${request.method} ${await request.text()}`;
+    });
+    await check("fetch inherited members", async () =>
+        wire(await fetch(source(), Object.create({ method: "PUT", body: "proto" }))));
+    await check("non-enumerable method", async () => {
+        const init = {};
+        Object.defineProperty(init, "method", { value: "PUT" });
+        return `${new Request(source(), init).method} ${await wire(await fetch(source(), init))}`;
+    });
+    await check("unknown members", async () => {
+        let read = false;
+        const init = { method: "PUT", get unknown() { read = true; return 1; } };
+        new Request(source(), init);
+        await (await fetch(source(), init)).text();
+        return read;
+    });
+
+    // A defined null method is the token "null", not a request to inherit or default.
+    await check("null method", async () =>
+        `${new Request(source(), { method: null }).method} ${await wire(await fetch(source(), { method: null }))}`);
+
+    // GET and HEAD reject a body from the input or the init, even an empty one, before the
+    // input is used; bodyless GET and HEAD stay allowed.
+    await check("GET inherited body", async () => new Request(source(), { method: "GET" }).method);
+    await check("HEAD replacement body", async () => new Request(new Request(url), { method: "HEAD", body: "x" }).method);
+    await check("GET empty input body", async () =>
+        new Request(new Request(url, { method: "POST", body: "" }), { method: "get" }).method);
+    await check("fetch GET rejects before use", async () => {
+        const input = source();
+        try {
+            await fetch(input, { method: "GET" });
+            return "sent";
+        } catch (error) {
+            return `${error.name} used=${input.bodyUsed}`;
+        }
+    });
+    await check("fetch HEAD replacement", async () => wire(await fetch(new Request(url), { method: "head", body: "x" })));
+    await check("bodyless GET and HEAD", async () => {
+        const input = new Request(url);
+        const head = new Request(input, { method: "HEAD" }).method;
+        const nullBody = new Request(input, { body: null }).method;
+        return `${head} ${nullBody} ${await wire(await fetch(input, { method: "GET", body: null }))}`;
+    });
+
+    // A null signal detaches the request from the input's aborted signal.
+    await check("null signal detaches", async () => {
+        const controller = new AbortController();
+        controller.abort();
+        const input = new Request(url, { method: "POST", body: "original", signal: controller.signal });
+        const request = new Request(input, { signal: null });
+        return `${request.signal} ${await wire(await fetch(input, { signal: null }))}`;
+    });
 }
 
 export async function postAndGetAsArrayBuffer(port) {

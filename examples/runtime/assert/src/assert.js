@@ -1,6 +1,7 @@
 import assert from 'node:assert';
 import { AssertionError } from 'node:assert';
 import fs from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import { createRequire } from 'node:module';
 import test from 'node:test';
 
@@ -139,6 +140,40 @@ export const testDeepStrictEqual = () => {
         assert.deepStrictEqual({ a: 1 }, { a: 1 });
         assert.deepStrictEqual(new Date(0), new Date(0));
         assert.deepStrictEqual(/abc/g, /abc/g);
+
+        // Independent assertions in a getter must not inherit util's skipPrototype option.
+        class A { constructor() { this.value = 1; } }
+        class B { constructor() { this.value = 1; } }
+        const a = new A();
+        const b = new B();
+        const left = {
+            get value() {
+                assert.throws(() => assert.deepStrictEqual(a, b), { code: 'ERR_ASSERTION' });
+                assert.notDeepStrictEqual(a, b);
+                assert.strictEqual(isDeepStrictEqual(a, b), false);
+                return a;
+            }
+        };
+        assert.strictEqual(isDeepStrictEqual(left, { value: b }, true), true);
+        assert.strictEqual(isDeepStrictEqual(a, b), false);
+        const sentinel = new Error('getter failure');
+        assert.throws(() => isDeepStrictEqual({
+            get value() { throw sentinel; }
+        }, { value: b }, true), (error) => error === sentinel);
+        assert.throws(() => assert.deepStrictEqual(a, b), { code: 'ERR_ASSERTION' });
+
+        // Nested comparisons also have independent recursion budgets.
+        const nested = Array.from({ length: 3000 }, (_, index) => index);
+        const tail = Array.from({ length: 2500 }, (_, index) => index);
+        for (const compare of [assert.deepStrictEqual, isDeepStrictEqual]) {
+            assert.strictEqual(isDeepStrictEqual({
+                get a() {
+                    compare(nested, nested.slice());
+                    return 1;
+                },
+                z: tail
+            }, { a: 1, z: tail.slice() }), true);
+        }
 
         // Strict: type matters
         let caught = false;

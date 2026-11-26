@@ -297,6 +297,23 @@ export function testPrepareOptions() {
     named.setAllowBareNamedParameters(false);
     assert.deepEqual(named.get({ left: 13n, right: 29n }), [null, null]);
     assert.deepEqual(named.get({ $left: 13n, $right: 29n }), [13n, 29n]);
+    for (const key of keys) {
+      const descriptor = Object.getOwnPropertyDescriptor(Object.prototype, key);
+      let row;
+      try {
+        Object.defineProperty(Object.prototype, key, {
+          configurable: true, get() { return false; },
+        });
+        row = db.prepare(sql, {
+          returnArrays: true, readBigInts: true,
+          allowBareNamedParameters: true, allowUnknownNamedParameters: true,
+        }).get({ left: 13n, right: 29n, extra: 41n });
+      } finally {
+        if (descriptor) Object.defineProperty(Object.prototype, key, descriptor);
+        else delete Object.prototype[key];
+      }
+      assert.deepEqual(row, [13n, 29n]);
+    }
     for (const value of [undefined, null]) {
       const closing = new DatabaseSync(':memory:');
       assert.throws(() => closing.prepare('SELECT 7', {

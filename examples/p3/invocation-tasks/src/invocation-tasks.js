@@ -48,6 +48,8 @@ export async function startTimer(name, delayMs) {
     return name;
 }
 
+export const drained = { startTimer };
+
 export async function quick(name) {
     note(`${name}:quick`);
     return name;

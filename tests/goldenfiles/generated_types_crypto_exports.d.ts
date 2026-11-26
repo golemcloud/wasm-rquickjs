@@ -35,4 +35,11 @@ declare module 'crypto' {
   export function subtleSignVerifyRsaPss(message: string): boolean;
   export function cryptoErrorContracts(): string[];
   export function webcryptoErrorContracts(): string[];
+  export function x25519Agreement(): string;
+  export function p521KeyPair(): string;
+  export function cfrg448Vectors(): string;
+  export function rsaPrivateOperations(): string;
+  export function ecdsaHostSignatures(): string;
+  export function k256SignatureForms(): string;
+  export function dsaEncodingForms(): string;
 }
