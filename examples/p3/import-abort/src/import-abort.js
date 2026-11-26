@@ -86,6 +86,30 @@ function countingSignal() {
     return signal;
 }
 
+// A wrapper around a counting signal that aborts it when a listener is added, before it passes
+// the listener on.
+function abortingOnListen(label) {
+    const inner = countingSignal();
+    return {
+        get aborted() {
+            return inner.aborted;
+        },
+        get reason() {
+            return inner.reason;
+        },
+        addEventListener(type, listener, options) {
+            inner.abort(new Error(`stop-${label}`));
+            inner.addEventListener(type, listener, options);
+        },
+        removeEventListener(type, listener) {
+            inner.removeEventListener(type, listener);
+        },
+        count() {
+            return inner.count();
+        },
+    };
+}
+
 // Calls `call` with a counting signal current. It reports the listener count once the import
 // runs and after the import settled. With `abortAfterMs` the signal aborts after that delay.
 async function countListeners(label, call, abortAfterMs) {
@@ -261,6 +285,26 @@ export async function run() {
         badError = error instanceof Error ? error.message : String(error);
     }
     outcomes.listeners.conversionError = { error: badError, after: badSignal.count() };
+
+    // A signal that aborts inside `addEventListener`, before it registers the listener, starts
+    // no host call and keeps no listener, for both bridge kinds.
+    const freeOnListen = abortingOnListen('on-listen-free');
+    outcomes.onListenFree = {
+        ...(await settle(withSignal(freeOnListen, () => wait('on-listen-free', 10000)))),
+        after: freeOnListen.count(),
+    };
+    const deferredOnListen = abortingOnListen('on-listen-deferred');
+    const onListenSource = source();
+    const onListenOutcome = await settle(
+        withSignal(deferredOnListen, () =>
+            consume('on-listen-deferred', onListenSource.iterable, 10000),
+        ),
+    );
+    await sleep(50);
+    outcomes.onListenDeferred = {
+        ...sourceOutcome(onListenOutcome, onListenSource),
+        after: deferredOnListen.count(),
+    };
 
     return JSON.stringify(outcomes);
 }

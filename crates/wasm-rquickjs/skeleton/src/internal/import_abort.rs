@@ -111,6 +111,9 @@ pub fn deferred_import_abort<'js>(ctx: &Ctx<'js>) -> rquickjs::Result<DeferredIm
 /// Registers the abort listener of a deferred import. The bridge calls it after it lowered its
 /// parameters and before it starts the import, so a lowering error leaves no listener on the
 /// signal, and an abort that arrives before the import starts still prevents the import.
+///
+/// The signal can abort while `addEventListener` runs, before the listener is registered, so
+/// `aborted` is checked again afterwards. In that case the listener is removed again.
 pub fn arm_deferred_import_abort<'js>(
     ctx: &Ctx<'js>,
     signal: rquickjs::Object<'js>,
@@ -125,6 +128,11 @@ pub fn arm_deferred_import_abort<'js>(
     options.set("once", true)?;
     let add: rquickjs::Function = signal.get("addEventListener")?;
     add.call::<_, ()>((This(signal.clone()), "abort", callback.clone(), options))?;
+    if signal.get::<_, bool>("aborted")? {
+        let remove: rquickjs::Function = signal.get("removeEventListener")?;
+        let _ = remove.call::<_, ()>((This(signal.clone()), "abort", callback));
+        return Ok(ArmedImportAbort::Aborted(signal.get("reason")?));
+    }
     Ok(ArmedImportAbort::Armed(
         DeferredImportSignal {
             signal: rquickjs::Persistent::save(ctx, signal),

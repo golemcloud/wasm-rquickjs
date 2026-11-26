@@ -538,6 +538,26 @@ fn p3_import_abort_cancels_the_signalled_imports() {
     assert_eq!(conversion_error["after"], 0, "{context}");
     assert!(!has("start:count-bad-future"), "{context}");
 
+    // A signal that aborts inside `addEventListener` starts no host call and keeps no listener.
+    for (outcome, label) in [
+        ("onListenFree", "on-listen-free"),
+        ("onListenDeferred", "on-listen-deferred"),
+    ] {
+        assert_eq!(
+            outcomes[outcome]["error"],
+            format!("stop-{label}"),
+            "{label}\n{context}"
+        );
+        assert!(!has(&format!("start:{label}")), "{label}\n{context}");
+        assert_eq!(outcomes[outcome]["after"], 0, "{label}\n{context}");
+    }
+    // The lowered JS stream source is closed without being read to its end.
+    assert_eq!(outcomes["onListenDeferred"]["closed"], true, "{context}");
+    assert_eq!(
+        outcomes["onListenDeferred"]["exhausted"], false,
+        "{context}"
+    );
+
     // Overlapping exported calls each keep the signal they passed to `withSignal`, though the
     // other calls made their own signals current before and after it: aborting the signal of
     // the second call cancels only its host call, while the other two are still in flight.
