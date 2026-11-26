@@ -21,13 +21,14 @@
 //!
 //! An async exported call drains its own work on its task; other invocations' work is neither run
 //! nor awaited. With the `post-return-drain` feature, for hosts that keep driving a call's task
-//! until it exits, the call returns its result as soon as it is ready and drains afterwards.
-//! Otherwise it drains before it returns, unless a JavaScript producer still feeds a component
-//! future/stream that the host reads after a return. Owner 0 is the runtime's own work, such as
-//! initialization and synchronous exported calls. A synchronous call returns without waiting for
-//! the work it schedules and its task ends when it returns, so a running async exported call, or
-//! else the next one, adopts that work and drains it on its own task. Work that a future of a
-//! finished invocation starts is adopted the same way.
+//! until it exits, the call returns its result as soon as it is ready and drains afterwards,
+//! except for the exports of the interfaces generated with `--drain-before-return`, whose host
+//! stops driving the call at the return. Otherwise it drains before it returns, unless a
+//! JavaScript producer still feeds a component future/stream that the host reads after a return.
+//! Owner 0 is the runtime's own work, such as initialization and synchronous exported calls. A
+//! synchronous call returns without waiting for the work it schedules and its task ends when it
+//! returns, so a running async exported call, or else the next one, adopts that work and drains
+//! it on its own task. Work that a future of a finished invocation starts is adopted the same way.
 //!
 //! When an invocation has finished, a reaction that it registered and that another invocation
 //! triggers later runs for the triggering invocation, because the finished invocation's task no
@@ -130,6 +131,7 @@ fn begin() -> u64 {
 pub(crate) fn finish(owner: u64) {
     RUNNING.with_borrow_mut(|running| running.remove(&owner));
     ADOPTIONS.with_borrow_mut(|adoptions| adoptions.remove(&owner));
+    DRAINS_BEFORE_RETURN.with_borrow_mut(|owners| owners.remove(&owner));
 }
 
 /// The owner whose work a future of `owner` runs as. A finished invocation no longer runs jobs,
@@ -220,11 +222,28 @@ pub fn spawn_local<T: 'static>(future: impl Future<Output = T> + 'static) -> Joi
 /// the work this call adopts, runs before the return, except while a JavaScript producer of any
 /// invocation feeds a component future/stream that the host can only consume after a return.
 pub async fn invocation<T>(body: impl Future<Output = T>) -> T {
+    run_invocation(!cfg!(feature = "post-return-drain"), body).await
+}
+
+/// Runs the body of an async exported call as [`invocation`] does without the
+/// `post-return-drain` feature, also when the feature is enabled. The generator uses it for the
+/// exports of the interfaces given with `--drain-before-return`, whose host stops driving the
+/// call's task at the return. Like that mode, it returns before its work while a JavaScript
+/// producer of any invocation feeds a component future/stream; under `post-return-drain` the
+/// producers of unlisted calls that already returned also count.
+pub async fn invocation_draining_before_return<T>(body: impl Future<Output = T>) -> T {
+    run_invocation(true, body).await
+}
+
+async fn run_invocation<T>(drains_before_return: bool, body: impl Future<Output = T>) -> T {
     let owner = begin();
+    if drains_before_return {
+        DRAINS_BEFORE_RETURN.with_borrow_mut(|owners| owners.insert(owner));
+    }
     adopt_runtime_work(owner);
     let mut pending = PendingDrain(Some(owner));
     let result = Owned::new(owner, body).await;
-    if !cfg!(feature = "post-return-drain") && Owned::new(owner, drain_before_return(owner)).await {
+    if drains_before_return && Owned::new(owner, drain_before_return(owner)).await {
         pending.0 = None;
         finish(owner);
     }
@@ -289,6 +308,8 @@ thread_local! {
     /// that invocation awaits them before it returns.
     static ADOPTIONS: RefCell<HashMap<u64, Vec<oneshot::Receiver<()>>>> =
         RefCell::new(HashMap::new());
+    /// The running invocations that drain their work before they return.
+    static DRAINS_BEFORE_RETURN: RefCell<HashSet<u64>> = RefCell::new(HashSet::new());
 }
 
 /// Records that work of the runtime owner waits for adoption, and wakes the running invocations'
@@ -310,7 +331,7 @@ pub(crate) fn adopt_runtime_work(adopter: u64) {
         return;
     }
     let (done, completion) = oneshot::channel();
-    if !cfg!(feature = "post-return-drain") {
+    if DRAINS_BEFORE_RETURN.with_borrow(|owners| owners.contains(&adopter)) {
         ADOPTIONS
             .with_borrow_mut(|adoptions| adoptions.entry(adopter).or_default().push(completion));
     }

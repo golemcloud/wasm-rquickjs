@@ -1,14 +1,28 @@
 //! Stateful zstd backend. Every handle owns its own codec context.
 
+use std::borrow::Cow;
 use std::collections::HashMap;
+use std::ptr::NonNull;
 use std::sync::{LazyLock, Mutex};
-use zstd_safe::{
-    CCtx, CParameter, DCtx, DParameter, InBuffer, OutBuffer, ResetDirective, Strategy,
-};
+use zstd_safe::{DCtx, DParameter, InBuffer, OutBuffer, ResetDirective, zstd_sys};
 
 enum Codec {
-    Compress(CCtx<'static>, Option<u64>),
+    // zstd-safe 7's boolean LDM setter cannot represent ZSTD_ps_disable.
+    // Own the C context directly so libzstd receives the original integers.
+    Compress(NonNull<zstd_sys::ZSTD_CCtx>, Option<u64>),
     Decompress(DCtx<'static>),
+}
+
+// SAFETY: Each context has one owner; STREAMS serializes every access.
+unsafe impl Send for Codec {}
+
+impl Drop for Codec {
+    fn drop(&mut self) {
+        if let Self::Compress(ctx, _) = self {
+            // SAFETY: This is the sole owner, and no codec call can outlive it.
+            unsafe { zstd_sys::ZSTD_freeCCtx(ctx.as_ptr()) };
+        }
+    }
 }
 
 struct Stream {
@@ -24,38 +38,28 @@ struct Stream {
 static STREAMS: LazyLock<Mutex<HashMap<u32, Stream>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
-fn compression_parameter(key: u32, value: i32) -> Option<CParameter> {
+fn compression_parameter(key: u32) -> Option<zstd_sys::ZSTD_cParameter> {
+    use zstd_sys::ZSTD_cParameter::*;
     Some(match key {
-        100 => CParameter::CompressionLevel(value),
-        101 => CParameter::WindowLog(value as u32),
-        102 => CParameter::HashLog(value as u32),
-        103 => CParameter::ChainLog(value as u32),
-        104 => CParameter::SearchLog(value as u32),
-        105 => CParameter::MinMatch(value as u32),
-        106 => CParameter::TargetLength(value as u32),
-        107 => CParameter::Strategy(match value {
-            1 => Strategy::ZSTD_fast,
-            2 => Strategy::ZSTD_dfast,
-            3 => Strategy::ZSTD_greedy,
-            4 => Strategy::ZSTD_lazy,
-            5 => Strategy::ZSTD_lazy2,
-            6 => Strategy::ZSTD_btlazy2,
-            7 => Strategy::ZSTD_btopt,
-            8 => Strategy::ZSTD_btultra,
-            9 => Strategy::ZSTD_btultra2,
-            _ => return None,
-        }),
-        160 => CParameter::EnableLongDistanceMatching(value != 0),
-        161 => CParameter::LdmHashLog(value as u32),
-        162 => CParameter::LdmMinMatch(value as u32),
-        163 => CParameter::LdmBucketSizeLog(value as u32),
-        164 => CParameter::LdmHashRateLog(value as u32),
-        200 => CParameter::ContentSizeFlag(value != 0),
-        201 => CParameter::ChecksumFlag(value != 0),
-        202 => CParameter::DictIdFlag(value != 0),
-        400 => CParameter::NbWorkers(value as u32),
-        401 => CParameter::JobSize(value as u32),
-        402 => CParameter::OverlapSizeLog(value as u32),
+        100 => ZSTD_c_compressionLevel,
+        101 => ZSTD_c_windowLog,
+        102 => ZSTD_c_hashLog,
+        103 => ZSTD_c_chainLog,
+        104 => ZSTD_c_searchLog,
+        105 => ZSTD_c_minMatch,
+        106 => ZSTD_c_targetLength,
+        107 => ZSTD_c_strategy,
+        160 => ZSTD_c_enableLongDistanceMatching,
+        161 => ZSTD_c_ldmHashLog,
+        162 => ZSTD_c_ldmMinMatch,
+        163 => ZSTD_c_ldmBucketSizeLog,
+        164 => ZSTD_c_ldmHashRateLog,
+        200 => ZSTD_c_contentSizeFlag,
+        201 => ZSTD_c_checksumFlag,
+        202 => ZSTD_c_dictIDFlag,
+        400 => ZSTD_c_nbWorkers,
+        401 => ZSTD_c_jobSize,
+        402 => ZSTD_c_overlapLog,
         _ => return None,
     })
 }
@@ -80,17 +84,37 @@ pub(super) fn new(
         }
         Codec::Decompress(ctx)
     } else {
-        let mut ctx = CCtx::create();
-        ctx.load_dictionary(dictionary).ok()?;
-        for (key, value) in params {
-            if key == 107 && value == 0 {
-                continue;
-            }
-            ctx.set_parameter(compression_parameter(key, value)?).ok()?;
-        }
+        // SAFETY: The new context is immediately placed in its owning Codec,
+        // including on every initialization failure below.
+        let ctx = NonNull::new(unsafe { zstd_sys::ZSTD_createCCtx() })?;
         let pledged = pledged.map(|v| v as u64);
-        ctx.set_pledged_src_size(pledged).ok()?;
-        Codec::Compress(ctx, pledged)
+        let codec = Codec::Compress(ctx, pledged);
+        for (key, value) in params {
+            let parameter = compression_parameter(key)?;
+            // SAFETY: The context is owned, and the parameter enum is valid.
+            native_result(unsafe {
+                zstd_sys::ZSTD_CCtx_setParameter(ctx.as_ptr(), parameter, value)
+            })
+            .ok()?;
+        }
+        // SAFETY: loadDictionary copies the borrowed bytes; neither call retains
+        // a Rust reference. Parameters precede dictionary table construction.
+        native_result(unsafe {
+            zstd_sys::ZSTD_CCtx_loadDictionary(
+                ctx.as_ptr(),
+                dictionary.as_ptr().cast(),
+                dictionary.len(),
+            )
+        })
+        .ok()?;
+        native_result(unsafe {
+            zstd_sys::ZSTD_CCtx_setPledgedSrcSize(
+                ctx.as_ptr(),
+                pledged.unwrap_or(zstd_safe::CONTENTSIZE_UNKNOWN),
+            )
+        })
+        .ok()?;
+        codec
     };
     let input_size = match &codec {
         Codec::Compress(_, pledged) => pledged.map(|_| 0),
@@ -119,6 +143,15 @@ fn native_error(code: usize) -> (i32, String) {
     )
 }
 
+fn native_result(code: usize) -> Result<usize, (i32, String)> {
+    // SAFETY: ZSTD_isError only inspects the numeric result.
+    if unsafe { zstd_sys::ZSTD_isError(code) } != 0 {
+        Err(native_error(code))
+    } else {
+        Ok(code)
+    }
+}
+
 fn frame_prefix(bytes: &[u8]) -> bool {
     let length = bytes.len().min(4);
     bytes[..length] == [0x28, 0xb5, 0x2f, 0xfd][..length]
@@ -129,8 +162,8 @@ pub(super) fn push(
     id: u32,
     bytes: &[u8],
     flush: u8,
-    limit: usize,
-) -> Result<Vec<u8>, (i32, String)> {
+    capacity: usize,
+) -> Result<(Vec<u8>, usize, bool), (i32, String)> {
     let mut streams = STREAMS.lock().unwrap();
     let stream = streams.get_mut(&id).ok_or_else(|| {
         (
@@ -140,92 +173,107 @@ pub(super) fn push(
     })?;
     if let Codec::Compress(_, pledged) = stream.codec {
         if stream.complete && bytes.is_empty() {
-            return Ok(Vec::new());
+            return Ok((Vec::new(), 0, true));
         }
-        if let Some(input_size) = &mut stream.input_size {
-            *input_size += bytes.len() as u64;
+        if let Some(input_size) = stream.input_size {
             // A single compressStream2(end) call infers the input size even when
             // the caller supplied a pledge. Validate only the active pledge.
-            if flush == 2 && Some(*input_size) != pledged {
+            if flush == 2 && Some(input_size + bytes.len() as u64) != pledged {
                 return Err((72, "Src size is incorrect".to_string()));
             }
         }
     }
-    let mut data = std::mem::take(&mut stream.pending);
-    data.extend_from_slice(bytes);
+    let prefix = std::mem::take(&mut stream.pending);
+    let prefix_len = prefix.len();
+    let data = if prefix.is_empty() {
+        Cow::Borrowed(bytes)
+    } else {
+        let mut data = prefix;
+        data.extend_from_slice(bytes);
+        Cow::Owned(data)
+    };
     let mut input = InBuffer::around(&data);
-    let mut result = Vec::new();
-    loop {
-        if matches!(stream.codec, Codec::Decompress(_)) && stream.complete {
-            let remaining = &data[input.pos..];
-            if stream.garbage || (!remaining.is_empty() && !frame_prefix(remaining)) {
-                stream.garbage = true;
-                if stream.reject_garbage {
-                    return Err((
-                        -7,
-                        "Trailing junk found after the end of the compressed stream".to_string(),
-                    ));
-                }
-                break;
+    if matches!(stream.codec, Codec::Decompress(_)) && stream.complete {
+        if stream.garbage || (!data.is_empty() && !frame_prefix(&data)) {
+            stream.garbage = true;
+            if stream.reject_garbage {
+                return Err((
+                    -7,
+                    "Trailing junk found after the end of the compressed stream".to_string(),
+                ));
             }
-            if remaining.len() < 4 {
-                if flush == 2 && !remaining.is_empty() && stream.reject_garbage {
-                    return Err((
-                        -7,
-                        "Trailing junk found after the end of the compressed stream".to_string(),
-                    ));
-                }
-                stream.pending.extend_from_slice(remaining);
-                break;
-            }
+            return Ok((Vec::new(), bytes.len(), true));
         }
-        let before = input.pos;
-        let mut chunk = vec![0; 16_384.min(limit.saturating_sub(result.len()).saturating_add(1))];
-        let mut output = OutBuffer::around(&mut chunk[..]);
-        let remaining = match &mut stream.codec {
-            Codec::Compress(ctx, _) => {
-                let directive = match flush {
-                    1 => zstd_safe::zstd_sys::ZSTD_EndDirective::ZSTD_e_flush,
-                    2 => zstd_safe::zstd_sys::ZSTD_EndDirective::ZSTD_e_end,
-                    _ => zstd_safe::zstd_sys::ZSTD_EndDirective::ZSTD_e_continue,
-                };
-                ctx.compress_stream2(&mut output, &mut input, directive)
+        if data.len() < 4 {
+            if flush == 2 && !data.is_empty() && stream.reject_garbage {
+                return Err((
+                    -7,
+                    "Trailing junk found after the end of the compressed stream".to_string(),
+                ));
             }
-            Codec::Decompress(ctx) => ctx.decompress_stream(&mut output, &mut input),
-        }
-        .map_err(native_error)?;
-        let written = output.pos();
-        result.extend_from_slice(&chunk[..written]);
-        if result.len() > limit {
-            return Err((-6, "output exceeds maxOutputLength".to_string()));
-        }
-        match stream.codec {
-            Codec::Compress(_, _) => {
-                stream.emitted |= written > 0;
-                stream.complete = flush == 2 && remaining == 0;
-                if stream.complete {
-                    stream.emitted = false;
-                    stream.input_size = None;
-                }
-                if input.pos == data.len() && (flush == 0 || remaining == 0) {
-                    break;
-                }
-            }
-            Codec::Decompress(_) => {
-                stream.complete = remaining == 0;
-                if input.pos == data.len() && written < chunk.len() {
-                    if flush == 2 && !stream.complete {
-                        return Err((-5, "unexpected end of file".to_string()));
-                    }
-                    break;
-                }
-            }
-        }
-        if input.pos == before && written == 0 {
-            break;
+            stream.pending.extend_from_slice(&data);
+            return Ok((Vec::new(), bytes.len(), true));
         }
     }
-    Ok(result)
+    // One call produces at most capacity bytes. The caller retains unconsumed
+    // input and resumes only when the readable side has demand.
+    let mut chunk = vec![0; capacity];
+    let (remaining, written) = match &mut stream.codec {
+        Codec::Compress(ctx, _) => {
+            let directive = match flush {
+                1 => zstd_sys::ZSTD_EndDirective::ZSTD_e_flush,
+                2 => zstd_sys::ZSTD_EndDirective::ZSTD_e_end,
+                _ => zstd_sys::ZSTD_EndDirective::ZSTD_e_continue,
+            };
+            let mut raw_input = zstd_sys::ZSTD_inBuffer {
+                src: data.as_ptr().cast(),
+                size: data.len(),
+                pos: 0,
+            };
+            let mut output = zstd_sys::ZSTD_outBuffer {
+                dst: chunk.as_mut_ptr().cast(),
+                size: chunk.len(),
+                pos: 0,
+            };
+            // SAFETY: Both buffers stay alive for this synchronous call,
+            // and the exclusively owned context retains neither pointer.
+            let remaining = native_result(unsafe {
+                zstd_sys::ZSTD_compressStream2(ctx.as_ptr(), &mut output, &mut raw_input, directive)
+            })?;
+            input.pos = raw_input.pos;
+            (remaining, output.pos)
+        }
+        Codec::Decompress(ctx) => {
+            let mut output = OutBuffer::around(&mut chunk[..]);
+            let remaining = ctx
+                .decompress_stream(&mut output, &mut input)
+                .map_err(native_error)?;
+            (remaining, output.pos())
+        }
+    };
+    let done = match stream.codec {
+        Codec::Compress(_, _) => {
+            if let Some(size) = &mut stream.input_size {
+                *size += input.pos as u64;
+            }
+            stream.emitted |= written > 0;
+            stream.complete = flush == 2 && remaining == 0;
+            if stream.complete {
+                stream.emitted = false;
+                stream.input_size = None;
+            }
+            input.pos == data.len() && (flush == 0 || remaining == 0)
+        }
+        Codec::Decompress(_) => {
+            stream.complete = remaining == 0;
+            if input.pos == data.len() && written < capacity && flush == 2 && !stream.complete {
+                return Err((-5, "unexpected end of file".to_string()));
+            }
+            input.pos == data.len() && (written < capacity || stream.complete)
+        }
+    };
+    chunk.truncate(written);
+    Ok((chunk, input.pos.saturating_sub(prefix_len), done))
 }
 
 pub(super) fn reset(id: u32) -> bool {
@@ -238,10 +286,24 @@ pub(super) fn reset(id: u32) -> bool {
             if stream.emitted && !stream.complete {
                 return false;
             }
-            ctx.reset(ResetDirective::SessionOnly)
-                .and_then(|_| ctx.set_pledged_src_size(*pledged))
+            // SAFETY: Session reset and pledge update use the exclusively owned context.
+            native_result(unsafe {
+                zstd_sys::ZSTD_CCtx_reset(
+                    ctx.as_ptr(),
+                    zstd_sys::ZSTD_ResetDirective::ZSTD_reset_session_only,
+                )
+            })
+            .and_then(|_| {
+                native_result(unsafe {
+                    zstd_sys::ZSTD_CCtx_setPledgedSrcSize(
+                        ctx.as_ptr(),
+                        pledged.unwrap_or(zstd_safe::CONTENTSIZE_UNKNOWN),
+                    )
+                })
+            })
+            .map_err(|_| ())
         }
-        Codec::Decompress(ctx) => ctx.reset(ResetDirective::SessionOnly),
+        Codec::Decompress(ctx) => ctx.reset(ResetDirective::SessionOnly).map_err(|_| ()),
     };
     stream.complete = false;
     stream.emitted = false;

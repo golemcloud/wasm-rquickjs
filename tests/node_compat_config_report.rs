@@ -234,6 +234,51 @@ fn node_compat_config_classifies_from_vendored_source() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[test]
+#[test_r::tag(report_contract)]
+fn historical_public_subtests_remain_in_primary_inventory() -> anyhow::Result<()> {
+    let entries = load_node_compat_config(CONFIG_PATH)?;
+    for (path, indices) in [
+        ("parallel/test-util-deprecate.js", &[0, 1, 2][..]),
+        (
+            "parallel/test-stream-finished.js",
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 26, 27,
+                28, 29, 30, 31, 32, 33, 36, 37, 38, 39, 40, 41,
+            ][..],
+        ),
+    ] {
+        let entry = entries.iter().find(|entry| entry.path == path).unwrap();
+        for index in indices {
+            let subtest = entry
+                .subtests
+                .iter()
+                .find(|subtest| subtest.index == *index)
+                .unwrap();
+            assert!(
+                matches!(
+                    subtest.category,
+                    NodeCompatCategory::Runnable | NodeCompatCategory::KnownGap
+                ),
+                "{path}#{} lost its public coverage obligation: {:?}",
+                subtest.name,
+                subtest.category
+            );
+            if subtest.category == NodeCompatCategory::KnownGap {
+                assert!(
+                    subtest
+                        .reason
+                        .as_deref()
+                        .is_some_and(|reason| !reason.is_empty()),
+                    "{path}#{} needs a per-cause gap reason",
+                    subtest.name
+                );
+            }
+        }
+    }
+    Ok(())
+}
+
 struct NodeCompatConfigFixture {
     _temp: Utf8TempDir,
     config_path: camino::Utf8PathBuf,

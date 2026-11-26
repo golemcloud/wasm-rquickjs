@@ -42,6 +42,15 @@ async fn zlib_trailing_input(#[tagged_as("zlib")] compiled: &CompiledTest) -> an
 }
 
 #[test]
+async fn zlib_zstd_contracts(#[tagged_as("zlib")] compiled: &CompiledTest) -> anyhow::Result<()> {
+    let (result, output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "test-zstd-contracts", &[]).await;
+    println!("Output:\n{}", output);
+    assert_eq!(result?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
 async fn zlib_zstd_disabled() -> anyhow::Result<()> {
     // Keep this component's Cargo output separate from the full-tier dependency.
     let compiled = CompiledTest::new_with_features(

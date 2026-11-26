@@ -156,6 +156,17 @@ wasm-rquickjs generate-wrapper-crate ... \
 Both options can be repeated. The native module's crate must use the
 same `rquickjs` version as the generated crate; the crate's `[patch.crates-io]` applies to it.
 
+#### Draining before the return
+
+With the skeleton's `post-return-drain` feature, an async export returns its result as soon as
+the JavaScript body produces it, and its remaining timers, promise jobs and adopted work run on
+the call's task after the return. A host that stops driving a call at its return loses that work.
+`--drain-before-return <namespace:package/interface>` makes the async exports of one exported
+interface drain before they return, as they do without the feature. An unversioned name selects
+every exported version, `namespace:package/interface@version` one version; the option can be
+repeated. As without the feature, a draining call still returns before its work while a JavaScript
+producer of any invocation feeds a component future or stream.
+
 ### Generating TypeScript module definitions
 
 The `generate-dts` command generates TypeScript module definitions for all the exported and imported interfaces:
@@ -225,6 +236,34 @@ initialization must become quiescent before the snapshot and cannot leave timers
 Runtime arguments and environment variables are restored before the first export runs; modules
 must not capture their values or immutable aliases during top-level initialization.
 
+**Source input without changing the template:** templates generated with `@slot`
+also export `wizer-initialize-with-source: async func(sources: list<string>)`.
+Pass one source per binary slot, in the same order as `inject-js`, including slots
+for modules imported only later. Embedded modules do not consume source entries.
+
+```sh
+wasm-rquickjs optimize --input template.wasm --output app.wasm --js bundle.js
+```
+
+This runs application initialization on every build and writes a self-contained
+snapshot. It does not deploy external source files or reuse initialized JavaScript
+state. The same template still supports `inject-js` without Wizer for quick builds.
+Source strings move into the template's existing lazy module storage. A wrong
+source count or a second source-initializer call traps.
+Before instrumentation, the optimizer re-encodes the unchanged template to
+compact padded instruction encodings, as slot injection does. Source text is
+not part of those instrumented bytes or their native compilation cache key.
+
+Library callers can set `OptimizeOptions.sources`, supply their shared Wasmtime
+configuration in `engine_config`, and opt into native compilation caching through
+`cache_config`. The returned `OptimizeResult.compilation_cache` reports per-build
+hits and misses, including when parallel builds share a directory. Wasmtime owns
+cache keys, validation, atomic writes and eviction. Callers choose the cache
+directory and size policy; Wasmtime's size limits are asynchronous soft limits,
+not a hard disk quota. Only native compilation is shared; each operation creates
+a fresh engine, store, instance and WASI context. Use `init_func = "wizer-initialize"`
+with source input; custom initializers remain available without source input.
+
 **External I/O during pre-initialization is rejected.** Top-level filesystem
 probes (including `existsSync` and module/package lookup), socket/DNS/HTTP/WebSocket
 acquisition, SQLite opens (including `:memory:`), execution-job creation, and
@@ -239,6 +278,9 @@ restore-safe pre-init stdio and guest diagnostics.
 
 Importing these builtins, embedded/data modules and explicitly supplied module
 sources remains supported. Logging and pure computation remain available.
+A call to any other import that the optimizer does not provide, such as a Golem
+host function, traps and fails the build. The error names the fully qualified
+import, for example `golem:agent/host@2.0.0#get-config-value`.
 `process.cwd()` is the logical `/` during pre-initialization and refreshes from the
 runtime environment after restoration. `wasm-rquickjs:execution` may be imported,
 but `runJavaScript()` and `startJavaScript()` are runtime-only, including for pure
@@ -1262,8 +1304,12 @@ throws immediately. Environment-data APIs are unavailable.
 - **Async:** `gzip`, `gunzip`, `deflate`, `inflate`, `deflateRaw`, `inflateRaw`, `unzip`, `brotliCompress`, `brotliDecompress`, `zstdCompress`, `zstdDecompress`
 - **Sync:** `gzipSync`, `gunzipSync`, `deflateSync`, `inflateSync`, `deflateRawSync`, `inflateRawSync`, `unzipSync`, `brotliCompressSync`, `brotliDecompressSync`, `zstdCompressSync`, `zstdDecompressSync`
 - `crc32`, `constants`, `codes`
+- Zstandard constants are available through `constants` and direct `ZSTD_*` aliases on the default/CommonJS export.
 - Zstandard requires the optional `zstd` feature (included in the full tiers). It uses the reference
   zstd codec with worker threads disabled for WASI; `normal-p3` does not include that codec.
+  The APIs remain discoverable without the feature, but calls throw `ERR_ZLIB_INITIALIZATION_FAILED`.
+  This generic initialization error can also indicate invalid codec parameters; check the build's
+  enabled features before diagnosing a parameter failure.
 - Decompression supports the boolean `rejectGarbageAfterEnd` option. Strict gzip/unzip rejects
   input after the first member; strict zstd still accepts valid concatenated frames.
 
@@ -1935,6 +1981,11 @@ There are a few important things to keep in mind when working on the project:
   These caches may reuse generated wrapper, optimized component, and compiled Wasmtime artifacts. Every test still
   creates fresh wasm memory, a fresh Wasmtime `Store` and component instance, a fresh WASI context and temporary
   directory, and fresh QuickJS runtime state. Do not group compatibility cases into one wasm instance.
+
+  The optimized harness builds binary-slot templates and passes current JavaScript as initializer input. With both
+  caches enabled, source-only edits reuse the wrapper and Wizer's native compilation, but produce a fresh snapshot.
+  Snapshot cache keys include all initializer sources, including additional modules. Unoptimized builds retain
+  embedded sources; explicit optimization of those components still exercises the initializer without source input.
 
   `WASM_RQUICKJS_TEST_DROP_CACHE=1` forces generated artifacts to be rebuilt and bypasses Wasmtime's filesystem cache.
   `WASM_RQUICKJS_TEST_UNOPTIMIZED=1` skips Wizer pre-initialization for a shorter compile/test loop.

@@ -4,6 +4,7 @@ use wit_encoder::StandaloneFunc;
 use wit_parser::Resolve;
 
 pub(crate) const WIZER_RESTORE_CAPABILITY: &str = "wasm-rquickjs-wizer-restore-v1";
+pub(crate) const WIZER_SOURCE_INITIALIZER: &str = "wizer-initialize-with-source";
 
 /// The world-level import that supplies `@composition` JavaScript modules.
 pub(crate) const GET_SCRIPT_IMPORT: &str = "get-script";
@@ -18,10 +19,22 @@ pub fn add_get_script_import(wit_root: &Utf8Path, world: Option<&str>) -> anyhow
     })
 }
 
-pub fn add_wizer_init_export(wit_root: &Utf8Path, world: Option<&str>) -> anyhow::Result<()> {
+pub fn add_wizer_init_export(
+    wit_root: &Utf8Path,
+    world: Option<&str>,
+    has_binary_slots: bool,
+) -> anyhow::Result<()> {
     modify_world(wit_root, world, |world| {
         let wizer_init_func = StandaloneFunc::new("wizer-initialize", true);
         world.function_export(wizer_init_func);
+        if has_binary_slots {
+            let mut initializer = StandaloneFunc::new(WIZER_SOURCE_INITIALIZER, true);
+            initializer.set_params((
+                "sources",
+                wit_encoder::Type::List(Box::new(wit_encoder::Type::String)),
+            ));
+            world.function_export(initializer);
+        }
         // Only templates with the matching runtime restore implementation opt in
         // to deterministic optimizer entropy and clocks.
         world.function_export(StandaloneFunc::new(WIZER_RESTORE_CAPABILITY, false));

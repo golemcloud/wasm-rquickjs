@@ -1245,6 +1245,7 @@ pub mod native_module {
 
     type DecompressOutcome<'js> = List<(Option<TypedArray<'js, u8>>, Option<String>, i32)>;
     type StreamOutcome<'js> = List<(Option<TypedArray<'js, u8>>, bool)>;
+    type ZstdOutcome<'js> = List<(Option<TypedArray<'js, u8>>, Option<String>, i32, u32, bool)>;
 
     // ===== One-shot functions =====
 
@@ -1484,21 +1485,27 @@ pub mod native_module {
         id: u32,
         data: TypedArray<'js, u8>,
         flush: u8,
-        limit: u32,
-    ) -> rquickjs::Result<DecompressOutcome<'js>> {
+        capacity: u32,
+    ) -> rquickjs::Result<ZstdOutcome<'js>> {
         #[cfg(feature = "zstd")]
         {
             // SAFETY: Codec processing consumes the rooted input without JS re-entry.
             let input = unsafe { data.as_bytes() }.unwrap_or_default();
-            match super::zstd::push(id, input, flush, limit as usize) {
-                Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
-                Err((code, message)) => Ok(List((None, Some(message), code))),
+            match super::zstd::push(id, input, flush, capacity as usize) {
+                Ok((bytes, consumed, done)) => Ok(List((
+                    Some(TypedArray::new(ctx, bytes)?),
+                    None,
+                    0,
+                    consumed as u32,
+                    done,
+                ))),
+                Err((code, message)) => Ok(List((None, Some(message), code, 0, true))),
             }
         }
         #[cfg(not(feature = "zstd"))]
         {
-            let _ = (ctx, id, data, flush, limit);
-            Ok(List((None, None, 0)))
+            let _ = (ctx, id, data, flush, capacity);
+            Ok(List((None, None, 0, 0, true)))
         }
     }
 

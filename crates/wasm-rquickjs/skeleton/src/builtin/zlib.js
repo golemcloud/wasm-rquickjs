@@ -1,5 +1,5 @@
 // node:zlib implementation
-import { Transform } from 'node:stream';
+import { Transform, addAbortSignal } from 'node:stream';
 import { Buffer } from 'node:buffer';
 import bufferModule from 'node:buffer';
 import {
@@ -50,6 +50,8 @@ const getDataViewByteLength = Function.prototype.call.bind(
 const getArrayBufferDetached = Function.prototype.call.bind(
   Object.getOwnPropertyDescriptor(ArrayBuffer.prototype, 'detached').get,
 );
+const registerFinalizer = Function.prototype.call.bind(FinalizationRegistry.prototype.register);
+const unregisterFinalizer = Function.prototype.call.bind(FinalizationRegistry.prototype.unregister);
 
 function bufferFromNativeBytes(bytes) {
   setPrototypeOf(bytes, BufferPrototype);
@@ -238,6 +240,11 @@ const zstdConstants = {
   ZSTD_error_dstBuffer_null: 74, ZSTD_error_noForwardProgress_destFull: 80,
   ZSTD_error_noForwardProgress_inputEmpty: 82,
 };
+
+const zstdErrorCodes = Object.create(null);
+for (const key of Object.keys(zstdConstants)) {
+  if (stringStartsWith(key, 'ZSTD_error_')) zstdErrorCodes[zstdConstants[key]] = key;
+}
 
 export const constants = Object.freeze({
   ...zstdConstants,
@@ -1173,7 +1180,7 @@ class Zstd extends ZlibBase {
       const value = opts.params[key];
       if (typeof value !== 'number' && typeof value !== 'boolean') {
         throw makeTypeError('ERR_INVALID_ARG_TYPE',
-          'The "options.params[key]" argument must be of type number.' + invalidArgTypeHelper(value));
+          'The "options.params[key]" property must be of type number.' + invalidArgTypeHelper(value));
       }
       if ((value | 0) !== -1) {
         seen.add(number);
@@ -1184,7 +1191,8 @@ class Zstd extends ZlibBase {
     const finishFlush = opts.finishFlush === undefined ? 2 : opts.finishFlush;
     validateRangeInt(flush, 'options.flush', 0, 2);
     validateRangeInt(finishFlush, 'options.finishFlush', 0, 2);
-    if (opts.chunkSize !== undefined) validateRangeInt(opts.chunkSize, 'options.chunkSize', Z_MIN_CHUNK, Infinity);
+    const chunkSize = opts.chunkSize;
+    if (chunkSize !== undefined) validateRangeInt(chunkSize, 'options.chunkSize', Z_MIN_CHUNK, _getKMaxLength());
     if (opts.maxOutputLength !== undefined) validateRangeInt(opts.maxOutputLength, 'options.maxOutputLength', 1, _getKMaxLength());
     const pledged = opts.pledgedSrcSize;
     if (pledged !== undefined) {
@@ -1197,23 +1205,45 @@ class Zstd extends ZlibBase {
     else if (!isArrayBufferView(dictionary) && !(dictionary instanceof ArrayBuffer) &&
              !(typeof SharedArrayBuffer !== 'undefined' && dictionary instanceof SharedArrayBuffer)) {
       throw makeTypeError('ERR_INVALID_ARG_TYPE',
-        'The "options.dictionary" argument must be an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' + invalidArgTypeHelper(dictionary));
+        'The "options.dictionary" property must be an instance of Buffer, TypedArray, DataView, or ArrayBuffer.' + invalidArgTypeHelper(dictionary));
+    }
+    if (typeof SharedArrayBuffer !== 'undefined' && dictionary instanceof SharedArrayBuffer) {
+      dictionary = new Uint8Array(dictionary);
     }
     const rejectGarbage = validateRejectGarbage(opts);
+    const signal = opts.signal;
     const handle = zstd_stream_new(decompress, JSON.stringify(params), toUint8Array(toBuffer(dictionary)), pledged,
       rejectGarbage === true);
     if (handle == null) throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Setting parameter failed');
-    try { super(opts, decompress ? 11 : 10); }
+    // An already-aborted signal may destroy the stream during super(). Attach
+    // it only after the native owner and its finalizer are installed.
+    try {
+      // Codec output stays binary; constructor encoding is not a setEncoding call.
+      if (opts.encoding) opts = { ...opts, encoding: null };
+      super(signal ? { ...opts, signal: undefined } : opts, decompress ? 11 : 10);
+    }
     catch (error) { zstd_stream_close(handle); throw error; }
-    this._finishFlush = finishFlush;
-    this._flushFlag = flush;
-    this._setNativeHandle(handle);
-    zstdCleanup.register(this, handle, this);
+    try {
+      this._finishFlush = finishFlush;
+      this._flushFlag = flush;
+      this._chunkSize = chunkSize ?? Z_DEFAULT_CHUNK;
+      this._info = opts.info;
+      this._zstdResume = null;
+      this._setNativeHandle(handle);
+      registerFinalizer(zstdCleanup, this, handle, this);
+      if (signal) addAbortSignal(signal, this);
+    }
+    catch (error) {
+      zstd_stream_close(handle);
+      unregisterFinalizer(zstdCleanup, this);
+      this._nativeHandle = null;
+      throw error;
+    }
   }
 
   _closeNativeHandle() {
     if (this._nativeHandle !== null) zstd_stream_close(this._nativeHandle);
-    zstdCleanup.unregister(this);
+    unregisterFinalizer(zstdCleanup, this);
     this._nativeHandle = null;
   }
 
@@ -1230,44 +1260,88 @@ class Zstd extends ZlibBase {
     super.flush(kind, callback);
   }
 
-  _processChunk(chunk, flush, limit = _getKMaxLength()) {
-    const data = toUint8Array(toBuffer(chunk));
-    this._bytesWritten += data.length;
-    const [bytes, message, errno] = zstd_stream_push(this._nativeHandle, data, flush, limit);
-    if (errno === -6) throw makeRangeError('ERR_BUFFER_TOO_LARGE', `Cannot create a Buffer larger than ${limit} bytes`);
+  _processStep(data, flush, capacity) {
+    const [bytes, message, errno, consumed, done] = zstd_stream_push(this._nativeHandle, data, flush, capacity);
     if (errno === -7) throw makeTypeError('ERR_TRAILING_JUNK_AFTER_STREAM_END', message);
     if (errno !== 0) {
-      const code = errno === -5 ? 'Z_BUF_ERROR' :
-        Object.keys(zstdConstants).find(key => key.startsWith('ZSTD_error_') && zstdConstants[key] === errno);
+      const code = errno === -5 ? 'Z_BUF_ERROR' : zstdErrorCodes[errno];
       const error = makeError(code, message);
       error.errno = errno;
       throw error;
     }
-    return bufferFromNativeBytes(bytes);
+    return [bufferFromNativeBytes(bytes), consumed, done];
+  }
+
+  _processChunk(chunk, flush, limit = _getKMaxLength()) {
+    const data = toUint8Array(toBuffer(chunk));
+    this._bytesWritten += data.length;
+    const chunks = [];
+    let offset = 0, total = 0, done;
+    do {
+      const [output, consumed, complete] = this._processStep(
+        data.subarray(offset), flush, Math.min(this._chunkSize, limit - total + 1));
+      offset += consumed;
+      total += output.length;
+      if (total > limit) throw makeRangeError('ERR_BUFFER_TOO_LARGE', `Cannot create a Buffer larger than ${limit} bytes`);
+      if (output.length) chunks.push(output);
+      done = complete;
+    } while (!done);
+    return Buffer.concat(chunks, total);
+  }
+
+  _processStream(chunk, flush, callback) {
+    const data = toUint8Array(toBuffer(chunk));
+    this._bytesWritten += data.length;
+    let offset = 0;
+    const resume = error => {
+      if (error) { callback(error); return; }
+      try {
+        while (this._nativeHandle !== null) {
+          const [output, consumed, done] = this._processStep(data.subarray(offset), flush, this._chunkSize);
+          offset += consumed;
+          const ready = output.length === 0 || this.push(output);
+          if (this._nativeHandle === null) break;
+          if (!ready) {
+            this._zstdResume = done ? error => queueMicrotask(() => callback(error)) : resume;
+            return;
+          }
+          if (done) break;
+        }
+        queueMicrotask(callback);
+      } catch (error) { callback(error); }
+    };
+    resume();
+  }
+
+  _read(size) {
+    const resume = this._zstdResume;
+    this._zstdResume = null;
+    if (resume) resume();
+    super._read(size);
   }
 
   _transform(chunk, encoding, callback) {
     try {
       const flush = chunk.length === 0 && this._pendingFlushes.length > 0 ?
         this._pendingFlushes.shift() : this._flushFlag;
-      const output = this._processChunk(chunk, flush);
-      if (output.length) this.push(output);
-      queueMicrotask(callback);
+      this._processStream(typeof chunk === 'string' ? Buffer.from(chunk, encoding) : chunk, flush, callback);
     } catch (error) { callback(error); }
   }
 
   _flush(callback) {
-    try {
-      if (this._nativeHandle !== null) {
-        const output = this._processChunk(Buffer.alloc(0), this._finishFlush);
-        if (output.length) this.push(output);
-      }
-      this._closeHandle();
-      callback();
-    } catch (error) {
+    if (this._nativeHandle === null) { callback(); return; }
+    this._processStream(Buffer.alloc(0), this._finishFlush, error => {
       this._closeHandle();
       callback(error);
-    }
+    });
+  }
+
+  _destroy(error, callback) {
+    this._closeHandle();
+    const resume = this._zstdResume;
+    this._zstdResume = null;
+    if (resume) resume(error || makeError('ERR_STREAM_DESTROYED', 'Cannot call write after a stream was destroyed'));
+    callback(error);
   }
 }
 
@@ -1425,22 +1499,83 @@ export function brotliDecompressSync(data, opts) {
 function zstdSync(data, opts, engine) {
   try {
     const buffer = engine._processChunk(data, engine._finishFlush, opts?.maxOutputLength ?? _getKMaxLength());
-    return opts?.info ? { buffer, engine } : buffer;
+    return engine._info ? { buffer, engine } : buffer;
   } finally { engine._closeHandle(); }
 }
 
-export function zstdCompressSync(data, opts) { return zstdSync(data, opts, new ZstdCompress(opts)); }
-export function zstdDecompressSync(data, opts) { return zstdSync(data, opts, new ZstdDecompress(opts)); }
+// Node's synchronous convenience calls complete even with an aborted signal.
+export function zstdCompressSync(data, opts) {
+  return zstdSync(data, opts, new ZstdCompress({ ...opts, signal: undefined }));
+}
+export function zstdDecompressSync(data, opts) {
+  return zstdSync(data, opts, new ZstdDecompress({ ...opts, signal: undefined }));
+}
 
 function zstdAsync(data, opts, callback, Engine) {
   if (typeof opts === 'function') { callback = opts; opts = {}; }
+  if (Engine === ZstdCompress && opts?.pledgedSrcSize === undefined) {
+    let pledgedSrcSize;
+    if (typeof data === 'string') {
+      const encoding = opts?.defaultEncoding;
+      // Match Node's default pledge only when the UTF-8 size is known to be
+      // the encoded size. Other encodings retain ordinary streaming behavior.
+      if (encoding == null || encoding === 'utf8' || encoding === 'utf-8') {
+        pledgedSrcSize = Buffer.byteLength(data);
+      }
+    } else if (isArrayBufferView(data) || data instanceof ArrayBuffer ||
+               (typeof SharedArrayBuffer !== 'undefined' && data instanceof SharedArrayBuffer)) {
+      pledgedSrcSize = data.byteLength;
+    }
+    if (pledgedSrcSize !== undefined) opts = { ...opts, pledgedSrcSize };
+  }
   // Construction and input validation throw synchronously; codec failures go
   // to the callback. Do not turn invalid options into asynchronous errors.
   const engine = new Engine(opts);
+  let input;
   try {
-    const input = toBuffer(data);
-    asyncConvenience(() => zstdSync(input, opts, engine), input, opts, callback);
-  } catch (error) { engine._closeHandle(); throw error; }
+    if (typeof callback !== 'function') {
+      throw makeTypeError('ERR_INVALID_ARG_TYPE',
+        'The "callback" argument must be of type function. Received ' + (callback === undefined ? 'undefined' : typeof callback));
+    }
+    input = typeof data === 'string' ? Buffer.from(data, engine._writableState.defaultEncoding) : toBuffer(data);
+  } catch (error) {
+    // This private engine cannot deliver errors after validation throws.
+    engine.on('error', () => {});
+    engine.destroy();
+    throw error;
+  }
+  const chunks = [];
+  const limit = opts?.maxOutputLength ?? _getKMaxLength();
+  let total = 0, settled = false;
+  const done = (error, result) => {
+    if (settled) return;
+    settled = true;
+    chunks.length = 0;
+    engine.destroy();
+    callback(error, result);
+  };
+  engine.once('error', done);
+  engine.on('data', chunk => {
+    total += chunk.length;
+    if (total > limit) {
+      engine.destroy(makeRangeError('ERR_BUFFER_TOO_LARGE', `Cannot create a Buffer larger than ${limit} bytes`));
+    } else {
+      chunks.push(chunk);
+    }
+  });
+  engine.once('end', () => {
+    let buffer;
+    try { buffer = Buffer.concat(chunks, total); }
+    catch (error) { done(error); return; }
+    done(null, engine._info ? { buffer, engine } : buffer);
+  });
+  try {
+    engine.end(input);
+  } catch (error) {
+    engine._closeHandle();
+    engine.destroy();
+    throw error;
+  }
 }
 
 function asyncConvenience(syncFn, data, opts, callback) {
@@ -1604,6 +1739,15 @@ const _default = {
   BROTLI_OPERATION_EMIT_METADATA,
   ZLIB_VERNUM,
 };
+
+for (const key of Object.keys(zstdConstants)) {
+  Object.defineProperty(_default, key, {
+    value: zstdConstants[key],
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+}
 
 Object.defineProperty(_default, 'constants', {
   value: constants,

@@ -3,6 +3,7 @@ package quickjs:zlib;
 world zlib {
   export test-byte-transfer: func() -> bool;
   export test-zstd: func() -> bool;
+  export test-zstd-contracts: func() -> bool;
   export test-zstd-disabled: func() -> bool;
   export test-trailing-input: func() -> bool;
 }

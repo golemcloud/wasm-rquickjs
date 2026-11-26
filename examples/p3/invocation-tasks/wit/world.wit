@@ -8,8 +8,15 @@ interface effects {
   hand-over: async func(label: string, s: stream<u8>);
 }
 
+// An interface whose exports drain their work before they return (`--drain-before-return`).
+interface drained {
+  // Sets a timer that records after `delay-ms` and returns at once.
+  start-timer: async func(name: string, delay-ms: u32) -> string;
+}
+
 world invocation-tasks {
   import effects;
+  export drained;
 
   // Starts promise jobs, a microtask, a nextTick callback and a timer, awaits host effects in
   // five rounds, and returns its name.
