@@ -116,16 +116,41 @@ pub fn generate_export_module(context: &GeneratorContext) -> anyhow::Result<Vec<
 }
 
 const CUSTOM_INVOCATION_CONTEXT_DTS: &str = include_str!("custom_invocation_context.d.ts");
+const IMPORT_ABORT_DTS: &str = include_str!("import_abort.d.ts");
 
 pub fn generate_import_modules(context: &GeneratorContext) -> anyhow::Result<Vec<Utf8PathBuf>> {
     let mut results = Vec::new();
-    let (_global, interfaces) = crate::imports::collect_imported_interfaces(context)?;
+    let (global, interfaces) = crate::imports::collect_imported_interfaces(context)?;
 
     if crate::imports::custom_invocation_context_interface(&interfaces).is_some() {
         let target = context
             .output
             .join("wasm-rquickjs-custom-invocation-context.d.ts");
         std::fs::write(&target, CUSTOM_INVOCATION_CONTEXT_DTS)
+            .map_err(|e| anyhow!("Failed to write TypeScript definitions: {e}"))?;
+        results.push(target);
+    }
+
+    let is_async = |function: &&wit_parser::Function| {
+        matches!(
+            function.kind,
+            wit_parser::FunctionKind::AsyncFreestanding
+                | wit_parser::FunctionKind::AsyncMethod(_)
+                | wit_parser::FunctionKind::AsyncStatic(_)
+        )
+    };
+    let has_async_imports = global
+        .functions
+        .iter()
+        .any(|(_, function)| is_async(function))
+        || interfaces.iter().any(|interface| {
+            interface
+                .name_and_interface()
+                .is_some_and(|(_, iface)| iface.functions.values().any(|f| is_async(&f)))
+        });
+    if has_async_imports {
+        let target = context.output.join("wasm-rquickjs-import-abort.d.ts");
+        std::fs::write(&target, IMPORT_ABORT_DTS)
             .map_err(|e| anyhow!("Failed to write TypeScript definitions: {e}"))?;
         results.push(target);
     }

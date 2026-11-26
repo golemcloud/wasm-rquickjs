@@ -1035,6 +1035,34 @@ nothing for it.
 </details>
 
 <details>
+<summary><strong><code>wasm-rquickjs:import-abort</code></strong></summary>
+
+Lets JavaScript stop waiting for an async import and drop its component-model subtask. For worlds
+with async imports `generate-dts` also writes `wasm-rquickjs-import-abort.d.ts`. Keep the module
+external when bundling.
+
+- `withSignal(signal, fn)` makes `signal` current while `fn` runs synchronously, then restores
+  the previous signal, and returns what `fn` returns. `undefined` and `null` clear the current
+  signal. Any object with `aborted`, `reason`, `addEventListener` and `removeEventListener`, such
+  as an `AbortSignal`, works.
+
+Every async import that is called while a signal is current takes the signal with it, including
+resource methods and static resource functions. When the signal aborts before the import
+finishes, the import's promise rejects with `signal.reason`, and the runtime drops the import:
+the host cancels the call or sees that its caller stopped waiting. A signal that is already
+aborted rejects without starting the import, and the import does not start when the signal aborts
+before the runtime first polls it. The runtime still converts the other arguments from JavaScript
+when the import is called, and drops them when the import does not start: each owned resource
+passed to the import is destroyed. A `future` or `stream` argument is not lowered when the signal
+is already aborted, so its JavaScript source is not read. A `future` or `stream` argument lowered
+before the signal aborts is closed, and the runtime calls `return()` on the iterator of a
+JavaScript stream source when the host stops reading. An import that finished
+keeps its result when the signal aborts later. Imports that `fn` starts after an `await` do not
+take the signal, so pass the signal again in each continuation that starts an import.
+
+</details>
+
+<details>
 <summary><strong><code>node:inspector</code></strong> (stub)</summary>
 
 Compatibility stubs — no V8 inspector in WASM.

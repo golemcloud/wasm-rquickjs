@@ -247,23 +247,42 @@ fn build_freestanding_import_bridge(
     }
 
     // An async bridge is a synchronous JS function that returns a promise. It builds the import
-    // future during the JS call, so the import runs in the caller's custom invocation context
-    // (see `crate::internal::custom_invocation_context::scoped_import`).
+    // future during the JS call, so the import runs in the caller's custom invocation context and
+    // takes the current import signal (see `crate::internal::import_abort::abortable_import`).
     let maybe_await = if is_async {
         quote! { .await }
     } else {
         quote! {}
     };
-    let returns = |ty: TokenStream| {
+    // An async bridge returns `AbortableImport<'js, T>` for a body that evaluates to
+    // `rquickjs::Result<T>`; a synchronous bridge returns the body's own type.
+    let returns_result = |ty: TokenStream| {
         if is_async {
-            quote! { crate::internal::custom_invocation_context::ScopedImport<'js, #ty> }
+            quote! { crate::internal::import_abort::AbortableImport<'js, #ty> }
+        } else {
+            quote! { rquickjs::Result<#ty> }
+        }
+    };
+    let returns_plain = |ty: TokenStream| {
+        if is_async {
+            quote! { crate::internal::import_abort::AbortableImport<'js, #ty> }
         } else {
             ty
         }
     };
+    let plain_body = |value: TokenStream| {
+        if is_async {
+            quote! { Ok(#value) }
+        } else {
+            value
+        }
+    };
     let body = |body: TokenStream| {
         if is_async {
-            quote! { crate::internal::custom_invocation_context::scoped_import(async move { #body }) }
+            quote! {
+                let __import_ctx = ctx.clone();
+                crate::internal::import_abort::abortable_import(&__import_ctx, async move { #body })
+            }
         } else {
             body
         }
@@ -273,7 +292,7 @@ fn build_freestanding_import_bridge(
         let reader_type = crate::async_values::reader_type(context, &async_value)?;
         let reader_to_js =
             crate::async_values::reader_to_js_expr(context, &async_value, quote! { result })?;
-        let ret = returns(quote! { rquickjs::Result<rquickjs::Value<'js>> });
+        let ret = returns_result(quote! { rquickjs::Value<'js> });
         let body = body(quote! {
             let result: #reader_type = #bindgen_path(#(#param_refs),*) #maybe_await;
             rquickjs::IntoJs::into_js(#reader_to_js, &ctx)
@@ -294,7 +313,7 @@ fn build_freestanding_import_bridge(
         if let Some(exception) = &return_types.expected_exception {
             let wrapped_exception = &exception.wrapped_type_ref;
             let wrap_exception = exception.wrap.run(quote! { error });
-            let ret = returns(quote! { rquickjs::Result<#wrapped_result> });
+            let ret = returns_result(quote! { #wrapped_result });
             let body = body(quote! {
                 let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
                 match result {
@@ -314,22 +333,16 @@ fn build_freestanding_import_bridge(
                 }
             }
         } else {
-            let ret = returns(quote! { #wrapped_result });
+            let ret = returns_plain(quote! { #wrapped_result });
+            let value = plain_body(wrap_result);
             let body = body(quote! {
                 let result: #original_result = #bindgen_path(#(#param_refs),*) #maybe_await;
-                #wrap_result
+                #value
             });
-            if needs_ctx {
+            if needs_ctx || is_async {
                 quote! {
                     #[rquickjs::function]
                     fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> #ret {
-                        #body
-                    }
-                }
-            } else if is_async {
-                quote! {
-                    #[rquickjs::function]
-                    fn #rust_function_ident<'js>(#(#param_list),*) -> #ret {
                         #body
                     }
                 }
@@ -504,13 +517,46 @@ fn build_deferred_import_bridge(
         #[rquickjs::function]
         fn #rust_function_ident<'js>(ctx: rquickjs::Ctx<'js>, #(#param_list),*) -> rquickjs::Result<rquickjs::Promise<'js>> {
             let (__promise, __resolve, __reject) = rquickjs::Promise::new(&ctx)?;
+            // The current import signal. An already aborted signal rejects before any parameter
+            // is lowered, so no import starts and no JS source is read.
+            let __abort_signal = match crate::internal::import_abort::deferred_import_abort(&ctx)? {
+                crate::internal::import_abort::DeferredImportAbort::None => None,
+                crate::internal::import_abort::DeferredImportAbort::Aborted(__reason) => {
+                    __reject.call::<_, ()>((__reason,))?;
+                    return Ok(__promise);
+                }
+                crate::internal::import_abort::DeferredImportAbort::Current(__signal) => Some(__signal),
+            };
             // Lower each `future<T>` / `stream<T>` parameter into a component reader here, while a
             // `Ctx` is available. The writers are fed from JS (promise callbacks / a JS pump) and
             // pure component-model tasks, so they keep running correctly after the import returns.
             #(#arg_bindings)*
+            // The abort listener is registered only after every parameter is lowered, so a
+            // lowering error leaves no listener on the signal. A signal that aborted meanwhile
+            // rejects without starting the import; dropping the lowered readers closes them.
+            let (__abort_signal, __abort_registration) = match __abort_signal {
+                None => (None, None),
+                Some(__signal) => match crate::internal::import_abort::arm_deferred_import_abort(&ctx, __signal)? {
+                    crate::internal::import_abort::ArmedImportAbort::Aborted(__reason) => {
+                        __reject.call::<_, ()>((__reason,))?;
+                        return Ok(__promise);
+                    }
+                    crate::internal::import_abort::ArmedImportAbort::Armed(__signal, __registration) => {
+                        (Some(__signal), Some(__registration))
+                    }
+                },
+            };
             let (__result_tx, __result_rx) = futures::channel::oneshot::channel();
             crate::internal::spawn_local(crate::internal::custom_invocation_context::scoped(async move {
-                let __result: #result_ty = #bindgen_path(#(#arg_exprs),*).await;
+                let __import = #bindgen_path(#(#arg_exprs),*);
+                // `None` when the signal aborted: the import future is dropped, which cancels its
+                // subtask.
+                let __result: Option<#result_ty> = match __abort_registration {
+                    None => Some(__import.await),
+                    Some(__registration) => {
+                        futures::future::Abortable::new(__import, __registration).await.ok()
+                    }
+                };
                 // The receiver is dropped if the originating JavaScript runtime shuts down.
                 let _ = __result_tx.send(__result);
             }));
@@ -522,7 +568,15 @@ fn build_deferred_import_bridge(
                     &__settle_ctx,
                     __resolve,
                     __reject,
-                    move |__ctx| { #produce_body },
+                    move |__ctx| {
+                        if let Some(__signal) = __abort_signal
+                            && let Some(__reason) = __signal.finish(__ctx, __result.is_none())?
+                        {
+                            return Ok(crate::internal::PromiseOutcome::Reject(__reason));
+                        }
+                        let __result = __result.expect("an import without an aborted signal has a result");
+                        #produce_body
+                    },
                 );
             });
             Ok(__promise)
@@ -820,6 +874,11 @@ fn generate_import_module(
             let rust_fn = RustWitFunction::new(context, &name, function);
 
             let rust_method_name_ident = rust_fn.function_name_ident();
+            // The TypeScript declarations name the method the same way.
+            let js_method_name_lit = LitStr::new(
+                &escape_js_ident(name.to_lower_camel_case()),
+                Span::call_site(),
+            );
 
             let parameters = function
                 .params
@@ -866,18 +925,40 @@ fn generate_import_module(
             } else {
                 quote! {}
             };
-            let returns = |ty: TokenStream| {
+            // An async bridge returns `AbortableImport<'js, T>` for a body that evaluates to
+            // `rquickjs::Result<T>`, and takes a `Ctx` to read the current import signal.
+            let returns_result = |ty: TokenStream| {
                 if is_async {
-                    quote! { crate::internal::custom_invocation_context::ScopedImport<'js, #ty> }
+                    quote! { crate::internal::import_abort::AbortableImport<'js, #ty> }
+                } else {
+                    quote! { rquickjs::Result<#ty> }
+                }
+            };
+            let returns_plain = |ty: TokenStream| {
+                if is_async {
+                    quote! { crate::internal::import_abort::AbortableImport<'js, #ty> }
                 } else {
                     ty
                 }
+            };
+            let plain_body = |value: TokenStream| {
+                if is_async {
+                    quote! { Ok(#value) }
+                } else {
+                    value
+                }
+            };
+            let ctx_param = if is_async {
+                quote! { ctx: rquickjs::Ctx<'js>, }
+            } else {
+                quote! {}
             };
             let body = |prelude: TokenStream, body: TokenStream| {
                 if is_async {
                     quote! {
                         #prelude
-                        crate::internal::custom_invocation_context::scoped_import(async move { #body })
+                        let __import_ctx = ctx.clone();
+                        crate::internal::import_abort::abortable_import(&__import_ctx, async move { #body })
                     }
                 } else {
                     quote! { #prelude #body }
@@ -916,7 +997,7 @@ fn generate_import_module(
                         let wrapped_exception = &exception.wrapped_type_ref;
                         let wrap_exception = exception.wrap.run(quote! { error });
 
-                        let ret = returns(quote! { rquickjs::Result<#wrapped_result> });
+                        let ret = returns_result(quote! { #wrapped_result });
                         let body = body(
                             method_prelude,
                             quote! {
@@ -934,23 +1015,26 @@ fn generate_import_module(
                             },
                         );
                         methods.push(quote! {
+                            #[qjs(rename = #js_method_name_lit)]
                             pub fn #rust_method_name_ident #lifetime (&self, ctx: #ctx_type, #(#param_list),*) -> #ret {
                                 #body
                             }
                         });
                     } else {
-                        let ret = returns(quote! { #wrapped_result });
+                        let ret = returns_plain(quote! { #wrapped_result });
+                        let value = plain_body(wrap_result);
                         let body = body(
                             method_prelude,
                             quote! {
                                 let result: #original_result = #method_target
                                     .#rust_method_name_ident(#(#param_refs),*)
                                     #maybe_await;
-                                #wrap_result
+                                #value
                             },
                         );
                         methods.push(quote! {
-                           pub fn #rust_method_name_ident #lifetime (&self, #(#param_list),*) -> #ret {
+                           #[qjs(rename = #js_method_name_lit)]
+                           pub fn #rust_method_name_ident #lifetime (&self, #ctx_param #(#param_list),*) -> #ret {
                                 #body
                             }
                         });
@@ -961,7 +1045,7 @@ fn generate_import_module(
                         let wrapped_exception = &exception.wrapped_type_ref;
                         let wrap_exception = exception.wrap.run(quote! { error });
 
-                        let ret = returns(quote! { rquickjs::Result<#wrapped_result> });
+                        let ret = returns_result(quote! { #wrapped_result });
                         let body = body(
                             quote! {},
                             quote! {
@@ -977,23 +1061,24 @@ fn generate_import_module(
                             },
                         );
                         methods.push(quote! {
-                            #[qjs(static)]
+                            #[qjs(static, rename = #js_method_name_lit)]
                             pub fn #rust_method_name_ident #lifetime (ctx: #ctx_type, #(#param_list),*) -> #ret {
                                 #body
                             }
                         });
                     } else {
-                        let ret = returns(quote! { #wrapped_result });
+                        let ret = returns_plain(quote! { #wrapped_result });
+                        let value = plain_body(wrap_result);
                         let body = body(
                             quote! {},
                             quote! {
                                 let result: #original_result = #bindgen_path::#rust_method_name_ident(#(#param_refs),*) #maybe_await;
-                                #wrap_result
+                                #value
                             },
                         );
                         methods.push(quote! {
-                           #[qjs(static)]
-                           pub fn #rust_method_name_ident #lifetime (#(#param_list),*) -> #ret {
+                           #[qjs(static, rename = #js_method_name_lit)]
+                           pub fn #rust_method_name_ident #lifetime (#ctx_param #(#param_list),*) -> #ret {
                                 #body
                            }
                         });
