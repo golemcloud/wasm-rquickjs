@@ -386,6 +386,20 @@ export function testNumberBinding() {
     assert.deepEqual(db.prepare('SELECT ? AS n, typeof(?) AS kind', {
       readBigInts: true,
     }).get(-0, -0), { __proto__: null, n: -0, kind: 'real' });
+    let reads = 0;
+    const params = Object.create({ $inherited: 41 });
+    Object.defineProperties(params, {
+      $left: { get() { throw new Error('hidden matching getter must not run'); } },
+      $unknown: { get() { throw new Error('hidden unknown getter must not run'); } },
+      $right: { enumerable: true, get() { reads++; return 29; } },
+    });
+    const named = db.prepare('SELECT $left AS x, $right AS y');
+    const row = { __proto__: null, x: null, y: 29 };
+    assert.deepEqual(named.get(params), row);
+    assert.deepEqual(named.all(params), [row]);
+    assert.deepEqual([...named.iterate(params)], [row]);
+    assert.deepEqual(named.run(params), { changes: 1, lastInsertRowid: 1 });
+    assert.equal(reads, 4);
   } finally {
     db.close();
   }
@@ -395,9 +409,28 @@ export function testNumberBinding() {
 export function testStatementLifetime() {
   const db = new DatabaseSync(':memory:');
   try {
+    const udfError = new Error('udf sentinel');
+    db.function('boom', () => { throw udfError; });
+    let execError;
+    try { db.exec('SELECT boom()'); } catch (error) { execError = error; }
+    const parameter = db.prepare('SELECT ? AS n');
+    assert.throws(() => parameter.get(1, 2), {
+      code: 'ERR_SQLITE_ERROR', message: 'column index out of range',
+      errcode: 25, errstr: 'column index out of range',
+    });
+    assert.equal(parameter.get(7).n, 7);
+    assert.equal(execError, udfError);
     assert.throws(() => db.prepare('SELECT missing FROM absent'), { code: 'ERR_SQLITE_ERROR' });
     db.exec('CREATE TABLE entries (n); INSERT INTO entries VALUES (13), (29), (41)');
     const query = db.prepare('SELECT n FROM entries ORDER BY n');
+    for (const invoke of [() => query.get(7), () => query.all(7),
+      () => [...query.iterate(7)], () => query.run(7)]) {
+      assert.throws(invoke, {
+        code: 'ERR_SQLITE_ERROR', message: 'column index out of range',
+        errcode: 25, errstr: 'column index out of range',
+      });
+      assert.equal(query.get().n, 13);
+    }
     const iterator = query.iterate();
     assert.deepEqual(iterator.next(), {
       __proto__: null, done: false, value: { __proto__: null, n: 13 },

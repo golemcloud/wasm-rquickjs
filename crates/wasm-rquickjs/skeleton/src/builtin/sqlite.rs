@@ -206,7 +206,7 @@ impl StatementState {
         let rc = unsafe { rusqlite::ffi::sqlite3_reset(self.raw.get()) };
         let conn = self.connection.upgrade().unwrap();
         check_sqlite(ctx, &conn, rc)?;
-        bind_params(ctx, self.raw.get(), params, bare, unknown)
+        bind_params(ctx, &conn, self.raw.get(), params, bare, unknown)
     }
 
     fn step<'js>(
@@ -901,6 +901,7 @@ fn finalize_statements(conn: &SqliteConnection) {
 
 fn bind_params<'js>(
     ctx: &rquickjs::Ctx<'js>,
+    conn: &SqliteConnection,
     stmt: *mut rusqlite::ffi::sqlite3_stmt,
     params: &rquickjs::Value<'js>,
     allow_bare_named: bool,
@@ -918,7 +919,7 @@ fn bind_params<'js>(
     if let Some(arr) = params.as_array() {
         for i in 0..arr.len() {
             let val: rquickjs::Value<'js> = arr.get(i)?;
-            bind_value(ctx, stmt, i + 1, &val)?;
+            bind_value(ctx, conn, stmt, i + 1, &val)?;
         }
     } else if params.is_object() {
         let obj = params.as_object().ok_or_else(|| {
@@ -951,7 +952,7 @@ fn bind_params<'js>(
         // Enumerate keys without reading values: ignored unknown keys must not
         // invoke getters, and recognized getters run exactly once.
         let keys: Vec<String> = obj
-            .own_keys(rquickjs::object::Filter::new().string())
+            .own_keys(rquickjs::object::Filter::default())
             .collect::<rquickjs::Result<_>>()?;
         for key in keys {
             let name = std::ffi::CString::new(key.as_str()).ok();
@@ -973,7 +974,7 @@ fn bind_params<'js>(
                 ));
             }
             let val = obj.get(key)?;
-            bind_value(ctx, stmt, idx as usize, &val)?;
+            bind_value(ctx, conn, stmt, idx as usize, &val)?;
         }
     }
     Ok(())
@@ -981,6 +982,7 @@ fn bind_params<'js>(
 
 fn bind_value<'js>(
     ctx: &rquickjs::Ctx<'js>,
+    conn: &SqliteConnection,
     stmt: *mut rusqlite::ffi::sqlite3_stmt,
     index: usize,
     val: &rquickjs::Value<'js>,
@@ -1011,13 +1013,7 @@ fn bind_value<'js>(
             ),
         }
     };
-    if rc != ffi::SQLITE_OK {
-        return Err(sqlite_error(
-            ctx,
-            &rusqlite::Error::SqliteFailure(ffi::Error::new(rc), None),
-        ));
-    }
-    Ok(())
+    check_sqlite(ctx, conn, rc)
 }
 
 fn open_database_impl<'js>(
@@ -1118,7 +1114,7 @@ fn exec_sql_impl<'js>(ctx: rquickjs::Ctx<'js>, conn_id: u32, sql: String) -> rqu
         ));
     }
     conn.execute_batch(&sql)
-        .map_err(|e| sqlite_error(&ctx, &e))?;
+        .map_err(|e| map_sqlite_or_udf_error(&ctx, e))?;
     Ok(())
 }
 
