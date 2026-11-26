@@ -37,4 +37,11 @@ world crypto {
   export subtle-sign-verify-rsa-pss: func(message: string) -> bool;
   export crypto-error-contracts: func() -> list<string>;
   export webcrypto-error-contracts: func() -> list<string>;
+  export x25519-agreement: func() -> string;
+  export p521-key-pair: func() -> string;
+  export cfrg448-vectors: func() -> string;
+  export rsa-private-operations: func() -> string;
+  export ecdsa-host-signatures: func() -> string;
+  export k256-signature-forms: func() -> string;
+  export dsa-encoding-forms: func() -> string;
 }

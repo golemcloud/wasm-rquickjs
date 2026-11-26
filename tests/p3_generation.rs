@@ -1093,20 +1093,7 @@ fn p3_generated_crate_builds_with_wasi_system_clock_import() -> anyhow::Result<(
 
     generate_p3(temp.path())?;
 
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        output.status.success(),
-        "P3 generated crate with a wasi:clocks/system-clock import should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    build_p3_with_features(temp.path(), "clock", None)?;
     Ok(())
 }
 
@@ -1152,20 +1139,7 @@ fn p3_generated_crate_builds_with_multiple_wasi_package_versions() -> anyhow::Re
 
     generate_p3(temp.path())?;
 
-    let output = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        output.status.success(),
-        "P3 generated crate with multiple versions of a WASI package should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&output.stdout),
-        String::from_utf8_lossy(&output.stderr)
-    );
+    build_p3_with_features(temp.path(), "multiple_wasi_versions", None)?;
     Ok(())
 }
 
@@ -1296,6 +1270,7 @@ fn p3_feature_activates_an_optional_wit_bindgen_p3_override() -> anyhow::Result<
                 key: "wit-bindgen-p3".to_string(),
                 value: replacement,
             }],
+            ..Default::default()
         },
     )?;
 
@@ -1318,6 +1293,75 @@ fn p3_feature_activates_an_optional_wit_bindgen_p3_override() -> anyhow::Result<
         "the `p3` feature must activate the optional wit-bindgen-p3 override; direct \
          dependencies:\n{stdout}"
     );
+    Ok(())
+}
+
+#[test]
+fn drain_before_return_selects_exported_interfaces_by_unversioned_or_versioned_name()
+-> anyhow::Result<()> {
+    let temp = Utf8TempDir::new()?;
+    write_fixture(
+        temp.path(),
+        indoc! {r#"
+            package test:drain@1.2.0;
+
+            interface drained {
+              run: async func() -> string;
+            }
+
+            interface other {
+              run: async func() -> string;
+            }
+
+            world drain {
+              export drained;
+              export other;
+            }
+        "#},
+        "export const drained = { run: async () => \"a\" };\nexport const other = { run: async () => \"b\" };\n",
+    )?;
+    let generate = |names: &[&str]| {
+        let output = temp.path().join("out");
+        let _ = std::fs::remove_dir_all(&output);
+        generate_wrapper_crate_with_options(
+            &temp.path().join("wit"),
+            &[JsModuleSpec {
+                name: "module".to_string(),
+                mode: EmbeddingMode::EmbedFile(temp.path().join("src").join("module.js")),
+            }],
+            &output,
+            None,
+            GenerationTarget::WasiP3,
+            &WrapperCrateOptions {
+                drain_before_return: names.iter().map(|name| name.to_string()).collect(),
+                ..Default::default()
+            },
+        )
+        .and_then(|()| Ok(std::fs::read_to_string(output.join("src").join("lib.rs"))?))
+    };
+
+    for name in ["test:drain/drained", "test:drain/drained@1.2.0"] {
+        let lib = generate(&[name])?;
+        assert_eq!(
+            lib.matches("internal::invocation_draining_before_return(")
+                .count(),
+            1,
+            "{name} selects only `drained`:\n{lib}"
+        );
+        assert_eq!(
+            lib.matches("internal::invocation(").count(),
+            1,
+            "{name}:\n{lib}"
+        );
+    }
+
+    for name in ["test:drain/missing", "test:drain/drained@9.9.9"] {
+        let error = generate(&[name]).expect_err(name).to_string();
+        assert!(
+            error.contains(name) && error.contains("test:drain/drained, test:drain/other"),
+            "{error}"
+        );
+    }
     Ok(())
 }
 
@@ -1351,20 +1395,7 @@ fn p3_generated_crate_builds_with_async_result_export() -> anyhow::Result<()> {
 
     generate_p3(temp.path())?;
 
-    let build = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        build.status.success(),
-        "P3 generated crate with an async result export should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr)
-    );
+    build_p3_with_features(temp.path(), "result_export", None)?;
     Ok(())
 }
 
@@ -1393,20 +1424,7 @@ fn p3_generated_crate_builds_with_node_builtin_imports() -> anyhow::Result<()> {
 
     generate_p3(temp.path())?;
 
-    let build = Command::new("cargo")
-        .arg("build")
-        .arg("--manifest-path")
-        .arg(temp.path().join("out").join("Cargo.toml"))
-        .arg("--target")
-        .arg("wasm32-wasip2")
-        .output()?;
-
-    assert!(
-        build.status.success(),
-        "P3 generated crate with Node.js builtin imports should build; stdout:\n{}\nstderr:\n{}",
-        String::from_utf8_lossy(&build.stdout),
-        String::from_utf8_lossy(&build.stderr)
-    );
+    build_p3_with_features(temp.path(), "p3_builtins", None)?;
     Ok(())
 }
 
@@ -3859,6 +3877,7 @@ fn p3_javascript_imports_a_native_module_from_a_dependency() -> anyhow::Result<(
                 key: "test-native-greeting".to_string(),
                 value: format!("{{ path = {:?} }}", native.as_str()),
             }],
+            ..Default::default()
         },
     )?;
 

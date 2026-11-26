@@ -5,9 +5,9 @@ use camino::Utf8Path;
 use std::time::Duration;
 use wasmtime::component::types::ComponentItem;
 use wasmtime::component::{Component, Linker, LinkerInstance, ResourceType};
-use wasmtime::{Config, Engine, Store, StoreContextMut};
+use wasmtime::{Cache, CacheConfig, Config, Engine, Store, StoreContextMut};
 use wasmtime_wasi::p2::bindings;
-use wasmtime_wizer::Wizer;
+use wasmtime_wizer::{WasmtimeWizerComponent, Wizer};
 
 // These providers belong only to the optimizer store, never a deployment host.
 // A fixed clock also makes QuickJS's context-local random seed reproducible.
@@ -97,7 +97,7 @@ impl wasmtime_wasi_http::WasiHttpView for WizerHost {
 
 /// Configuration for Wizer pre-initialization.
 #[derive(Debug, Clone, Copy, Default)]
-pub struct OptimizeOptions {
+pub struct OptimizeOptions<'a> {
     /// Guest-to-host copy budget in bytes per hostcall, including Wizer snapshot
     /// memory extraction. This is not WebAssembly instruction fuel or a limit
     /// on the total snapshot size.
@@ -108,6 +108,32 @@ pub struct OptimizeOptions {
     /// Wasmtime fork via Cargo patches. Stock Wasmtime does not expose this
     /// setting, so requesting it without the feature returns an error.
     pub hostcall_fuel: Option<usize>,
+    /// Sources for binary slots, in the same order as binary injection. With
+    /// `Some`, `init_func` must be `wizer-initialize`. The optimizer calls the
+    /// template's typed source initializer without changing its Wasm bytes.
+    pub sources: Option<&'a [String]>,
+    /// Use the caller's shared compilation configuration. It must support
+    /// asynchronous components. Instruction fuel and epoch deadlines are
+    /// unrestricted during pre-initialization, as with the default configuration.
+    pub engine_config: Option<&'a Config>,
+    /// Native compilation cache configuration. Each optimization creates its own
+    /// cache handle so its result counts only that operation's hits and misses,
+    /// even when parallel builds share the same directory. Wasmtime owns keys,
+    /// artifact validation, atomic writes and eviction.
+    pub cache_config: Option<&'a CacheConfig>,
+}
+
+/// Native compilation cache activity for one optimization, not elapsed-time inference.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct CompilationCacheStats {
+    pub hits: usize,
+    pub misses: usize,
+}
+
+#[derive(Debug, Clone, Copy, Default)]
+pub struct OptimizeResult {
+    /// `None` when no `OptimizeOptions::cache_config` was supplied.
+    pub compilation_cache: Option<CompilationCacheStats>,
 }
 
 /// Pre-initialize a WebAssembly component using Wizer with default options.
@@ -133,20 +159,26 @@ pub async fn optimize_component(
     output: &Utf8Path,
     init_func: &str,
 ) -> anyhow::Result<()> {
-    optimize_component_with_options(input, output, init_func, &OptimizeOptions::default()).await
+    optimize_component_with_options(input, output, init_func, &OptimizeOptions::default())
+        .await
+        .map(|_| ())
 }
 
 /// Pre-initialize a WebAssembly component using Wizer with explicit options.
 ///
-/// Behaves like [`optimize_component`], but allows configuring the guest-to-host
-/// copy budget on Golem's Wasmtime fork. The budget is set before instantiation
-/// and applies to initialization and snapshot extraction on the same store.
+/// Behaves like [`optimize_component`], with optional source input, caller-supplied
+/// engine configuration and native compilation caching. The guest-to-host copy
+/// budget on Golem's Wasmtime fork applies to initialization and snapshot extraction.
 pub async fn optimize_component_with_options(
     input: &Utf8Path,
     output: &Utf8Path,
     init_func: &str,
-    options: &OptimizeOptions,
-) -> anyhow::Result<()> {
+    options: &OptimizeOptions<'_>,
+) -> anyhow::Result<OptimizeResult> {
+    anyhow::ensure!(
+        options.sources.is_none() || init_func == "wizer-initialize",
+        "Initializer sources require init_func=wizer-initialize"
+    );
     #[cfg(not(feature = "use-golem-wasmtime"))]
     if options.hostcall_fuel.is_some() {
         anyhow::bail!(
@@ -157,10 +189,39 @@ pub async fn optimize_component_with_options(
     eprintln!("Reading component from {input}...");
     let wasm_bytes = std::fs::read(input.as_std_path())
         .map_err(|e| anyhow!("Failed to read input component: {e}"))?;
+    let input_size = wasm_bytes.len();
+    let wasm_bytes = if options.sources.is_some() {
+        tokio::task::spawn_blocking(move || -> anyhow::Result<Vec<u8>> {
+            use wasm_encoder::reencode::{ReencodeComponent, RoundtripReencoder};
+            // Slot injection already canonicalizes padded instruction encodings.
+            // Do the same for an unchanged template, without adding source data.
+            let mut component = wasm_encoder::Component::new();
+            RoundtripReencoder
+                .parse_component(
+                    &mut component,
+                    wasmparser_encoder::Parser::new(0),
+                    &wasm_bytes,
+                )
+                .map_err(|error| anyhow!("Failed to reencode input component: {error}"))?;
+            Ok(component.finish())
+        })
+        .await??
+    } else {
+        wasm_bytes
+    };
 
-    let mut config = Config::new();
-    config.wasm_component_model(true);
-    config.wasm_component_model_async(true);
+    let mut config = if let Some(config) = options.engine_config {
+        config.clone()
+    } else {
+        let mut config = Config::new();
+        config.wasm_component_model(true);
+        config.wasm_component_model_async(true);
+        config
+    };
+    let cache = options.cache_config.cloned().map(Cache::new).transpose()?;
+    if let Some(cache) = &cache {
+        config.cache(Some(cache.clone()));
+    }
     let engine = Engine::new(&config)?;
 
     let stderr = preinit::Stderr::default();
@@ -185,116 +246,153 @@ pub async fn optimize_component_with_options(
         },
     );
 
+    if store.get_fuel().is_ok() {
+        store.set_fuel(u64::MAX)?;
+    }
+    store.set_epoch_deadline(u64::MAX);
+
     #[cfg(feature = "use-golem-wasmtime")]
     if let Some(fuel) = options.hostcall_fuel {
         store.set_hostcall_fuel(fuel);
     }
 
-    let init_func_name = init_func.to_string();
+    let init_func_name = if options.sources.is_some() {
+        crate::wit::WIZER_SOURCE_INITIALIZER
+    } else {
+        init_func
+    };
 
     eprintln!("Pre-initializing component (init_func={init_func_name})...");
 
     let mut wizer = Wizer::new();
-    wizer.init_func(&init_func_name);
+    wizer.init_func(init_func_name);
     // Must keep init func in output to avoid a wasmtime-wizer bug where
     // removing the export corrupts CoreInstance section references.
     wizer.keep_init_func(true);
 
-    let (optimized, _) = wizer
-        .run_component(
-            &mut store,
-            &wasm_bytes,
-            async |store: &mut Store<WizerHost>, component: &Component| {
-                // Inspect Wizer's compiled component before instantiation, so
-                // capability negotiation does not compile the input twice.
-                let deterministic = init_func == "wizer-initialize"
-                    && component.component_type().exports(store.engine()).any(|(name, item)| {
-                        name == crate::wit::WIZER_RESTORE_CAPABILITY
-                            && matches!(item.ty, ComponentItem::ComponentFunc(ref f)
+    let instantiate = async |store: &mut Store<WizerHost>, component: &Component| {
+        // Inspect Wizer's compiled component before instantiation, so
+        // capability negotiation does not compile the input twice.
+        let deterministic = init_func == "wizer-initialize"
+            && component
+                .component_type()
+                .exports(store.engine())
+                .any(|(name, item)| {
+                    name == crate::wit::WIZER_RESTORE_CAPABILITY
+                        && matches!(item.ty, ComponentItem::ComponentFunc(ref f)
                                 if !f.async_() && f.params().len() == 0 && f.results().len() == 0)
-                    });
-                if deterministic {
-                    use rand_10::{SeedableRng, rngs::StdRng};
-                    let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
-                    builder
-                        .inherit_stdout()
-                        .stderr(stderr.clone())
-                        .secure_random(StdRng::from_seed([0; 32]))
-                        .insecure_random(StdRng::from_seed([1; 32]))
-                        .insecure_random_seed(0)
-                        .wall_clock(PreinitClock)
-                        .monotonic_clock(PreinitClock);
-                    #[cfg(not(feature = "use-golem-wasmtime"))]
-                    { store.data_mut().wasi = builder.build(); }
-                    #[cfg(feature = "use-golem-wasmtime")]
-                    {
-                        let (wasi, io_ctx) = builder.build();
-                        store.data_mut().wasi = wasi;
-                        store.data_mut().io_ctx = io_ctx;
-                    }
-                } else {
-                    eprintln!(
-                        "Warning: no supported Wizer restore capability for initializer `{init_func}`; \
+                });
+        if deterministic {
+            use rand_10::{SeedableRng, rngs::StdRng};
+            let mut builder = wasmtime_wasi::WasiCtxBuilder::new();
+            builder
+                .inherit_stdout()
+                .stderr(stderr.clone())
+                .secure_random(StdRng::from_seed([0; 32]))
+                .insecure_random(StdRng::from_seed([1; 32]))
+                .insecure_random_seed(0)
+                .wall_clock(PreinitClock)
+                .monotonic_clock(PreinitClock);
+            #[cfg(not(feature = "use-golem-wasmtime"))]
+            {
+                store.data_mut().wasi = builder.build();
+            }
+            #[cfg(feature = "use-golem-wasmtime")]
+            {
+                let (wasi, io_ctx) = builder.build();
+                store.data_mut().wasi = wasi;
+                store.data_mut().io_ctx = io_ctx;
+            }
+        } else {
+            eprintln!(
+                "Warning: no supported Wizer restore capability for initializer `{init_func}`; \
                          preserving legacy entropy/clocks. Output is not guaranteed reproducible and \
                          snapshotted RNG state may be reused. Rebuild the guest template to enable \
                          deterministic pre-initialization."
-                    );
-                }
-                let mut linker: Linker<WizerHost> = Linker::new(store.engine());
+            );
+        }
+        let mut linker: Linker<WizerHost> = Linker::new(store.engine());
 
-                // Add real Preview 2 and Preview 3 WASI and HTTP implementations. Preview 3
-                // wrappers still have a small residual Preview 2 import surface from std.
-                wasmtime_wasi::p2::add_to_linker_with_options_async(
-                    &mut linker,
-                    &bindings::LinkOptions::default(),
-                )?;
-                wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
-                // Keep P3 socket resource ownership in the deny-only provider.
-                wasmtime_wasi::p3::cli::add_to_linker(&mut linker)?;
-                wasmtime_wasi::p3::clocks::add_to_linker(&mut linker)?;
-                wasmtime_wasi::p3::filesystem::add_to_linker(&mut linker)?;
-                wasmtime_wasi::p3::random::add_to_linker(&mut linker)?;
-                wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
+        // Add real Preview 2 and Preview 3 WASI and HTTP implementations. Preview 3
+        // wrappers still have a small residual Preview 2 import surface from std.
+        wasmtime_wasi::p2::add_to_linker_with_options_async(
+            &mut linker,
+            &bindings::LinkOptions::default(),
+        )?;
+        wasmtime_wasi_http::p2::add_only_http_to_linker_async(&mut linker)?;
+        // Keep P3 socket resource ownership in the deny-only provider.
+        wasmtime_wasi::p3::cli::add_to_linker(&mut linker)?;
+        wasmtime_wasi::p3::clocks::add_to_linker(&mut linker)?;
+        wasmtime_wasi::p3::filesystem::add_to_linker(&mut linker)?;
+        wasmtime_wasi::p3::random::add_to_linker(&mut linker)?;
+        wasmtime_wasi_http::p3::add_to_linker(&mut linker)?;
 
-                // Implement wasi:logging/logging with actual log output
-                {
-                    let mut logging = linker.instance("wasi:logging/logging")?;
-                    logging.func_wrap(
-                        "log",
-                        |_ctx: StoreContextMut<'_, WizerHost>,
-                         (level, context, message): (LogLevel, String, String)|
-                         -> Result<(), wasmtime::Error> {
-                            if context.is_empty() {
-                                eprintln!("[wizer] [{level}] {message}");
-                            } else {
-                                eprintln!("[wizer] [{level}] [{context}] {message}");
-                            }
-                            Ok(())
-                        },
-                    )?;
-                }
+        // Implement wasi:logging/logging with actual log output
+        {
+            let mut logging = linker.instance("wasi:logging/logging")?;
+            logging.func_wrap(
+                "log",
+                |_ctx: StoreContextMut<'_, WizerHost>,
+                 (level, context, message): (LogLevel, String, String)|
+                 -> Result<(), wasmtime::Error> {
+                    if context.is_empty() {
+                        eprintln!("[wizer] [{level}] {message}");
+                    } else {
+                        eprintln!("[wizer] [{level}] [{context}] {message}");
+                    }
+                    Ok(())
+                },
+            )?;
+        }
 
-                // Stub any remaining unknown imports (e.g. golem:api/host,
-                // user-defined WIT interfaces) with trapping functions.
-                // We skip wasi: prefixed imports to preserve wasmtime's
-                // semver version aliasing for WASI interfaces.
-                preinit::deny_external_io(&mut linker, component)?;
-                stub_unknown_imports(&mut linker, component)?;
+        // Stub any remaining unknown imports (e.g. golem:api/host,
+        // user-defined WIT interfaces) with trapping functions.
+        // We skip wasi: prefixed imports to preserve wasmtime's
+        // semver version aliasing for WASI interfaces.
+        preinit::deny_external_io(&mut linker, component)?;
+        stub_unknown_imports(&mut linker, component)?;
 
-                linker.instantiate_async(store, component).await
-            },
-        )
-        .await
-        .map_err(|error| match stderr.diagnostic() {
-            Some(diagnostic) => error.context(diagnostic),
-            None => error,
-        })?;
+        linker.instantiate_async(store, component).await
+    };
+
+    let optimized = async {
+        if let Some(sources) = options.sources {
+            let (context, instrumented) = wizer.instrument_component(&wasm_bytes)?;
+            let compile_engine = engine.clone();
+            let component =
+                tokio::task::spawn_blocking(move || Component::new(&compile_engine, &instrumented))
+                    .await??;
+            let instance = instantiate(&mut store, &component).await?;
+            instance
+                .get_typed_func::<(&[String],), ()>(&mut store, init_func_name)?
+                .call_async(&mut store, (sources,))
+                .await?;
+            wizer
+                .snapshot_component(
+                    &context,
+                    &mut WasmtimeWizerComponent {
+                        store: &mut store,
+                        instance,
+                    },
+                )
+                .await
+        } else {
+            wizer
+                .run_component(&mut store, &wasm_bytes, instantiate)
+                .await
+                .map(|(optimized, _)| optimized)
+        }
+    }
+    .await
+    .map_err(|error| match stderr.diagnostic() {
+        Some(diagnostic) => error.context(diagnostic),
+        None => error,
+    })?;
 
     eprintln!("Writing pre-initialized component to {output}...");
     std::fs::write(output.as_std_path(), &optimized)
         .map_err(|e| anyhow!("Failed to write output component: {e}"))?;
 
-    let input_size = wasm_bytes.len();
     let output_size = optimized.len();
     eprintln!(
         "Done! Input: {:.1} KB, Output: {:.1} KB",
@@ -302,7 +400,12 @@ pub async fn optimize_component_with_options(
         output_size as f64 / 1024.0,
     );
 
-    Ok(())
+    Ok(OptimizeResult {
+        compilation_cache: cache.map(|cache| CompilationCacheStats {
+            hits: cache.cache_hits(),
+            misses: cache.cache_misses(),
+        }),
+    })
 }
 
 /// Prefixes for imports that are handled by real implementations
@@ -396,6 +499,7 @@ fn stub_unknown_imports(
         stub_component_item(
             &mut linker.root(),
             import_name,
+            import_name,
             &item.ty,
             &engine,
             &wasi_resources,
@@ -405,9 +509,13 @@ fn stub_unknown_imports(
     Ok(())
 }
 
+/// `fqn` is the import path of `name`, in the same `interface#function` form
+/// as the pre-initialization I/O diagnostics, so a trap names the versioned
+/// interface and not only the bare function.
 fn stub_component_item(
     linker_instance: &mut LinkerInstance<'_, WizerHost>,
     name: &str,
+    fqn: &str,
     item: &ComponentItem,
     engine: &Engine,
     wasi_resources: &[ResourceType],
@@ -419,6 +527,7 @@ fn stub_component_item(
                 stub_component_item(
                     &mut nested,
                     export_name,
+                    &format!("{fqn}#{export_name}"),
                     &export_item.ty,
                     engine,
                     wasi_resources,
@@ -426,7 +535,7 @@ fn stub_component_item(
             }
         }
         ComponentItem::ComponentFunc(func_ty) if func_ty.async_() => {
-            let fqn = name.to_string();
+            let fqn = fqn.to_string();
             linker_instance.func_new_concurrent(name, move |_accessor, _ty, _args, _results| {
                 let fqn = fqn.clone();
                 Box::pin(async move {
@@ -438,7 +547,7 @@ fn stub_component_item(
             })?;
         }
         ComponentItem::ComponentFunc(_) => {
-            let fqn = name.to_string();
+            let fqn = fqn.to_string();
             linker_instance.func_new(name, move |_ctx, _ty, _args, _results| {
                 Err(wasmtime::Error::msg(format!(
                     "wizer pre-initialization called unknown import `{fqn}` — \

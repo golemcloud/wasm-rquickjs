@@ -19,6 +19,7 @@ fn main() {
             target,
             native_module,
             dependency,
+            drain_before_return,
         } => {
             let modules = if let Some(js) = maybe_js {
                 vec![JsModuleSpec {
@@ -32,6 +33,7 @@ fn main() {
             let options = WrapperCrateOptions {
                 native_modules: native_module.iter().map(|arg| arg.0.clone()).collect(),
                 dependencies: dependency.iter().map(|arg| arg.0.clone()).collect(),
+                drain_before_return: drain_before_return.clone(),
             };
             if let Err(err) = generate_wrapper_crate_with_options(
                 wit,
@@ -62,14 +64,28 @@ fn main() {
             input,
             output,
             init_func,
+            js,
         } => {
+            let sources: Vec<String> = js
+                .iter()
+                .map(|path| {
+                    std::fs::read_to_string(path.as_std_path()).unwrap_or_else(|err| {
+                        eprintln!("Error reading JS file {path}: {err:#}");
+                        std::process::exit(1);
+                    })
+                })
+                .collect();
+            let options = wasm_rquickjs::OptimizeOptions {
+                sources: (!js.is_empty()).then_some(sources.as_slice()),
+                ..Default::default()
+            };
             let rt = tokio::runtime::Builder::new_current_thread()
                 .enable_all()
                 .build()
                 .expect("Failed to create tokio runtime");
-            if let Err(err) =
-                rt.block_on(wasm_rquickjs::optimize_component(input, output, init_func))
-            {
+            if let Err(err) = rt.block_on(wasm_rquickjs::optimize_component_with_options(
+                input, output, init_func, &options,
+            )) {
                 eprintln!("Error optimizing component: {err:#}");
                 std::process::exit(1);
             }
