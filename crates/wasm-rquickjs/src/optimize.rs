@@ -499,6 +499,7 @@ fn stub_unknown_imports(
         stub_component_item(
             &mut linker.root(),
             import_name,
+            import_name,
             &item.ty,
             &engine,
             &wasi_resources,
@@ -508,9 +509,13 @@ fn stub_unknown_imports(
     Ok(())
 }
 
+/// `fqn` is the import path of `name`, in the same `interface#function` form
+/// as the pre-initialization I/O diagnostics, so a trap names the versioned
+/// interface and not only the bare function.
 fn stub_component_item(
     linker_instance: &mut LinkerInstance<'_, WizerHost>,
     name: &str,
+    fqn: &str,
     item: &ComponentItem,
     engine: &Engine,
     wasi_resources: &[ResourceType],
@@ -522,6 +527,7 @@ fn stub_component_item(
                 stub_component_item(
                     &mut nested,
                     export_name,
+                    &format!("{fqn}#{export_name}"),
                     &export_item.ty,
                     engine,
                     wasi_resources,
@@ -529,7 +535,7 @@ fn stub_component_item(
             }
         }
         ComponentItem::ComponentFunc(func_ty) if func_ty.async_() => {
-            let fqn = name.to_string();
+            let fqn = fqn.to_string();
             linker_instance.func_new_concurrent(name, move |_accessor, _ty, _args, _results| {
                 let fqn = fqn.clone();
                 Box::pin(async move {
@@ -541,7 +547,7 @@ fn stub_component_item(
             })?;
         }
         ComponentItem::ComponentFunc(_) => {
-            let fqn = name.to_string();
+            let fqn = fqn.to_string();
             linker_instance.func_new(name, move |_ctx, _ty, _args, _results| {
                 Err(wasmtime::Error::msg(format!(
                     "wizer pre-initialization called unknown import `{fqn}` — \
