@@ -532,6 +532,48 @@ export async function testZstd() {
 export async function testZstdContracts() {
   const failures = [];
   for (const [name, check] of [
+    ['binary output despite constructor encoding', async () => {
+      const source = Buffer.from([0, 255, 13, 29, 128, 65]);
+      const options = { encoding: 'hex' };
+      const frame = await new Promise((resolve, reject) => zlib.zstdCompress(source, options,
+        (error, value) => error ? reject(error) : resolve(value)));
+      assert.ok(Buffer.isBuffer(frame));
+      const decoded = await new Promise((resolve, reject) => zlib.zstdDecompress(frame, options,
+        (error, value) => error ? reject(error) : resolve(value)));
+      assert.ok(Buffer.isBuffer(decoded));
+      assert.deepEqual(decoded, source);
+      await streamRoundTrip(source, zlib.createZstdCompress(options), zlib.createZstdDecompress(options));
+      assert.deepEqual(options, { encoding: 'hex' });
+    }],
+    ['callback info snapshot', async () => {
+      const source = Buffer.from('callback shape 13|29');
+      const frame = zlib.zstdCompressSync(source);
+      for (const info of [false, true]) {
+        const options = { info };
+        const result = new Promise((resolve, reject) => zlib.zstdDecompress(frame, options,
+          (error, value) => error ? reject(error) : resolve(value)));
+        options.info = !info;
+        const value = await result;
+        assert.deepEqual(info ? value.buffer : value, source);
+        assert.equal(Buffer.isBuffer(value), !info);
+        if (info) assert.ok(value.engine instanceof zlib.ZstdDecompress);
+      }
+    }],
+    ['direct constant aliases', async () => {
+      assert.equal(zlib.default.ZSTD_c_compressionLevel, 100);
+      assert.equal(zlib.default.ZSTD_e_end, 2);
+      assert.throws(() => { zlib.default.ZSTD_e_end = 99; }, TypeError);
+      const source = Buffer.from('direct constant parameter 13|29');
+      const frame = zlib.zstdCompressSync(source,
+        { params: { [zlib.default.ZSTD_c_compressionLevel]: 9 } });
+      assert.deepEqual(zlib.zstdDecompressSync(frame), source);
+    }],
+    ['callback validation precedence', async () => {
+      for (const operation of [zlib.zstdCompress, zlib.zstdDecompress]) {
+        assert.throws(() => operation(123),
+          { code: 'ERR_INVALID_ARG_TYPE', message: /callback/ });
+      }
+    }],
     ['callback source pledge', async () => {
       const bytes = Buffer.from('héllo wörld 🚀 '.repeat(1000));
       const padded = Buffer.concat([Buffer.alloc(7), bytes, Buffer.alloc(11)]);
@@ -579,11 +621,25 @@ export async function testZstdContracts() {
     }],
     ['error intrinsic capture', async () => {
       const original = String.prototype.startsWith;
+      const find = Array.prototype.find;
+      const keys = Object.keys;
+      let error;
+      // Construct first: parameter enumeration is not the error-mapping path.
+      const decoder = zlib.createZstdDecompress();
+      const failed = new Promise(resolve => decoder.on('error', resolve));
       try {
         String.prototype.startsWith = () => { throw new Error('mutable startsWith'); };
-        assert.throws(() => zlib.zstdDecompressSync(Buffer.from([1, 2, 3, 4])),
-          { code: 'ZSTD_error_prefix_unknown', errno: 10 });
-      } finally { String.prototype.startsWith = original; }
+        Array.prototype.find = () => { throw new Error('mutable find'); };
+        Object.keys = () => { throw new Error('mutable keys'); };
+        decoder.end(Buffer.from([1, 2, 3, 4]));
+        error = await failed;
+      } finally {
+        String.prototype.startsWith = original;
+        Array.prototype.find = find;
+        Object.keys = keys;
+      }
+      assert.equal(error?.code, 'ZSTD_error_prefix_unknown');
+      assert.equal(error?.errno, 10);
     }],
     ['callback encoding', async () => {
       for (const pledgedSrcSize of [undefined, 1]) {

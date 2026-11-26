@@ -228,6 +228,11 @@ const zstdConstants = {
   ZSTD_error_noForwardProgress_inputEmpty: 82,
 };
 
+const zstdErrorCodes = Object.create(null);
+for (const key of Object.keys(zstdConstants)) {
+  if (stringStartsWith(key, 'ZSTD_error_')) zstdErrorCodes[zstdConstants[key]] = key;
+}
+
 export const constants = Object.freeze({
   ...zstdConstants,
   Z_NO_FLUSH,
@@ -1184,12 +1189,17 @@ class Zstd extends ZlibBase {
     if (handle == null) throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'Setting parameter failed');
     // An already-aborted signal may destroy the stream during super(). Attach
     // it only after the native owner and its finalizer are installed.
-    try { super(signal ? { ...opts, signal: undefined } : opts, decompress ? 11 : 10); }
+    try {
+      // Codec output stays binary; constructor encoding is not a setEncoding call.
+      if (opts.encoding) opts = { ...opts, encoding: null };
+      super(signal ? { ...opts, signal: undefined } : opts, decompress ? 11 : 10);
+    }
     catch (error) { zstd_stream_close(handle); throw error; }
     try {
       this._finishFlush = finishFlush;
       this._flushFlag = flush;
       this._chunkSize = chunkSize ?? Z_DEFAULT_CHUNK;
+      this._info = opts.info;
       this._zstdResume = null;
       this._setNativeHandle(handle);
       registerFinalizer(zstdCleanup, this, handle, this);
@@ -1226,8 +1236,7 @@ class Zstd extends ZlibBase {
     const [bytes, message, errno, consumed, done] = zstd_stream_push(this._nativeHandle, data, flush, capacity);
     if (errno === -7) throw makeTypeError('ERR_TRAILING_JUNK_AFTER_STREAM_END', message);
     if (errno !== 0) {
-      const code = errno === -5 ? 'Z_BUF_ERROR' :
-        Object.keys(zstdConstants).find(key => stringStartsWith(key, 'ZSTD_error_') && zstdConstants[key] === errno);
+      const code = errno === -5 ? 'Z_BUF_ERROR' : zstdErrorCodes[errno];
       const error = makeError(code, message);
       error.errno = errno;
       throw error;
@@ -1458,7 +1467,7 @@ export function brotliDecompressSync(data, opts) {
 function zstdSync(data, opts, engine) {
   try {
     const buffer = engine._processChunk(data, engine._finishFlush, opts?.maxOutputLength ?? _getKMaxLength());
-    return opts?.info ? { buffer, engine } : buffer;
+    return engine._info ? { buffer, engine } : buffer;
   } finally { engine._closeHandle(); }
 }
 
@@ -1492,11 +1501,11 @@ function zstdAsync(data, opts, callback, Engine) {
   const engine = new Engine(opts);
   let input;
   try {
-    input = typeof data === 'string' ? Buffer.from(data, engine._writableState.defaultEncoding) : toBuffer(data);
     if (typeof callback !== 'function') {
       throw makeTypeError('ERR_INVALID_ARG_TYPE',
         'The "callback" argument must be of type function. Received ' + (callback === undefined ? 'undefined' : typeof callback));
     }
+    input = typeof data === 'string' ? Buffer.from(data, engine._writableState.defaultEncoding) : toBuffer(data);
   } catch (error) {
     // This private engine cannot deliver errors after validation throws.
     engine.on('error', () => {});
@@ -1526,7 +1535,7 @@ function zstdAsync(data, opts, callback, Engine) {
     let buffer;
     try { buffer = Buffer.concat(chunks, total); }
     catch (error) { done(error); return; }
-    done(null, opts?.info ? { buffer, engine } : buffer);
+    done(null, engine._info ? { buffer, engine } : buffer);
   });
   try {
     engine.end(input);
@@ -1698,6 +1707,15 @@ const _default = {
   BROTLI_OPERATION_EMIT_METADATA,
   ZLIB_VERNUM,
 };
+
+for (const key of Object.keys(zstdConstants)) {
+  Object.defineProperty(_default, key, {
+    value: zstdConstants[key],
+    writable: false,
+    configurable: false,
+    enumerable: false,
+  });
+}
 
 Object.defineProperty(_default, 'constants', {
   value: constants,

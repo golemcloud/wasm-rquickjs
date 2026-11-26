@@ -1304,6 +1304,7 @@ throws immediately. Environment-data APIs are unavailable.
 - **Async:** `gzip`, `gunzip`, `deflate`, `inflate`, `deflateRaw`, `inflateRaw`, `unzip`, `brotliCompress`, `brotliDecompress`, `zstdCompress`, `zstdDecompress`
 - **Sync:** `gzipSync`, `gunzipSync`, `deflateSync`, `inflateSync`, `deflateRawSync`, `inflateRawSync`, `unzipSync`, `brotliCompressSync`, `brotliDecompressSync`, `zstdCompressSync`, `zstdDecompressSync`
 - `crc32`, `constants`, `codes`
+- Zstandard constants are available through `constants` and direct `ZSTD_*` aliases on the default/CommonJS export.
 - Zstandard requires the optional `zstd` feature (included in the full tiers). It uses the reference
   zstd codec with worker threads disabled for WASI; `normal-p3` does not include that codec.
   The APIs remain discoverable without the feature, but calls throw `ERR_ZLIB_INITIALIZATION_FAILED`.
