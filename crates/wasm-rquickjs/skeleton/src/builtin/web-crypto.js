@@ -2527,6 +2527,12 @@ export function getDiffieHellman(name) {
 
 // ===== ECDH =====
 
+function createInvalidCurveError(curve) {
+    const err = new Error('Invalid curve: ' + curve);
+    err.code = 'ERR_CRYPTO_INVALID_CURVE';
+    return err;
+}
+
 function ECDH(curve) {
     if (!(this instanceof ECDH)) return new ECDH(curve);
     if (typeof curve !== 'string') {
@@ -2536,9 +2542,7 @@ function ECDH(curve) {
     }
     const handle = webCryptoNative.ecdh_create(curve);
     if (handle === null || handle === undefined) {
-        const err = new Error('Invalid curve: ' + curve);
-        err.code = 'ERR_CRYPTO_INVALID_CURVE';
-        throw err;
+        throw createInvalidCurveError(curve);
     }
     this._handle = handle;
 }
@@ -2954,52 +2958,6 @@ const RAW_EC_ECDH_NAMES = {
 };
 const EC_PUBLIC_KEY_OID = [0x06, 0x07, 0x2a, 0x86, 0x48, 0xce, 0x3d, 0x02, 0x01];
 
-// The native ECDH has no P-521, so derive a raw P-521 private key's public
-// point (d * G, uncompressed) with BigInt affine arithmetic.
-const P521_P = (1n << 521n) - 1n;
-const P521_B = 0x0051953eb9618e1c9a1f929a21a0b68540eea2da725b99b315f3b8b489918ef109e156193951ec7e937b1652c0bd3bb1bf073573df883d2c34f1ef451fd46b503f00n;
-const P521_G = [
-    0x00c6858e06b70404e9cd9e3ecb662395b4429c648139053fb521f828af606b4d3dbaa14b5e77efe75928fe1dc127a2ffa8de3348b3c1856a429bf97e7e31c2e5bd66n,
-    0x011839296a789a3bc0045c8a5fb42c7d1bd998f54449579b446817afbd17273e662c97ee72995ef42640c550b9013fad0761353c7086a272c24088be94769fd16650n,
-];
-
-function p521PublicPoint(privateBytes) {
-    const mod = (a) => { a %= P521_P; return a < 0n ? a + P521_P : a; };
-    const inv = (a) => {
-        let t = 0n, nt = 1n, r = P521_P, nr = mod(a);
-        while (nr) { const q = r / nr; [t, nt] = [nt, t - q * nt]; [r, nr] = [nr, r - q * nr]; }
-        return mod(t);
-    };
-    const add = (p1, p2) => {
-        if (!p1) return p2;
-        if (!p2) return p1;
-        const [x1, y1] = p1, [x2, y2] = p2;
-        let l;
-        if (x1 === x2) {
-            if (mod(y1 + y2) === 0n) return null;
-            l = mod((3n * x1 * x1 - 3n) * inv(2n * y1));
-        } else {
-            l = mod((y2 - y1) * inv(x2 - x1));
-        }
-        const x3 = mod(l * l - x1 - x2);
-        return [x3, mod(l * (x1 - x3) - y1)];
-    };
-    let k = 0n;
-    for (const b of privateBytes) k = (k << 8n) | BigInt(b);
-    let r = null, q = P521_G;
-    for (; k; k >>= 1n) {
-        if (k & 1n) r = add(r, q);
-        q = add(q, q);
-    }
-    if (!r) throw new ERR_INVALID_ARG_VALUE('key.key', 'invalid private key');
-    const out = [0x04];
-    for (const c of r) {
-        const hex = c.toString(16).padStart(132, '0');
-        for (let i = 0; i < hex.length; i += 2) out.push(parseInt(hex.slice(i, i + 2), 16));
-    }
-    return out;
-}
-
 function derTlv(tag, content) {
     const n = content.length;
     const len = n < 0x80 ? [n] : n < 0x100 ? [0x81, n] : [0x82, n >> 8, n & 0xff];
@@ -3071,7 +3029,16 @@ function importRawKey(key, isPrivate) {
         let point = bytes;
         if (isPrivate) {
             if (crv === 'P-521') {
-                point = p521PublicPoint(bytes);
+                if (bytes.length !== 66) {
+                    throw new ERR_INVALID_ARG_VALUE('key.key', key.key);
+                }
+                if (!webCryptoNative.p521_supported()) {
+                    throw createInvalidCurveError(RAW_EC_ECDH_NAMES[crv]);
+                }
+                point = webCryptoNative.p521_raw_public_key(new Uint8Array(bytes));
+                if (point === null || point === undefined) {
+                    throw new ERR_INVALID_ARG_VALUE('key.key', key.key);
+                }
             } else {
                 const ecdh = createECDH(RAW_EC_ECDH_NAMES[crv]);
                 ecdh.setPrivateKey(Buffer.from(bytes));
