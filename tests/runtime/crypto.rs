@@ -12,6 +12,17 @@ async fn compiled_crypto() -> CompiledTest {
         .expect("Failed to compile crypto")
 }
 
+#[test_dep(tagged_as = "crypto_normal", scope = Cloneable)]
+async fn compiled_crypto_normal() -> CompiledTest {
+    CompiledTest::new_with_features(
+        Utf8Path::new("examples/runtime/crypto"),
+        true,
+        FeatureCombination::Normal,
+    )
+    .await
+    .expect("Failed to compile normal crypto")
+}
+
 #[test]
 async fn web_crypto_random_uuid(
     #[tagged_as("crypto")] compiled: &CompiledTest,
@@ -1198,6 +1209,19 @@ async fn crypto_p521_key_pair(
         return Err(anyhow!("Expected string result"));
     };
     let actual: serde_json::Value = serde_json::from_str(&json)?;
+    // Raw-import observations match Node.js 26.13.1, with points checked against SEC 2.
+    let raw_imports = serde_json::json!({
+        "one": {"x": true, "y": true, "d": true, "raw": true},
+        "orderMinusOne": {"x": true, "y": true, "d": true, "raw": true},
+        "orderPlusOne": {"x": true, "y": true, "d": true, "raw": true},
+        "largePlusOne": {"x": true, "y": true, "d": true, "raw": true},
+        "largeMinusOne": {"x": true, "y": true, "d": true, "raw": true},
+        "length0": "TypeError ERR_INVALID_ARG_VALUE",
+        "length1": "TypeError ERR_INVALID_ARG_VALUE",
+        "length65": "TypeError ERR_INVALID_ARG_VALUE",
+        "length67": "TypeError ERR_INVALID_ARG_VALUE",
+        "length6600": "TypeError ERR_INVALID_ARG_VALUE",
+    });
     assert_eq!(
         actual,
         serde_json::json!({
@@ -1208,6 +1232,39 @@ async fn crypto_p521_key_pair(
             "publicIsScalarTimesGenerator": true,
             "privateCarriesPublic": true,
             "exportRoundTrips": [true, true, true, true],
+            "rawImports": {"P-521": raw_imports, "secp521r1": raw_imports},
+        })
+    );
+    Ok(())
+}
+
+#[test]
+async fn crypto_p521_raw_import_without_backend(
+    #[tagged_as("crypto_normal")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (result, _output) =
+        invoke_and_capture_output(compiled.wasm_path(), None, "p521-key-pair", &[]).await;
+    let Some(Val::String(json)) = result? else {
+        return Err(anyhow!("Expected string result"));
+    };
+    let actual: serde_json::Value = serde_json::from_str(&json)?;
+    // Valid scalars lack a backend, while bad lengths still fail input validation.
+    let raw_imports = serde_json::json!({
+        "one": "Error ERR_CRYPTO_INVALID_CURVE",
+        "orderMinusOne": "Error ERR_CRYPTO_INVALID_CURVE",
+        "orderPlusOne": "Error ERR_CRYPTO_INVALID_CURVE",
+        "largePlusOne": "Error ERR_CRYPTO_INVALID_CURVE",
+        "largeMinusOne": "Error ERR_CRYPTO_INVALID_CURVE",
+        "length0": "TypeError ERR_INVALID_ARG_VALUE",
+        "length1": "TypeError ERR_INVALID_ARG_VALUE",
+        "length65": "TypeError ERR_INVALID_ARG_VALUE",
+        "length67": "TypeError ERR_INVALID_ARG_VALUE",
+        "length6600": "TypeError ERR_INVALID_ARG_VALUE",
+    });
+    assert_eq!(
+        actual,
+        serde_json::json!({
+            "rawImports": {"P-521": raw_imports, "secp521r1": raw_imports},
         })
     );
     Ok(())

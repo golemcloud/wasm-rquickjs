@@ -414,7 +414,7 @@ pub(super) fn realpath_for_module_resolution(
 ) -> std::io::Result<String> {
     // Wizer has no guest preopens. Touching wasi-libc's lazy preopen cache here
     // would snapshot the empty build-time filesystem into every runtime.
-    crate::internal::preinit::check("fs.realpath", path);
+    crate::internal::preinit::filesystem()?;
 
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
@@ -655,6 +655,17 @@ fn make_fs_error<'js>(
     path: Option<&str>,
 ) -> rquickjs::Object<'js> {
     make_fs_error_with_dest(ctx, err, syscall, path, None)
+}
+
+fn preinit_error<'js>(
+    ctx: &rquickjs::Ctx<'js>,
+    syscall: &str,
+    path: &str,
+    dest: Option<&str>,
+) -> Option<rquickjs::Object<'js>> {
+    crate::internal::preinit::filesystem()
+        .err()
+        .map(|error| make_fs_error_with_dest(ctx, &error, syscall, Some(path), dest))
 }
 
 fn make_fs_error_with_dest<'js>(
@@ -916,7 +927,9 @@ pub mod native_module {
         path: String,
         encoding: String,
     ) -> List<(Option<String>, Option<String>)> {
-        crate::internal::preinit::check("fs.readFile", &path);
+        if let Err(error) = crate::internal::preinit::filesystem() {
+            return List((None, Some(format!("Failed to read file {path:?}: {error}"))));
+        }
         let resolved_path = runtime_path(&ctx, &path);
         let List((value, error)) = super::read_file_with_encoding_impl(&resolved_path, &encoding);
         List((
@@ -930,7 +943,9 @@ pub mod native_module {
         path: String,
         ctx: Ctx<'_>,
     ) -> List<(Option<TypedArray<'_, u8>>, Option<String>)> {
-        crate::internal::preinit::check("fs.readFile", &path);
+        if let Err(error) = crate::internal::preinit::filesystem() {
+            return List((None, Some(format!("Failed to read file {path:?}: {error}"))));
+        }
         let resolved_path = runtime_path(&ctx, &path);
         match std::fs::read(&resolved_path) {
             Ok(bytes) => {
@@ -955,7 +970,10 @@ pub mod native_module {
         use std::io::Read;
 
         let result = Object::new(ctx.clone()).unwrap();
-        crate::internal::preinit::check("fs.read_file", &path);
+        if let Some(error) = super::preinit_error(&ctx, "open", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         let resolved_path = runtime_path(&ctx, &path);
         let mut file = match std::fs::File::open(&resolved_path) {
@@ -1025,7 +1043,9 @@ pub mod native_module {
         encoding: String,
         content: String,
     ) -> Option<String> {
-        crate::internal::preinit::check("fs.writeFile", &path);
+        if let Err(error) = crate::internal::preinit::filesystem() {
+            return Some(format!("Failed to write file {path:?}: {error}"));
+        }
         if encoding != "utf8" {
             Some("Only 'utf8' encoding is supported".to_string())
         } else {
@@ -1049,7 +1069,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn write_file(ctx: Ctx<'_>, path: String, content: TypedArray<'_, u8>) -> Option<String> {
-        crate::internal::preinit::check("fs.writeFile", &path);
+        if let Err(error) = crate::internal::preinit::filesystem() {
+            return Some(format!("Failed to write file {path:?}: {error}"));
+        }
         // SAFETY: No JS executes while the rooted input is read by synchronous file I/O.
         if let Some(bytes) = unsafe { content.as_bytes() } {
             let resolved_path = runtime_path(&ctx, &path);
@@ -1073,7 +1095,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn unlink(ctx: Ctx<'_>, path: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.unlink", &path);
+        if let Some(error) = super::preinit_error(&ctx, "unlink", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::remove_file(Path::new(&fs_path)) {
             Ok(_) => {
@@ -1087,7 +1111,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn rename(ctx: Ctx<'_>, old_path: String, new_path: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.rename", format_args!("{old_path} -> {new_path}"));
+        if let Some(error) = super::preinit_error(&ctx, "rename", &old_path, Some(&new_path)) {
+            return Some(error);
+        }
         let old_fs_path = runtime_path(&ctx, &old_path);
         let new_fs_path = runtime_path(&ctx, &new_path);
         match std::fs::rename(Path::new(&old_fs_path), Path::new(&new_fs_path)) {
@@ -1109,7 +1135,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn mkdir(ctx: Ctx<'_>, path: String, recursive: bool) -> Option<String> {
-        crate::internal::preinit::check("fs.mkdir", &path);
+        if let Err(error) = crate::internal::preinit::filesystem() {
+            return Some(format!("Failed to create directory {path:?}: {error}"));
+        }
         let resolved_path = runtime_path(&ctx, &path);
         let fs_path = Path::new(&resolved_path);
         let result = if recursive {
@@ -1135,7 +1163,10 @@ pub mod native_module {
 
         let result = Object::new(ctx.clone()).unwrap();
 
-        crate::internal::preinit::check("fs.open", &path);
+        if let Some(error) = super::preinit_error(&ctx, "open", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1464,7 +1495,10 @@ pub mod native_module {
             return result;
         }
 
-        crate::internal::preinit::check("fs.stat", &path);
+        if let Some(error) = super::preinit_error(&ctx, "stat", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1502,7 +1536,10 @@ pub mod native_module {
             return result;
         }
 
-        crate::internal::preinit::check("fs.lstat", &path);
+        if let Some(error) = super::preinit_error(&ctx, "lstat", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         let absolute_path = runtime_path(&ctx, &path);
 
@@ -1592,7 +1629,10 @@ pub mod native_module {
             return result;
         }
 
-        crate::internal::preinit::check("fs.readdir", &path);
+        if let Some(error) = super::preinit_error(&ctx, "scandir", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1648,7 +1688,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_access(ctx: Ctx<'_>, path: String, _mode: i32) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.access", &path);
+        if let Some(error) = super::preinit_error(&ctx, "access", &path, None) {
+            return Some(error);
+        }
 
         let fs_path = runtime_path(&ctx, &path);
 
@@ -1715,7 +1757,10 @@ pub mod native_module {
             return result;
         }
 
-        crate::internal::preinit::check("fs.realpath", &path);
+        if let Some(error) = super::preinit_error(&ctx, "realpath", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         let absolute_path = runtime_path(&ctx, &path);
         match super::canonicalize_guest_path(&absolute_path) {
@@ -1740,7 +1785,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_truncate(ctx: Ctx<'_>, path: String, len: f64) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.truncate", &path);
+        if let Some(error) = super::preinit_error(&ctx, "truncate", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::OpenOptions::new().write(true).open(&fs_path) {
             Ok(file) => {
@@ -1756,7 +1803,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_copy_file(ctx: Ctx<'_>, src: String, dest: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.copy_file", format_args!("{src} -> {dest}"));
+        if let Some(error) = super::preinit_error(&ctx, "copyfile", &src, Some(&dest)) {
+            return Some(error);
+        }
         let fs_src = runtime_path(&ctx, &src);
         let fs_dest = runtime_path(&ctx, &dest);
         match std::fs::copy(&fs_src, &fs_dest) {
@@ -1776,7 +1825,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_link(ctx: Ctx<'_>, existing_path: String, new_path: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.link", format_args!("{existing_path} -> {new_path}"));
+        if let Some(error) = super::preinit_error(&ctx, "link", &existing_path, Some(&new_path)) {
+            return Some(error);
+        }
         let fs_existing_path = runtime_path(&ctx, &existing_path);
         let fs_new_path = runtime_path(&ctx, &new_path);
         match std::fs::hard_link(&fs_existing_path, &fs_new_path) {
@@ -1796,7 +1847,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_symlink(ctx: Ctx<'_>, target: String, path: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.symlink", &path);
+        if let Some(error) = super::preinit_error(&ctx, "symlink", &target, Some(&path)) {
+            return Some(error);
+        }
 
         let fs_path = runtime_path(&ctx, &path);
         match super::symlink_at_path(&target, &fs_path) {
@@ -1819,7 +1872,10 @@ pub mod native_module {
         let result = Object::new(ctx.clone()).unwrap();
         let fs_path = runtime_path(&ctx, &path);
 
-        crate::internal::preinit::check("fs.readlink", &path);
+        if let Some(error) = super::preinit_error(&ctx, "readlink", &path, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
 
         match std::fs::read_link(&fs_path) {
             Ok(target) => {
@@ -1841,7 +1897,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_chmod(ctx: Ctx<'_>, path: String, mode: u32) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.chmod", &path);
+        if let Some(error) = super::preinit_error(&ctx, "chmod", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         // chmod is not supported on WASI; verify path exists
         match std::fs::metadata(&fs_path) {
@@ -1879,7 +1937,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_chown(ctx: Ctx<'_>, path: String, _uid: u32, _gid: u32) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.chown", &path);
+        if let Some(error) = super::preinit_error(&ctx, "chown", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         // chown is not supported on WASI; just verify path exists
         match std::fs::metadata(&fs_path) {
@@ -1903,7 +1963,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_lchown(ctx: Ctx<'_>, path: String, _uid: u32, _gid: u32) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.lchown", &path);
+        if let Some(error) = super::preinit_error(&ctx, "lchown", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::symlink_metadata(&fs_path) {
             Ok(_) => None,
@@ -1918,7 +1980,9 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.utimes", &path);
+        if let Some(error) = super::preinit_error(&ctx, "utime", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         match super::set_path_times(&fs_path, atime_secs, mtime_secs, true) {
             Ok(_) => None,
@@ -1933,7 +1997,9 @@ pub mod native_module {
         atime_secs: f64,
         mtime_secs: f64,
     ) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.lutimes", &path);
+        if let Some(error) = super::preinit_error(&ctx, "lutime", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         match super::set_path_times(&fs_path, atime_secs, mtime_secs, false) {
             Ok(_) => None,
@@ -1964,7 +2030,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_mkdir(ctx: Ctx<'_>, path: String, recursive: bool, mode: u32) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.mkdir", &path);
+        if let Some(error) = super::preinit_error(&ctx, "mkdir", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         let p = Path::new(&fs_path);
         let mode = mode & 0o7777;
@@ -1991,7 +2059,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_rmdir(ctx: Ctx<'_>, path: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.rmdir", &path);
+        if let Some(error) = super::preinit_error(&ctx, "rmdir", &path, None) {
+            return Some(error);
+        }
         let fs_path = runtime_path(&ctx, &path);
         match std::fs::remove_dir(&fs_path) {
             Ok(_) => {
@@ -2005,7 +2075,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_rm(ctx: Ctx<'_>, path: String, recursive: bool, force: bool) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.rm", &path);
+        if let Some(error) = super::preinit_error(&ctx, "lstat", &path, None) {
+            return if force { None } else { Some(error) };
+        }
         let fs_path = runtime_path(&ctx, &path);
         let meta = std::fs::symlink_metadata(&fs_path);
         match meta {
@@ -2055,10 +2127,13 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_mkdtemp(ctx: Ctx<'_>, prefix: String) -> Object<'_> {
-        crate::internal::preinit::check("fs.mkdtemp", &prefix);
         use rand::Rng;
 
         let result = Object::new(ctx.clone()).unwrap();
+        if let Some(error) = super::preinit_error(&ctx, "mkdtemp", &prefix, None) {
+            result.set("error", error).unwrap();
+            return result;
+        }
         let mut rng = rand::rng();
         let chars: Vec<char> = (0..6)
             .map(|_| {
@@ -2097,7 +2172,9 @@ pub mod native_module {
         path: String,
         data: TypedArray<'js, u8>,
     ) -> Option<Object<'js>> {
-        crate::internal::preinit::check("fs.append_file", &path);
+        if let Some(error) = super::preinit_error(&ctx, "open", &path, None) {
+            return Some(error);
+        }
         // SAFETY: The bytes are consumed by synchronous file I/O without JS re-entry.
         let Some(bytes) = (unsafe { data.as_bytes() }) else {
             return Some(super::make_fs_error(
@@ -2129,7 +2206,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_append_file_string(ctx: Ctx<'_>, path: String, data: String) -> Option<Object<'_>> {
-        crate::internal::preinit::check("fs.append_file_string", &path);
+        if let Some(error) = super::preinit_error(&ctx, "open", &path, None) {
+            return Some(error);
+        }
         let file = std::fs::OpenOptions::new()
             .append(true)
             .create(true)
@@ -2151,7 +2230,9 @@ pub mod native_module {
 
     #[rquickjs::function]
     pub fn fs_exists(ctx: Ctx<'_>, path: String) -> bool {
-        crate::internal::preinit::check("fs.exists", &path);
+        if crate::internal::preinit::filesystem().is_err() {
+            return false;
+        }
         let fs_path = runtime_path(&ctx, &path);
 
         std::path::Path::new(&fs_path).exists()

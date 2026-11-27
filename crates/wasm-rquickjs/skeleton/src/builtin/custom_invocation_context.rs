@@ -3,6 +3,7 @@ pub const CUSTOM_INVOCATION_CONTEXT_JS: &str = include_str!("custom_invocation_c
 /// `queueMicrotask` jobs get no promise hook events, so the callback carries its scope itself.
 pub const WIRE_JS: &str = r#"
         import { capture_for_callback as __wasm_rquickjs_captureScope, enter_callback as __wasm_rquickjs_enterScope, leave_callback as __wasm_rquickjs_leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
+        import { is_preinitializing as __wasm_rquickjs_isPreinitializing, reject_preinit_uncaught_error as __wasm_rquickjs_rejectPreinitUncaughtError } from '__wasm_rquickjs_builtin/process_native';
         const __wasm_rquickjs_queueMicrotask = globalThis.queueMicrotask;
         globalThis.queueMicrotask = function queueMicrotask(callback) {
             if (typeof callback !== 'function') {
@@ -13,6 +14,15 @@ pub const WIRE_JS: &str = r#"
                 const previous = __wasm_rquickjs_enterScope(scope);
                 try {
                     return callback();
+                } catch (error) {
+                    // QuickJS's pending-job path discards escaped errors. Make
+                    // initialization fail without changing runtime job policy.
+                    if (!__wasm_rquickjs_isPreinitializing()) throw error;
+                    if (typeof globalThis.__wasm_rquickjs_handleUncaughtError === 'function') {
+                        globalThis.__wasm_rquickjs_handleUncaughtError(error);
+                    } else {
+                        __wasm_rquickjs_rejectPreinitUncaughtError(error);
+                    }
                 } finally {
                     __wasm_rquickjs_leaveScope(previous);
                 }

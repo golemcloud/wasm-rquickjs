@@ -7,6 +7,7 @@
 
 pub mod custom_invocation_context;
 pub(crate) mod error_formatting;
+pub mod import_abort;
 pub mod invocation;
 pub(crate) mod module_loading;
 pub(crate) mod preinit;
