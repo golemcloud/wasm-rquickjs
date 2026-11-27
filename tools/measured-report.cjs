@@ -503,7 +503,7 @@ function render(report) {
   rows.push('', `Selected total: ${t.selected}; non-flaky passes: ${t.nonFlakyPasses}; flaky passes: ${t.flakyPasses}; attempts: ${t.attempts}.`,
     `Outcomes: ${OUTCOMES.map(outcome => `${outcome}: ${t[outcome]}`).join('; ')}.`,
     `Properly implemented*: ${t.properlyImplemented}/${t.selected} (${t.properlyImplementedPercent}%).`, '',
-    '*Only explicitly declared (reviewer-audited), non-flaky behavior cases with sealed evidence qualify in this selected local inventory. Unclassified and import-only checks and flaky passes never qualify. All selected cases remain in the denominator. This is not shipped qualification.', '');
+    '*Only explicitly declared (reviewer-audited), non-flaky behavior cases with sealed evidence qualify in this selected local inventory. Unclassified checks and flaky passes never qualify. Reviewers must exclude import-only checks from behavior declarations; discovery does not detect their assertion quality. All selected cases remain in the denominator. This is not shipped qualification.', '');
   for (const entry of report.executions) {
     rows.push(`## ${escape(entry.id)}`, '', `Source: ${entry.source.revision}; component: ${entry.component?.digest || 'not built'}; lane: ${escape(entry.lane)}; workflow: ${escape(entry.workflowRun)}/${entry.workflowAttempt}.`, '',
       '| Case | Coverage | Qualified | Outcome | Flaky | Attempts | Reason |', '| --- | --- | --- | --- | --- | ---: | --- |');

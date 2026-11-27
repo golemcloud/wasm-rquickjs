@@ -3216,7 +3216,7 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
 }
 
 // Guest setup owns these roots; measured discovery publishes the same superset.
-pub const NODE_COMPAT_INPUT_ROOTS: [&str; 6] = [
+const NODE_COMPAT_INPUT_ROOTS: [&str; 6] = [
     "tests/node_compat/common-shim",
     "tests/node_compat/suite/common",
     "tests/node_compat/suite/fixtures",

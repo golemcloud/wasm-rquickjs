@@ -2088,7 +2088,7 @@ while sharing the dependency cache, so builds cannot overwrite another fixture's
 publication. The execution-owned `component.wasm` copy is hashed, executed and retained. No
 producer-owned build lock needs recovery after interruption.
 Execution-specific Cargo outputs accumulate in the shared target cache. When no builds are
-running, reclaim that regenerable WASM cache with `cargo clean --target wasm32-wasip2`;
+running, reclaim that regenerable WASM cache with `cargo clean --target-dir target --target wasm32-wasip2`;
 this does not remove the authoritative component copies retained in evidence bundles.
 Only use offline fixtures without credentials.
 
@@ -2114,7 +2114,9 @@ Normalized `report.json` is authoritative; Markdown uses only that JSON and neve
 timestamps. Reports separate all six outcomes, non-flaky/flaky passes and attempt totals. Fail-then-pass
 is `pass` with `flaky: true`, excluded from every "properly implemented" numerator but kept in the
 selected denominator. Only explicitly declared non-flaky behavior assertions with sealed completed
-evidence qualify; import-only and unclassified checks do not. Incomplete selected evidence is explicit. These counts describe selected
+evidence qualify; unclassified checks never qualify. Reviewers must exclude import-only checks from
+behavior declarations; discovery does not detect their assertion quality. Incomplete selected evidence
+is explicit. These counts describe selected
 local assertions, not full Node support, Golem recovery/durability or shipped qualification.
 
 The bundle is portable local evidence, not an uploader or permanent archive. Keep raw bundles out
