@@ -1,9 +1,11 @@
 # Node.js target selection (NJ-01, GOL-1946)
 
 **Status:** Node.js 26.13.1 with npm 11.20.0 is the selected target for NJ-02 (GOL-1947),
-compared against Node.js 24.22.3. The harness, CI and runtime remain pinned to 22.14.0 until
-NJ-02 switches them. This record is a qualification result, not implemented runtime support.
-The runtime still reports `process.version` `v22.0.0`.
+compared against Node.js 24.22.3. This record is a qualification result, not implemented runtime
+support. NJ-02 has since switched the `node_compat` suite and the runtime's `process` version
+metadata to 26.13.1; its 22.14.0 baseline audit is kept with
+[pull request #218](https://github.com/golemcloud/wasm-rquickjs/pull/218). Host Node.js and npm pins
+are still 22.14.0 and 10.9.2.
 No material blocker to Node 26 was found, and it is supported one year longer than Node 24
 (end of life 2029-04-30 against 2028-04-30).
 
@@ -111,7 +113,8 @@ The 75 Node 26-only cases break down as follows:
   coverage: `assert.CallTracker` (10), multi-argument `assert.fail` (5), `fs.rmdir` with
   `recursive` (10), keygen `hash`/`mgf1Hash` (2), dgram deprecations (1), FileHandle close on GC
   (1), and `_stream_*` aliases (1).
-- 11 are `test-trace-events-*` tests that moved to `test/trace_events/`, which is not vendored.
+- 11 are `test-trace-events-*` tests that moved to `test/trace_events/`, which was not vendored
+  at qualification time. It is vendored now, and all 11 replacements pass as runnable.
 - 3 are sqlite tests renamed by "sqlite: rename DatabaseSync and StatementSync" (`f2b698f1cf`).
 - 8 are renamed-unmapped.
 - 23 are failing cases in 20 files: stream 6, crypto/webcrypto 6, buffer 2, sqlite 2, and one each
@@ -317,6 +320,8 @@ All of this is required for either target unless marked "26 only".
 4. **Vendoring.** Vendor `test/sqlite/`, which `test-sqlite*.js` now load as `../sqlite/next-db.js`,
    and copy it in `setup_node_compat_test_files`. `test/sea/` and `test/trace_events/` (26 only)
    are where moved tests now live; vendor them only if those cases stay classified.
+   `test/sqlite/` and `test/trace_events/` vendoring and copying are in place, including the
+   `common/trace_events.js` helper; `test/sea/` is still open.
 5. **Shim helpers.**
    - Both targets need `hasFIPS` and `isBoringSSL` in `common-shim/crypto.js`, plus
      `hasInspector`, `hasSQLite`, `skipIfSQLiteMissing`, `expectRequireStack`,
@@ -324,6 +329,8 @@ All of this is required for either target unless marked "26 only".
    - 26 only: `hasFFI`, `skipIfFFIMissing`, `hasPerfetto`, `skipIfPerfettoEnabled`/`Disabled`,
      `hasDtls`, `hasQuic`, `hasLocalStorage`, `hasTemporal`, `hasFullICU` and `hasV8Sandbox`.
    - Export them from `index.mjs` too.
+   - These helpers are in place. Capability flags report what the component provides, because
+     `common.skip()` counts as a pass; `hasSQLite` probes `node:sqlite`.
 6. **Mapping review.** Review the renamed-unmapped (63), now-ignored (38) and removed (85) rows
    in the mapping file. Where a subtest of an `--expose-internals` file such as
    `test-stream-finished.js` uses only public API, give it an explicit `runnable` category rather
@@ -353,7 +360,10 @@ All of this is required for either target unless marked "26 only".
 
 1. Create a fresh worktree, run `./tests/node_compat/vendor.sh 26.13.1`, and set
    `"nodeVersion": "26.13.1"`.
-2. Apply harness item 2 first, then run `cargo test --test migrate_config_split`.
+2. Harness items 2 and 3 are in place. Run
+   `cargo test --test migrate_config_split -- --exact migrate_config_split` with
+   `NODE_COMPAT_MIGRATION_PREVIOUS_SUITE` set to a copy of the 22.14.0 suite, and map every
+   entry in its review report (see the [README](README.md#migrating-the-config-after-re-vendoring)).
 3. Keep each 22.14.0 category. New files start as `unevaluated`; they are not part of the
    restored baseline.
 4. Map every 22.14.0 passing case using the mapping file:

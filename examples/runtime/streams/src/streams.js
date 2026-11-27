@@ -246,3 +246,23 @@ export async function testDuplexFromWeb() {
     }
     return result;
 }
+
+// ReadableStream.from gets the iterator eagerly, and rejects a non-object iterator as Node 26 does.
+export function testReadableStreamFromIterator() {
+    let called = 0;
+    const stream = ReadableStream.from({
+        [Symbol.iterator]() {
+            called++;
+            return [1][Symbol.iterator]();
+        },
+    });
+    assert.ok(stream instanceof ReadableStream);
+    assert.strictEqual(called, 1);
+    assert.throws(() => ReadableStream.from({ [Symbol.iterator]() { return 1; } }), {
+        name: 'TypeError',
+        code: 'ERR_INVALID_STATE',
+        message: 'Invalid state: The iterator method must return an object',
+    });
+    return 'ok';
+}
+

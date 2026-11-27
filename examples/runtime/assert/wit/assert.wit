@@ -15,4 +15,5 @@ world assert {
   export test-strict-mode: func() -> bool;
   export test-assertion-error: func() -> bool;
   export test-eval-generated-message: func() -> bool;
+  export test-subtest-after-each-once: func() -> bool;
 }

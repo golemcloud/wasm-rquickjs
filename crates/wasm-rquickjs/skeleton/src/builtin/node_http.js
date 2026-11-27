@@ -998,9 +998,11 @@ IncomingMessage.prototype._addHeaderLine = function _addHeaderLine(field, value,
             dest[name] = value;
         }
     } else {
-        // No prefix: first-wins (single value headers)
+        // No prefix: first-wins (single value headers), unless the message joins duplicates.
         if (dest[name] === undefined) {
             dest[name] = value;
+        } else if (this.joinDuplicateHeaders) {
+            dest[name] += ', ' + value;
         }
     }
 };

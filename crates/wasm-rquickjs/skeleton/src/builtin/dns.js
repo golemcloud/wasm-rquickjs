@@ -128,14 +128,9 @@ export function lookup(hostname, optionsOrCallback, callback) {
     const family = normalizeFamily(options.family || 0);
     const all = !!options.all;
 
-    // If hostname is falsy, return the null-address compatibility result.
+    // Node 26 rejects a falsy hostname instead of returning a null address.
     if (!hostname) {
-        if (all) {
-            queueMicrotask(() => cb(null, [{ address: null, family: 4 }]));
-        } else {
-            queueMicrotask(() => cb(null, null, 4));
-        }
-        return;
+        throw new ERR_INVALID_ARG_VALUE('hostname', hostname, 'must be a non-empty string');
     }
 
     if (typeof hostname === 'string' && hostname.toLowerCase() === 'localhost') {

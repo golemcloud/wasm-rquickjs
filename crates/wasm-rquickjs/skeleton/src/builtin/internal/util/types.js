@@ -21,7 +21,18 @@
 // OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE
 // USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-const _toString = Object.prototype.toString;
+const _objectToString = Object.prototype.toString;
+// These brand checks read Symbol.toStringTag, which V8's native checks never do,
+// so a throwing user getter must not escape them.
+const _toString = {
+    call(value) {
+        try {
+            return _objectToString.call(value);
+        } catch {
+            return "";
+        }
+    },
+};
 const _getPrototypeOf = Object.getPrototypeOf;
 
 const _isObjectLike = (value) =>
@@ -60,12 +71,41 @@ const _setIteratorPrototype = (() => {
     return _getPrototypeOf(new Set().values());
 })();
 
+// V8 checks these types by their internal brand, not Symbol.toStringTag, so
+// use intrinsic accessors that only accept real instances.
+const _getter = (prototype, key) =>
+    Object.getOwnPropertyDescriptor(prototype, key)?.get;
+
+const _hasBrand = (getter, value) => {
+    if (!_isObjectLike(value) || getter === undefined) {
+        return false;
+    }
+    try {
+        getter.call(value);
+        return true;
+    } catch {
+        return false;
+    }
+};
+
+const _arrayBufferByteLength = _getter(ArrayBuffer.prototype, "byteLength");
+const _sharedArrayBufferByteLength = typeof SharedArrayBuffer === "function"
+    ? _getter(SharedArrayBuffer.prototype, "byteLength")
+    : undefined;
+// A detached DataView still answers .buffer, unlike .byteLength.
+const _dataViewBuffer = _getter(DataView.prototype, "buffer");
+const _dateGetTime = Date.prototype.getTime;
+const _regExpGlobal = _getter(RegExp.prototype, "global");
+const _typedArrayToStringTag = _getter(
+    Object.getPrototypeOf(Uint8Array.prototype),
+    Symbol.toStringTag,
+);
+
+const _typedArrayName = (value) =>
+    _isObjectLike(value) ? _typedArrayToStringTag.call(value) : undefined;
+
 export function isAnyArrayBuffer(value) {
-    return (
-        _isObjectLike(value) &&
-        (_toString.call(value) === "[object ArrayBuffer]" ||
-            _toString.call(value) === "[object SharedArrayBuffer]")
-    );
+    return isArrayBuffer(value) || isSharedArrayBuffer(value);
 }
 
 export function isArgumentsObject(value) {
@@ -73,9 +113,7 @@ export function isArgumentsObject(value) {
 }
 
 export function isArrayBuffer(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object ArrayBuffer]"
-    );
+    return _hasBrand(_arrayBufferByteLength, value);
 }
 
 export function isAsyncFunction(value) {
@@ -106,11 +144,19 @@ export function isBoxedPrimitive(value) {
 }
 
 export function isDataView(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object DataView]";
+    return _hasBrand(_dataViewBuffer, value);
 }
 
 export function isDate(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Date]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        _dateGetTime.call(value);
+        return true;
+    } catch {
+        return false;
+    }
 }
 
 export function isGeneratorFunction(value) {
@@ -183,7 +229,15 @@ export function isPromise(value) {
 }
 
 export function isRegExp(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object RegExp]";
+    if (!_isObjectLike(value)) {
+        return false;
+    }
+    try {
+        // RegExp.prototype itself answers undefined instead of throwing.
+        return typeof _regExpGlobal.call(value) === "boolean";
+    } catch {
+        return false;
+    }
 }
 
 export function isSet(value) {
@@ -210,10 +264,7 @@ export function isSetIterator(value) {
 }
 
 export function isSharedArrayBuffer(value) {
-    return (
-        _isObjectLike(value) &&
-        _toString.call(value) === "[object SharedArrayBuffer]"
-    );
+    return _hasBrand(_sharedArrayBufferByteLength, value);
 }
 
 export function isStringObject(value) {
@@ -251,74 +302,49 @@ export function isArrayBufferView(value) {
 }
 
 export function isBigInt64Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object BigInt64Array]"
-    );
+    return _typedArrayName(value) === "BigInt64Array";
 }
 
 export function isBigUint64Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object BigUint64Array]"
-    );
+    return _typedArrayName(value) === "BigUint64Array";
 }
 
 export function isFloat32Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Float32Array]"
-    );
+    return _typedArrayName(value) === "Float32Array";
 }
 
 export function isFloat64Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Float64Array]"
-    );
+    return _typedArrayName(value) === "Float64Array";
 }
 
 export function isInt8Array(value) {
-    return _isObjectLike(value) && _toString.call(value) === "[object Int8Array]";
+    return _typedArrayName(value) === "Int8Array";
 }
 
 export function isInt16Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Int16Array]"
-    );
+    return _typedArrayName(value) === "Int16Array";
 }
 
 export function isInt32Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Int32Array]"
-    );
+    return _typedArrayName(value) === "Int32Array";
 }
 
-// Adapted from Lodash
 export function isTypedArray(value) {
-    /** Used to match `toStringTag` values of typed arrays. */
-    const reTypedTag =
-        /^\[object (?:Float(?:32|64)|(?:Int|Uint)(?:8|16|32)|Uint8Clamped|Big(?:Uint|Int)64)Array\]$/;
-    return _isObjectLike(value) && reTypedTag.test(_toString.call(value));
+    return _typedArrayName(value) !== undefined;
 }
 
 export function isUint8Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Uint8Array]"
-    );
+    return _typedArrayName(value) === "Uint8Array";
 }
 
 export function isUint8ClampedArray(value) {
-    return (
-        _isObjectLike(value) &&
-        _toString.call(value) === "[object Uint8ClampedArray]"
-    );
+    return _typedArrayName(value) === "Uint8ClampedArray";
 }
 
 export function isUint16Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Uint16Array]"
-    );
+    return _typedArrayName(value) === "Uint16Array";
 }
 
 export function isUint32Array(value) {
-    return (
-        _isObjectLike(value) && _toString.call(value) === "[object Uint32Array]"
-    );
+    return _typedArrayName(value) === "Uint32Array";
 }

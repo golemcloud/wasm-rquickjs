@@ -339,21 +339,20 @@ export const test10 = () => {
          }
      }
 
-     const invalidPort = url.parse('http://faß.example:abc/');
-     if (invalidPort.hostname !== 'xn--fa-hia.example') return false;
-     if (invalidPort.pathname !== '/:abc/') return false;
-     if (invalidPort.href !== 'http://xn--fa-hia.example/:abc/') return false;
-
-     const multiColon = url.parse('http://faß.example:abc:def/path');
-     if (multiColon.hostname !== 'xn--fa-hia.example') return false;
-     if (multiColon.pathname !== '/:abc:def/path') return false;
-     if (multiColon.href !== 'http://xn--fa-hia.example/:abc:def/path') return false;
-
-     const multiColonWithPort = url.parse('http://example.com::80/path');
-     if (multiColonWithPort.hostname !== 'example.com') return false;
-     if (multiColonWithPort.port !== '80') return false;
-     if (multiColonWithPort.pathname !== '/:/path') return false;
-     if (multiColonWithPort.href !== 'http://example.com:80/:/path') return false;
+     // Like Node 26, url.parse() rejects a host with an invalid port instead of moving it to the path.
+     for (const invalidPort of [
+         'http://faß.example:abc/',
+         'http://faß.example:abc:def/path',
+         'http://example.com::80/path',
+     ]) {
+         try {
+             url.parse(invalidPort);
+             return false;
+         } catch (error) {
+             if (error.code !== 'ERR_INVALID_ARG_VALUE') return false;
+             if (error.message !== `The argument 'url' ${invalidPort}. Received 'Invalid port in url'`) return false;
+         }
+     }
 
      const slashesHost = url.parse('//example.com/path', false, true);
      if (slashesHost.hostname !== 'example.com') return false;

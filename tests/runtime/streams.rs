@@ -154,3 +154,18 @@ async fn duplex_from_web(#[tagged_as("streams")] compiled: &CompiledTest) -> any
     assert_eq!(r, Some(Val::String("echo:hello".to_string())));
     Ok(())
 }
+
+#[test]
+async fn readable_stream_from_iterator(
+    #[tagged_as("streams")] compiled: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled.wasm_path(),
+        None,
+        "test-readable-stream-from-iterator",
+        &[],
+    )
+    .await;
+    assert_eq!(r?, Some(Val::String("ok".to_string())), "{output}");
+    Ok(())
+}

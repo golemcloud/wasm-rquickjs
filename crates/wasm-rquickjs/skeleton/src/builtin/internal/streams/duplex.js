@@ -230,12 +230,19 @@ function duplexify(body, name) {
         const then = value?.then;
         if (typeof then === "function") {
             let d;
+            // Tracks whether writable final() has started.
+            let finalized = false;
 
             const promise = then.call(
                 value,
                 (val) => {
                     if (val != null) {
                         throw new ERR_INVALID_RETURN_VALUE("nully", "body", val);
+                    }
+                    // Like Node 26, an async function that returns without consuming its
+                    // input destroys the duplex so pipeline propagates destruction upstream.
+                    if (!finalized) {
+                        destroyer(d);
                     }
                 },
                 (err) => {
@@ -249,6 +256,7 @@ function duplexify(body, name) {
                 readable: false,
                 write,
                 final(cb) {
+                    finalized = true;
                     final(async () => {
                         try {
                             await promise;
@@ -358,7 +366,7 @@ function fromAsyncGen(fn) {
                 const { chunk, done, cb } = await _promise;
                 nextTick(cb);
                 if (done) return;
-                if (signal.aborted) throw new AbortError();
+                if (signal.aborted) throw new AbortError(undefined, { cause: signal.reason });
                 ({ promise, resolve } = createDeferredPromise());
                 yield chunk;
             }
@@ -379,7 +387,16 @@ function fromAsyncGen(fn) {
             _resolve({ done: true, cb });
         },
         destroy(err, cb) {
-            ac.abort();
+            ac.abort(err);
+
+            // Like Node 26, unblock a source iterator waiting for the next write/final
+            // so the readable side observes the abort and finishes destroying.
+            if (resolve !== null) {
+                const _resolve = resolve;
+                resolve = null;
+                _resolve({ done: true, cb() {} });
+            }
+
             cb(err);
         },
     };
@@ -468,7 +485,7 @@ function _duplexify(pair) {
         eos(r, (err) => {
             readable = false;
             if (err) {
-                destroyer(r, err);
+                destroyer(w, err);
             }
             onfinished(err);
         });

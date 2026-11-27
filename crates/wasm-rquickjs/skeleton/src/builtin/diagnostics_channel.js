@@ -7,6 +7,9 @@ class Channel {
         this._name = name;
         this._subscribers = [];
         this._stores = new Map();
+        // Node 26 channels carry their native subscriber-count slot as an own property;
+        // channels here have no native slot.
+        this._index = undefined;
     }
 
     get name() {

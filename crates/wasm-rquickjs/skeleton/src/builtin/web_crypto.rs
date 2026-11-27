@@ -2754,137 +2754,45 @@ impl KeyData {
     }
 
     fn export_sec1_private_der(&self) -> Option<Vec<u8>> {
-        match self {
-            KeyData::EcP256Private(sk) => {
-                let secret_key = p256::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
+        // RustCrypto omits the optional curve parameters, which OpenSSL writes and requires
+        // when it reads SEC1, so add the named curve.
+        let (der, curve_oid) = match self {
+            KeyData::EcP256Private(sk) => (
+                p256::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.2.840.10045.3.1.7",
+            ),
             #[cfg(feature = "crypto-full")]
-            KeyData::EcP384Private(sk) => {
-                let secret_key = p384::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
+            KeyData::EcP384Private(sk) => (
+                p384::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.3.132.0.34",
+            ),
             #[cfg(feature = "crypto-full")]
-            KeyData::EcP521Private(sk) => {
-                let secret_key = p521::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
+            KeyData::EcP521Private(sk) => (
+                p521::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.3.132.0.35",
+            ),
             #[cfg(feature = "crypto-full")]
-            KeyData::EcK256Private(sk) => {
-                let secret_key = k256::SecretKey::from(sk);
-                secret_key.to_sec1_der().ok().map(|d| d.to_vec())
-            }
-            _ => None,
-        }
+            KeyData::EcK256Private(sk) => (
+                k256::SecretKey::from(sk).to_sec1_der().ok()?.to_vec(),
+                "1.3.132.0.10",
+            ),
+            _ => return None,
+        };
+        use sec1::der::{Decode, Encode};
+        let mut key = sec1::EcPrivateKey::from_der(&der).ok()?;
+        key.parameters = Some(sec1::EcParameters::NamedCurve(
+            sec1::der::asn1::ObjectIdentifier::new(curve_oid).ok()?,
+        ));
+        key.to_der().ok()
     }
 
     fn export_sec1_private_pem(&self) -> Option<String> {
-        match self {
-            KeyData::EcP256Private(sk) => {
-                let secret_key = p256::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP384Private(sk) => {
-                let secret_key = p384::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP521Private(sk) => {
-                let secret_key = p521::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcK256Private(sk) => {
-                let secret_key = k256::SecretKey::from(sk);
-                secret_key
-                    .to_sec1_pem(sec1::LineEnding::LF)
-                    .ok()
-                    .map(|s| s.to_string())
-            }
-            _ => None,
-        }
+        let der = self.export_sec1_private_der()?;
+        sec1::der::pem::encode_string("EC PRIVATE KEY", sec1::LineEnding::LF, &der).ok()
     }
 
-    fn export_pkcs8_encrypted_pem(&self, passphrase: &[u8]) -> Option<String> {
-        use pkcs8::EncodePrivateKey;
-        match self {
-            KeyData::EcP256Private(sk) => sk
-                .to_pkcs8_encrypted_pem(passphrase, pkcs8::LineEnding::LF)
-                .ok()
-                .map(|s| s.to_string()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP384Private(sk) => sk
-                .to_pkcs8_encrypted_pem(passphrase, pkcs8::LineEnding::LF)
-                .ok()
-                .map(|s| s.to_string()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP521Private(sk) => sk
-                .to_pkcs8_encrypted_pem(passphrase, pkcs8::LineEnding::LF)
-                .ok()
-                .map(|s| s.to_string()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcK256Private(sk) => sk
-                .to_pkcs8_encrypted_pem(passphrase, pkcs8::LineEnding::LF)
-                .ok()
-                .map(|s| s.to_string()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::RsaPrivate(sk) => sk
-                .to_pkcs8_encrypted_pem(passphrase, pkcs8::LineEnding::LF)
-                .ok()
-                .map(|s| s.to_string()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::DsaPrivate(sk) => sk
-                .to_pkcs8_encrypted_pem(passphrase, pkcs8::LineEnding::LF)
-                .ok()
-                .map(|s| s.to_string()),
-            _ => None,
-        }
-    }
-
-    fn export_pkcs8_encrypted_der(&self, passphrase: &[u8]) -> Option<Vec<u8>> {
-        use pkcs8::EncodePrivateKey;
-        match self {
-            KeyData::EcP256Private(sk) => sk
-                .to_pkcs8_encrypted_der(passphrase)
-                .ok()
-                .map(|d| d.as_bytes().to_vec()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP384Private(sk) => sk
-                .to_pkcs8_encrypted_der(passphrase)
-                .ok()
-                .map(|d| d.as_bytes().to_vec()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcP521Private(sk) => sk
-                .to_pkcs8_encrypted_der(passphrase)
-                .ok()
-                .map(|d| d.as_bytes().to_vec()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::EcK256Private(sk) => sk
-                .to_pkcs8_encrypted_der(passphrase)
-                .ok()
-                .map(|d| d.as_bytes().to_vec()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::RsaPrivate(sk) => sk
-                .to_pkcs8_encrypted_der(passphrase)
-                .ok()
-                .map(|d| d.as_bytes().to_vec()),
-            #[cfg(feature = "crypto-full")]
-            KeyData::DsaPrivate(sk) => sk
-                .to_pkcs8_encrypted_der(passphrase)
-                .ok()
-                .map(|d| d.as_bytes().to_vec()),
-            _ => None,
-        }
+    fn export_pkcs8_encrypted_der(&self, cipher_name: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+        encrypt_pkcs8_der_impl(&self.export_private_der()?, cipher_name, passphrase)
     }
 
     fn export_jwk(&self) -> Option<String> {
@@ -3503,6 +3411,27 @@ fn decrypt_traditional_pem(pem: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
     Some(output)
 }
 
+/// Encrypts a PKCS#8 private key like OpenSSL's `PEM_write_bio_PKCS8PrivateKey`:
+/// PBES2 with PBKDF2-HMAC-SHA256 (2048 iterations) and the requested AES-CBC cipher.
+fn encrypt_pkcs8_der_impl(der: &[u8], cipher_name: &str, passphrase: &[u8]) -> Option<Vec<u8>> {
+    use pkcs8::der::Decode;
+    use pkcs8::pkcs5::pbes2;
+    let info = pkcs8::PrivateKeyInfoRef::from_der(der).ok()?;
+    let mut salt = [0u8; 16];
+    let mut iv = [0u8; 16];
+    getrandom_04::fill(&mut salt).ok()?;
+    getrandom_04::fill(&mut iv).ok()?;
+    let kdf: pbes2::Kdf = pbes2::Pbkdf2Params::hmac_sha256(2048, &salt).ok()?.into();
+    let encryption = match cipher_name {
+        "aes-128-cbc" | "aes128" => pbes2::EncryptionScheme::Aes128Cbc { iv },
+        "aes-192-cbc" | "aes192" => pbes2::EncryptionScheme::Aes192Cbc { iv },
+        _ => pbes2::EncryptionScheme::Aes256Cbc { iv },
+    };
+    let params = pbes2::Parameters { kdf, encryption };
+    let doc = info.encrypt_with_params(params, passphrase).ok()?;
+    Some(doc.as_bytes().to_vec())
+}
+
 fn key_export_encrypted_impl(
     id: u32,
     format: &str,
@@ -3513,9 +3442,14 @@ fn key_export_encrypted_impl(
     let store = KEY_STORE.lock().unwrap();
     let key = store.get(&id)?;
     match (format, type_) {
-        ("pem", "pkcs8") => key
-            .export_pkcs8_encrypted_pem(passphrase)
-            .map(|s| s.into_bytes()),
+        ("pem", "pkcs8") => {
+            let der = key.export_pkcs8_encrypted_der(cipher_name, passphrase)?;
+            pkcs8::der::Document::try_from(der)
+                .ok()?
+                .to_pem("ENCRYPTED PRIVATE KEY", pkcs8::LineEnding::LF)
+                .ok()
+                .map(String::into_bytes)
+        }
         ("pem", "pkcs1") => {
             let der = key.export_pkcs1_private_der()?;
             let encrypted_pem =
@@ -3528,7 +3462,7 @@ fn key_export_encrypted_impl(
                 encrypt_traditional_pem(&der, cipher_name, passphrase, "EC PRIVATE KEY")?;
             Some(encrypted_pem.into_bytes())
         }
-        ("der", "pkcs8") => key.export_pkcs8_encrypted_der(passphrase),
+        ("der", "pkcs8") => key.export_pkcs8_encrypted_der(cipher_name, passphrase),
         _ => None,
     }
 }
@@ -5510,7 +5444,8 @@ fn dh_compute_secret_impl(id: u32, other_pub_bytes: &[u8]) -> Result<Vec<u8>, St
     if other_pub.is_zero() || other_pub.is_one() {
         return Err("Supplied key is too small".to_string());
     }
-    if other_pub >= state.p {
+    // DH_check_pub_key: a valid peer key lies in [2, p - 2].
+    if other_pub >= &state.p - BigUint::one() {
         return Err("Supplied key is too large".to_string());
     }
     let priv_key = state.priv_key.as_ref().ok_or("No private key set")?;
@@ -6406,6 +6341,7 @@ pub mod native_module {
             .unwrap_or(&[]);
         super::create_private_key_from_der(slice)
             .or_else(|| super::create_rsa_private_key_from_der(slice))
+            .or_else(|| super::create_private_key_from_sec1_der(slice))
     }
 
     #[rquickjs::function]
@@ -6424,6 +6360,23 @@ pub mod native_module {
             .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
             .unwrap_or(&[]);
         super::create_private_key_from_encrypted_pem(&pem, slice)
+    }
+
+    #[rquickjs::function]
+    pub fn encrypt_pkcs8_der(
+        der: TypedArray<'_, u8>,
+        cipher_name: String,
+        passphrase: TypedArray<'_, u8>,
+    ) -> Option<Vec<u8>> {
+        let der = der
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
+            .unwrap_or(&[]);
+        let passphrase = passphrase
+            .as_raw()
+            .map(|raw| unsafe { std::slice::from_raw_parts(raw.cast::<u8>().as_ptr(), raw.len()) })
+            .unwrap_or(&[]);
+        super::encrypt_pkcs8_der_impl(der, &cipher_name, passphrase)
     }
 
     #[rquickjs::function]
@@ -6845,8 +6798,35 @@ pub mod native_module {
         }
     }
 
-    /// Returns the 66-byte private scalar followed by the 133-byte uncompressed
-    /// public point, or nothing when this tier has no P-521 backend.
+    #[rquickjs::function]
+    pub fn p521_supported() -> bool {
+        cfg!(feature = "crypto-full")
+    }
+
+    /// Derives an uncompressed P-521 point from a fixed-width raw scalar modulo n.
+    /// The caller retains the original scalar encoding for raw key exports.
+    #[rquickjs::function]
+    pub fn p521_raw_public_key(private_key: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+        #[cfg(feature = "crypto-full")]
+        {
+            use elliptic_curve::{Curve, field, sec1::ToSec1Point};
+
+            let bytes = p521::FieldBytes::from(super::typed_array_array::<66>(&private_key)?);
+            let scalar = field::bytes_to_uint::<p521::NistP521>(&bytes);
+            // Raw imports accept noncanonical scalars too. Use the existing fixed-width
+            // remainder, not Scalar::reduce (which only subtracts the order once).
+            let reduced = scalar.rem(p521::NistP521::ORDER.as_nz_ref());
+            let bytes = field::uint_to_bytes::<p521::NistP521>(&reduced);
+            let secret = p521::SecretKey::from_bytes(&bytes).ok()?;
+            Some(secret.public_key().to_sec1_point(false).as_bytes().to_vec())
+        }
+        #[cfg(not(feature = "crypto-full"))]
+        {
+            let _ = private_key;
+            None
+        }
+    }
+
     // ===== ECDH native functions =====
 
     #[rquickjs::function]

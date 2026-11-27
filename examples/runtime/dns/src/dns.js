@@ -61,13 +61,13 @@ export async function test() {
         });
     });
 
-    // Test 9: lookup with empty hostname matches Node.js compatibility behavior
-    // and returns a null address with IPv4 family.
-    results.nullHostname = await new Promise((resolve) => {
-        dns.lookup('', (err, address, family) => {
-            resolve(!err && address === null && family === 4);
-        });
-    });
+    // Test 9: like Node.js 26, lookup rejects an empty hostname.
+    try {
+        dns.lookup('', () => {});
+        results.nullHostname = false;
+    } catch (e) {
+        results.nullHostname = e.code === 'ERR_INVALID_ARG_VALUE';
+    }
 
     // Test 10: lookup with all: true and IP passthrough
     results.lookupAll = await new Promise((resolve) => {

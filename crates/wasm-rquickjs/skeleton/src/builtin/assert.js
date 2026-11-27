@@ -1,7 +1,6 @@
-import { inspect, innerDeepEqual } from 'node:util';
+import { inspect, innerDeepEqual, types as utilTypes } from 'node:util';
 import fs from 'node:fs';
 import { ERR_INVALID_ARG_TYPE, ERR_INVALID_ARG_VALUE, ERR_INVALID_RETURN_VALUE, ERR_MISSING_ARGS } from '__wasm_rquickjs_builtin/internal/errors';
-import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
 
 const inspectDiffOptions = {
     depth: 1000,
@@ -13,6 +12,9 @@ const inspectDiffOptions = {
     showProxy: false,
 };
 const RegExpPrototypeExec = RegExp.prototype.exec;
+const DatePrototypeGetTime = Date.prototype.getTime;
+const TypedArrayPrototypeGetSymbolToStringTag =
+    Object.getOwnPropertyDescriptor(Object.getPrototypeOf(Uint8Array.prototype), Symbol.toStringTag).get;
 const RegExpPrototypeSourceGetter = Object.getOwnPropertyDescriptor(RegExp.prototype, 'source').get;
 
 function inspectForDiff(value) {
@@ -965,6 +967,13 @@ function getErrMessage(stackStartFn) {
         return undefined;
     }
 
+    // Node 26 reads the expression from the source line of the call only
+    // (lib/internal/errors/error_source.js), so a call spanning lines shows its first line.
+    const newline = sourceExpression.indexOf('\n');
+    if (newline !== -1) {
+        sourceExpression = sourceExpression.slice(0, newline);
+    }
+
     sourceExpression = sourceExpression.replace(ESCAPE_SEQUENCES_REGEXP, escapeControlCharacter);
     sourceExpression = sourceExpression.replace(/\\\\u([0-9a-fA-F]{4})/g, function(_, hex) {
         return '\\u' + hex;
@@ -1276,6 +1285,13 @@ function processMessage(message, actual, expected) {
 }
 
 function innerFail(obj) {
+    // Node 26 accepts only a string, an Error or a message factory function as the message of
+    // an assertion (lib/internal/assert/utils.js innerFail); assert.fail takes any message.
+    const message = obj.message;
+    if (obj.operator !== 'fail' && message !== undefined && message !== null &&
+        typeof message !== 'string' && typeof message !== 'function' && !isErrorLike(message)) {
+        throw new ERR_INVALID_ARG_TYPE('message', ['string', 'function'], message);
+    }
     let msg = processMessage(obj.message, obj.actual, obj.expected);
     if (isErrorLike(msg)) throw msg;
     obj.message = msg;
@@ -1509,25 +1525,35 @@ function partialDeepStrictEqual(actual, expected, message) {
 }
 
 function createPartialDeepMemo() {
-    return { weakMemo: createPrivateWeakMap(), pairsA: null, pairsB: null };
+    return { a: [], b: [], cycle: { useSet: false } };
 }
 
-function partialMemoHas(memo, actual, expected) {
-    const expectedSet = memo.weakMemo.get(actual);
-    return expectedSet !== undefined && expectedSet.has(expected);
-}
-
-function partialMemoAdd(memo, actual, expected) {
-    let expectedSet = memo.weakMemo.get(actual);
-    if (expectedSet === undefined) {
-        expectedSet = createPrivateWeakSet();
-        memo.weakMemo.set(actual, expectedSet);
-    }
-    expectedSet.add(expected);
-}
+// The comparison branch of a value, from its internal brand like Node 26 (comparisons.js
+// uses ArrayIsArray, isMap, isDate, ...), so a spoofed Symbol.toStringTag cannot select it.
+const kBrandedTags = [
+    ['[object Array]', Array.isArray],
+    ['[object Map]', utilTypes.isMap],
+    ['[object Set]', utilTypes.isSet],
+    ['[object Date]', utilTypes.isDate],
+    ['[object RegExp]', utilTypes.isRegExp],
+    ['[object ArrayBuffer]', utilTypes.isArrayBuffer],
+    ['[object SharedArrayBuffer]', utilTypes.isSharedArrayBuffer],
+    ['[object DataView]', utilTypes.isDataView],
+];
 
 function getTag(value) {
-    return Object.prototype.toString.call(value);
+    for (let i = 0; i < kBrandedTags.length; i++) {
+        if (kBrandedTags[i][1](value)) {
+            return kBrandedTags[i][0];
+        }
+    }
+    const tag = Object.prototype.toString.call(value);
+    for (let i = 0; i < kBrandedTags.length; i++) {
+        if (kBrandedTags[i][0] === tag) {
+            return '[object Object]';
+        }
+    }
+    return tag;
 }
 
 function getEnumerableSymbols(value) {
@@ -1563,7 +1589,8 @@ function compareExpectedProperties(actual, expected, memo, skipArrayIndices) {
             continue;
         }
 
-        if (!hasOwn(actual, key)) {
+        // Like Node 26 objEquiv, actual must own the key as an enumerable property.
+        if (!Object.prototype.propertyIsEnumerable.call(actual, key)) {
             return false;
         }
 
@@ -1575,7 +1602,7 @@ function compareExpectedProperties(actual, expected, memo, skipArrayIndices) {
     const expectedSymbols = getEnumerableSymbols(expected);
     for (let i = 0; i < expectedSymbols.length; i++) {
         const symbolKey = expectedSymbols[i];
-        if (!hasOwn(actual, symbolKey)) {
+        if (!Object.prototype.propertyIsEnumerable.call(actual, symbolKey)) {
             return false;
         }
 
@@ -1598,6 +1625,53 @@ function arraysEqual(actualBytes, expectedBytes) {
         }
     }
 
+    return true;
+}
+
+// Node 26 partialArrayEquiv and partialSparseArrayEquiv (comparisons.js): expected's elements
+// must appear in order in actual; from the first hole on either side, only present elements
+// count, so a hole never matches a present undefined.
+function partialSparseArrayEquiv(actual, expected, memo, startA, startB) {
+    let aPos = startA;
+    const keysA = Object.keys(actual);
+    const keysB = Object.keys(expected);
+    const lenA = keysA.length - startA;
+    const lenB = keysB.length - startB;
+    if (lenA < lenB) {
+        return false;
+    }
+    for (let i = 0; i < lenB; i++) {
+        const keyB = keysB[startB + i];
+        while (!innerPartialDeepEqual(actual[keysA[aPos]], expected[keyB], memo)) {
+            aPos++;
+            if (aPos > keysA.length - lenB + i) {
+                return false;
+            }
+        }
+        aPos++;
+    }
+    return true;
+}
+
+function partialArrayEquiv(actual, expected, memo) {
+    let aPos = 0;
+    for (let i = 0; i < expected.length; i++) {
+        let isSparse = expected[i] === undefined && !Object.prototype.hasOwnProperty.call(expected, i);
+        if (isSparse) {
+            return partialSparseArrayEquiv(actual, expected, memo, aPos, i);
+        }
+        while (!(isSparse = actual[aPos] === undefined && !Object.prototype.hasOwnProperty.call(actual, aPos)) &&
+               !innerPartialDeepEqual(actual[aPos], expected[i], memo)) {
+            aPos++;
+            if (aPos > actual.length - expected.length + i) {
+                return false;
+            }
+        }
+        if (isSparse) {
+            return partialSparseArrayEquiv(actual, expected, memo, aPos, i);
+        }
+        aPos++;
+    }
     return true;
 }
 
@@ -1633,19 +1707,6 @@ function isTypedArrayView(value, tag) {
     return ArrayBuffer.isView(value);
 }
 
-function strictMapKeyEqual(actualKey, expectedKey) {
-    if (Object.is(actualKey, expectedKey)) {
-        return true;
-    }
-
-    if (actualKey === null || expectedKey === null ||
-        typeof actualKey !== 'object' || typeof expectedKey !== 'object') {
-        return false;
-    }
-
-    return innerDeepEqual(actualKey, expectedKey, true, undefined);
-}
-
 function isURLValue(value, tag) {
     return tag === '[object URL]' ||
         (value !== null && typeof value === 'object' &&
@@ -1662,11 +1723,34 @@ function innerPartialDeepEqual(actual, expected, memo) {
         return false;
     }
 
-    if (partialMemoHas(memo, actual, expected)) {
-        return true;
+    // Node 26 cycle handling (comparisons.js handleCycles), as in util's deep equality: one
+    // level below the roots only the root on the same side counts; deeper, an object on the
+    // current path from either side matches only when its counterpart is on the path too.
+    const depth = memo.a.length;
+    if (depth >= 2) {
+        memo.cycle.useSet = true;
     }
-    partialMemoAdd(memo, actual, expected);
+    if (memo.cycle.useSet) {
+        const actualOnPath = memo.a.includes(actual) || memo.b.includes(actual);
+        const expectedOnPath = memo.a.includes(expected) || memo.b.includes(expected);
+        if (actualOnPath || expectedOnPath) {
+            return actualOnPath && expectedOnPath;
+        }
+    } else if (depth === 1) {
+        if (memo.a[0] === actual) return memo.b[0] === expected;
+        if (memo.b[0] === expected) return false;
+    }
+    memo.a.push(actual);
+    memo.b.push(expected);
+    try {
+        return partialContainerEqual(actual, expected, memo);
+    } finally {
+        memo.a.length = depth;
+        memo.b.length = depth;
+    }
+}
 
+function partialContainerEqual(actual, expected, memo) {
     const expectedTag = getTag(expected);
     const actualTag = getTag(actual);
 
@@ -1675,9 +1759,7 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        if (!isSubsequence(actual, expected, function(actualItem, expectedItem) {
-            return innerPartialDeepEqual(actualItem, expectedItem, memo);
-        })) {
+        if (actual.length < expected.length || !partialArrayEquiv(actual, expected, memo)) {
             return false;
         }
 
@@ -1689,26 +1771,37 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        const actualEntries = Array.from(actual.entries());
+        // Like Node 26 partialObjectMapEquiv, each actual entry with an object key matches at
+        // most one expected entry, and object keys compare partially.
+        const actualObjectEntries = [];
+        for (const entry of actual.entries()) {
+            if (typeof entry[0] === 'object' && entry[0] !== null) {
+                actualObjectEntries.push(entry);
+            }
+        }
+        const usedActualEntries = new Array(actualObjectEntries.length).fill(false);
 
-        const expectedEntries = Array.from(expected.entries());
-        for (let i = 0; i < expectedEntries.length; i++) {
-            const expectedEntry = expectedEntries[i];
-            let foundMapEntry = false;
-
-            if (actual.has(expectedEntry[0])) {
-                if (!innerPartialDeepEqual(actual.get(expectedEntry[0]), expectedEntry[1], memo)) {
+        for (const expectedEntry of expected.entries()) {
+            const expectedKey = expectedEntry[0];
+            if (typeof expectedKey !== 'object' || expectedKey === null) {
+                if (!actual.has(expectedKey) ||
+                    !innerPartialDeepEqual(actual.get(expectedKey), expectedEntry[1], memo)) {
                     return false;
                 }
-                foundMapEntry = true;
-            } else {
-                for (let j = 0; j < actualEntries.length; j++) {
-                    const actualEntry = actualEntries[j];
-                    if (strictMapKeyEqual(actualEntry[0], expectedEntry[0]) &&
-                        innerPartialDeepEqual(actualEntry[1], expectedEntry[1], memo)) {
-                        foundMapEntry = true;
-                        break;
-                    }
+                continue;
+            }
+
+            let foundMapEntry = false;
+            for (let j = 0; j < actualObjectEntries.length; j++) {
+                if (usedActualEntries[j]) {
+                    continue;
+                }
+                const actualEntry = actualObjectEntries[j];
+                if (innerPartialDeepEqual(actualEntry[0], expectedKey, memo) &&
+                    innerPartialDeepEqual(actualEntry[1], expectedEntry[1], memo)) {
+                    usedActualEntries[j] = true;
+                    foundMapEntry = true;
+                    break;
                 }
             }
 
@@ -1731,7 +1824,17 @@ function innerPartialDeepEqual(actual, expected, memo) {
             usedActualValues[i] = false;
         }
 
-        const expectedValues = Array.from(expected.values());
+        // Like Node 26 setEquiv, a value actual also holds matches itself first; only the
+        // remaining expected values are matched deeply against the unused actual values.
+        const expectedValues = [];
+        for (const expectedValue of expected.values()) {
+            const index = actual.has(expectedValue) ? actualValues.indexOf(expectedValue) : -1;
+            if (index !== -1 && !usedActualValues[index]) {
+                usedActualValues[index] = true;
+            } else {
+                expectedValues.push(expectedValue);
+            }
+        }
         for (let i = 0; i < expectedValues.length; i++) {
             const expectedValue = expectedValues[i];
             let foundSetValue = false;
@@ -1761,7 +1864,9 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        return Object.is(actual.getTime(), expected.getTime());
+        // Like Node 26 keyCheck in partial mode, expected's own properties must match too.
+        return Object.is(DatePrototypeGetTime.call(actual), DatePrototypeGetTime.call(expected)) &&
+            compareExpectedProperties(actual, expected, memo, false);
     }
 
     if (expectedTag === '[object RegExp]' || actualTag === '[object RegExp]') {
@@ -1771,7 +1876,8 @@ function innerPartialDeepEqual(actual, expected, memo) {
 
         return actual.source === expected.source &&
             actual.flags === expected.flags &&
-            actual.lastIndex === expected.lastIndex;
+            actual.lastIndex === expected.lastIndex &&
+            compareExpectedProperties(actual, expected, memo, false);
     }
 
     if (expectedTag === '[object ArrayBuffer]' || expectedTag === '[object SharedArrayBuffer]') {
@@ -1814,6 +1920,11 @@ function innerPartialDeepEqual(actual, expected, memo) {
         if (!isTypedArrayView(actual, actualTag) || actualTag !== expectedTag || actual.byteLength < expected.byteLength) {
             return false;
         }
+        // Symbol.toStringTag can be forged; compare the intrinsic element type like Node 26.
+        if (TypedArrayPrototypeGetSymbolToStringTag.call(actual) !==
+            TypedArrayPrototypeGetSymbolToStringTag.call(expected)) {
+            return false;
+        }
 
         const actualTypedArray = new Uint8Array(actual.buffer, actual.byteOffset, actual.byteLength);
         const expectedTypedArray = new Uint8Array(expected.buffer, expected.byteOffset, expected.byteLength);
@@ -1827,7 +1938,9 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        return compareExpectedProperties(actual, expected, memo, false);
+        // Element bytes were matched above; like Node's getOwnNonIndexProperties, only the
+        // remaining own properties are compared.
+        return compareExpectedProperties(actual, expected, memo, true);
     }
 
     const expectedIsURL = isURLValue(expected, expectedTag);
@@ -1837,7 +1950,7 @@ function innerPartialDeepEqual(actual, expected, memo) {
             return false;
         }
 
-        return actual.href === expected.href;
+        return actual.href === expected.href && compareExpectedProperties(actual, expected, memo, false);
     }
 
     if (expectedTag === '[object Error]' || expected instanceof Error) {
@@ -1874,6 +1987,11 @@ function innerPartialDeepEqual(actual, expected, memo) {
 
     if (expectedTag !== '[object Object]') {
         return innerDeepEqual(actual, expected, true, undefined);
+    }
+
+    // Like Node 26 objectComparisonStart, a plain expected object only matches a plain object.
+    if (actualTag !== '[object Object]') {
+        return false;
     }
 
     return compareExpectedProperties(actual, expected, memo, false);
@@ -2084,7 +2202,7 @@ function checkIsPromise(obj) {
     return obj !== null && typeof obj === 'object' && typeof obj.then === 'function' && typeof obj.catch === 'function';
 }
 
-function ensureAsyncAssertionFrame(error, assertionFn) {
+function ensureAsyncAssertionFrame(error, assertionFn, receiver) {
     if (!error || typeof error !== 'object' || typeof assertionFn !== 'function' || !assertionFn.name) {
         return;
     }
@@ -2093,7 +2211,9 @@ function ensureAsyncAssertionFrame(error, assertionFn) {
         return;
     }
 
-    const asyncFrame = 'at async Function.' + assertionFn.name;
+    // Like Node 26's V8 frames, the frame is named after the receiver the assertion was called on.
+    const owner = receiver === assert ? 'assert.' : receiver === strict ? 'strict.' : '';
+    const asyncFrame = 'at async ' + owner + assertionFn.name;
     if (error.stack.indexOf(asyncFrame) !== -1) {
         return;
     }
@@ -2101,7 +2221,7 @@ function ensureAsyncAssertionFrame(error, assertionFn) {
     error.stack += '\n    ' + asyncFrame + ' (native)';
 }
 
-async function waitForActual(promiseFn, assertionFn) {
+async function waitForActual(promiseFn, assertionFn, receiver) {
     let resultPromise;
     if (typeof promiseFn === 'function') {
         // If this throws synchronously, async function semantics make the returned
@@ -2119,7 +2239,7 @@ async function waitForActual(promiseFn, assertionFn) {
     try {
         await resultPromise;
     } catch (e) {
-        ensureAsyncAssertionFrame(e, assertionFn);
+        ensureAsyncAssertionFrame(e, assertionFn, receiver);
         return e;
     }
 
@@ -2236,12 +2356,12 @@ function doesNotThrow(fn) {
 
 async function rejects(promiseFn) {
     let args = Array.prototype.slice.call(arguments, 1);
-    expectsError.apply(null, [rejects, await waitForActual(promiseFn, rejects)].concat(args));
+    expectsError.apply(null, [rejects, await waitForActual(promiseFn, rejects, this)].concat(args));
 }
 
 async function doesNotReject(promiseFn) {
     const args = Array.prototype.slice.call(arguments, 1);
-    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn, doesNotReject)].concat(args));
+    expectsNoError.apply(null, [doesNotReject, await waitForActual(promiseFn, doesNotReject, this)].concat(args));
 }
 
 function ifError(value) {
@@ -2546,7 +2666,9 @@ assert.match = match;
 assert.doesNotMatch = doesNotMatch;
 assert.fail = fail;
 assert.AssertionError = AssertionError;
-assert.CallTracker = CallTracker;
+// Node 26 removed assert.CallTracker (DEP0173, end of life). It stays available here for
+// existing callers, non-enumerable as Node 26 no longer lists it among the assert methods.
+Object.defineProperty(assert, 'CallTracker', { value: CallTracker, writable: true, configurable: true, enumerable: false });
 
 const strict = function strict(value, message) {
     innerOk(strict, arguments.length, value, message);
@@ -2571,7 +2693,7 @@ strict.match = match;
 strict.doesNotMatch = doesNotMatch;
 strict.fail = fail;
 strict.AssertionError = AssertionError;
-strict.CallTracker = CallTracker;
+Object.defineProperty(strict, 'CallTracker', { value: CallTracker, writable: true, configurable: true, enumerable: false });
 strict.strict = strict;
 
 assert.strict = strict;

@@ -1,7 +1,9 @@
 import assert from 'node:assert';
 import { AssertionError } from 'node:assert';
 import fs from 'node:fs';
+import { isDeepStrictEqual } from 'node:util';
 import { createRequire } from 'node:module';
+import test from 'node:test';
 
 const require = createRequire(import.meta.url);
 
@@ -138,6 +140,40 @@ export const testDeepStrictEqual = () => {
         assert.deepStrictEqual({ a: 1 }, { a: 1 });
         assert.deepStrictEqual(new Date(0), new Date(0));
         assert.deepStrictEqual(/abc/g, /abc/g);
+
+        // Independent assertions in a getter must not inherit util's skipPrototype option.
+        class A { constructor() { this.value = 1; } }
+        class B { constructor() { this.value = 1; } }
+        const a = new A();
+        const b = new B();
+        const left = {
+            get value() {
+                assert.throws(() => assert.deepStrictEqual(a, b), { code: 'ERR_ASSERTION' });
+                assert.notDeepStrictEqual(a, b);
+                assert.strictEqual(isDeepStrictEqual(a, b), false);
+                return a;
+            }
+        };
+        assert.strictEqual(isDeepStrictEqual(left, { value: b }, true), true);
+        assert.strictEqual(isDeepStrictEqual(a, b), false);
+        const sentinel = new Error('getter failure');
+        assert.throws(() => isDeepStrictEqual({
+            get value() { throw sentinel; }
+        }, { value: b }, true), (error) => error === sentinel);
+        assert.throws(() => assert.deepStrictEqual(a, b), { code: 'ERR_ASSERTION' });
+
+        // Nested comparisons also have independent recursion budgets.
+        const nested = Array.from({ length: 3000 }, (_, index) => index);
+        const tail = Array.from({ length: 2500 }, (_, index) => index);
+        for (const compare of [assert.deepStrictEqual, isDeepStrictEqual]) {
+            assert.strictEqual(isDeepStrictEqual({
+                get a() {
+                    compare(nested, nested.slice());
+                    return 1;
+                },
+                z: tail
+            }, { a: 1, z: tail.slice() }), true);
+        }
 
         // Strict: type matters
         let caught = false;
@@ -493,4 +529,108 @@ export const testEvalGeneratedMessage = () => {
     const message = require(filename);
     return message !== 'false == true' &&
         message.startsWith('The expression evaluated to a falsy value:');
+};
+
+// Subtests await async setup and teardown, then restore mocks before settling, for synchronous,
+// promise and done-callback bodies. Teardown runs once even after setup/body failure; that
+// primary error wins over a secondary teardown error. Node reports child failures through the
+// parent and resolves t.test(); this runtime rejects, so error identity is checked only on
+// rejection. Both outcomes are accepted, but cleanup order and mock restoration always apply.
+export const testSubtestAfterEachOnce = async () => {
+    try {
+        for (const kind of ['sync', 'promise', 'callback']) {
+            const target = { method() { return 'original'; } };
+            const calls = [];
+            await test('async hooks ' + kind, async (t) => {
+                t.beforeEach(async (st) => {
+                    await null;
+                    st.mock.method(target, 'method', () => 'mocked');
+                    calls.push('before');
+                });
+                t.afterEach(async () => {
+                    await null;
+                    calls.push('after:' + target.method());
+                });
+                const body = (st) => { calls.push('body:' + target.method()); };
+                const fn = kind === 'callback' ? (st, done) => { body(st); done(); }
+                    : kind === 'promise' ? async (st) => { await null; body(st); } : body;
+                await t.test(kind, fn);
+                calls.push('settled:' + target.method());
+            });
+            assert.deepStrictEqual(calls, ['before', 'body:mocked', 'after:mocked', 'settled:original']);
+        }
+
+        for (const phase of ['setup', 'body', 'teardown']) {
+            const primary = new Error(phase + ' failed');
+            const secondary = new Error('secondary teardown failure');
+            const target = { method() { return 'original'; } };
+            const calls = [];
+            await test('async hook rejection ' + phase, async (t) => {
+                t.beforeEach(async (st) => {
+                    st.mock.method(target, 'method', () => 'mocked');
+                    await null;
+                    calls.push('before');
+                    if (phase === 'setup') throw primary;
+                });
+                t.afterEach(async () => {
+                    await null;
+                    calls.push('after:' + target.method());
+                    throw phase === 'teardown' ? primary : secondary;
+                });
+                try {
+                    await t.test(phase, async () => {
+                        calls.push('body');
+                        if (phase === 'body') throw primary;
+                    });
+                } catch (e) {
+                    assert.strictEqual(e, primary);
+                }
+                calls.push('settled:' + target.method());
+            });
+            assert.deepStrictEqual(calls, phase === 'setup'
+                ? ['before', 'after:mocked', 'settled:original']
+                : ['before', 'body', 'after:mocked', 'settled:original']);
+        }
+
+        const hookError = new Error('afterEach failed');
+        const target = { method() { return 'original'; } };
+        const calls = [];
+        const outcomes = {};
+        const mockAndRecord = (st, kind) => {
+            st.mock.method(target, 'method', () => 'mocked');
+            calls.push(kind + ':' + target.method());
+        };
+        await test('afterEach once', async (t) => {
+            t.afterEach(() => {
+                calls.push('afterEach');
+                throw hookError;
+            });
+            const subtests = [
+                ['sync', (st) => { mockAndRecord(st, 'sync'); }],
+                ['promise', async (st) => { await null; mockAndRecord(st, 'promise'); }],
+                ['callback', (st, done) => { mockAndRecord(st, 'callback'); done(); }],
+            ];
+            for (const [kind, fn] of subtests) {
+                try {
+                    await t.test(kind, fn);
+                    outcomes[kind] = 'resolved';
+                } catch (e) {
+                    outcomes[kind] = e === hookError ? 'hook-error' : e;
+                }
+                calls.push(kind + ':' + target.method());
+            }
+        });
+        assert.deepStrictEqual(calls, [
+            'sync:mocked', 'afterEach', 'sync:original',
+            'promise:mocked', 'afterEach', 'promise:original',
+            'callback:mocked', 'afterEach', 'callback:original',
+        ]);
+        for (const kind of ['sync', 'promise', 'callback']) {
+            assert.ok(outcomes[kind] === 'resolved' || outcomes[kind] === 'hook-error', kind);
+        }
+        return true;
+    } catch (e) {
+        console.error(e);
+        return false;
+    }
 };

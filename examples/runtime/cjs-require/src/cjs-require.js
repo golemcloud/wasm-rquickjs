@@ -476,6 +476,7 @@ export const testRequirePackageImports = () => {
                     false,
                     './dep.cjs',
                 ],
+                '#/slash-dep': './dep.cjs',
             },
         }));
         fs.writeFileSync('/imports-app/dep.cjs', 'module.exports = { mode: "require" };');
@@ -492,6 +493,7 @@ export const testRequirePackageImports = () => {
             'exports.nullTarget = function() { return require("#null-target"); };',
             'exports.falseTarget = function() { return require("#false-target"); };',
             'exports.arrayFalseFallback = require("#array-false-fallback");',
+            'exports.slashDep = require("#/slash-dep");',
         ].join('\n'));
 
         const appRequire = require('module').createRequire('/imports-app/main.cjs');
@@ -510,7 +512,8 @@ export const testRequirePackageImports = () => {
             },
         );
         assert.throws(() => mod.invalidBare(), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
-        assert.throws(() => mod.initialSlash(), { code: 'ERR_INVALID_MODULE_SPECIFIER' });
+        // Node 25+ accepts `#/` subpath imports, so an unmapped one is merely undefined.
+        assert.throws(() => mod.initialSlash(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
         assert.throws(() => mod.importOnly(), { code: 'ERR_PACKAGE_IMPORT_NOT_DEFINED' });
         assert.throws(
             () => mod.nullTarget(),
@@ -525,6 +528,8 @@ export const testRequirePackageImports = () => {
         );
         assert.throws(() => mod.falseTarget(), { code: 'ERR_INVALID_PACKAGE_TARGET' });
         assert.deepStrictEqual(mod.arrayFalseFallback, { mode: 'require' });
+        assert.deepStrictEqual(mod.slashDep, { mode: 'require' });
+        assert.strictEqual(appRequire.resolve('#/slash-dep'), '/imports-app/dep.cjs');
         assert.strictEqual(appRequire.resolve('#dep'), '/imports-app/dep.cjs');
         assert.throws(
             () => Module._resolveFilename('#missing', null),

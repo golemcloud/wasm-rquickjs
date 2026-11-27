@@ -379,6 +379,10 @@ function howMuchToRead(n, state) {
         return 1;
     }
     if (Number.isNaN(n)) {
+        // Without a decoder, read() returns the next buffered chunk, as in Node 26.
+        if (!state.decoder && state.length) {
+            return state.buffer.first().length;
+        }
         // Only flow one buffer at a time.
         if (state.flowing && state.length) {
             return state.buffer.first().length;
@@ -1555,7 +1559,8 @@ function newReadableStreamFromStreamReadable(streamReadable, options = {}) {
 
     streamReadable.pause();
 
-    const cleanup = eos(streamReadable, (error) => {
+    // Like Node 26, a Duplex's readable completion does not wait for its half-open writable side.
+    const cleanup = eos(streamReadable, { writable: false }, (error) => {
         cleanup();
         streamReadable.on('error', () => {});
         if (error)

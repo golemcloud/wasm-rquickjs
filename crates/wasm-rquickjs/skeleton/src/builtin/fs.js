@@ -5,6 +5,7 @@ import {
     ERR_DIR_CONCURRENT_OPERATION,
     ERR_FS_FILE_TOO_LARGE,
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_THIS,
     ERR_OUT_OF_RANGE,
 } from '__wasm_rquickjs_builtin/internal/errors';
 import {
@@ -165,7 +166,9 @@ const HAS_LCHMOD = false;
 const FILE_HANDLE_IN_USE_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUse');
 const FILE_HANDLE_IN_USE_COUNT_SYMBOL = Symbol.for('__wasm_rquickjs.filehandleInUseCount');
 
+// Node 26 exposes fs.constants as a null-prototype object.
 export let constants = {
+    __proto__: null,
     F_OK, R_OK, W_OK, X_OK,
     O_RDONLY, O_WRONLY, O_RDWR, O_CREAT, O_EXCL, O_NOCTTY,
     O_TRUNC, O_APPEND, O_DIRECTORY, O_NOATIME, O_NOFOLLOW,
@@ -717,17 +720,24 @@ export let Dirent = class Dirent {
 // --- Dir class ---
 
 export let Dir = class Dir {
+    #path;
+
     constructor(path, entries) {
         if (path === undefined) {
             const err = new TypeError('The "path" argument must be of type string. Received undefined');
             err.code = 'ERR_MISSING_ARGS';
             throw err;
         }
-        this.path = path;
+        this.#path = path;
         this._entries = entries;
         this._index = 0;
         this._closed = false;
         this._pendingAsyncOps = 0;
+    }
+
+    get path() {
+        if (!(#path in this)) throw new ERR_INVALID_THIS('Dir');
+        return this.#path;
     }
 
     _assertNotClosed() {
@@ -817,6 +827,16 @@ export let Dir = class Dir {
                 }
             });
         });
+    }
+
+    [Symbol.dispose]() {
+        if (this._closed) return;
+        this.closeSync();
+    }
+
+    async [Symbol.asyncDispose]() {
+        if (this._closed) return;
+        await this.close();
     }
 
     [Symbol.asyncIterator]() {
@@ -1062,11 +1082,13 @@ export let openSync = function openSync(path, flags, mode) {
     mode = validateMode(mode, 'mode', 0o666);
     mode = mode & ~process.umask();
     const fullPath = pathToString(path);
+    // Opening an existing file with O_CREAT creates no entry, so watchers see no 'rename'.
+    const created = (flags & O_CREAT) && _activeWatchers.size > 0 && native.fs_stat(fullPath).error;
     const result = native.fs_open(fullPath, flags, mode);
     if (result.error) {
         throw createSystemError(result.error);
     }
-    if (flags & O_CREAT) {
+    if (created) {
         _notifyFSWatchers(fullPath, 'rename');
     }
     return result.fd;
@@ -1265,6 +1287,8 @@ function makeStatFsResult(bigint) {
         return {
             type: BigInt(0),
             bsize: BigInt(4096),
+            // Node 26 adds the fragment size; WASI exposes no filesystem statistics.
+            frsize: BigInt(4096),
             blocks: BigInt(0),
             bfree: BigInt(0),
             bavail: BigInt(0),
@@ -1275,6 +1299,7 @@ function makeStatFsResult(bigint) {
     return {
         type: 0,
         bsize: 4096,
+        frsize: 4096,
         blocks: 0,
         bfree: 0,
         bavail: 0,
@@ -3401,9 +3426,16 @@ ReadStream.prototype.close = function(cb) {
     this.destroy();
 };
 
+// Like Node 26 validateThisInternalField, autoClose works only on stream instances.
 Object.defineProperty(ReadStream.prototype, 'autoClose', {
-    get() { return this._readableState ? this._readableState.autoDestroy : true; },
-    set(val) { if (this._readableState) this._readableState.autoDestroy = val; }
+    get() {
+        if (!this || !this._readableState) throw new ERR_INVALID_THIS('ReadStream');
+        return this._readableState.autoDestroy;
+    },
+    set(val) {
+        if (!this || !this._readableState) throw new ERR_INVALID_THIS('ReadStream');
+        this._readableState.autoDestroy = val;
+    }
 });
 
 Object.defineProperty(ReadStream.prototype, 'pending', {
@@ -3664,8 +3696,14 @@ WriteStream.prototype.close = function(cb) {
 };
 
 Object.defineProperty(WriteStream.prototype, 'autoClose', {
-    get() { return this._writableState ? this._writableState.autoDestroy : true; },
-    set(val) { if (this._writableState) this._writableState.autoDestroy = val; }
+    get() {
+        if (!this || !this._writableState) throw new ERR_INVALID_THIS('WriteStream');
+        return this._writableState.autoDestroy;
+    },
+    set(val) {
+        if (!this || !this._writableState) throw new ERR_INVALID_THIS('WriteStream');
+        this._writableState.autoDestroy = val;
+    }
 });
 
 Object.defineProperty(WriteStream.prototype, 'pending', {

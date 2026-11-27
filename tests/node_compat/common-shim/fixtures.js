@@ -8,30 +8,36 @@ const fs = require('fs');
 
 const fixturesDir = '/home/node/test/fixtures';
 
+// Like upstream, avoid array iteration so tests that delete Array.prototype[Symbol.iterator] work.
 function fixturesPath(...args) {
-  return path.join(fixturesDir, ...args);
+  args.unshift(fixturesDir);
+  return Reflect.apply(path.join, this, args);
 }
 
 function fileURL(...args) {
   var url = require('url');
   if (url.pathToFileURL) {
-    return url.pathToFileURL(fixturesPath(...args));
+    return url.pathToFileURL(Reflect.apply(fixturesPath, this, args));
   }
-  return new URL('file://' + fixturesPath(...args));
+  return new URL('file://' + Reflect.apply(fixturesPath, this, args));
 }
 
 function readSync(arg, encoding) {
-  const p = Array.isArray(arg) ? fixturesPath(...arg) : fixturesPath(arg);
+  const p = Array.isArray(arg) ? Reflect.apply(fixturesPath, this, arg) : fixturesPath(arg);
   return fs.readFileSync(p, encoding);
 }
 
-const keyAliases = {
-  // DSA parsing/signing is not implemented yet; use EC fixtures for sign/verify flow tests.
+// DSA one-shot sign/verify with these 2048-bit fixtures is not implemented yet, so the
+// sign/verify flow tests below use EC fixtures instead. Other tests read the real DSA keys.
+const dsaAliasTests = ['test-crypto-async-sign-verify.js', 'test-crypto-rsa-dsa.js'];
+const dsaAliases = {
   'dsa_private.pem': 'ec_secp256k1_private.pem',
   'dsa_private_encrypted.pem': 'ec_secp256k1_private_encrypted.pem',
   'dsa_private_pkcs8.pem': 'ec_secp256k1_private.pem',
   'dsa_public.pem': 'ec_secp256k1_public.pem',
 };
+const mainFile = (require.main && require.main.filename) || process.argv[1] || '';
+const keyAliases = dsaAliasTests.includes(path.basename(mainFile)) ? dsaAliases : {};
 
 function readKey(name, encoding) {
   const mappedName = keyAliases[name] || name;

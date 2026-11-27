@@ -734,7 +734,8 @@ export function httpResponseLifecycle() {
     }
 
     return Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') &&
-        order.join(',') === 'listener,callback' &&
+        // Like Node 26, end() callbacks run before 'finish' listeners.
+        order.join(',') === 'callback,listener' &&
         writeOrder.join(',') === 'after-write,callback' &&
         throwingMessage === 'socket write failed' &&
         throwingCallbackCount === 0 &&
@@ -821,9 +822,9 @@ export async function httpResponseRepeatedEndCallbacks() {
         Buffer.concat(wire).toString().endsWith('\r\n\r\nbody') === false ||
         finishCount !== 1 ||
         firstCallbackCount !== 1 ||
-        firstCallbackError !== undefined ||
+        firstCallbackError !== null ||
         queuedCallbackCount !== 1 ||
-        queuedCallbackError !== undefined ||
+        queuedCallbackError !== null ||
         !queuedCallbackWasAsync ||
         finishedCallbackCount !== 1 ||
         finishedCallbackCode !== 'ERR_STREAM_ALREADY_FINISHED' ||
@@ -861,7 +862,7 @@ export async function httpResponseRepeatedEndCallbacks() {
     if (
         !blockedResponse.writableFinished ||
         blockedCallbackCount !== 1 ||
-        blockedCallbackError !== undefined
+        blockedCallbackError !== null
     ) {
         return false;
     }
@@ -944,6 +945,7 @@ export async function httpResponseRepeatedEndCallbacks() {
         let responseErrorCount = 0;
         let cancelledFinishCount = 0;
         let endCallbackCount = 0;
+        let endCallbackError;
         let writeCallbackCount = 0;
         let writeCallbackError;
         socket.on('error', (error) => {
@@ -963,14 +965,20 @@ export async function httpResponseRepeatedEndCallbacks() {
             writeCallbackCount++;
             writeCallbackError = error;
         });
-        response.end('body', () => endCallbackCount++);
+        response.end('body', (error) => {
+            endCallbackCount++;
+            endCallbackError = error;
+        });
         socket.destroy(withError ? expectedError : undefined);
         for (const completion of completions) {
             if (typeof completion === 'function') completion(expectedError);
         }
         await new Promise((resolve) => setImmediate(resolve));
+        // Like Node 26, a cancelled flush reports its error to the end() callback
+        // and the response never emits 'finish'.
         if (responseErrorCount !== 0 ||
-            cancelledFinishCount !== 1 || endCallbackCount !== 1 ||
+            cancelledFinishCount !== 0 || endCallbackCount !== 1 ||
+            endCallbackError !== expectedError ||
             writeCallbackCount !== 1 || writeCallbackError !== expectedError ||
             socketCloseCount !== 1 || socketErrorCount !== Number(withError) ||
             (withError && socketError !== expectedError)) {

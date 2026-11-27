@@ -103,7 +103,7 @@ EventEmitter._domainInit = function(emitter) {
     }
 };
 
-// Patch setTimeout/setInterval to auto-bind callbacks to the active domain.
+// Patch setTimeout/setInterval/setImmediate to auto-bind callbacks to the active domain.
 const _origSetTimeout = globalThis.setTimeout;
 const _origSetInterval = globalThis.setInterval;
 
@@ -122,6 +122,17 @@ if (_origSetInterval) {
             callback = active.bind(callback);
         }
         return _origSetInterval.call(globalThis, callback, delay, ...rest);
+    };
+}
+
+const _origSetImmediate = globalThis.setImmediate;
+
+if (_origSetImmediate) {
+    globalThis.setImmediate = function domainSetImmediate(callback, ...rest) {
+        if (active && typeof callback === 'function') {
+            callback = active.bind(callback);
+        }
+        return _origSetImmediate.call(globalThis, callback, ...rest);
     };
 }
 

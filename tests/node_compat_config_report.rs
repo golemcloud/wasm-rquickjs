@@ -199,11 +199,26 @@ fn node_compat_config_requires_source_for_implicit_classification() -> anyhow::R
     fixture.write_suite_version("22.14.0")?;
     let error = fixture.load().unwrap_err();
     assert!(
-        error
-            .to_string()
-            .contains("cannot classify node-compat entry"),
+        error.to_string().contains("no vendored source"),
         "{error:#}"
     );
+    Ok(())
+}
+
+#[test]
+#[test_r::tag(report_contract)]
+fn node_compat_config_requires_source_for_classified_entries() -> anyhow::Result<()> {
+    let fixture = NodeCompatConfigFixture::with_tests(
+        r#"{"parallel/test-internal.js": {"category": "known-gap", "reason": "gap"}}"#,
+    )?;
+    fixture.write_suite_version("22.14.0")?;
+    let error = fixture.load().unwrap_err();
+    assert!(
+        error.to_string().contains("parallel/test-internal.js"),
+        "{error:#}"
+    );
+    fixture.write_source("'use strict';\n")?;
+    assert_eq!(fixture.load()?[0].category, NodeCompatCategory::KnownGap);
     Ok(())
 }
 
@@ -216,6 +231,51 @@ fn node_compat_config_classifies_from_vendored_source() -> anyhow::Result<()> {
     let entries = fixture.load()?;
     assert_eq!(entries.len(), 1);
     assert_eq!(entries[0].category, NodeCompatCategory::NodeInternals);
+    Ok(())
+}
+
+#[test]
+#[test_r::tag(report_contract)]
+fn historical_public_subtests_remain_in_primary_inventory() -> anyhow::Result<()> {
+    let entries = load_node_compat_config(CONFIG_PATH)?;
+    for (path, indices) in [
+        ("parallel/test-util-deprecate.js", &[0, 1, 2][..]),
+        (
+            "parallel/test-stream-finished.js",
+            &[
+                0, 1, 2, 3, 4, 5, 6, 7, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 25, 26, 27,
+                28, 29, 30, 31, 32, 33, 36, 37, 38, 39, 40, 41,
+            ][..],
+        ),
+    ] {
+        let entry = entries.iter().find(|entry| entry.path == path).unwrap();
+        for index in indices {
+            let subtest = entry
+                .subtests
+                .iter()
+                .find(|subtest| subtest.index == *index)
+                .unwrap();
+            assert!(
+                matches!(
+                    subtest.category,
+                    NodeCompatCategory::Runnable | NodeCompatCategory::KnownGap
+                ),
+                "{path}#{} lost its public coverage obligation: {:?}",
+                subtest.name,
+                subtest.category
+            );
+            if subtest.category == NodeCompatCategory::KnownGap {
+                assert!(
+                    subtest
+                        .reason
+                        .as_deref()
+                        .is_some_and(|reason| !reason.is_empty()),
+                    "{path}#{} needs a per-cause gap reason",
+                    subtest.name
+                );
+            }
+        }
+    }
     Ok(())
 }
 
@@ -235,14 +295,17 @@ impl NodeCompatConfigFixture {
     }
 
     fn create(with_implicit_entry: bool) -> anyhow::Result<Self> {
-        let temp = Utf8TempDir::new()?;
-        let config_path = temp.path().join("config.jsonc");
-        let suite_root = temp.path().join("suite");
-        let tests = if with_implicit_entry {
+        Self::with_tests(if with_implicit_entry {
             r#"{"parallel/test-internal.js": {}}"#
         } else {
             "{}"
-        };
+        })
+    }
+
+    fn with_tests(tests: &str) -> anyhow::Result<Self> {
+        let temp = Utf8TempDir::new()?;
+        let config_path = temp.path().join("config.jsonc");
+        let suite_root = temp.path().join("suite");
         fs::write(
             &config_path,
             format!(r#"{{"nodeVersion": "22.14.0", "tests": {tests}}}"#),

@@ -1,6 +1,6 @@
 import { isAbortSignal, markTransferableSignal } from '__wasm_rquickjs_builtin/internal/clone_policy';
 import { AbortController as NativeAbortController, AbortSignal as NativeAbortSignal } from '__wasm_rquickjs_builtin/abort_controller';
-import { validateAbortSignal, validateObject } from '__wasm_rquickjs_builtin/internal/validators';
+import { validateAbortSignal, validateObject, validateOneOf } from '__wasm_rquickjs_builtin/internal/validators';
 import { NativeWeakRef, nativeWeakRefDeref } from '__wasm_rquickjs_builtin/internal/weak_collections';
 // Copyright Joyent, Inc. and other Node contributors.
 //
@@ -33,6 +33,7 @@ import {
 import * as webCryptoNative from '__wasm_rquickjs_builtin/web_crypto_native';
 import {
     ERR_INVALID_ARG_TYPE,
+    ERR_INVALID_ARG_VALUE,
     ERR_OUT_OF_RANGE,
     isErrorStackTraceLimitWritable
 } from '__wasm_rquickjs_builtin/internal/errors';
@@ -61,7 +62,9 @@ const getOwnPropertyDescriptors = Object.getOwnPropertyDescriptors;
 // Mark that a method should not be used.
 // Returns a modified function which warns once by default.
 // If --no-deprecation is set, then it is a no-op.
-export const deprecate = _internalDeprecate;
+export function deprecate(fn, msg, code, { modifyPrototype } = {}) {
+    return _internalDeprecate(fn, msg, code, undefined, modifyPrototype);
+}
 
 
 const debugs = {};
@@ -418,10 +421,10 @@ function _exportKeyForCompare(key, keyType) {
         // Try a more explicit export signature.
     }
 
+    const formatType = keyType === 'public' ? 'spki' : 'pkcs8';
     try {
-        return key.export('der');
+        return key.export({ format: 'der', type: formatType });
     } catch (_) {
-        const formatType = keyType === 'public' ? 'spki' : 'pkcs8';
         try {
             return key.export('der', formatType, undefined);
         } catch (_) {
@@ -540,7 +543,7 @@ function _deepObjEquiv(a, b, strict, memo) {
         return a === b;
     }
 
-    if (strict && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
+    if (strict && !_deepSkipPrototype && Object.getPrototypeOf(a) !== Object.getPrototypeOf(b))
         return false;
 
     // Check type tags match - objects of different built-in types are never equal
@@ -590,9 +593,10 @@ function _deepObjEquiv(a, b, strict, memo) {
         } catch (_) {
             return false;
         }
-        if (aDateTime !== bDateTime) return false;
+        // Two invalid dates (NaN time) are equal, as in Node 26.
+        if (aDateTime !== bDateTime && (aDateTime === aDateTime || bDateTime === bDateTime)) return false;
         // In strict mode, also check constructor and own properties
-        if (strict && a.constructor !== b.constructor) return false;
+        if (strict && !_deepSkipPrototype && a.constructor !== b.constructor) return false;
         const dKeysA = Object.keys(a);
         const dKeysB = Object.keys(b);
         if (dKeysA.length !== dKeysB.length) return false;
@@ -712,7 +716,7 @@ function _deepObjEquiv(a, b, strict, memo) {
             return false;
         }
         if (aSource !== bSource || aFlags !== bFlags || aLastIndex !== bLastIndex) return false;
-        if (strict && a.constructor !== b.constructor) return false;
+        if (strict && !_deepSkipPrototype && a.constructor !== b.constructor) return false;
         const rKeysA = Object.keys(a);
         const rKeysB = Object.keys(b);
         if (rKeysA.length !== rKeysB.length) return false;
@@ -780,13 +784,14 @@ function _deepObjEquiv(a, b, strict, memo) {
     if (ArrayBuffer.isView(a) && ArrayBuffer.isView(b)) {
         if (a.byteLength !== b.byteLength) return false;
         if (aTypedBrand === '' || bTypedBrand === '') {
-            if (strict) {
+            if (strict && !_deepSkipPrototype) {
                 if (a.constructor !== b.constructor) return false;
             } else {
                 if (aTag !== bTag) return false;
             }
         }
-        if (!strict && (a instanceof Float32Array || a instanceof Float64Array)) {
+        const floatTag = _getTypedArrayTag(a);
+        if (!strict && (floatTag === 'Float16Array' || floatTag === 'Float32Array' || floatTag === 'Float64Array')) {
             if (a.length !== b.length) return false;
             for (let i = 0; i < a.length; i++) {
                 if (a[i] != b[i]) return false;
@@ -820,17 +825,37 @@ function _deepObjEquiv(a, b, strict, memo) {
     }
 
     if (!memo) {
-        memo = { a: [], b: [] };
+        memo = { a: [], b: [], cycle: { useSet: false } };
     }
-    // Check for cycles: if we've seen this exact pair (a, b), assume equal
-    for (let mi = 0; mi < memo.a.length; mi++) {
-        if (memo.a[mi] === a && memo.b[mi] === b) {
-            return true;
+    // Node 26 cycle handling (comparisons.js handleCycles). One level below the roots,
+    // only the root on the same side counts. Once the comparison goes deeper, every object
+    // on the current path counts, from either side, for the rest of the comparison: an
+    // object on the path then matches only when its counterpart is on the path too.
+    const depth = memo.a.length;
+    if (depth >= 2) {
+        memo.cycle.useSet = true;
+    }
+    if (memo.cycle.useSet) {
+        const aOnPath = memo.a.includes(a) || memo.b.includes(a);
+        const bOnPath = memo.a.includes(b) || memo.b.includes(b);
+        if (aOnPath || bOnPath) {
+            return aOnPath && bOnPath;
         }
+    } else if (depth === 1) {
+        if (memo.a[0] === a) return memo.b[0] === b;
+        if (memo.b[0] === b) return false;
     }
     memo.a.push(a);
     memo.b.push(b);
+    try {
+        return _deepContainerEquiv(a, b, strict, memo);
+    } finally {
+        memo.a.length = depth;
+        memo.b.length = depth;
+    }
+}
 
+function _deepContainerEquiv(a, b, strict, memo) {
     if (a instanceof Map && b instanceof Map) {
         if (a.size !== b.size) return false;
         const aEntries = Array.from(a.entries());
@@ -863,7 +888,7 @@ function _deepObjEquiv(a, b, strict, memo) {
                 for (let j = 0; j < bEntries.length; j++) {
                     if (matchedB[j]) continue;
                     if (Object.is(aKey, bEntries[j][0])) {
-                        const valueMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                        const valueMemo = { a: memo.a.slice(), b: memo.b.slice(), cycle: memo.cycle };
                         if (_innerDeep(aEntries[i][1], bEntries[j][1], strict, valueMemo)) {
                             memo.a = valueMemo.a;
                             memo.b = valueMemo.b;
@@ -883,9 +908,9 @@ function _deepObjEquiv(a, b, strict, memo) {
             let found = false;
             for (let j = 0; j < bEntries.length; j++) {
                 if (matchedB[j]) continue;
-                const keyMemo = { a: memo.a.slice(), b: memo.b.slice() };
+                const keyMemo = { a: memo.a.slice(), b: memo.b.slice(), cycle: memo.cycle };
                 if (_innerDeep(aEntries[ai][0], bEntries[j][0], strict, keyMemo)) {
-                    const valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice() };
+                    const valueMemo = { a: keyMemo.a.slice(), b: keyMemo.b.slice(), cycle: keyMemo.cycle };
                     if (_innerDeep(aEntries[ai][1], bEntries[j][1], strict, valueMemo)) {
                         memo.a = valueMemo.a;
                         memo.b = valueMemo.b;
@@ -944,7 +969,7 @@ function _deepObjEquiv(a, b, strict, memo) {
             let found = false;
             for (let j = 0; j < arrB.length; j++) {
                 if (usedB[j]) continue;
-                if (_innerDeep(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice() })) {
+                if (_innerDeep(arrA[unmatchedA[i]], arrB[j], strict, { a: memo.a.slice(), b: memo.b.slice(), cycle: memo.cycle })) {
                     usedB[j] = true;
                     found = true;
                     break;
@@ -974,7 +999,8 @@ function _deepObjEquiv(a, b, strict, memo) {
         for (let i = 0; i < a.length; i++) {
             const aHas = _hasOwnProp(a, i);
             const bHas = _hasOwnProp(b, i);
-            if (strict && aHas !== bHas) return false;
+            // Node 26: a hole never equals a present element, also in loose mode.
+            if (aHas !== bHas) return false;
             if (!_innerDeep(a[i], b[i], strict, memo)) return false;
         }
         const keysA = Object.keys(a).filter(function(k) { return !_isArrIdx(k, a.length); });
@@ -1047,13 +1073,33 @@ function _innerDeep(a, b, strict, memo) {
 }
 
 export function innerDeepEqual(a, b, strict, memo) {
+    const previousCount = _deepCallCount;
     _deepCallCount = 0;
-    return _innerDeep(a, b, strict, memo);
+    const previous = _deepSkipPrototype;
+    _deepSkipPrototype = false;
+    try {
+        return _innerDeep(a, b, strict, memo);
+    } finally {
+        _deepCallCount = previousCount;
+        _deepSkipPrototype = previous;
+    }
 }
 
-export function isDeepStrictEqual(val1, val2) {
+// Node 26 util.isDeepStrictEqual(val1, val2, skipPrototype): strict comparison that
+// ignores [[Prototype]] and constructor identity.
+let _deepSkipPrototype = false;
+
+export function isDeepStrictEqual(val1, val2, skipPrototype) {
+    const previousCount = _deepCallCount;
     _deepCallCount = 0;
-    return _innerDeep(val1, val2, true, undefined);
+    const previous = _deepSkipPrototype;
+    _deepSkipPrototype = !!skipPrototype;
+    try {
+        return _innerDeep(val1, val2, true, undefined);
+    } finally {
+        _deepCallCount = previousCount;
+        _deepSkipPrototype = previous;
+    }
 }
 
 const _externalValueMarkerSymbol = Symbol.for('wasm-rquickjs.util.types.external');
@@ -1423,78 +1469,43 @@ export function getCallSite(frameCount, options) {
     return getCallSites(frameCount, options);
 }
 
-const _styleTextFormats = Object.keys(inspect.colors);
+// Node 26 lib/util.js styleText helpers.
+const _kStyleTextHexColor = /^#(?:[0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/;
+const _kStyleTextHexCloseSeq = '\u001b[39m';
 
-function _throwStyleTextInvalidArgValue(name, value, reason) {
-    let inspected;
-    try {
-        inspected = JSON.stringify(value);
-    } catch (_) {
-        inspected = String(value);
-    }
+// Replaces nested close codes so the outer style resumes; a close code at the very
+// end of the text is left alone.
+function _replaceStyleTextCloseCode(str, closeSeq, openSeq, keepClose) {
+    const closeLen = closeSeq.length;
+    let index = str.indexOf(closeSeq);
+    if (index === -1) return str;
 
-    let message = "The argument '" + name + "' " + reason;
-    if (inspected !== undefined) {
-        message += '. Received ' + inspected;
-    }
+    let result = '';
+    let lastIndex = 0;
+    const replacement = keepClose ? closeSeq + openSeq : openSeq;
 
-    const err = new TypeError(message);
-    err.code = 'ERR_INVALID_ARG_VALUE';
-    throw err;
-}
-
-function _isStyleTextFormatValue(format) {
-    return format === 'none' || _styleTextFormats.indexOf(format) !== -1;
-}
-
-function _normalizeStyleTextFormats(format) {
-    if (typeof format === 'string') {
-        if (!_isStyleTextFormatValue(format)) {
-            _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
+    do {
+        const afterClose = index + closeLen;
+        if (afterClose < str.length) {
+            result += str.slice(lastIndex, index) + replacement;
+            lastIndex = afterClose;
+        } else {
+            break;
         }
-        return [format];
-    }
+        index = str.indexOf(closeSeq, lastIndex);
+    } while (index !== -1);
 
-    if (Array.isArray(format)) {
-        for (let i = 0; i < format.length; i++) {
-            if (typeof format[i] !== 'string' || !_isStyleTextFormatValue(format[i])) {
-                _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
-            }
-        }
-        return format;
-    }
-
-    _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format or array of string formats');
+    return result + str.slice(lastIndex);
 }
 
-function _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose) {
-    if (text.indexOf(closeSequence) === -1) {
-        return text;
-    }
-
-    const replacement = keepClose ? closeSequence + openSequence : openSequence;
-    return text.split(closeSequence).join(replacement);
-}
-
-function _applyStyleTextFormat(format, text) {
-    if (format === 'none') {
-        return text;
-    }
-
-    const style = inspect.colors[format];
-    if (!Array.isArray(style) || style.length < 2) {
-        _throwStyleTextInvalidArgValue('format', format, 'must be a valid string format');
-    }
-
-    const open = style[0];
-    const close = style[1];
-    const openSequence = '\u001b[' + open + 'm';
-    const closeSequence = '\u001b[' + close + 'm';
-
-    const keepClose = open === 1 || open === 2;
-    const processedText = _replaceStyleTextCloseCode(text, closeSequence, openSequence, keepClose);
-
-    return openSequence + processedText + closeSequence;
+function _styleTextHexOpenSeq(hex) {
+    const digits = hex.length === 4
+        ? hex[1] + hex[1] + hex[2] + hex[2] + hex[3] + hex[3]
+        : hex.slice(1);
+    const r = parseInt(digits.slice(0, 2), 16);
+    const g = parseInt(digits.slice(2, 4), 16);
+    const b = parseInt(digits.slice(4, 6), 16);
+    return '\u001b[38;2;' + r + ';' + g + ';' + b + 'm';
 }
 
 function _parseStyleTextForceColor(value) {
@@ -1556,44 +1567,60 @@ export function styleText(format, text, options) {
     if (typeof text !== 'string') {
         throw new ERR_INVALID_ARG_TYPE('text', 'string', text);
     }
-
-    const formats = _normalizeStyleTextFormats(format);
-    let stream = typeof process !== 'undefined' ? process.stdout : undefined;
-    let validateStream = true;
-
     if (options !== undefined) {
-        if (typeof options !== 'object' || options === null || Array.isArray(options)) {
-            throw new ERR_INVALID_ARG_TYPE('options', 'Object', options);
-        }
-
-        if (options.stream !== undefined) {
-            stream = options.stream;
-        }
-
-        if (options.validateStream !== undefined) {
-            if (typeof options.validateStream !== 'boolean') {
-                throw new ERR_INVALID_ARG_TYPE('options.validateStream', 'boolean', options.validateStream);
-            }
-            validateStream = options.validateStream;
-        }
+        validateObject(options, 'options');
+    }
+    const validateStream = options?.validateStream ?? true;
+    if (typeof validateStream !== 'boolean') {
+        throw new ERR_INVALID_ARG_TYPE('options.validateStream', 'boolean', validateStream);
     }
 
+    let skipColorize = false;
     if (validateStream) {
+        const stream = options?.stream ?? (typeof process !== 'undefined' ? process.stdout : undefined);
         if (!_isStyleTextStream(stream)) {
-            throw new ERR_INVALID_ARG_TYPE('options.stream', ['ReadableStream', 'WritableStream', 'Stream'], stream);
+            throw new ERR_INVALID_ARG_TYPE('stream', ['ReadableStream', 'WritableStream', 'Stream'], stream);
         }
-
-        if (!_shouldStyleTextColorize(stream)) {
-            return text;
-        }
+        skipColorize = !_shouldStyleTextColorize(stream);
     }
 
-    let styledText = text;
-    for (let i = formats.length - 1; i >= 0; i--) {
-        styledText = _applyStyleTextFormat(formats[i], styledText);
+    const formatArray = Array.isArray(format) ? format : [format];
+    const colors = inspect.colors;
+
+    let openCodes = '';
+    let closeCodes = '';
+    let processedText = text;
+
+    for (const key of formatArray) {
+        if (key === 'none') continue;
+
+        if (typeof key === 'string' && key[0] === '#') {
+            if (!_kStyleTextHexColor.test(key)) {
+                throw new ERR_INVALID_ARG_VALUE('format', key, 'must be a valid hex color (#RGB or #RRGGBB)');
+            }
+            if (skipColorize) continue;
+            const hexOpenSeq = _styleTextHexOpenSeq(key);
+            openCodes += hexOpenSeq;
+            closeCodes = _kStyleTextHexCloseSeq + closeCodes;
+            processedText = _replaceStyleTextCloseCode(processedText, _kStyleTextHexCloseSeq, hexOpenSeq, false);
+            continue;
+        }
+
+        const codes = typeof key === 'string' || typeof key === 'number' ? colors[key] : undefined;
+        if (!codes) {
+            validateOneOf(key, 'format', Object.getOwnPropertyNames(colors));
+        }
+        const openSeq = '\u001b[' + codes[0] + 'm';
+        const closeSeq = '\u001b[' + codes[1] + 'm';
+        const keepClose = codes[0] === 1 || codes[0] === 2;
+        openCodes += openSeq;
+        closeCodes = closeSeq + closeCodes;
+        processedText = _replaceStyleTextCloseCode(processedText, closeSeq, openSeq, keepClose);
     }
 
-    return styledText;
+    if (skipColorize) return text;
+
+    return openCodes + processedText + closeCodes;
 }
 
 // --- util.parseEnv() ---
@@ -1622,7 +1649,8 @@ export function parseEnv(content) {
         throw new ERR_INVALID_ARG_TYPE('content', 'string', content);
     }
 
-    const store = {};
+    // Node 26 returns a null-prototype object, so keys such as __proto__ are plain entries.
+    const store = { __proto__: null };
     let remaining = _parseEnvTrimSpaces(content.replace(/\r/g, ''));
 
     while (remaining.length > 0) {

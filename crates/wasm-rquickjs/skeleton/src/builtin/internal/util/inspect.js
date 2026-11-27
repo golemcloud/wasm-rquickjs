@@ -28,6 +28,7 @@ import { createPrivateWeakMap, createPrivateWeakSet } from "__wasm_rquickjs_buil
 import {
     ALL_PROPERTIES,
     getConstructorName as internalGetConstructorName,
+    getEngineObjectProxyTarget,
     getPromiseDetails,
     getProxyDetails,
     getOwnNonIndexProperties,
@@ -578,17 +579,35 @@ function formatValue(
 
     // Memorize the context for custom inspection on proxies.
     const context = value;
+    // Engine objects emulated with a proxy format as their target, without a Proxy wrapper.
+    const engineTarget = getEngineObjectProxyTarget(value);
+    if (engineTarget !== undefined) {
+        value = engineTarget;
+    }
     // Always check for proxies to prevent side effects and to prevent triggering
     // any proxy handlers.
-    const proxy = getProxyDetails(value, !!ctx.showProxy);
+    let proxy = getProxyDetails(value, !!ctx.showProxy);
+    // Node 26 formats the target of a proxy wrapped in `Proxy(...)`, once per proxy level.
+    let proxies = 0;
     if (proxy !== undefined) {
-        if (proxy === null || proxy[0] === null) {
-            return ctx.stylize("<Revoked Proxy>", "special");
-        }
         if (ctx.showProxy) {
+            if (proxy === null || proxy[0] === null) {
+                return ctx.stylize("<Revoked Proxy>", "special");
+            }
             return formatProxy(ctx, proxy, recurseTimes);
         }
-        value = proxy;
+        do {
+            if (proxy === null) {
+                let formatted = ctx.stylize("<Revoked Proxy>", "special");
+                for (let i = 0; i < proxies; i++) {
+                    formatted = `${ctx.stylize("Proxy(", "special")}${formatted}${ctx.stylize(")", "special")}`;
+                }
+                return formatted;
+            }
+            value = proxy;
+            proxy = getProxyDetails(value, false);
+            proxies += 1;
+        } while (proxy !== undefined);
     }
 
     // Provide a hook for user-specified inspect functions.
@@ -641,7 +660,11 @@ function formatValue(
         return ctx.stylize(`[Circular *${index}]`, "special");
     }
 
-    return formatRaw(ctx, value, recurseTimes, typedArray);
+    let formatted = formatRaw(ctx, value, recurseTimes, typedArray);
+    for (let i = 0; i < proxies; i++) {
+        formatted = `${ctx.stylize("Proxy(", "special")}${formatted}${ctx.stylize(")", "special")}`;
+    }
+    return formatted;
 }
 
 function formatRaw(ctx, value, recurseTimes, typedArray) {
@@ -660,14 +683,11 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
         protoProps = undefined;
     }
 
-    let tag;
+    let tag = "";
     try {
         tag = value[Symbol.toStringTag];
-    } catch (err) {
-        if (err?.name === "TypeError" && err.message === "circular reference") {
-            err.message = "Converting circular structure to JSON";
-        }
-        throw err;
+    } catch {
+        // Node 26 ignores a throwing Symbol.toStringTag getter.
     }
     // Only list the tag in case it's non-enumerable / not an own property.
     // Otherwise we'd print this twice.
@@ -697,6 +717,7 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
     const filter = ctx.showHidden ? ALL_PROPERTIES : ONLY_ENUMERABLE;
 
     let extrasType = kObjectType;
+    let extraKeys;
 
     // Iterators and the rest are split to reduce checks.
     // We have to check all values in case the constructor is set to null.
@@ -871,6 +892,20 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
             if (Object.prototype.hasOwnProperty.call(value, 'cause') && keys.indexOf('cause') === -1) {
                 keys.push('cause');
             }
+            // Node 26 also prints AggregateError errors and SuppressedError error/suppressed.
+            try {
+                const errors = value.errors;
+                if (Array.isArray(errors) && Object.prototype.hasOwnProperty.call(value, 'errors') && keys.indexOf('errors') === -1) {
+                    keys.push('errors');
+                }
+            } catch {
+                // A throwing errors getter is ignored.
+            }
+            for (const key of ['error', 'suppressed']) {
+                if (Object.prototype.hasOwnProperty.call(value, key) && keys.indexOf(key) === -1) {
+                    keys.push(key);
+                }
+            }
             base = formatError(value, constructor, tag, ctx, keys);
             if (keys.length === 0 && protoProps === undefined) {
                 return base;
@@ -891,14 +926,14 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
                 (formatter) = formatArrayBuffer;
             } else if (keys.length === 0 && protoProps === undefined) {
                 return prefix +
-                    `{ byteLength: ${formatNumber(ctx.stylize, value.byteLength, ctx.numericSeparator)} }`;
+                    `{ [byteLength]: ${formatNumber(ctx.stylize, value.byteLength, ctx.numericSeparator)} }`;
             }
             braces[0] = `${prefix}{`;
-            Array.prototype.unshift.call(keys, "byteLength");
+            extraKeys = ["byteLength"];
         } else if (types.isDataView(value) || (constructor === null && nullProtoConstructor === "DataView")) {
             braces[0] = `${getPrefix(constructor, tag, "DataView")}{`;
             // .buffer goes last, it's not a primitive like the others.
-            Array.prototype.unshift.call(keys, "byteLength", "byteOffset", "buffer");
+            extraKeys = ["byteLength", "byteOffset", "buffer"];
         } else if (
             types.isPromise(value) ||
             (constructor === null && (nullProtoConstructor === "Promise" || isNullProtoPromise(value)))
@@ -977,6 +1012,18 @@ function formatRaw(ctx, value, recurseTimes, typedArray) {
     const indentationLvl = ctx.indentationLvl;
     try {
         output = formatter(ctx, value, recurseTimes);
+        if (extraKeys !== undefined) {
+            for (i = 0; i < extraKeys.length; i++) {
+                let formatted;
+                try {
+                    formatted = formatExtraProperties(ctx, value, recurseTimes, extraKeys[i], typedArray);
+                } catch {
+                    const tempValue = { [extraKeys[i]]: value.buffer[extraKeys[i]] };
+                    formatted = formatExtraProperties(ctx, tempValue, recurseTimes, extraKeys[i], typedArray);
+                }
+                output.push(formatted);
+            }
+        }
         for (i = 0; i < keys.length; i++) {
             output.push(
                 formatProperty(ctx, value, recurseTimes, keys[i], extrasType),
@@ -1629,13 +1676,14 @@ function formatError(
         if (typeof stackValue === "string") {
             stack = stackValue;
         } else {
+            // Node 26 prints a non-string stack below the error's own summary line.
             const stackCtx = {
                 ...ctx,
                 compact: false,
-                indentationLvl: 0,
-                seen: [],
+                indentationLvl: ctx.indentationLvl + 4,
+                seen: [...ctx.seen, err],
             };
-            stack = formatValue(stackCtx, stackValue, 0);
+            stack = `${Error.prototype.toString.call(err)}\n    ${formatValue(stackCtx, stackValue, 0)}`;
         }
     } else {
         stack = Error.prototype.toString.call(err);
@@ -2048,6 +2096,17 @@ function formatWeakMap(ctx, value, recurseTimes) {
     return formatMapIterInner(ctx, recurseTimes, entries, kWeak);
 }
 
+function formatExtraProperties(ctx, value, recurseTimes, key, typedArray) {
+    // Read the value before indenting: the getter throws for a detached
+    // DataView, and formatRaw() then retries with a fallback value.
+    const extraValue = value[key];
+    ctx.indentationLvl += 2;
+    const str = formatValue(ctx, extraValue, recurseTimes, typedArray);
+    ctx.indentationLvl -= 2;
+    const name = ctx.stylize(`[${key}]`, "string");
+    return `${name}: ${str}`;
+}
+
 function formatProperty(
     ctx,
     value,
@@ -2083,26 +2142,22 @@ function formatProperty(
                 (ctx.getters === "get" && desc.set === undefined) ||
                 (ctx.getters === "set" && desc.set !== undefined))
         ) {
+            ctx.indentationLvl += 2;
             try {
                 const tmp = desc.get.call(original);
-                ctx.indentationLvl += 2;
                 if (tmp === null) {
                     str = `${s(`[${label}:`, sp)} ${s("null", "null")}${s("]", sp)}`;
-                } else if (typeof tmp === "object") {
+                } else if (typeof tmp === "object" || typeof tmp === "function") {
                     str = `${s(`[${label}]`, sp)} ${formatValue(ctx, tmp, recurseTimes)}`;
                 } else {
                     const primitive = formatPrimitive(s, tmp, ctx);
                     str = `${s(`[${label}:`, sp)} ${primitive}${s("]", sp)}`;
                 }
-                ctx.indentationLvl -= 2;
             } catch (err) {
-                let errMessage = err?.message;
-                if (err?.name === "TypeError" && errMessage === "not a symbol") {
-                    errMessage = "Symbol.prototype.toString requires that 'this' be a Symbol";
-                }
-                const message = `<Inspection threw (${errMessage})>`;
+                const message = `<Inspection threw (${formatValue(ctx, err, recurseTimes)})>`;
                 str = `${s(`[${label}:`, sp)} ${message}${s("]", sp)}`;
             }
+            ctx.indentationLvl -= 2;
         } else {
             str = ctx.stylize(`[${label}]`, sp);
         }
@@ -2116,20 +2171,16 @@ function formatProperty(
     }
     if (typeof key === "symbol") {
         const tmp = key.toString().replace(strEscapeSequencesReplacer, escapeFn);
-
-        name = `[${ctx.stylize(tmp, "symbol")}]`;
-    } else if (key === "__proto__") {
-        name = "['__proto__']";
-    } else if (desc.enumerable === false) {
-        const tmp = key.replace(strEscapeSequencesReplacer, escapeFn);
-
-        name = `[${tmp}]`;
+        name = ctx.stylize(tmp, "symbol");
     } else if (keyStrRegExp.test(key)) {
-        name = ctx.stylize(key, "name");
+        name = key === "__proto__" ? "['__proto__']" : ctx.stylize(key, "name");
     } else {
         name = ctx.stylize(strEscape(key), "string");
     }
 
+    if (desc.enumerable === false) {
+        name = `[${name}]`;
+    }
     return `${name}:${extra}${str}`;
 }
 
@@ -2718,11 +2769,14 @@ function formatSetIterInner(
 // Adopted from https://github.com/chalk/ansi-regex/blob/HEAD/index.js
 // License: MIT, authors: @sindresorhus, Qix-, arjunmehta and LitoMore
 // Matches all ansi escape code sequences in a string
-const ansiPattern = "[\\u001B\\u009B][[\\]()#;?]*" +
-    "(?:(?:(?:(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]+)*" +
-    "|[a-zA-Z\\d]+(?:;[-a-zA-Z\\d\\/#&.:=?%@~_]*)*)?(?:\\u0007|\\u001B\\u005C|\\u009C))" +
-    "|(?:(?:\\d{1,4}(?:;\\d{0,4})*)?[\\dA-PR-TZcf-nq-uy=><~]))";
-const ansi = new RegExp(ansiPattern, "g");
+// Node 26 lib/internal/util/inspect.js: OSC sequences (such as hyperlinks) end at BEL,
+// ESC \\ or ST; CSI parameters may also be separated by colons.
+const ansi = new RegExp(
+    '(?:\\u001B\\][\\s\\S]*?(?:\\u0007|\\u001B\\u005C|\\u009C))' +
+    '|[\\u001B\\u009B][[\\]()#;?]*' +
+    '(?:\\d{1,4}(?:[;:]\\d{0,4})*)?' +
+    '[\\dA-PR-TZcf-nq-uy=><~]', 'g',
+);
 
 /**
  * Returns the number of columns required to display the given string.

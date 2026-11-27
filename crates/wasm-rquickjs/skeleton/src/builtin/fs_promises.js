@@ -17,10 +17,13 @@ import {
     validateUid,
     validateFlush,
     validateAbortSignal,
-    validateAppendFileData,
     validateMkdtempPrefix as _validateMkdtempPrefix,
     makeAbortError,
 } from '__wasm_rquickjs_builtin/internal/fs/shared';
+import {
+    validateInteger as validateIntegerOption,
+    validateOneOf,
+} from '__wasm_rquickjs_builtin/internal/validators';
 
 const fileHandleCloneAdapter = {__proto__: null, kind: 'FileHandle', requiresTransfer: true};
 
@@ -291,18 +294,10 @@ export class FileHandle {
 
     get fd() { return this._fd; }
 
-    async appendFile(data, options) {
-        if (this._closed) throw makeEBADF('write');
-        validateAppendFileData(data);
-        if (typeof data === 'string') {
-            const pos = null;
-            const result = native.fs_write_string(this._fd, data, pos);
-            if (result.error) throw createSystemError(result.error);
-        } else {
-            const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-            const result = native.fs_write_buffer(this._fd, dataArray, 0, dataArray.length, null);
-            if (result.error) throw createSystemError(result.error);
-        }
+    // FileHandle.appendFile is FileHandle.writeFile, as in Node: a handle opened with an
+    // append flag appends at the end.
+    appendFile(data, options) {
+        return this.writeFile(data, options);
     }
 
     async chmod(mode) {
@@ -386,6 +381,7 @@ export class FileHandle {
                 position = position !== undefined ? position : null;
             }
         }
+        length |= 0;
 
         if (length === 0) {
             return { bytesRead: 0, buffer };
@@ -735,29 +731,10 @@ export async function appendFile(path, data, options) {
         return path.appendFile(data, options);
     }
 
-    const pathString = pathToString(path);
-    const flush = options && typeof options === 'object' ? options.flush : undefined;
-    validateFlush(flush);
-    validateAppendFileData(data);
-
-    let error;
-    if (typeof data === 'string') {
-        error = native.fs_append_file_string(pathString, data);
-    } else {
-        const dataArray = new Uint8Array(data.buffer || data, data.byteOffset || 0, data.byteLength || data.length);
-        error = native.fs_append_file(pathString, dataArray);
-    }
-    if (error) throw createSystemError(error);
-
-    if (flush === true) {
-        const fs = require('node:fs');
-        const fd = fs.openSync(pathString, 'r');
-        try {
-            fs.fsyncSync(fd);
-        } finally {
-            fs.closeSync(fd);
-        }
-    }
+    // Like Node 26, appendFile is writeFile with flag 'a', so it shares its data types and signal.
+    const opts = typeof options === 'string' ? { encoding: options } : { ...options };
+    opts.flag ||= 'a';
+    return writeFile(path, data, opts);
 }
 
 export async function unlink(path) {
@@ -1042,6 +1019,11 @@ export async function* watch(filename, options = {}) {
         throw err;
     }
 
+    const maxQueue = options.maxQueue ?? 2048;
+    validateIntegerOption(maxQueue, 'options.maxQueue');
+    const overflow = options.overflow ?? 'ignore';
+    validateOneOf(overflow, 'options.overflow', ['ignore', 'error']);
+
     const signal = options.signal;
     validateAbortSignal(signal, 'options.signal');
 
@@ -1085,8 +1067,16 @@ export async function* watch(filename, options = {}) {
             const w = waiting;
             waiting = null;
             w.resolve(event);
-        } else {
+        } else if (queue.length < maxQueue) {
             queue.push(event);
+        } else if (overflow === 'error') {
+            // Like Node 26, an overflowing queue is replaced by a single queue-overflow error.
+            queue.length = 0;
+            const err = new Error(`fs.watch() queued more than ${maxQueue} events`);
+            err.code = 'ERR_FS_WATCH_QUEUE_OVERFLOW';
+            queue.push(err);
+        } else {
+            process.emitWarning('fs.watch maxQueue exceeded');
         }
     });
 
@@ -1112,6 +1102,7 @@ export async function* watch(filename, options = {}) {
                 });
             }
             if (event === null) break;
+            if (event instanceof Error) throw event;
             yield event;
         }
     } finally {

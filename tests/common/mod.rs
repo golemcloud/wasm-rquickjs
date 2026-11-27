@@ -2921,7 +2921,7 @@ fn is_unevaluated_node_compat_reason(reason: &str) -> bool {
     r == "newly discovered, not yet evaluated" || r.starts_with("inherited: newly discovered")
 }
 
-fn node_compat_category_from_entry(
+pub fn node_compat_category_from_entry(
     path: &str,
     entry: &serde_json::Value,
     inherited: Option<NodeCompatCategory>,
@@ -2990,6 +2990,20 @@ pub fn load_node_compat_config_with_suite_root(
         .get("tests")
         .and_then(|v| v.as_object())
         .ok_or_else(|| anyhow::anyhow!("config.jsonc missing 'tests' object"))?;
+
+    // Every configured entry counts in the inventory, so its source must exist; otherwise the
+    // runner and report would silently disagree about the denominator.
+    let missing: Vec<&String> = tests_obj
+        .keys()
+        .filter(|path| !suite_root.join(path).is_file())
+        .collect();
+    if !missing.is_empty() {
+        return Err(anyhow!(
+            "{} node_compat config entries have no vendored source under {}: {missing:?}; map each one to its replacement or remove it with a recorded reason",
+            missing.len(),
+            suite_root.display()
+        ));
+    }
 
     let mut tests = Vec::new();
     for (path, opts) in tests_obj {
@@ -3207,6 +3221,7 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
 /// - `/home/node/test/common/` — common shims
 /// - `/tmp/` — for tmpdir shim
 /// - `/home/node/test/fixtures/` — fixture data files (recursively copied)
+/// - `/home/node/test/sqlite/` — vendored sqlite test helpers, when present
 pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> anyhow::Result<()> {
     // Parse the suite name from the relative path (e.g., "parallel/test-foo.js" → "parallel")
     let suite = test_rel_path.split('/').next().unwrap_or("parallel");
@@ -3271,7 +3286,8 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
         }
     }
 
-    // Copy vendored ESM common helpers that are not replaced by local shims.
+    // Copy vendored ESM common helpers and the trace_events helper that are not replaced by
+    // local shims.
     let vendored_common_dir = std::path::Path::new("tests/node_compat/suite/common");
     if vendored_common_dir.exists() {
         for entry in fs::read_dir(vendored_common_dir)? {
@@ -3279,7 +3295,7 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
             let file_name = entry.file_name();
             let file_name_str = file_name.to_string_lossy();
             if entry.file_type()?.is_file()
-                && file_name_str.ends_with(".mjs")
+                && (file_name_str.ends_with(".mjs") || file_name_str == "trace_events.js")
                 && !common_dir.join(file_name_str.as_ref()).exists()
             {
                 fs::copy(entry.path(), common_dir.join(file_name_str.as_ref()))?;
@@ -3308,6 +3324,12 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
 
     if test_rel_path == "sequential/test-module-loading.js" && vendored_fixtures_src.exists() {
         copy_dir_recursive(vendored_fixtures_src, fixtures_dst.as_std_path())?;
+    }
+
+    // Shared sqlite test helpers, such as `require('../sqlite/next-db.js')`
+    let vendored_sqlite_src = std::path::Path::new("tests/node_compat/suite/sqlite");
+    if vendored_sqlite_src.exists() {
+        copy_dir_recursive(vendored_sqlite_src, test_root.join("sqlite").as_std_path())?;
     }
 
     Ok(())

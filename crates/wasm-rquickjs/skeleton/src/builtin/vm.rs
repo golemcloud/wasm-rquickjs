@@ -140,6 +140,7 @@ fn eval_in_new_context_impl<'js>(
         "DisposableStack",
         "Float16Array",
         "InternalError",
+        "QuotaExceededError",
         "SuppressedError",
         "atob",
         "btoa",
@@ -459,8 +460,10 @@ fn throw_require_async_module<'js>(
     filename: &str,
 ) -> rquickjs::Result<rquickjs::Value<'js>> {
     let error_ctor: rquickjs::Function = globals.get("Error")?;
+    // The CommonJS loader adds the require stack (and drops the hint under
+    // --experimental-print-required-tla), as Node's ERR_REQUIRE_ASYNC_MODULE does.
     let msg = format!(
-        "require() cannot be used on an ESM graph with top-level await. Use import() instead. Module: {}",
+        "require() cannot be used on an ESM graph with top-level await. Use import() instead. To see where the top-level await comes from, use --experimental-print-required-tla.\nRequired module: {}",
         filename
     );
     let error_obj: rquickjs::Object = error_ctor.call((&msg,))?;

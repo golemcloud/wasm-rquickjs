@@ -1,4 +1,4 @@
-import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, diffieHellman, sign, verify, publicEncrypt, privateDecrypt, privateEncrypt, publicDecrypt } from 'node:crypto';
+import { createHash, createHmac, hash, getHashes, getCiphers, getCurves, constants, randomBytes, randomInt, timingSafeEqual, pbkdf2Sync, scryptSync, hkdfSync, createCipheriv, createDecipheriv, generateKeyPair, generateKeyPairSync, createSign, createVerify, createPublicKey, createPrivateKey, diffieHellman, sign, verify, publicEncrypt, privateDecrypt, privateEncrypt, publicDecrypt, getDiffieHellman, createDiffieHellman, createSecretKey } from 'node:crypto';
 
 export function newUuids() {
     const uuid1 = crypto.randomUUID()
@@ -276,6 +276,163 @@ export async function subtleSignVerifyRsaPss(message) {
     return await crypto.subtle.verify(pss, keyPair.publicKey, signature, data);
 }
 
+export async function cryptoErrorContracts() {
+    const lines = [];
+    const check = (name, fn) => {
+        try {
+            const value = fn();
+            lines.push(`${name}: ok ${typeof value === 'string' ? value.split('\n')[0] : typeof value}`);
+        } catch (e) {
+            lines.push(`${name}: ${e.name} ${e.code} ${e.message}`);
+        }
+    };
+    const aeadFinal = (algorithm, tamper) => {
+        const key = Buffer.alloc(32, 1);
+        const iv = Buffer.alloc(12, 2);
+        const cipher = createCipheriv(algorithm, key, iv);
+        const ciphertext = Buffer.concat([cipher.update('payload'), cipher.final()]);
+        const tag = cipher.getAuthTag();
+        const decipher = createDecipheriv(algorithm, key, iv);
+        if (tamper !== 'no-tag') {
+            tag[0] ^= 1;
+            decipher.setAuthTag(tag);
+        }
+        decipher.update(ciphertext);
+        return decipher.final();
+    };
+    check('gcm tampered tag', () => aeadFinal('aes-256-gcm', 'tag'));
+    check('gcm missing tag', () => aeadFinal('aes-256-gcm', 'no-tag'));
+    check('chacha20-poly1305 tampered tag', () => aeadFinal('chacha20-poly1305', 'tag'));
+
+    const rsa = generateKeyPairSync('rsa', { modulusLength: 512 });
+    const ed = generateKeyPairSync('ed25519');
+    check('public pkcs8', () => rsa.publicKey.export({ format: 'pem', type: 'pkcs8' }));
+    check('public without format', () => rsa.publicKey.export({ type: 'spki' }));
+    check('public spki ignores cipher', () => rsa.publicKey.export({ format: 'pem', type: 'spki', cipher: 'aes-128-cbc', passphrase: 'x' }));
+    check('private without type', () => rsa.privateKey.export({ format: 'pem' }));
+    check('private passphrase without cipher', () => rsa.privateKey.export({ format: 'pem', type: 'pkcs8', passphrase: 'x' }));
+    check('private der pkcs1 encrypted', () => rsa.privateKey.export({ format: 'der', type: 'pkcs1', cipher: 'aes-128-cbc', passphrase: 'x' }));
+    check('private unknown cipher', () => rsa.privateKey.export({ format: 'pem', type: 'pkcs8', cipher: 'nope', passphrase: 'x' }));
+    check('private pem pkcs8 encrypted', () => rsa.privateKey.export({ format: 'pem', type: 'pkcs8', cipher: 'aes-128-cbc', passphrase: 'x' }));
+    check('ed25519 public pkcs1', () => ed.publicKey.export({ format: 'pem', type: 'pkcs1' }));
+    check('ed25519 private sec1', () => ed.privateKey.export({ format: 'pem', type: 'sec1' }));
+    check('keygen passphrase without cipher', () => generateKeyPairSync('ed25519', { privateKeyEncoding: { format: 'jwk', passphrase: 'x' } }));
+    check('keygen public pkcs8', () => generateKeyPairSync('ed25519', { publicKeyEncoding: { format: 'pem', type: 'pkcs8' } }));
+    check('createPrivateKey der spki', () => createPrivateKey({ key: Buffer.alloc(0), format: 'der', type: 'spki' }));
+    const shortTag = createDecipheriv('aes-256-gcm', Buffer.alloc(32), Buffer.alloc(12));
+    check('gcm implicit 12-byte tag', () => shortTag.setAuthTag(Buffer.alloc(12)));
+    check('gcm authTagLength 12-byte tag', () => createDecipheriv('aes-256-gcm', Buffer.alloc(32), Buffer.alloc(12), { authTagLength: 12 }).setAuthTag(Buffer.alloc(12)) && 'set');
+    const info = new Uint8Array(2048);
+    Object.defineProperty(info, 'byteLength', { get() { return 1; } });
+    check('hkdfSync info with fake byteLength', () => hkdfSync('sha256', 'a', '', info, 10));
+    check('cipher output encoding change', () => {
+        const cipher = createCipheriv('aes-256-cbc', Buffer.alloc(32), Buffer.alloc(16));
+        cipher.update('test', 'utf-8', 'utf-8');
+        return cipher.final('hex');
+    });
+    check('generateKeyPair Ed25519', () => generateKeyPair('Ed25519', () => {}));
+    check('generateKeyPair toString', () => generateKeyPair('toString', () => {}));
+
+    // One-shot sign()/verify() validate synchronously but deliver errors of the
+    // signing job to the callback, after returning.
+    const viaCallback = (name, fn, show = (value) => value) => new Promise((resolve) => {
+        let returned = false;
+        const done = (outcome) => {
+            lines.push(`${name}: ${returned ? '' : 'before return '}${outcome}`);
+            resolve();
+        };
+        try {
+            fn((err, value) => done(err ? `callback ${err.name} ${err.code}` : `callback ok ${show(value)}`));
+            returned = true;
+        } catch (e) {
+            lines.push(`${name}: throws ${e.name} ${e.code}`);
+            resolve();
+        }
+    });
+    const x25519 = generateKeyPairSync('x25519');
+    await viaCallback('sign digest too big for key', (cb) => sign('sha512', Buffer.from('message'), rsa.privateKey, cb));
+    await viaCallback('verify with x25519 key', (cb) => verify(undefined, Buffer.from('message'), x25519.publicKey, Buffer.alloc(16), cb));
+    await viaCallback('sign invalid padding', (cb) => sign('sha256', Buffer.from('message'), { key: rsa.privateKey, padding: 'x' }, cb));
+    await viaCallback('verify mismatching signature', (cb) => verify('sha256', Buffer.from('message'), rsa.publicKey, Buffer.alloc(64), cb));
+
+    // A key of the wrong type is rejected synchronously and never reaches the callback.
+    const secretKey = createSecretKey(Buffer.alloc(32, 1));
+    const message = Buffer.from('message');
+    await viaCallback('sign with public KeyObject', (cb) => sign('sha256', message, rsa.publicKey, cb));
+    await viaCallback('sign with nested secret KeyObject', (cb) => sign('sha256', message, { key: secretKey }, cb));
+    await viaCallback('verify with secret KeyObject', (cb) => verify('sha256', message, secretKey, Buffer.alloc(64), cb));
+    await viaCallback('verify with nested private KeyObject', (cb) => verify('sha256', message, { key: rsa.privateKey }, sign('sha256', message, rsa.privateKey), cb));
+
+    // Inherited and non-enumerable padding/saltLength options reach the job.
+    const pss = { padding: constants.RSA_PKCS1_PSS_PADDING, saltLength: 20 };
+    const privatePem = rsa.privateKey.export({ format: 'pem', type: 'pkcs8' });
+    const signatureKind = (signature) => `pkcs1=${verify('sha256', message, rsa.publicKey, signature)} pss=${verify('sha256', message, { key: rsa.publicKey, ...pss }, signature)}`;
+    await viaCallback('sign inherited PSS options', (cb) => sign('sha256', message, Object.assign(Object.create(pss), { key: privatePem }), cb), signatureKind);
+    await viaCallback('sign non-enumerable PSS options', (cb) => sign('sha256', message, Object.defineProperties({ key: privatePem }, { padding: { value: pss.padding }, saltLength: { value: pss.saltLength } }), cb), signatureKind);
+    await viaCallback('sign default padding', (cb) => sign('sha256', message, { key: privatePem }, cb), signatureKind);
+    const pssSignature = sign('sha256', message, { key: rsa.privateKey, ...pss });
+    await viaCallback('verify inherited PSS options', (cb) => verify('sha256', message, Object.assign(Object.create(pss), { key: rsa.publicKey.export({ format: 'pem', type: 'spki' }) }), pssSignature, cb));
+    await viaCallback('verify PSS signature with default padding', (cb) => verify('sha256', message, { key: rsa.publicKey }, pssSignature, cb));
+
+    const modp14 = getDiffieHellman('modp14');
+    const alice = createDiffieHellman(modp14.getPrime(), modp14.getGenerator());
+    alice.generateKeys();
+    const pMinus1 = Buffer.from(modp14.getPrime());
+    pMinus1[pMinus1.length - 1] -= 1;
+    check('DH computeSecret(1)', () => alice.computeSecret(Buffer.from([1])));
+    check('DH computeSecret(p - 1)', () => alice.computeSecret(pMinus1));
+    return lines;
+}
+
+export async function webcryptoErrorContracts() {
+    const lines = [];
+    const describe = (e) => `${e.name} ${e.code} ${e.message}`;
+    const check = (name, fn) => {
+        try {
+            fn();
+            lines.push(`${name}: ok`);
+        } catch (e) {
+            lines.push(`${name}: ${describe(e)}`);
+        }
+    };
+    const checkAsync = async (name, fn) => {
+        try {
+            const value = await fn();
+            lines.push(`${name}: ok ${value}`);
+        } catch (e) {
+            lines.push(`${name}: ${describe(e)}`);
+        }
+    };
+    const { subtle } = crypto;
+    check('getRandomValues()', () => crypto.getRandomValues());
+    check('getRandomValues(ArrayBuffer)', () => crypto.getRandomValues(new ArrayBuffer(1)));
+    check('getRandomValues(Float32Array)', () => crypto.getRandomValues(new Float32Array(1)));
+    check('getRandomValues(65537 bytes)', () => crypto.getRandomValues(new Uint8Array(65537)));
+
+    const iv = new Uint8Array(16);
+    const cbcDecrypt = await subtle.importKey('raw', new Uint8Array(16), { name: 'AES-CBC' }, false, ['decrypt']);
+    const cbcEncrypt = await subtle.importKey('raw', new Uint8Array(16), { name: 'AES-CBC' }, false, ['encrypt']);
+    await checkAsync('encrypt without usage', () => subtle.encrypt({ name: 'AES-CBC', iv }, cbcDecrypt, new Uint8Array(1)));
+    await checkAsync('decrypt without usage', () => subtle.decrypt({ name: 'AES-CBC', iv }, cbcEncrypt, new Uint8Array(16)));
+    await checkAsync('decrypt wrong algorithm without usage', () => subtle.decrypt({ name: 'AES-CTR', counter: iv, length: 64 }, cbcEncrypt, new Uint8Array(16)));
+    const hmacSign = await subtle.importKey('raw', new Uint8Array(32), { name: 'HMAC', hash: 'SHA-256' }, true, ['sign']);
+    await checkAsync('verify without usage', () => subtle.verify('HMAC', hmacSign, new Uint8Array(32), new Uint8Array(1)));
+    const kw = await subtle.importKey('raw', new Uint8Array(16), { name: 'AES-KW' }, false, ['unwrapKey']);
+    await checkAsync('wrapKey without usage', () => subtle.wrapKey('raw', hmacSign, kw, 'AES-KW'));
+
+    const hmac = (length, usages) => subtle.importKey('raw', new Uint8Array(32), { name: 'HMAC', hash: 'SHA-256', length }, false, usages);
+    await checkAsync('HMAC usage deriveBits', () => hmac(undefined, ['deriveBits']));
+    await checkAsync('HMAC length 0', () => hmac(0, ['sign']));
+    await checkAsync('HMAC length 384', () => hmac(384, ['sign']));
+    const jwk = await subtle.exportKey('jwk', hmacSign);
+    lines.push(`HMAC SHA-256 jwk alg: ${jwk.alg}`);
+    await checkAsync('HMAC jwk alg HS384', () => subtle.importKey('jwk', { ...jwk, alg: 'HS384' }, { name: 'HMAC', hash: 'SHA-256' }, true, ['sign']));
+    await checkAsync('HMAC jwk without alg', async () => (await subtle.importKey('jwk', { ...jwk, alg: undefined }, { name: 'HMAC', hash: 'SHA-256' }, true, ['sign'])).algorithm.length);
+    const sha3 = await subtle.importKey('raw', new Uint8Array(32), { name: 'HMAC', hash: 'SHA3-256' }, true, ['sign']);
+    lines.push(`HMAC SHA3-256 jwk alg: ${(await subtle.exportKey('jwk', sha3)).alg}`);
+    return lines;
+}
+
 export function x25519Agreement() {
     const privateKey = (hex) => createPrivateKey({
         key: Buffer.from('302e020100300506032b656e04220420' + hex, 'hex'), format: 'der', type: 'pkcs8',
@@ -342,6 +499,46 @@ export function p521KeyPair() {
     const onCurve = ([x, y]) => mod(y * y - (x * x * x - 3n * x + b)) === 0n;
     const big = (value) => BigInt('0x' + Buffer.from(value, 'base64url').toString('hex'));
 
+    // Raw P-521 scalars have exactly 66 bytes. Independent SEC 2 points G/-G
+    // also check noncanonical imports, including values needing many reductions.
+    const scalar = (v) => Buffer.from(v.toString(16).padStart(132, '0'), 'hex');
+    const rawImports = {};
+    for (const namedCurve of ['P-521', 'secp521r1']) {
+        const observed = rawImports[namedCurve] = {};
+        for (const [name, d, y] of [
+            ['one', 1n, g[1]], ['orderMinusOne', n - 1n, p - g[1]],
+            ['orderPlusOne', n + 1n, g[1]], ['largePlusOne', 127n * n + 1n, g[1]],
+            ['largeMinusOne', 127n * n - 1n, p - g[1]],
+        ]) {
+            const bytes = scalar(d);
+            try {
+                const key = createPrivateKey({ key: bytes, format: 'raw-private', asymmetricKeyType: 'ec', namedCurve });
+                const rawJwk = key.export({ format: 'jwk' });
+                observed[name] = {
+                    x: big(rawJwk.x) === g[0], y: big(rawJwk.y) === y,
+                    d: big(rawJwk.d) === d, raw: key.export({ format: 'raw-private' }).equals(bytes),
+                };
+            } catch (e) {
+                observed[name] = `${e.name} ${e.code}`;
+            }
+        }
+        for (const bytes of [
+            Buffer.from([1]), Buffer.alloc(65, 1), Buffer.alloc(67, 1),
+            Buffer.alloc(0), Buffer.alloc(6600, 0x55),
+        ]) {
+            try {
+                createPrivateKey({ key: bytes, format: 'raw-private', asymmetricKeyType: 'ec', namedCurve });
+                observed['length' + bytes.length] = 'accepted';
+            } catch (e) {
+                observed['length' + bytes.length] = `${e.name} ${e.code}`;
+            }
+        }
+    }
+    // Lower tiers can report the raw-import contract without generating an unsupported key.
+    if (rawImports['P-521'].one === 'Error ERR_CRYPTO_INVALID_CURVE') {
+        return JSON.stringify({ rawImports });
+    }
+
     const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-521' });
     const jwk = privateKey.export({ format: 'jwk' });
     const publicJwk = publicKey.export({ format: 'jwk' });
@@ -353,6 +550,16 @@ export function p521KeyPair() {
         if (k & 1n) expected = add(expected, addend);
         addend = add(addend, addend);
     }
+    const exportRoundTrips = [
+        ['der', 'sec1'], ['pem', 'sec1'],
+        ['pem', 'pkcs8', 'aes-128-cbc'],
+        ['pem', 'pkcs8', 'aes-256-cbc'],
+    ].map(([format, type, cipher]) => {
+        const passphrase = cipher ? 'p521 export' : undefined;
+        const encoded = privateKey.export({ format, type, cipher, passphrase });
+        const restored = createPrivateKey({ key: encoded, format, type, passphrase }).export({ format: 'jwk' });
+        return restored.d === jwk.d && restored.x === jwk.x && restored.y === jwk.y;
+    });
     return JSON.stringify({
         crv: publicJwk.crv,
         generatorOnCurve: onCurve(g),
@@ -360,6 +567,8 @@ export function p521KeyPair() {
         scalarInRange: d > 0n && d < n,
         publicIsScalarTimesGenerator: expected !== null && expected[0] === point[0] && expected[1] === point[1],
         privateCarriesPublic: jwk.x === publicJwk.x && jwk.y === publicJwk.y,
+        exportRoundTrips,
+        rawImports,
     });
 }
 
@@ -794,6 +1003,9 @@ const DSA_ENCODING_FIXTURE = {
 export async function dsaEncodingForms() {
     const h = (s) => Buffer.from(s, 'hex');
     const msg = Buffer.from('message');
+    const viaCallback = (fn) => new Promise((resolve, reject) => {
+        fn((error, value) => error ? reject(error) : resolve(value));
+    });
     const run = (fn) => {
         try {
             return fn();
@@ -815,6 +1027,8 @@ export async function dsaEncodingForms() {
             der: verify(hash, msg, key, h(der)),
             derExplicit: verify(hash, msg, { key, dsaEncoding: 'der' }, h(der)),
             p1363: verify(hash, msg, raw, h(p1363)),
+            p1363Callback: await viaCallback((cb) => verify(hash, msg, raw, h(p1363), cb)),
+            p1363AlteredCallback: await viaCallback((cb) => verify(hash, msg, raw, altered, cb)),
             p1363AsDer: verify(hash, msg, key, h(p1363)),
             derAsP1363: verify(hash, msg, raw, h(der)),
             p1363OtherMessage: verify(hash, Buffer.from('messagf'), raw, h(p1363)),
@@ -828,12 +1042,25 @@ export async function dsaEncodingForms() {
     for (const [name, curve, hash] of [['p256', 'P-256', 'sha256'], ['p521', 'P-521', 'sha512']]) {
         const own = generateKeyPairSync('ec', { namedCurve: curve });
         const sig = sign(hash, msg, { key: own.privateKey, dsaEncoding: 'ieee-p1363' });
+        const callbackSig = await viaCallback((cb) => sign(hash, msg, { key: own.privateKey, dsaEncoding: 'ieee-p1363' }, cb));
+        own.privateKey.dsaEncoding = 'ieee-p1363';
         out['own' + name] = {
             length: sig.length,
             p1363: verify(hash, msg, { key: own.publicKey, dsaEncoding: 'ieee-p1363' }, sig),
             asDer: verify(hash, msg, own.publicKey, sig),
             streaming: createVerify(hash).update(msg).verify({ key: own.publicKey, dsaEncoding: 'ieee-p1363' },
                 createSign(hash).update(msg).sign({ key: own.privateKey, dsaEncoding: 'ieee-p1363' })),
+            callbackLength: callbackSig.length,
+            callbackSignature: verify(hash, msg, { key: own.publicKey, dsaEncoding: 'ieee-p1363' }, callbackSig),
+            directKeyCallbackLength: (await viaCallback((cb) => sign(hash, msg, own.privateKey, cb))).length,
+            invalidSignCallback: run(() => {
+                sign(hash, msg, { key: own.privateKey, dsaEncoding: 'p1363' }, () => {});
+                return 'did not throw';
+            }),
+            invalidVerifyCallback: run(() => {
+                verify(hash, msg, { key: own.publicKey, dsaEncoding: 'p1363' }, sig, () => {});
+                return 'did not throw';
+            }),
         };
     }
     const subtle = crypto.subtle;

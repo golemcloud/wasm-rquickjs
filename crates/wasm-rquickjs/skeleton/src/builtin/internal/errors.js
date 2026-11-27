@@ -572,7 +572,23 @@ Object.defineProperty(globalThis, '__wasm_rquickjs_install_source_map_error_stac
 // Node.js includes the error code in toString() so that regex tests like
 // /ERR_INVALID_ARG_TYPE/ can match against String(error).
 // We keep message and name clean (for exact-match tests) but add toString().
+const nativeErrorPrototypes = new Set([
+    Error.prototype,
+    TypeError.prototype,
+    RangeError.prototype,
+    SyntaxError.prototype,
+    URIError.prototype,
+    EvalError.prototype,
+    ReferenceError.prototype,
+]);
+
 function addCodeToMessage(err, code) {
+    // Node creates coded errors as plain instances of their base class, so
+    // `err.constructor` is the native error constructor, not the ERR_* class.
+    const base = Object.getPrototypeOf(Object.getPrototypeOf(err));
+    if (nativeErrorPrototypes.has(base)) {
+        Object.setPrototypeOf(err, base);
+    }
     err.code = code;
     const origToString = Error.prototype.toString;
     Object.defineProperty(err, 'toString', {

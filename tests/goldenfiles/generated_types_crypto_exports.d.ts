@@ -33,6 +33,8 @@ declare module 'crypto' {
   export function subtleSignVerifyHmac(message: string): boolean;
   export function subtleSignVerifyEd25519(message: string): boolean;
   export function subtleSignVerifyRsaPss(message: string): boolean;
+  export function cryptoErrorContracts(): string[];
+  export function webcryptoErrorContracts(): string[];
   export function x25519Agreement(): string;
   export function p521KeyPair(): string;
   export function cfrg448Vectors(): string;

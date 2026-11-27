@@ -9,6 +9,7 @@ import {
     memory_usage as _native_memory_usage,
     has_typescript_runtime,
     typescript_runtime_mode,
+    sqlite_version,
     is_preinitializing,
     reject_preinit_uncaught_error,
     await_runtime_idle
@@ -227,19 +228,25 @@ process.pid = 1;
 process.ppid = 0;
 process.platform = 'wasi';
 process.arch = 'wasm32';
-process.version = 'v22.0.0';
+// Node.js release whose public API this runtime targets; see tests/node_compat/target-selection.md.
+process.version = 'v26.13.1';
 process.versions = {
-    node: '22.0.0',
-    modules: '127',
+    node: '26.13.1',
+    modules: '147',
     openssl: '3.0.0',
 };
+// Only builds with the sqlite feature have a working node:sqlite.
+const _sqliteVersion = sqlite_version();
+if (_sqliteVersion) {
+    process.versions.sqlite = _sqliteVersion;
+}
 process.config = {
     target_defaults: { default_configuration: 'Release' },
     variables: {
         v8_enable_i18n_support: 0,
         asan: 0,
         openssl_quic: 0,
-        node_module_version: 127,
+        node_module_version: 147,
         node_use_amaro: has_typescript_runtime(),
     },
 };
@@ -257,8 +264,11 @@ process.features = {
     tls_sni: false,
     tls_ocsp: false,
     tls: false,
+    openssl_is_boringssl: false,
     cached_builtins: true,
     require_module: true,
+    dtls: false,
+    quic: false,
     typescript: typescriptRuntimeMode ?? false,
 };
 process.execPath = '/usr/local/bin/node';
@@ -269,7 +279,7 @@ Object.defineProperty(process, 'title', {
     enumerable: true,
     configurable: true,
 });
-process.release = { name: 'node' };
+process.release = { name: 'node', lts: 'Lithium' };
 process.allowedNodeEnvironmentFlags = new Set();
 
 const _reportOptions = {

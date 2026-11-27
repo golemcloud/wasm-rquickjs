@@ -8,6 +8,7 @@ import * as pathModule from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { extractSourceMapURL } from '__wasm_rquickjs_builtin/internal/source_map_url';
 import { createPrivateWeakMap, createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
+import { markEngineObjectProxy } from '__wasm_rquickjs_builtin/internal/binding/util';
 
 let contextIdCounter = 1;
 const contextIds = createPrivateWeakMap();
@@ -1108,7 +1109,7 @@ function createModuleNamespace(module) {
         configurable: true,
     });
 
-    return new Proxy(namespaceTarget, {
+    return markEngineObjectProxy(new Proxy(namespaceTarget, {
         ownKeys: function() {
             return names.concat([Symbol.toStringTag]);
         },
@@ -1127,7 +1128,7 @@ function createModuleNamespace(module) {
         getOwnPropertyDescriptor: function(_target, prop) {
             return Object.getOwnPropertyDescriptor(namespaceTarget, prop);
         },
-    });
+    }));
 }
 
 function sourceTextModuleBindingValue(binding, name) {
@@ -1810,7 +1811,7 @@ function collectSandboxBindings(sandbox) {
 }
 
 function finalizeCompileFunction(fn, code, params, options) {
-    fn = new Proxy(fn, {
+    fn = markEngineObjectProxy(new Proxy(fn, {
         apply(target, thisArg, args) {
             try {
                 return Reflect.apply(target, thisArg, args);
@@ -1819,7 +1820,7 @@ function finalizeCompileFunction(fn, code, params, options) {
                 throw err;
             }
         },
-    });
+    }));
     const renderedParams = params.map(String).join(', ');
     Object.defineProperty(fn, 'toString', {
         configurable: true,
@@ -2485,15 +2486,15 @@ function vmModuleStatusError(message) {
     return err;
 }
 
-function throwInvalidModuleThis(value) {
-    const err = new TypeError('The "this" argument must be an instance of Module.' + invalidArgTypeHelper(value));
-    err.code = 'ERR_INVALID_ARG_TYPE';
+function throwInvalidModuleThis(type) {
+    const err = new TypeError('Value of "this" must be of type ' + type);
+    err.code = 'ERR_INVALID_THIS';
     throw err;
 }
 
 function requireVmModuleThis(value) {
     if (!value || value[vmModuleInstanceBrandSymbol] !== true) {
-        throwInvalidModuleThis(value);
+        throwInvalidModuleThis('Module');
     }
     return value;
 }
@@ -2523,9 +2524,7 @@ function inspectVmModule(depth, options, inspect) {
 
 function requireSyntheticModuleThis(value) {
     if (!value || value[vmModuleInstanceBrandSymbol] !== true || !(value instanceof SyntheticModule)) {
-        const err = new TypeError('The "this" argument must be an instance of SyntheticModule.' + invalidArgTypeHelper(value));
-        err.code = 'ERR_INVALID_ARG_TYPE';
-        throw err;
+        throwInvalidModuleThis('SyntheticModule');
     }
     return value;
 }
@@ -2561,7 +2560,8 @@ function defineVmDynamicImportCallbackBinding(helperName, callback, wrap) {
                 ? wrap[vmDynamicImportReferrerSymbol]
                 : wrap;
             try {
-                result = callback(String(specifier), referrer, dynamicImportAttributes(options));
+                // Only the evaluation phase of import() is supported, not import.source().
+                result = callback(String(specifier), referrer, dynamicImportAttributes(options), 'evaluation');
             } catch (err) {
                 return Promise.reject(err);
             }
@@ -2864,6 +2864,12 @@ export class SourceTextModule {
         this._dependencies = analysis.dependencies;
         this._usesImportedNames = sourceTextModuleHasImportedNames(this._dependencies);
         this._dependencySpecifiers = Object.freeze(this._dependencies.map((dependency) => dependency.specifier));
+        this._moduleRequests = Object.freeze(this._dependencies.map((dependency) => Object.freeze({
+            __proto__: null,
+            specifier: dependency.specifier,
+            attributes: dependency.attributes,
+            phase: 'evaluation',
+        })));
         this._bindings = Object.create(null);
         this._names = [];
         this._exportBindings = [];
@@ -2922,6 +2928,11 @@ export class SourceTextModule {
     get dependencySpecifiers() {
         requireVmModuleThis(this);
         return this._dependencySpecifiers;
+    }
+
+    get moduleRequests() {
+        requireVmModuleThis(this);
+        return this._moduleRequests;
     }
 
     async link(linker) {
@@ -3143,7 +3154,8 @@ export class SyntheticModule {
         this[vmModuleInstanceBrandSymbol] = true;
         this._context = this._options.context;
         this._identifier = this._options.identifier || 'vm:module(0)';
-        this._status = 'unlinked';
+        // A synthetic module has no dependencies, so Node 26 instantiates it on construction.
+        this._status = 'linked';
         this._error = undefined;
         this._dependencySpecifiers = Object.freeze([]);
         this._names = exportNames.slice();
@@ -3179,30 +3191,14 @@ export class SyntheticModule {
         return this._error;
     }
 
-    async link(linker) {
-        if (typeof linker !== 'function') {
-            throwInvalidArgType('linker', 'function', linker);
-        }
-        if (this._status === 'linked' || this._status === 'evaluated' || this._status === 'errored') {
-            const err = new Error('Module has already been linked');
-            err.code = 'ERR_VM_MODULE_ALREADY_LINKED';
-            throw err;
-        }
-        if (this._status !== 'unlinked') {
-            throw vmModuleStatusError('Module status must be unlinked');
-        }
-        this._status = 'linking';
-        await Promise.resolve();
-        this._status = 'linked';
+    link() {
+        requireSyntheticModuleThis(this);
     }
 
     setExport(name, value) {
         requireSyntheticModuleThis(this);
         if (typeof name !== 'string') {
             throw new TypeError('Export name must be a string');
-        }
-        if (this._status === 'unlinked' || this._status === 'linking') {
-            throw vmModuleStatusError('Module status must not be unlinked or linking');
         }
         const binding = this._bindings[name];
         if (binding === undefined) {
