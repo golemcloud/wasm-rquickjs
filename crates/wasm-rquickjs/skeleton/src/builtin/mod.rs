@@ -8,6 +8,7 @@ use sync_exports::SyncableBuiltinLoaderExt;
 
 mod abort_controller;
 mod abort_signal;
+pub(crate) use abort_signal::with_abort_signal;
 mod assert;
 mod async_hooks;
 mod base64;
@@ -28,6 +29,7 @@ pub(crate) mod execution;
 mod formdata_node;
 mod fs;
 mod gc;
+mod import_abort;
 #[cfg(feature = "test-observability")]
 pub(crate) use gc::install_observability as install_gc_observability;
 mod http;
@@ -296,6 +298,8 @@ pub fn add_module_resolvers(
         .with_module("__wasm_rquickjs_builtin/execution_native")
         .with_module("__wasm_rquickjs_builtin/custom_invocation_context_native")
         .with_module("wasm-rquickjs:custom-invocation-context")
+        .with_module("__wasm_rquickjs_builtin/import_abort_native")
+        .with_module("wasm-rquickjs:import-abort")
         .with_module("wasm-rquickjs:execution")
         .with_module("__wasm_rquickjs_builtin/typescript_native");
 
@@ -404,6 +408,10 @@ pub fn module_loader() -> (
     .with_module(
         "__wasm_rquickjs_builtin/custom_invocation_context_native",
         custom_invocation_context::js_native_module,
+    )
+    .with_module(
+        "__wasm_rquickjs_builtin/import_abort_native",
+        import_abort::js_native_module,
     );
     let native_loader = native_loader.with_module(
         "__wasm_rquickjs_builtin/typescript_native",
@@ -619,7 +627,8 @@ pub fn module_loader() -> (
         .with_module(
             "wasm-rquickjs:custom-invocation-context",
             custom_invocation_context::CUSTOM_INVOCATION_CONTEXT_JS,
-        );
+        )
+        .with_module("wasm-rquickjs:import-abort", import_abort::IMPORT_ABORT_JS);
 
     #[cfg(feature = "golem")]
     let builtin_loader = builtin_loader.with_module(

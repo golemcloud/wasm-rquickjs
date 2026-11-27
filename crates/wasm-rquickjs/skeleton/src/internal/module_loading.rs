@@ -2324,7 +2324,7 @@ fn cjs_named_import_error_message(
         return None;
     }
     let source_path = canonical_cjs_analysis_path(ctx, &resolved);
-    let source = std::fs::read_to_string(&source_path).ok()?;
+    let source = required_module_source(std::path::Path::new(&source_path)).ok()?;
     let analysis =
         analyze_cjs_exports_for_file(ctx, &resolved, &source, &mut HashSet::new(), cjs_conditions);
     if !analysis.is_cjs && analysis.exports.is_empty() && analysis.reexports.is_empty() {
@@ -4498,8 +4498,7 @@ impl NodeFileResolver {
                 Self::module_resolution_is_file(ctx, normalized)
             }
             FileCandidateSemantics::DirectFilesystem => {
-                super::preinit::check("module path probe", normalized);
-                std::path::Path::new(normalized).is_file()
+                super::preinit::filesystem().is_ok() && std::path::Path::new(normalized).is_file()
             }
         }
     }
@@ -4836,7 +4835,9 @@ impl Resolver for RuntimeFileResolver {
         if unsupported_esm_url_scheme(&input).is_some() {
             return NodeModuleErrorResolver.resolve(ctx, base, name, attributes);
         }
-        super::preinit::check("module filesystem resolution", name);
+        if super::preinit::filesystem().is_err() {
+            return Err(Error::new_resolving(base, name));
+        }
         self.0.resolve(ctx, base, name, attributes)
     }
 }
@@ -5097,7 +5098,12 @@ impl CjsModuleProbeSession {
     }
 
     fn probe(&self, normalized: &str) -> ModulePathProbe {
-        super::preinit::check("module path probe", normalized);
+        if super::preinit::filesystem().is_err() {
+            return ModulePathProbe {
+                classification: None,
+                _session_hit: false,
+            };
+        }
         let cached = {
             let state = self.0.borrow();
             (state.depth > 0 && state.cache_enabled())
@@ -5249,7 +5255,9 @@ fn module_resolution_path_matches(
 }
 
 fn cjs_module_path_stat(ctx: Ctx<'_>, filename: String) -> i32 {
-    super::preinit::check("module path stat", &filename);
+    if super::preinit::filesystem().is_err() {
+        return -2;
+    }
     let services = ctx
         .userdata::<crate::internal::runtime_services::RuntimeServices>()
         .expect("runtime services not initialized");
@@ -5763,7 +5771,9 @@ impl NodeModulesResolver {
         pkg_path: &std::path::Path,
         resolution: &NodePackageResolutionContext<'_, '_>,
     ) -> Result<Option<Rc<PackageJson>>, NodePackageResolveError> {
-        super::preinit::check("package.json read", pkg_path.display());
+        if super::preinit::filesystem().is_err() {
+            return Ok(None);
+        }
         let cache_key = CjsEvalResolver::normalize_path(pkg_path);
         #[cfg(feature = "typescript-compiler-profiling")]
         if let Some(profile) = &resolution.profile {
@@ -11376,7 +11386,7 @@ fn module_source_filesystem_literal_path(ctx: &Ctx<'_>, fs_path: &str) -> String
 }
 
 fn required_module_source(path: &std::path::Path) -> std::io::Result<String> {
-    super::preinit::check("module source read", path.display());
+    super::preinit::filesystem()?;
     std::fs::read_to_string(path)
 }
 

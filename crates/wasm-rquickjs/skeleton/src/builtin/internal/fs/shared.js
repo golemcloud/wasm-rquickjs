@@ -1,5 +1,18 @@
 // Shared helpers used by both fs.js and fs_promises.js.
 // This module must NOT import from 'node:fs' to avoid circular dependencies.
+import { is_preinitializing } from '__wasm_rquickjs_builtin/process_native';
+import { createPrivateWeakSet } from '__wasm_rquickjs_builtin/internal/weak_collections';
+
+const preinitFilesystemErrors = createPrivateWeakSet();
+
+export function markPreinitFilesystemError(error) {
+    if (is_preinitializing()) preinitFilesystemErrors.add(error);
+    return error;
+}
+
+export function isStalePreinitFilesystemError(error) {
+    return preinitFilesystemErrors.has(error) && !is_preinitializing();
+}
 
 export function getInternalFsBinding() {
     return globalThis.__wasm_rquickjs_internal_fs_binding ||
@@ -45,6 +58,9 @@ export function createSystemError(errObj) {
     err.syscall = errObj.syscall;
     if (errObj.path !== undefined) err.path = errObj.path;
     if (errObj.dest !== undefined) err.dest = errObj.dest;
+    // Native filesystem ENOENT during preinit is synthetic. Keep its provenance
+    // private: a loader's own ENOENT must not become a retryable snapshot error.
+    if (errObj.code === 'ENOENT') markPreinitFilesystemError(err);
     return err;
 }
 
