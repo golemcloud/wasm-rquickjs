@@ -9,6 +9,8 @@ import {
     memory_usage as _native_memory_usage,
     has_typescript_runtime,
     typescript_runtime_mode,
+    is_preinitializing,
+    reject_preinit_uncaught_error,
     await_runtime_idle
 } from '__wasm_rquickjs_builtin/process_native';
 import { capture_for_callback as __captureScope, enter_callback as __enterScope, leave_callback as __leaveScope } from '__wasm_rquickjs_builtin/custom_invocation_context_native';
@@ -603,31 +605,37 @@ const __nextTickWakeupOwners = new Set();
 const __jobOwner = globalThis.__wasm_rquickjs_job_owner;
 
 function __wasm_rquickjs_handleUncaughtError(err, domain) {
-    if (domain && typeof domain.emit === 'function') {
-        if (err != null && (typeof err === 'object' || typeof err === 'function')) {
-            err.domain = domain;
-            err.domainThrown = true;
+    try {
+        if (domain && typeof domain.emit === 'function') {
+            if (err != null && (typeof err === 'object' || typeof err === 'function')) {
+                err.domain = domain;
+                err.domainThrown = true;
+            }
+            domain.emit('error', err);
+            return;
         }
-        domain.emit('error', err);
-        return;
-    }
 
-    if (_uncaughtExceptionCallback !== null) {
-        _uncaughtExceptionCallback(err);
-        return;
-    }
+        if (_uncaughtExceptionCallback !== null) {
+            _uncaughtExceptionCallback(err);
+            return;
+        }
 
-    if (process.listenerCount('uncaughtException') > 0) {
-        process.emit('uncaughtException', err, 'uncaughtException');
-        return;
-    }
+        if (process.listenerCount('uncaughtException') > 0) {
+            process.emit('uncaughtException', err, 'uncaughtException');
+            return;
+        }
 
-    if (typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
-        globalThis.__wasm_rquickjs_child_uncaught(err);
-        return;
-    }
-    if (typeof console !== 'undefined') {
-        console.error(err);
+        if (typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
+            globalThis.__wasm_rquickjs_child_uncaught(err);
+            return;
+        }
+        reject_preinit_uncaught_error(err);
+        if (typeof console !== 'undefined') {
+            console.error(err);
+        }
+    } catch (handlerError) {
+        reject_preinit_uncaught_error(handlerError);
+        throw handlerError;
     }
 }
 
@@ -1167,7 +1175,7 @@ globalThis.__wasm_rquickjs_unhandled_rejection_checkpoint = function() {
             emitted += 1;
             try {
                 if (process.listenerCount('unhandledRejection') === 0 &&
-                    typeof globalThis.__wasm_rquickjs_child_uncaught === 'function') {
+                    (is_preinitializing() || typeof globalThis.__wasm_rquickjs_child_uncaught === 'function')) {
                     __wasm_rquickjs_handleUncaughtError(entry.reason);
                 } else {
                     process.emit('unhandledRejection', entry.reason, promise);

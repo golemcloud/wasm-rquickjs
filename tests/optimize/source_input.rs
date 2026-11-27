@@ -230,25 +230,56 @@ fn initializer_sources_reuse_compilation_without_reusing_guest_state() -> anyhow
             );
             assert!(!output.exists());
         }
-        for invalid in [
-            "export const = ;",
-            "import fs from 'node:fs'; fs.existsSync('/app');",
-        ] {
-            let sources = vec![invalid.into(), a[1].clone(), a[2].clone()];
-            assert!(
-                optimize_component_with_options(
-                    &template,
-                    &output,
-                    "wizer-initialize",
-                    &OptimizeOptions {
-                        sources: Some(&sources),
-                        ..Default::default()
-                    }
-                )
-                .await
-                .is_err()
-            );
-            assert!(!output.exists());
+        let malformed = vec!["export const = ;".into(), a[1].clone(), a[2].clone()];
+        assert!(
+            optimize_component_with_options(
+                &template,
+                &output,
+                "wizer-initialize",
+                &OptimizeOptions {
+                    sources: Some(&malformed),
+                    ..Default::default()
+                }
+            )
+            .await
+            .is_err()
+        );
+        assert!(!output.exists());
+
+        // Filesystem absence is catchable even with supplied initializer sources.
+        // Reuse compiled code, then execute the snapshot in fresh guest instances.
+        let probe = vec![
+            r#"
+                import fs from 'node:fs';
+                const exists = fs.existsSync('/app');
+                let calls = 0;
+                export function ready() { return 'ready'; }
+                export function run() { return JSON.stringify({exists, calls: ++calls}); }
+            "#
+            .into(),
+            a[1].clone(),
+            a[2].clone(),
+        ];
+        let result = optimize_component_with_options(
+            &template,
+            &output,
+            "wizer-initialize",
+            &OptimizeOptions {
+                sources: Some(&probe),
+                engine_config: Some(&config),
+                cache_config: Some(&cache_config),
+                ..Default::default()
+            },
+        )
+        .await?;
+        assert_eq!(
+            result.compilation_cache,
+            Some(CompilationCacheStats { hits: 1, misses: 0 })
+        );
+        for _ in 0..2 {
+            let value: serde_json::Value =
+                serde_json::from_str(&run_probe(&output, false).await?.unwrap())?;
+            assert_eq!(value, serde_json::json!({"exists": false, "calls": 1}));
         }
         optimize_component_with_options(
             &template,
