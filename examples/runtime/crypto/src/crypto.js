@@ -499,6 +499,46 @@ export function p521KeyPair() {
     const onCurve = ([x, y]) => mod(y * y - (x * x * x - 3n * x + b)) === 0n;
     const big = (value) => BigInt('0x' + Buffer.from(value, 'base64url').toString('hex'));
 
+    // Raw P-521 scalars have exactly 66 bytes. Independent SEC 2 points G/-G
+    // also check noncanonical imports, including values needing many reductions.
+    const scalar = (v) => Buffer.from(v.toString(16).padStart(132, '0'), 'hex');
+    const rawImports = {};
+    for (const namedCurve of ['P-521', 'secp521r1']) {
+        const observed = rawImports[namedCurve] = {};
+        for (const [name, d, y] of [
+            ['one', 1n, g[1]], ['orderMinusOne', n - 1n, p - g[1]],
+            ['orderPlusOne', n + 1n, g[1]], ['largePlusOne', 127n * n + 1n, g[1]],
+            ['largeMinusOne', 127n * n - 1n, p - g[1]],
+        ]) {
+            const bytes = scalar(d);
+            try {
+                const key = createPrivateKey({ key: bytes, format: 'raw-private', asymmetricKeyType: 'ec', namedCurve });
+                const rawJwk = key.export({ format: 'jwk' });
+                observed[name] = {
+                    x: big(rawJwk.x) === g[0], y: big(rawJwk.y) === y,
+                    d: big(rawJwk.d) === d, raw: key.export({ format: 'raw-private' }).equals(bytes),
+                };
+            } catch (e) {
+                observed[name] = `${e.name} ${e.code}`;
+            }
+        }
+        for (const bytes of [
+            Buffer.from([1]), Buffer.alloc(65, 1), Buffer.alloc(67, 1),
+            Buffer.alloc(0), Buffer.alloc(6600, 0x55),
+        ]) {
+            try {
+                createPrivateKey({ key: bytes, format: 'raw-private', asymmetricKeyType: 'ec', namedCurve });
+                observed['length' + bytes.length] = 'accepted';
+            } catch (e) {
+                observed['length' + bytes.length] = `${e.name} ${e.code}`;
+            }
+        }
+    }
+    // Lower tiers can report the raw-import contract without generating an unsupported key.
+    if (rawImports['P-521'].one === 'Error ERR_CRYPTO_INVALID_CURVE') {
+        return JSON.stringify({ rawImports });
+    }
+
     const { privateKey, publicKey } = generateKeyPairSync('ec', { namedCurve: 'P-521' });
     const jwk = privateKey.export({ format: 'jwk' });
     const publicJwk = publicKey.export({ format: 'jwk' });
@@ -528,6 +568,7 @@ export function p521KeyPair() {
         publicIsScalarTimesGenerator: expected !== null && expected[0] === point[0] && expected[1] === point[1],
         privateCarriesPublic: jwk.x === publicJwk.x && jwk.y === publicJwk.y,
         exportRoundTrips,
+        rawImports,
     });
 }
 

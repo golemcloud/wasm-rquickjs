@@ -1,9 +1,21 @@
 // Native functions for the process implementation
 #[rquickjs::module(rename = "camelCase")]
 pub mod native_module {
-    use rquickjs::{BigInt, Ctx, Persistent, Promise};
+    use rquickjs::{BigInt, Ctx, Persistent, Promise, Value};
     use std::collections::HashMap;
     use std::path::Path;
+
+    #[rquickjs::function]
+    pub fn is_preinitializing() -> bool {
+        crate::internal::preinit::is_active()
+    }
+
+    #[rquickjs::function]
+    pub fn reject_preinit_uncaught_error(error: Value<'_>) {
+        if crate::internal::preinit::is_active() {
+            crate::internal::preinit::uncaught_error(&crate::internal::format_js_exception(&error));
+        }
+    }
 
     #[rquickjs::function]
     pub fn memory_usage(ctx: Ctx<'_>) -> Vec<i64> {

@@ -1274,13 +1274,13 @@ class Zstd extends ZlibBase {
 
   _processChunk(chunk, flush, limit = _getKMaxLength()) {
     const data = toUint8Array(toBuffer(chunk));
-    this._bytesWritten += data.length;
     const chunks = [];
     let offset = 0, total = 0, done;
     do {
       const [output, consumed, complete] = this._processStep(
         data.subarray(offset), flush, Math.min(this._chunkSize, limit - total + 1));
       offset += consumed;
+      this._bytesWritten += consumed;
       total += output.length;
       if (total > limit) throw makeRangeError('ERR_BUFFER_TOO_LARGE', `Cannot create a Buffer larger than ${limit} bytes`);
       if (output.length) chunks.push(output);
@@ -1291,7 +1291,6 @@ class Zstd extends ZlibBase {
 
   _processStream(chunk, flush, callback) {
     const data = toUint8Array(toBuffer(chunk));
-    this._bytesWritten += data.length;
     let offset = 0;
     const resume = error => {
       if (error) { callback(error); return; }
@@ -1299,6 +1298,7 @@ class Zstd extends ZlibBase {
         while (this._nativeHandle !== null) {
           const [output, consumed, done] = this._processStep(data.subarray(offset), flush, this._chunkSize);
           offset += consumed;
+          this._bytesWritten += consumed;
           const ready = output.length === 0 || this.push(output);
           if (this._nativeHandle === null) break;
           if (!ready) {

@@ -202,7 +202,8 @@ pub(super) fn push(
                     "Trailing junk found after the end of the compressed stream".to_string(),
                 ));
             }
-            return Ok((Vec::new(), bytes.len(), true));
+            // Stop this write without counting discarded input as consumed.
+            return Ok((Vec::new(), 0, true));
         }
         if data.len() < 4 {
             if flush == 2 && !data.is_empty() && stream.reject_garbage {

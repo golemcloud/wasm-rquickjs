@@ -531,12 +531,67 @@ export const testEvalGeneratedMessage = () => {
         message.startsWith('The expression evaluated to a falsy value:');
 };
 
-// A throwing afterEach hook runs exactly once per subtest and the subtest's mocks are restored,
-// whether the subtest is synchronous, returns a promise or uses a done callback. Node reports
-// the hook failure through the parent and resolves t.test(); this runtime rejects t.test() with
-// the hook error, so either outcome is accepted, but no other error is.
+// Subtests await async setup and teardown, then restore mocks before settling, for synchronous,
+// promise and done-callback bodies. Teardown runs once even after setup/body failure; that
+// primary error wins over a secondary teardown error. Node reports child failures through the
+// parent and resolves t.test(); this runtime rejects, so error identity is checked only on
+// rejection. Both outcomes are accepted, but cleanup order and mock restoration always apply.
 export const testSubtestAfterEachOnce = async () => {
     try {
+        for (const kind of ['sync', 'promise', 'callback']) {
+            const target = { method() { return 'original'; } };
+            const calls = [];
+            await test('async hooks ' + kind, async (t) => {
+                t.beforeEach(async (st) => {
+                    await null;
+                    st.mock.method(target, 'method', () => 'mocked');
+                    calls.push('before');
+                });
+                t.afterEach(async () => {
+                    await null;
+                    calls.push('after:' + target.method());
+                });
+                const body = (st) => { calls.push('body:' + target.method()); };
+                const fn = kind === 'callback' ? (st, done) => { body(st); done(); }
+                    : kind === 'promise' ? async (st) => { await null; body(st); } : body;
+                await t.test(kind, fn);
+                calls.push('settled:' + target.method());
+            });
+            assert.deepStrictEqual(calls, ['before', 'body:mocked', 'after:mocked', 'settled:original']);
+        }
+
+        for (const phase of ['setup', 'body', 'teardown']) {
+            const primary = new Error(phase + ' failed');
+            const secondary = new Error('secondary teardown failure');
+            const target = { method() { return 'original'; } };
+            const calls = [];
+            await test('async hook rejection ' + phase, async (t) => {
+                t.beforeEach(async (st) => {
+                    st.mock.method(target, 'method', () => 'mocked');
+                    await null;
+                    calls.push('before');
+                    if (phase === 'setup') throw primary;
+                });
+                t.afterEach(async () => {
+                    await null;
+                    calls.push('after:' + target.method());
+                    throw phase === 'teardown' ? primary : secondary;
+                });
+                try {
+                    await t.test(phase, async () => {
+                        calls.push('body');
+                        if (phase === 'body') throw primary;
+                    });
+                } catch (e) {
+                    assert.strictEqual(e, primary);
+                }
+                calls.push('settled:' + target.method());
+            });
+            assert.deepStrictEqual(calls, phase === 'setup'
+                ? ['before', 'after:mocked', 'settled:original']
+                : ['before', 'body', 'after:mocked', 'settled:original']);
+        }
+
         const hookError = new Error('afterEach failed');
         const target = { method() { return 'original'; } };
         const calls = [];

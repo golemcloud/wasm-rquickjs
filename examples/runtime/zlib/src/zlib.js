@@ -533,6 +533,54 @@ export async function testZstd() {
 export async function testZstdContracts() {
   const failures = [];
   for (const [name, check] of [
+    ['decompression byte accounting', async () => {
+      // Node 26 frame for "hello", independent of this runtime's compressor.
+      const frame = Buffer.from('28b52ffd200529000068656c6c6f', 'hex');
+      const junk = Buffer.from('junk');
+      const skippable = Buffer.from('502a4d1803000000616263', 'hex');
+      for (const [suffix, expectedBytes, expectedOutput] of [
+        [Buffer.alloc(0), 14, 'hello'],
+        [junk, 14, 'hello'],
+        [frame.subarray(0, 2), 16, 'hello'],
+        [Buffer.from([0x28, 0xb5, 0, 0]), 14, 'hello'],
+        [frame, 28, 'hellohello'],
+        [Buffer.concat([skippable, frame, junk]), 39, 'hellohello'],
+      ]) {
+        const input = Buffer.concat([frame, suffix]);
+        const sync = zlib.zstdDecompressSync(input, { info: true, chunkSize: 64 });
+        assert.equal(sync.buffer.toString(), expectedOutput);
+        assert.equal(sync.engine.bytesWritten, expectedBytes);
+        const callback = await new Promise((resolve, reject) => zlib.zstdDecompress(input,
+          { info: true, chunkSize: 64 }, (error, value) => error ? reject(error) : resolve(value)));
+        assert.equal(callback.buffer.toString(), expectedOutput);
+        assert.equal(callback.engine.bytesWritten, expectedBytes);
+      }
+      for (const [parts, expectedBytes, expectedOutput] of [
+        [[Buffer.concat([frame, junk])], 14, 'hello'],
+        [[frame, junk], 14, 'hello'],
+        [[Buffer.concat([frame, frame.subarray(0, 1)]), junk], 15, 'hello'],
+        [[frame, frame.subarray(0, 1), junk], 15, 'hello'],
+        [[frame, frame.subarray(0, 2)], 16, 'hello'],
+        [[frame, frame.subarray(0, 1), frame.subarray(1), junk], 28, 'hellohello'],
+        [[frame, skippable.subarray(0, 3), skippable.subarray(3), frame, junk], 39, 'hellohello'],
+      ]) {
+        const decoder = zlib.createZstdDecompress({ chunkSize: 64 });
+        const chunks = [];
+        const done = new Promise((resolve, reject) => {
+          decoder.on('data', chunk => chunks.push(chunk));
+          decoder.on('end', resolve);
+          decoder.on('error', reject);
+        });
+        for (const part of parts) {
+          await new Promise((resolve, reject) => decoder.write(part,
+            error => error ? reject(error) : resolve()));
+        }
+        decoder.end();
+        await done;
+        assert.equal(Buffer.concat(chunks).toString(), expectedOutput);
+        assert.equal(decoder.bytesWritten, expectedBytes);
+      }
+    }],
     ['binary output despite constructor encoding', async () => {
       const source = Buffer.from([0, 255, 13, 29, 128, 65]);
       const options = { encoding: 'hex' };
