@@ -1,3 +1,6 @@
 declare module 'zlib' {
   export function testByteTransfer(): boolean;
+  export function testZstd(): boolean;
+  export function testZstdContracts(): boolean;
+  export function testZstdDisabled(): boolean;
 }

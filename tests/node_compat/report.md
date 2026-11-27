@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3200/4499 (71.1%)
+**Primary compatibility (CI-enforced):** 3228/4523 (71.4%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3200 | 71.1% | 33.1% | 29.6% |
-| 🧩 known gap | 1299 | 28.9% | 13.5% | 12.0% |
+| ✅ passing (runnable) | 3228 | 71.4% | 33.4% | 29.9% |
+| 🧩 known gap | 1295 | 28.6% | 13.4% | 12.0% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
-| ❔ unevaluated (excluded) | 3840 | — | 39.8% | 35.6% |
+| ❔ unevaluated (excluded) | 3816 | — | 39.5% | 35.4% |
 | 🔒 Node.js internals (excluded) | 1140 | — | — | 10.6% |
 | **Total** | **10794** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3200/9654 (33.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3228/9654 (33.4%)**.
 
 ## Inventory by Module
 
@@ -88,7 +88,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | webstreams | 89 | 66 | 1 | 0 | 0 | 21 | 1 | 98.5% | 75.0% |
 | whatwg | 319 | 43 | 32 | 0 | 0 | 56 | 188 | 57.3% | 32.8% |
 | worker_threads | 202 | 25 | 29 | 127 | 0 | 13 | 8 | 46.3% | 12.9% |
-| zlib | 324 | 45 | 15 | 0 | 0 | 260 | 4 | 75.0% | 14.1% |
+| zlib | 324 | 73 | 11 | 0 | 0 | 236 | 4 | 86.9% | 22.8% |
 
 ## Split Test Summary
 
@@ -1040,9 +1040,9 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-zlib-dictionary-fail.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-failed-init.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-invalid-input.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
-| `test-zlib-reject-garbage-after-end.js` | 6 | 0 | 0 | 0 | 0 | 6 | 0 |
+| `test-zlib-reject-garbage-after-end.js` | 6 | 0 | 6 | 0 | 0 | 0 | 0 |
 | `test-zlib-reset-incomplete-output.js` | 7 | 0 | 0 | 0 | 0 | 7 | 0 |
-| `test-zlib-truncated.js` | 3 | 0 | 3 | 0 | 0 | 0 | 0 |
+| `test-zlib-truncated.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-type-error.js` | 4 | 0 | 0 | 0 | 0 | 4 | 0 |
 | `test-zlib-zero-windowBits.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-zlib-zip-coverage.js` | 65 | 0 | 0 | 0 | 0 | 65 | 0 |
@@ -1063,10 +1063,10 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-zlib-zip-writable.js` | 13 | 0 | 0 | 0 | 0 | 13 | 0 |
 | `test-zlib-zip-zip64.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-zlib-zip.js` | 11 | 0 | 0 | 0 | 0 | 11 | 0 |
-| `test-zlib-zstd-reset-incomplete-frame.js` | 5 | 0 | 0 | 0 | 0 | 5 | 0 |
-| `test-zlib-zstd-reset.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
-| `test-zlib-zstd.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
-| `test-zlib.js` | 2 | 0 | 2 | 0 | 0 | 0 | 0 |
+| `test-zlib-zstd-reset-incomplete-frame.js` | 5 | 5 | 0 | 0 | 0 | 0 | 0 |
+| `test-zlib-zstd-reset.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-zlib-zstd.js` | 3 | 3 | 0 | 0 | 0 | 0 | 0 |
+| `test-zlib.js` | 2 | 2 | 0 | 0 | 0 | 0 | 0 |
 | `test-async-wrap-getasyncid.js` | 18 | 0 | 0 | 0 | 0 | 0 | 18 |
 | `test-benchmark-node-bench-tools.js` | 16 | 0 | 0 | 0 | 0 | 16 | 0 |
 | `test-child-process-execsync.js` | 7 | 0 | 0 | 7 | 0 | 0 | 0 |
@@ -1090,7 +1090,7 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1299)
+### known gap (1295)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
@@ -1113,7 +1113,6 @@ Secondary full-public compatibility, including public tests that are currently e
 | rooted symlink targets cannot be resolved inside a WASI preopen; the adapter rejects them at creation, while persistent relative symlinks are covered by runtime tests | 11 | `es-module/test-esm-preserve-symlinks-main.js`, `es-module/test-esm-preserve-symlinks.js`, `es-module/test-esm-symlink-main.js`, ... (+8) |
 | wasi:sockets UDP implementation hangs in wasmtime | 11 | `parallel/test-dgram-implicit-bind.js`, `parallel/test-dgram-multicast-set-interface.js#block_00_block_00`, `parallel/test-dgram-multicast-set-interface.js#block_02_block_02`, ... (+8) |
 | dgram multicast membership APIs are not implemented (ENOSYS) | 10 | `parallel/test-dgram-membership.js#block_02_addmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_03_dropmembership_with_no_argument_should_throw`, `parallel/test-dgram-membership.js#block_04_addmembership_with_invalid_multicast_address_should_throw`, ... (+7) |
-| zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented | 10 | `parallel/test-zlib-convenience-methods.js`, `parallel/test-zlib-empty-buffer.js`, `parallel/test-zlib-random-byte-pipes.js`, ... (+7) |
 | async_hooks not fully implemented | 9 | `parallel/test-async-hooks-destroy-on-gc.js`, `parallel/test-async-hooks-disable-during-promise.js`, `parallel/test-async-hooks-disable-gc-tracking.js`, ... (+6) |
 | net.js TCP implementation incomplete - needs event handling and API fixes | 9 | `parallel/test-net-connect-nodelay.js`, `parallel/test-net-connect-paused-connection.js`, `parallel/test-net-during-close.js`, ... (+6) |
 | spawn() AbortSignal handling is incomplete (exit code/signal/error semantics differ from Node) | 9 | `parallel/test-child-process-spawn-controller.js#block_00_block_00`, `parallel/test-child-process-spawn-controller.js#block_01_block_01`, `parallel/test-child-process-spawn-controller.js#block_02_block_02`, ... (+6) |
@@ -1129,6 +1128,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | inherited: common.canCreateSymLink shim always returns false, so symlink permission tests are skipped | 6 | `parallel/test-permission-fs-symlink-target-write.js#block_00_block_00`, `parallel/test-permission-fs-symlink-target-write.js#block_01_block_01`, `parallel/test-permission-fs-symlink.js#block_00_block_00`, ... (+3) |
 | inherited: perf_hooks createHistogram/monitorEventLoopDelay are not implemented | 6 | `parallel/test-perf-hooks-histogram.js#block_00_block_00`, `parallel/test-perf-hooks-histogram.js#block_01_block_01`, `parallel/test-perf-hooks-histogram.js#block_02_block_02`, ... (+3) |
 | same-process import.meta.resolve behavior is covered by runtime tests; remaining vendored failure requires child_process execPath emulation for --input-type/--import ESM CLI modes | 6 | `es-module/test-esm-import-meta-resolve.mjs#block_00_block_00`, `es-module/test-esm-import-meta-resolve.mjs#block_01_block_01`, `es-module/test-esm-import-meta-resolve.mjs#block_02_block_02`, ... (+3) |
+| shared non-zstd rejectGarbageAfterEnd assertions fail before complete subtest qualification | 6 | `parallel/test-zlib-reject-garbage-after-end.js#test_00_zstd_decompresses_concatenated_frames_regardless_of_chunking`, `parallel/test-zlib-reject-garbage-after-end.js#test_01_zstd_trailing_junk_handling_is_independent_of_chunking`, `parallel/test-zlib-reject-garbage-after-end.js#test_02_zstd_handles_incomplete_trailing_frame_identifiers_as_junk`, ... (+3) |
 | the test's meaningful body requires rooted symlink targets; common.canCreateSymLink skips it under the supported relative-only WASI boundary | 6 | `parallel/test-fs-options-immutable.js#block_00_block_00`, `parallel/test-fs-options-immutable.js#block_01_block_01`, `parallel/test-fs-options-immutable.js#block_02_block_02`, ... (+3) |
 | common-shim spawnPromisified child emulation does not support --experimental-webstorage/--localstorage-file flags | 5 | `parallel/test-webstorage.js#test_00_storage_instances_cannot_be_created_in_userland`, `parallel/test-webstorage.js#test_02_sessionstorage_is_not_persisted`, `parallel/test-webstorage.js#test_05_localstorage_is_not_persisted_if_it_is_unused`, ... (+2) |
 | inherited: buffer.transcode and ICU transcoding are not implemented | 5 | `parallel/test-icu-transcode.js#block_00_block_00`, `parallel/test-icu-transcode.js#block_01_block_01`, `parallel/test-icu-transcode.js#block_02_test_that_uint8array_arguments_are_okay`, ... (+2) |
@@ -1957,11 +1957,11 @@ Secondary full-public compatibility, including public tests that are currently e
 | vm.Script.createCachedData relies on V8 code cache internals unavailable in QuickJS | 1 | `parallel/test-vm-createcacheddata.js` |
 | vm.SourceTextModule dynamic import referrer realm semantics depend on Node VM realm behavior not modeled by the QuickJS host | 1 | `parallel/test-vm-module-referrer-realm.mjs` |
 
-### unevaluated (3840)
+### unevaluated (3816)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
-| newly discovered, not yet evaluated | 3639 | `es-module/test-cjs-defer-static-import-eval.mjs`, `es-module/test-defer-import-builtin-module.mjs`, `es-module/test-defer-import-eval-with-tla.mjs`, ... (+3636) |
+| newly discovered, not yet evaluated | 3615 | `es-module/test-cjs-defer-static-import-eval.mjs`, `es-module/test-defer-import-builtin-module.mjs`, `es-module/test-defer-import-eval-with-tla.mjs`, ... (+3612) |
 | newly discovered subtest, not yet evaluated | 201 | `es-module/test-esm-json.mjs#test_01_should_load_json_with_import_calls`, `parallel/test-assert-deep.js#test_01_loose_deepequal`, `parallel/test-assert-deep.js#test_08_deepstrictequal_handles_shared_expected_array_elements_after`, ... (+198) |
 
 ### Node.js internals (1140)

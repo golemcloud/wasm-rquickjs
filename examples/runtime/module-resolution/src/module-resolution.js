@@ -43,13 +43,13 @@ export async function testBuiltinDiscovery(testCase) {
         for (const id of ['node:test', 'node:sqlite']) {
             assert.strictEqual(get(id), require(id), id);
         }
-        // Actual package capability probes: keep absent SEA/zstd capabilities
-        // absent, so callers can take their ordinary-runtime/uncompressed path.
+        // Package probes retain the absent SEA fallback and discover the same
+        // supported codec APIs as the ordinary zlib module.
         assert.strictEqual(get('node:sea'), undefined);
         assert.strictEqual(get('node:sea')?.isSea() ?? false, false);
         const zlib = get('node:zlib');
         assert.strictEqual(zlib, require('zlib'));
-        assert.strictEqual(zlib.zstdCompressSync, undefined);
+        assert.strictEqual(typeof zlib.zstdCompressSync, 'function');
         assert.strictEqual(typeof zlib.gzipSync, 'function');
     } else if (testCase === 1) {
         const originalLoad = module._load;

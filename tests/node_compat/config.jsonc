@@ -4052,7 +4052,7 @@
       }
     },
     "parallel/test-worker-message-port-close-while-receiving.js": {},
-    "parallel/test-zlib-zero-byte.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+    "parallel/test-zlib-zero-byte.js": {},
     "parallel/test-async-hooks-vm-gc.js": {},
     "parallel/test-finalization-registry-shutdown.js": {},
     "parallel/test-heapdump-async-hooks-init-promise.js": { "category": "engine-difference", "reason": "v8.getHeapSnapshot is V8-specific and unavailable in QuickJS" },
@@ -4198,10 +4198,10 @@
       }
     },
     "parallel/test-zlib-flush-flags.js": {},
-    "parallel/test-zlib-convenience-methods.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+    "parallel/test-zlib-convenience-methods.js": {},
     "parallel/test-zlib-from-string.js": {},
     "parallel/test-zlib-brotli-from-string.js": {},
-    "parallel/test-zlib-empty-buffer.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+    "parallel/test-zlib-empty-buffer.js": {},
     "parallel/test-zlib-deflate-constructors.js": {},
     "parallel/test-zlib-not-string-or-buffer.js": {},
     "parallel/test-zlib-sync-no-event.js": {},
@@ -4252,20 +4252,20 @@
     "parallel/test-zlib-kmaxlength-rangeerror.js": {},
     "parallel/test-zlib-maxOutputLength.js": {},
     "parallel/test-zlib-params.js": {},
-    "parallel/test-zlib-random-byte-pipes.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+    "parallel/test-zlib-random-byte-pipes.js": {},
     "parallel/test-zlib-reset-before-write.js": {},
     "parallel/test-zlib-truncated.js": {
       "split": true,
       "subtests": {
-        "block_00_value_as_truncated_input": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
-        "block_01_mistaken_for_an_empty_truncated_frame": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
-        "block_02_must_report_that_the_frame_is_incomplete": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" }
+        "block_00_value_as_truncated_input": {},
+        "block_01_mistaken_for_an_empty_truncated_frame": {},
+        "block_02_must_report_that_the_frame_is_incomplete": {}
       }
     },
     "parallel/test-zlib-unused-weak.js": { "category": "node-internals", "reason": "asserts internal zlib native-handle weak-reference/external-memory behavior" },
     "parallel/test-zlib-write-after-close.js": {},
     "parallel/test-zlib-write-after-end.js": {},
-    "parallel/test-zlib-write-after-flush.js": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
+    "parallel/test-zlib-write-after-flush.js": {},
     "parallel/test-zlib-close-after-error.js": { "category": "node-internals", "reason": "asserts private zlib stream _closed state after error" },
     "parallel/test-zlib-close-in-ondata.js": {},
     "parallel/test-zlib-destroy.js": {
@@ -10665,8 +10665,8 @@
     "parallel/test-zlib.js": {
       "split": true,
       "subtests": {
-        "block_00_block_00": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" },
-        "block_01_block_01": { "category": "known-gap", "reason": "zlib zstd compression APIs (zstdCompress, ZstdCompress) are not implemented" }
+        "block_00_block_00": {},
+        "block_01_block_01": {}
       }
     },
     "sequential/test-async-wrap-getasyncid.js": {
@@ -16832,11 +16832,11 @@
         "test_01_brotlidecompress_reset_preserves_its_dictionary": {}
       }
     },
-    "parallel/test-zlib-decode-strings.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-zlib-decode-strings.js": {},
     "parallel/test-zlib-negative-zero.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
     "parallel/test-zlib-reject-garbage-after-end.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
+      "category": "known-gap",
+      "reason": "shared non-zstd rejectGarbageAfterEnd assertions fail before complete subtest qualification",
       "split": true,
       "subtests": {
         "test_00_zstd_decompresses_concatenated_frames_regardless_of_chunking": {},
@@ -17211,15 +17211,13 @@
         "test_10_a_deflate_and_a_zstd_member_each_stream_back_through_content": {}
       }
     },
-    "parallel/test-zlib-zstd-dictionary.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-zlib-zstd-flush.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-zlib-zstd-from-string.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-zlib-zstd-from-zstd.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-zlib-zstd-kmaxlength-rangeerror.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
-    "parallel/test-zlib-zstd-pledged-src-size.js": { "category": "unevaluated", "reason": "newly discovered, not yet evaluated" },
+    "parallel/test-zlib-zstd-dictionary.js": {},
+    "parallel/test-zlib-zstd-flush.js": {},
+    "parallel/test-zlib-zstd-from-string.js": {},
+    "parallel/test-zlib-zstd-from-zstd.js": {},
+    "parallel/test-zlib-zstd-kmaxlength-rangeerror.js": {},
+    "parallel/test-zlib-zstd-pledged-src-size.js": {},
     "parallel/test-zlib-zstd-reset-incomplete-frame.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "test_00_zstdcompress_reset_throws_when_an_incomplete_frame_has_emitt": {},
@@ -17230,8 +17228,6 @@
       }
     },
     "parallel/test-zlib-zstd-reset.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "test_00_zstdcompress_reset_preserves_its_initial_options": {},
@@ -17240,8 +17236,6 @@
       }
     },
     "parallel/test-zlib-zstd.js": {
-      "category": "unevaluated",
-      "reason": "newly discovered, not yet evaluated",
       "split": true,
       "subtests": {
         "block_00_block_00": {},

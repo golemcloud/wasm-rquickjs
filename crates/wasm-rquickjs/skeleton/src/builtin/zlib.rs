@@ -5,6 +5,9 @@ use std::sync::{LazyLock, Mutex};
 
 use flate2::{Compression, Decompress, FlushDecompress, Status};
 
+#[cfg(feature = "zstd")]
+mod zstd;
+
 // ===== Handle ID generation =====
 
 static NEXT_HANDLE: AtomicU32 = AtomicU32::new(1);
@@ -1117,6 +1120,7 @@ pub mod native_module {
     use rquickjs::{Ctx, TypedArray};
 
     type DecompressOutcome<'js> = List<(Option<TypedArray<'js, u8>>, Option<String>, i32)>;
+    type ZstdOutcome<'js> = List<(Option<TypedArray<'js, u8>>, Option<String>, i32, u32, bool)>;
 
     // ===== One-shot functions =====
 
@@ -1286,6 +1290,83 @@ pub mod native_module {
     #[rquickjs::function]
     pub fn brotli_stream_bytes_written(id: u32) -> u32 {
         super::brotli_stream_bytes_written_impl(id)
+    }
+
+    #[rquickjs::function]
+    pub fn zstd_stream_new<'js>(
+        decompress: bool,
+        params: String,
+        dictionary: TypedArray<'js, u8>,
+        pledged: Option<f64>,
+        reject_garbage: bool,
+    ) -> Option<u32> {
+        #[cfg(feature = "zstd")]
+        {
+            // SAFETY: Codec initialization consumes the rooted dictionary without JS re-entry.
+            let dictionary = unsafe { dictionary.as_bytes() }.unwrap_or_default();
+            super::zstd::new(decompress, &params, dictionary, pledged, reject_garbage)
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            let _ = (decompress, params, dictionary, pledged, reject_garbage);
+            None
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn zstd_stream_push<'js>(
+        ctx: Ctx<'js>,
+        id: u32,
+        data: TypedArray<'js, u8>,
+        flush: u8,
+        capacity: u32,
+    ) -> rquickjs::Result<ZstdOutcome<'js>> {
+        #[cfg(feature = "zstd")]
+        {
+            // SAFETY: Codec processing consumes the rooted input without JS re-entry.
+            let input = unsafe { data.as_bytes() }.unwrap_or_default();
+            match super::zstd::push(id, input, flush, capacity as usize) {
+                Ok((bytes, consumed, done)) => Ok(List((
+                    Some(TypedArray::new(ctx, bytes)?),
+                    None,
+                    0,
+                    consumed as u32,
+                    done,
+                ))),
+                Err((code, message)) => Ok(List((None, Some(message), code, 0, true))),
+            }
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            let _ = (ctx, id, data, flush, capacity);
+            Ok(List((None, None, 0, 0, true)))
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn zstd_stream_reset(id: u32) -> bool {
+        #[cfg(feature = "zstd")]
+        {
+            super::zstd::reset(id)
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            let _ = id;
+            false
+        }
+    }
+
+    #[rquickjs::function]
+    pub fn zstd_stream_close(id: u32) -> bool {
+        #[cfg(feature = "zstd")]
+        {
+            super::zstd::close(id)
+        }
+        #[cfg(not(feature = "zstd"))]
+        {
+            let _ = id;
+            false
+        }
     }
 }
 
