@@ -57,6 +57,7 @@ fn zlib_compress_sync_impl(data: &[u8], level: i32, window_bits: i32) -> Option<
 
 enum SyncDecompressError {
     Buffer,
+    Trailing,
     #[cfg(feature = "brotli")]
     Brotli {
         code: String,
@@ -72,6 +73,7 @@ fn gzip_decompress_multi_member(
     data: &[u8],
     finish_flush: i32,
     auto_detect: bool,
+    reject_garbage: bool,
 ) -> Result<Vec<u8>, SyncDecompressError> {
     let allow_partial = finish_flush != 4;
     let stop_at_block = finish_flush == 5;
@@ -89,6 +91,10 @@ fn gzip_decompress_multi_member(
     while (cursor.position() as usize) < data.len() {
         let pos = cursor.position() as usize;
         let remaining = &data[pos..];
+
+        if members_decoded > 0 && reject_garbage {
+            return Err(SyncDecompressError::Trailing);
+        }
 
         // Node treats any suffix beginning with zero after a complete member as
         // gzip padding, including a zero followed by otherwise non-padding data.
@@ -159,6 +165,7 @@ fn inflate_sync(
     data: &[u8],
     zlib_header: bool,
     finish_flush: i32,
+    reject_garbage: bool,
 ) -> Result<Vec<u8>, SyncDecompressError> {
     let allow_partial = finish_flush != 4;
     let flush = if allow_partial {
@@ -174,6 +181,9 @@ fn inflate_sync(
     if !result.stream_end && !allow_partial {
         return Err(SyncDecompressError::Buffer);
     }
+    if result.stream_end && result.input_consumed < data.len() && reject_garbage {
+        return Err(SyncDecompressError::Trailing);
+    }
     output.truncate(result.output_len);
     Ok(output)
 }
@@ -182,19 +192,20 @@ fn zlib_decompress_sync_impl(
     data: &[u8],
     window_bits: i32,
     finish_flush: i32,
+    reject_garbage: bool,
 ) -> Result<Vec<u8>, SyncDecompressError> {
     if window_bits >= 24 {
-        gzip_decompress_multi_member(data, finish_flush, false)
+        gzip_decompress_multi_member(data, finish_flush, false, reject_garbage)
     } else if window_bits == 0 {
         if data.len() < 2 || data.first() == Some(&0x1f) {
-            gzip_decompress_multi_member(data, finish_flush, true)
+            gzip_decompress_multi_member(data, finish_flush, true, reject_garbage)
         } else {
-            inflate_sync(data, true, finish_flush)
+            inflate_sync(data, true, finish_flush, reject_garbage)
         }
     } else if window_bits < 0 {
-        inflate_sync(data, false, finish_flush)
+        inflate_sync(data, false, finish_flush, reject_garbage)
     } else {
-        inflate_sync(data, true, finish_flush)
+        inflate_sync(data, true, finish_flush, reject_garbage)
     }
 }
 
@@ -220,6 +231,7 @@ fn brotli_compress_sync_impl(data: &[u8], params_json: &str) -> Option<Vec<u8>> 
 fn brotli_decompress_sync_impl(
     data: &[u8],
     finish_flush: u8,
+    reject_garbage: bool,
 ) -> Result<Vec<u8>, SyncDecompressError> {
     let mut state = brotli::BrotliState::new(
         brotli::HeapAlloc::<u8>::default(),
@@ -248,7 +260,13 @@ fn brotli_decompress_sync_impl(
         output.extend_from_slice(&chunk[..output_offset]);
 
         match result {
-            brotli::BrotliResult::ResultSuccess => return Ok(output),
+            brotli::BrotliResult::ResultSuccess => {
+                return if available_in > 0 && reject_garbage {
+                    Err(SyncDecompressError::Trailing)
+                } else {
+                    Ok(output)
+                };
+            }
             brotli::BrotliResult::ResultFailure => {
                 let errno = state.error_code as i32;
                 let decoder_error = format!("{:?}", state.error_code);
@@ -309,6 +327,7 @@ fn brotli_compress_sync_impl(_data: &[u8], _params_json: &str) -> Option<Vec<u8>
 fn brotli_decompress_sync_impl(
     _data: &[u8],
     _finish_flush: u8,
+    _reject_garbage: bool,
 ) -> Result<Vec<u8>, SyncDecompressError> {
     Err(SyncDecompressError::Generic)
 }
@@ -326,6 +345,8 @@ fn crc32_compute_impl(data: &[u8], initial: u32) -> u32 {
 struct ZlibStream {
     kind: ZlibStreamKind,
     bytes_written: u32,
+    reject_garbage: bool,
+    trailing: bool,
 }
 
 enum ZlibStreamKind {
@@ -349,6 +370,7 @@ enum ZlibStreamKind {
     Decompress {
         inner: Decompress,
         zlib_header: bool,
+        finished: bool,
     },
     GzipCompress {
         encoder: flate2::write::GzEncoder<Vec<u8>>,
@@ -359,6 +381,7 @@ enum ZlibStreamKind {
         header_buf: Vec<u8>,
         header_parsed: bool,
         trailer_remaining: usize,
+        finished: bool,
     },
 }
 
@@ -470,6 +493,7 @@ fn zlib_stream_new_impl(
     _window_bits: i32,
     _mem_level: i32,
     _strategy: i32,
+    reject_garbage: bool,
 ) -> Option<u32> {
     let compression = map_compression_level(level);
 
@@ -485,6 +509,7 @@ fn zlib_stream_new_impl(
         1 => ZlibStreamKind::Decompress {
             inner: Decompress::new(true),
             zlib_header: true,
+            finished: false,
         },
         // 2: gzip compress — streaming with flush support
         2 => ZlibStreamKind::GzipCompress {
@@ -497,6 +522,7 @@ fn zlib_stream_new_impl(
             header_buf: Vec::new(),
             header_parsed: false,
             trailer_remaining: 0,
+            finished: false,
         },
         // 4: deflate raw compress
         4 => ZlibStreamKind::RawCompress {
@@ -506,6 +532,7 @@ fn zlib_stream_new_impl(
         5 => ZlibStreamKind::Decompress {
             inner: Decompress::new(false),
             zlib_header: false,
+            finished: false,
         },
         // 6: unzip (auto-detect gzip/zlib) — streaming decompression
         6 => ZlibStreamKind::GzipDecompress {
@@ -513,6 +540,7 @@ fn zlib_stream_new_impl(
             header_buf: Vec::new(),
             header_parsed: false,
             trailer_remaining: 0,
+            finished: false,
         },
         _ => return None,
     };
@@ -523,6 +551,8 @@ fn zlib_stream_new_impl(
         ZlibStream {
             kind,
             bytes_written: 0,
+            reject_garbage,
+            trailing: false,
         },
     );
     Some(id)
@@ -652,10 +682,19 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                 Some(Vec::new())
             }
         }
-        ZlibStreamKind::Decompress { inner, .. } => {
+        ZlibStreamKind::Decompress {
+            inner, finished, ..
+        } => {
+            if *finished {
+                stream.trailing |= stream.reject_garbage && !data.is_empty();
+                return Some(Vec::new());
+            }
             let mut output = vec![0u8; data.len() + 1024];
             let flush_mode = map_flush_decompress(flush);
             let result = decompress_loop(inner, data, &mut output, flush_mode)?;
+            *finished = result.stream_end;
+            stream.trailing |=
+                result.stream_end && result.input_consumed < data.len() && stream.reject_garbage;
             output.truncate(result.output_len);
             Some(output)
         }
@@ -678,12 +717,17 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
             header_buf,
             header_parsed,
             trailer_remaining,
+            finished,
         } => {
             let mut all_output = Vec::new();
             let mut remaining: Vec<u8> = data.to_vec();
 
             loop {
                 if remaining.is_empty() {
+                    break;
+                }
+                if *finished && stream.reject_garbage {
+                    stream.trailing = true;
                     break;
                 }
 
@@ -699,6 +743,11 @@ fn zlib_stream_push_impl(id: u32, data: &[u8], flush: i32) -> Option<Vec<u8>> {
                     // Trailer fully consumed, prepare for next member
                     *inner = Decompress::new(false);
                     *header_parsed = false;
+                    *finished = true;
+                    if stream.reject_garbage && !remaining.is_empty() {
+                        stream.trailing = true;
+                        break;
+                    }
                     if remaining.is_empty() {
                         break;
                     }
@@ -836,9 +885,12 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
                 buffer.clear();
             }
             ZlibStreamKind::Decompress {
-                inner, zlib_header, ..
+                inner,
+                zlib_header,
+                finished,
             } => {
                 *inner = Decompress::new(*zlib_header);
+                *finished = false;
             }
             ZlibStreamKind::GzipCompress { encoder, level } => {
                 *encoder = flate2::write::GzEncoder::new(Vec::new(), *level);
@@ -848,14 +900,17 @@ fn zlib_stream_reset_impl(id: u32) -> bool {
                 header_buf,
                 header_parsed,
                 trailer_remaining,
+                finished,
             } => {
                 *inner = Decompress::new(false);
                 header_buf.clear();
                 *header_parsed = false;
                 *trailer_remaining = 0;
+                *finished = false;
             }
         }
         stream.bytes_written = 0;
+        stream.trailing = false;
         true
     } else {
         false
@@ -945,7 +1000,17 @@ fn zlib_stream_bytes_written_impl(id: u32) -> u32 {
 struct BrotliStream {
     kind: BrotliStreamKind,
     bytes_written: u32,
+    reject_garbage: bool,
+    allow_incomplete: bool,
+    trailing: bool,
 }
+
+#[cfg(feature = "brotli")]
+type BrotliDecoder = brotli::BrotliState<
+    brotli::HeapAlloc<u8>,
+    brotli::HeapAlloc<u32>,
+    brotli::HeapAlloc<brotli::HuffmanCode>,
+>;
 
 #[cfg(feature = "brotli")]
 enum BrotliStreamKind {
@@ -957,7 +1022,10 @@ enum BrotliStreamKind {
         buffer: Vec<u8>,
     },
     DecompressStreaming {
-        decompressor: Box<brotli::Decompressor<Cursor<Vec<u8>>>>,
+        decoder: Box<BrotliDecoder>,
+        input: Vec<u8>,
+        offset: usize,
+        finished: bool,
     },
 }
 
@@ -966,7 +1034,12 @@ static BROTLI_STREAMS: LazyLock<Mutex<HashMap<u32, BrotliStream>>> =
     LazyLock::new(|| Mutex::new(HashMap::new()));
 
 #[cfg(feature = "brotli")]
-fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
+fn brotli_stream_new_impl(
+    mode: u8,
+    params_json: &str,
+    reject_garbage: bool,
+    allow_incomplete: bool,
+) -> Option<u32> {
     let kind = match mode {
         0 => {
             let quality = parse_brotli_quality(params_json);
@@ -991,6 +1064,9 @@ fn brotli_stream_new_impl(mode: u8, params_json: &str) -> Option<u32> {
         BrotliStream {
             kind,
             bytes_written: 0,
+            reject_garbage,
+            allow_incomplete,
+            trailing: false,
         },
     );
     Some(id)
@@ -1039,20 +1115,25 @@ fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
             // flush == 2 means finish (BROTLI_OPERATION_FINISH)
             if flush == 2 {
                 let input = std::mem::take(buffer);
-                let mut decompressor = brotli::Decompressor::new(Cursor::new(input), 4096);
-                let chunk_size = 16 * 1024;
-                let mut chunk = vec![0u8; chunk_size];
-                let n = decompressor.read(&mut chunk).ok()?;
-                chunk.truncate(n);
                 stream.kind = BrotliStreamKind::DecompressStreaming {
-                    decompressor: Box::new(decompressor),
+                    decoder: Box::new(brotli::BrotliState::new(
+                        brotli::HeapAlloc::default(),
+                        brotli::HeapAlloc::default(),
+                        brotli::HeapAlloc::default(),
+                    )),
+                    input,
+                    offset: 0,
+                    finished: false,
                 };
-                Some(chunk)
+                brotli_stream_read(stream, 16 * 1024)
             } else {
                 Some(Vec::new())
             }
         }
-        BrotliStreamKind::DecompressStreaming { .. } => Some(Vec::new()),
+        BrotliStreamKind::DecompressStreaming { .. } => {
+            stream.trailing |= stream.reject_garbage && !data.is_empty();
+            Some(Vec::new())
+        }
     }
 }
 
@@ -1060,12 +1141,50 @@ fn brotli_stream_push_impl(id: u32, data: &[u8], flush: u8) -> Option<Vec<u8>> {
 fn brotli_stream_pull_impl(id: u32, max_bytes: u32) -> Option<Vec<u8>> {
     let mut streams = BROTLI_STREAMS.lock().unwrap();
     let stream = streams.get_mut(&id)?;
+    brotli_stream_read(stream, max_bytes as usize)
+}
 
+#[cfg(feature = "brotli")]
+fn brotli_stream_read(stream: &mut BrotliStream, max_bytes: usize) -> Option<Vec<u8>> {
     match &mut stream.kind {
-        BrotliStreamKind::DecompressStreaming { decompressor } => {
-            let mut chunk = vec![0u8; max_bytes as usize];
-            let n = decompressor.read(&mut chunk).ok()?;
-            chunk.truncate(n);
+        BrotliStreamKind::DecompressStreaming {
+            decoder,
+            input,
+            offset,
+            finished,
+        } => {
+            if *finished {
+                return Some(Vec::new());
+            }
+            let mut chunk = vec![0u8; max_bytes];
+            let mut available_in = input.len() - *offset;
+            let mut available_out = chunk.len();
+            let mut output_offset = 0;
+            let mut total_out = 0;
+            let result = brotli::BrotliDecompressStream(
+                &mut available_in,
+                offset,
+                input,
+                &mut available_out,
+                &mut output_offset,
+                &mut chunk,
+                &mut total_out,
+                decoder,
+            );
+            match result {
+                brotli::BrotliResult::ResultSuccess => {
+                    *finished = true;
+                    stream.trailing |= stream.reject_garbage && available_in > 0;
+                }
+                brotli::BrotliResult::NeedsMoreOutput => {}
+                // Match the reader API: return decoded bytes before EOF.
+                brotli::BrotliResult::NeedsMoreInput if output_offset > 0 => {}
+                brotli::BrotliResult::NeedsMoreInput if stream.allow_incomplete => {
+                    *finished = true;
+                }
+                _ => return None,
+            }
+            chunk.truncate(output_offset);
             Some(chunk)
         }
         _ => Some(Vec::new()),
@@ -1088,7 +1207,12 @@ fn brotli_stream_bytes_written_impl(id: u32) -> u32 {
 }
 
 #[cfg(not(feature = "brotli"))]
-fn brotli_stream_new_impl(_mode: u8, _params_json: &str) -> Option<u32> {
+fn brotli_stream_new_impl(
+    _mode: u8,
+    _params_json: &str,
+    _reject_garbage: bool,
+    _allow_incomplete: bool,
+) -> Option<u32> {
     None
 }
 
@@ -1120,6 +1244,7 @@ pub mod native_module {
     use rquickjs::{Ctx, TypedArray};
 
     type DecompressOutcome<'js> = List<(Option<TypedArray<'js, u8>>, Option<String>, i32)>;
+    type StreamOutcome<'js> = List<(Option<TypedArray<'js, u8>>, bool)>;
     type ZstdOutcome<'js> = List<(Option<TypedArray<'js, u8>>, Option<String>, i32, u32, bool)>;
 
     // ===== One-shot functions =====
@@ -1144,11 +1269,13 @@ pub mod native_module {
         data: TypedArray<'js, u8>,
         window_bits: i32,
         finish_flush: i32,
+        reject_garbage: bool,
     ) -> rquickjs::Result<DecompressOutcome<'js>> {
         // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
         let input = unsafe { data.as_bytes() }.unwrap_or_default();
-        match super::zlib_decompress_sync_impl(input, window_bits, finish_flush) {
+        match super::zlib_decompress_sync_impl(input, window_bits, finish_flush, reject_garbage) {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
+            Err(super::SyncDecompressError::Trailing) => Ok(List((None, None, -7))),
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
             }
@@ -1179,11 +1306,13 @@ pub mod native_module {
         ctx: Ctx<'js>,
         data: TypedArray<'js, u8>,
         finish_flush: u8,
+        reject_garbage: bool,
     ) -> rquickjs::Result<DecompressOutcome<'js>> {
         // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
         let input = unsafe { data.as_bytes() }.unwrap_or_default();
-        match super::brotli_decompress_sync_impl(input, finish_flush) {
+        match super::brotli_decompress_sync_impl(input, finish_flush, reject_garbage) {
             Ok(bytes) => Ok(List((Some(TypedArray::new(ctx, bytes)?), None, 0))),
+            Err(super::SyncDecompressError::Trailing) => Ok(List((None, None, -7))),
             Err(super::SyncDecompressError::Buffer) => {
                 Ok(List((None, Some("unexpected end of file".to_string()), -5)))
             }
@@ -1212,8 +1341,16 @@ pub mod native_module {
         window_bits: i32,
         mem_level: i32,
         strategy: i32,
+        reject_garbage: bool,
     ) -> Option<u32> {
-        super::zlib_stream_new_impl(mode, level, window_bits, mem_level, strategy)
+        super::zlib_stream_new_impl(
+            mode,
+            level,
+            window_bits,
+            mem_level,
+            strategy,
+            reject_garbage,
+        )
     }
 
     #[rquickjs::function]
@@ -1222,12 +1359,18 @@ pub mod native_module {
         id: u32,
         data: TypedArray<'js, u8>,
         flush: i32,
-    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
+    ) -> rquickjs::Result<StreamOutcome<'js>> {
         // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
         let input = unsafe { data.as_bytes() }.unwrap_or_default();
-        super::zlib_stream_push_impl(id, input, flush)
+        let bytes = super::zlib_stream_push_impl(id, input, flush)
             .map(|bytes| TypedArray::new(ctx, bytes))
-            .transpose()
+            .transpose()?;
+        let trailing = super::ZLIB_STREAMS
+            .lock()
+            .unwrap()
+            .get(&id)
+            .is_some_and(|stream| stream.trailing);
+        Ok(List((bytes, trailing)))
     }
 
     #[rquickjs::function]
@@ -1253,8 +1396,13 @@ pub mod native_module {
     // ===== Brotli streaming functions =====
 
     #[rquickjs::function]
-    pub fn brotli_stream_new(mode: u8, params_json: String) -> Option<u32> {
-        super::brotli_stream_new_impl(mode, &params_json)
+    pub fn brotli_stream_new(
+        mode: u8,
+        params_json: String,
+        reject_garbage: bool,
+        allow_incomplete: bool,
+    ) -> Option<u32> {
+        super::brotli_stream_new_impl(mode, &params_json, reject_garbage, allow_incomplete)
     }
 
     #[rquickjs::function]
@@ -1263,12 +1411,21 @@ pub mod native_module {
         id: u32,
         data: TypedArray<'js, u8>,
         flush: u8,
-    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
+    ) -> rquickjs::Result<StreamOutcome<'js>> {
         // SAFETY: Compression consumes the rooted input synchronously without JS re-entry.
         let input = unsafe { data.as_bytes() }.unwrap_or_default();
-        super::brotli_stream_push_impl(id, input, flush)
+        let bytes = super::brotli_stream_push_impl(id, input, flush)
             .map(|bytes| TypedArray::new(ctx, bytes))
-            .transpose()
+            .transpose()?;
+        #[cfg(feature = "brotli")]
+        let trailing = super::BROTLI_STREAMS
+            .lock()
+            .unwrap()
+            .get(&id)
+            .is_some_and(|stream| stream.trailing);
+        #[cfg(not(feature = "brotli"))]
+        let trailing = false;
+        Ok(List((bytes, trailing)))
     }
 
     #[rquickjs::function]
@@ -1276,10 +1433,19 @@ pub mod native_module {
         ctx: Ctx<'js>,
         id: u32,
         max_bytes: u32,
-    ) -> rquickjs::Result<Option<TypedArray<'js, u8>>> {
-        super::brotli_stream_pull_impl(id, max_bytes)
+    ) -> rquickjs::Result<StreamOutcome<'js>> {
+        let bytes = super::brotli_stream_pull_impl(id, max_bytes)
             .map(|bytes| TypedArray::new(ctx, bytes))
-            .transpose()
+            .transpose()?;
+        #[cfg(feature = "brotli")]
+        let trailing = super::BROTLI_STREAMS
+            .lock()
+            .unwrap()
+            .get(&id)
+            .is_some_and(|stream| stream.trailing);
+        #[cfg(not(feature = "brotli"))]
+        let trailing = false;
+        Ok(List((bytes, trailing)))
     }
 
     #[rquickjs::function]

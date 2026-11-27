@@ -9,13 +9,13 @@ import {
   brotli_decompress_sync as _brotli_decompress_sync,
   crc32_compute,
   zlib_stream_new,
-  zlib_stream_push,
+  zlib_stream_push as _zlib_stream_push,
   zlib_stream_params,
   zlib_stream_reset,
   zlib_stream_close,
   brotli_stream_new,
-  brotli_stream_push,
-  brotli_stream_pull,
+  brotli_stream_push as _brotli_stream_push,
+  brotli_stream_pull as _brotli_stream_pull,
   brotli_stream_close,
   zstd_stream_new,
   zstd_stream_push,
@@ -57,6 +57,19 @@ function bufferFromNativeBytes(bytes) {
   setPrototypeOf(bytes, BufferPrototype);
   return bytes;
 }
+
+function trailingJunkError() {
+  return makeTypeError('ERR_TRAILING_JUNK_AFTER_STREAM_END', 'Trailing junk found after the end of the compressed stream');
+}
+
+function streamResult([bytes, trailing]) {
+  if (trailing) throw trailingJunkError();
+  return bytes;
+}
+
+function zlib_stream_push(...args) { return streamResult(_zlib_stream_push(...args)); }
+function brotli_stream_push(...args) { return streamResult(_brotli_stream_push(...args)); }
+function brotli_stream_pull(...args) { return streamResult(_brotli_stream_pull(...args)); }
 
 function isDetachedArrayBuffer(buffer) {
   try {
@@ -495,6 +508,15 @@ function toUint8Array(buf) {
 
 // ===== Validation for zlib options =====
 
+function validateRejectGarbage(opts) {
+  const value = opts.rejectGarbageAfterEnd;
+  if (value !== undefined && typeof value !== 'boolean') {
+    throw makeTypeError('ERR_INVALID_ARG_TYPE',
+      'The "options.rejectGarbageAfterEnd" property must be of type boolean.' + invalidArgTypeHelper(value));
+  }
+  return value === true;
+}
+
 function validateZlibOptions(opts, mode) {
   opts = opts || {};
   const level = (opts.level !== undefined && !Number.isNaN(opts.level)) ? opts.level : Z_DEFAULT_COMPRESSION;
@@ -559,7 +581,8 @@ function validateZlibOptions(opts, mode) {
     }
   }
 
-  return { level, windowBits, memLevel, strategy, chunkSize, flush, finishFlush, dictionary, info, maxOutputLength };
+  const rejectGarbage = validateRejectGarbage(opts);
+  return { level, windowBits, memLevel, strategy, chunkSize, flush, finishFlush, dictionary, info, maxOutputLength, rejectGarbage };
 }
 
 function validateBrotliOptions(opts) {
@@ -593,7 +616,8 @@ function validateBrotliOptions(opts) {
     }
   }
 
-  return { flush, finishFlush, chunkSize, params, info, maxOutputLength };
+  const rejectGarbage = validateRejectGarbage(opts);
+  return { flush, finishFlush, chunkSize, params, info, maxOutputLength, rejectGarbage };
 }
 
 function validateBrotliParams(params) {
@@ -907,7 +931,7 @@ class _Deflate extends ZlibBase {
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(0, this._level, this._windowBits, this._memLevel, this._strategy));
+    this._setNativeHandle(zlib_stream_new(0, this._level, this._windowBits, this._memLevel, this._strategy, false));
   }
 }
 
@@ -919,10 +943,11 @@ class _Inflate extends ZlibBase {
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;
     this._dictionary = validated.dictionary;
+    this._rejectGarbage = validated.rejectGarbage;
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(1, 0, this._windowBits, 0, 0));
+    this._setNativeHandle(zlib_stream_new(1, 0, this._windowBits, 0, 0, this._rejectGarbage));
   }
 }
 
@@ -939,7 +964,7 @@ class _Gzip extends ZlibBase {
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(2, this._level, this._windowBits, this._memLevel, this._strategy));
+    this._setNativeHandle(zlib_stream_new(2, this._level, this._windowBits, this._memLevel, this._strategy, false));
   }
 }
 
@@ -949,10 +974,11 @@ class _Gunzip extends ZlibBase {
     super(opts, GUNZIP);
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;
+    this._rejectGarbage = validated.rejectGarbage;
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(3, 0, 15, 0, 0));
+    this._setNativeHandle(zlib_stream_new(3, 0, 15, 0, 0, this._rejectGarbage));
   }
 }
 
@@ -970,7 +996,7 @@ class _DeflateRaw extends ZlibBase {
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(4, this._level, this._windowBits, this._memLevel, this._strategy));
+    this._setNativeHandle(zlib_stream_new(4, this._level, this._windowBits, this._memLevel, this._strategy, false));
   }
 }
 
@@ -981,10 +1007,11 @@ class _InflateRaw extends ZlibBase {
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;
     this._dictionary = validated.dictionary;
+    this._rejectGarbage = validated.rejectGarbage;
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(5, 0, 15, 0, 0));
+    this._setNativeHandle(zlib_stream_new(5, 0, 15, 0, 0, this._rejectGarbage));
   }
 }
 
@@ -994,10 +1021,11 @@ class _Unzip extends ZlibBase {
     super(opts, UNZIP);
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : Z_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : Z_NO_FLUSH;
+    this._rejectGarbage = validated.rejectGarbage;
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(zlib_stream_new(6, 0, 15, 0, 0));
+    this._setNativeHandle(zlib_stream_new(6, 0, 15, 0, 0, this._rejectGarbage));
   }
 }
 
@@ -1018,7 +1046,7 @@ class _BrotliCompress extends ZlibBase {
   _initHandle() {
     if (this._nativeHandle !== null) return;
     const paramsJson = brotliParamsToJson(this._brotliParams);
-    this._setNativeHandle(brotli_stream_new(0, paramsJson));
+    this._setNativeHandle(brotli_stream_new(0, paramsJson, false, false));
   }
 }
 
@@ -1030,10 +1058,13 @@ class _BrotliDecompress extends ZlibBase {
     this._finishFlush = validated.finishFlush !== undefined ? validated.finishFlush : BROTLI_OPERATION_FINISH;
     this._flushFlag = validated.flush !== undefined ? validated.flush : BROTLI_OPERATION_PROCESS;
     this._brotliFlushCb = null;
+    this._rejectGarbage = validated.rejectGarbage;
     this._initHandle();
   }
   _initHandle() {
-    this._setNativeHandle(brotli_stream_new(1, '{}'));
+    this._setNativeHandle(brotli_stream_new(
+      1, '{}', this._rejectGarbage, this._finishFlush !== BROTLI_OPERATION_FINISH,
+    ));
   }
   _flush(callback) {
     if (this._nativeHandle === null) {
@@ -1064,7 +1095,8 @@ class _BrotliDecompress extends ZlibBase {
     try {
       while (this._nativeHandle !== null) {
         const chunk = brotli_stream_pull(this._nativeHandle, Z_DEFAULT_CHUNK);
-        if (!chunk || chunk.length === 0) {
+        if (chunk == null) throw makeError('ERR_ZLIB_INITIALIZATION_FAILED', 'zlib error');
+        if (chunk.length === 0) {
           this._closeHandle();
           callback();
           return;
@@ -1178,11 +1210,7 @@ class Zstd extends ZlibBase {
     if (typeof SharedArrayBuffer !== 'undefined' && dictionary instanceof SharedArrayBuffer) {
       dictionary = new Uint8Array(dictionary);
     }
-    const rejectGarbage = opts.rejectGarbageAfterEnd;
-    if (rejectGarbage !== undefined && typeof rejectGarbage !== 'boolean') {
-      throw makeTypeError('ERR_INVALID_ARG_TYPE',
-        'The "options.rejectGarbageAfterEnd" property must be of type boolean.' + invalidArgTypeHelper(rejectGarbage));
-    }
+    const rejectGarbage = validateRejectGarbage(opts);
     const signal = opts.signal;
     const handle = zstd_stream_new(decompress, JSON.stringify(params), toUint8Array(toBuffer(dictionary)), pledged,
       rejectGarbage === true);
@@ -1234,7 +1262,7 @@ class Zstd extends ZlibBase {
 
   _processStep(data, flush, capacity) {
     const [bytes, message, errno, consumed, done] = zstd_stream_push(this._nativeHandle, data, flush, capacity);
-    if (errno === -7) throw makeTypeError('ERR_TRAILING_JUNK_AFTER_STREAM_END', message);
+    if (errno === -7) throw trailingJunkError();
     if (errno !== 0) {
       const code = errno === -5 ? 'Z_BUF_ERROR' : zstdErrorCodes[errno];
       const error = makeError(code, message);
@@ -1368,7 +1396,9 @@ function doSyncDecompress(data, opts, windowBitsOverride, mode) {
     uint8,
     wb,
     validated.finishFlush,
+    validated.rejectGarbage,
   );
+  if (errno === -7) throw trailingJunkError();
   if (errno !== 0) {
     throw makeZlibError(errorMessage, errno);
   }
@@ -1442,7 +1472,11 @@ export function brotliDecompressSync(data, opts) {
   const [result, errorMessage, errno] = _brotli_decompress_sync(
     uint8,
     validated.finishFlush,
+    validated.rejectGarbage,
   );
+  // Native sync trailing input uses -7 with no message; a named -7 is
+  // BROTLI_DECODER_ERROR_FORMAT_HUFFMAN_SPACE, not trailing input.
+  if (errno === -7 && errorMessage == null) throw trailingJunkError();
   if (errno !== 0) {
     throw typeof errorMessage === 'string' && stringStartsWith(errorMessage, 'ERR_')
       ? makeBrotliError(errorMessage, errno)

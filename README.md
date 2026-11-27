@@ -1349,6 +1349,8 @@ throws immediately. Environment-data APIs are unavailable.
   The APIs remain discoverable without the feature, but calls throw `ERR_ZLIB_INITIALIZATION_FAILED`.
   This generic initialization error can also indicate invalid codec parameters; check the build's
   enabled features before diagnosing a parameter failure.
+- Decompression supports the boolean `rejectGarbageAfterEnd` option. Strict gzip/unzip rejects
+  input after the first member; strict zstd still accepts valid concatenated frames.
 
 </details>
 
