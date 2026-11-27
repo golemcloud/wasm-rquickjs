@@ -236,3 +236,67 @@ async fn sqlite_test_number_binding(
     assert_eq!(r?, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn sqlite_test_statement_lifetime(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-statement-lifetime",
+        &[],
+    )
+    .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn sqlite_test_statement_statistics(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-statement-statistics",
+        &[],
+    )
+    .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn sqlite_test_statement_recovery(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-statement-recovery",
+        &[],
+    )
+    .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn sqlite_test_statement_deserialize(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-statement-deserialize",
+        &[],
+    )
+    .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}

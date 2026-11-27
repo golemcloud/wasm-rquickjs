@@ -12,4 +12,8 @@ declare module 'sqlite' {
   export function testPrepareOptions(): boolean;
   export function testTransactionState(): boolean;
   export function testNumberBinding(): boolean;
+  export function testStatementLifetime(): boolean;
+  export function testStatementStatistics(): boolean;
+  export function testStatementRecovery(): boolean;
+  export function testStatementDeserialize(): boolean;
 }

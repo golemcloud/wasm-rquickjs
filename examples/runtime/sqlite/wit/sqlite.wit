@@ -14,4 +14,8 @@ world sqlite {
   export test-prepare-options: func() -> bool;
   export test-transaction-state: func() -> bool;
   export test-number-binding: func() -> bool;
+  export test-statement-lifetime: func() -> bool;
+  export test-statement-statistics: func() -> bool;
+  export test-statement-recovery: func() -> bool;
+  export test-statement-deserialize: func() -> bool;
 }
