@@ -1,4 +1,5 @@
 pub mod js_subtest_parser;
+pub mod measured;
 pub mod test_server;
 
 use crate::common::WasmSource::Precompiled;

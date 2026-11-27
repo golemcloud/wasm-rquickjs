@@ -37,9 +37,21 @@ async fn compiled_node_compat_full() -> CompiledTest {
     } else {
         common::FeatureCombination::FullNoLoggingWithGolemAndTypeScript
     };
-    CompiledTest::new_with_features(path, true, feature_combination)
-        .await
-        .expect("Failed to compile node-compat-runner")
+    let evidence = common::measured::Prerequisite::start("component-build")
+        .expect("record measured prerequisite");
+    let compiled = evidence
+        .finish(CompiledTest::new_with_features(path, true, feature_combination).await)
+        .expect("Failed to compile node-compat-runner");
+    common::measured::component(
+        compiled.wasm_path().as_std_path(),
+        if common::truthy_env("WASM_RQUICKJS_TEST_NET_WRITE_PROFILING") {
+            "node-compat-net-write-profiling"
+        } else {
+            "full-no-logging-golem-typescript"
+        },
+    )
+    .expect("record measured component");
+    compiled
 }
 
 /// Each worker materialises its own `FullPreparedComponent` (which owns
@@ -51,8 +63,12 @@ async fn compiled_node_compat_full() -> CompiledTest {
 fn prepare_node_compat_full(
     #[tagged_as("node_compat_full_compiled")] compiled: &CompiledTest,
 ) -> Arc<FullPreparedComponent> {
+    let evidence = common::measured::Prerequisite::start("component-prepare")
+        .expect("record measured prerequisite");
     Arc::new(FullPreparedComponent(Arc::new(
-        GolemPreparedComponent::new(compiled.wasm_path()).expect("Failed to prepare component"),
+        evidence
+            .finish(GolemPreparedComponent::new(compiled.wasm_path()))
+            .expect("Failed to prepare component"),
     )))
 }
 
@@ -640,6 +656,15 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
         if !entry.split || entry.subtests.is_empty() {
             // Non-split: one Rust test per file (unchanged behavior)
+            common::measured::register(
+                &file_test_name,
+                &path,
+                concat!(module_path!(), "::gen_node_compat_tests"),
+                entry.category.label(),
+                entry.reason.as_deref(),
+                test_timeout_secs,
+                if entry.flaky { 2 } else { 1 },
+            );
             let props = TestProperties {
                 is_ignored: entry.category.should_ignore_in_runner(),
                 tags: vec![shard_tag(&file_test_name)],
@@ -652,7 +677,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
             };
 
             r.add_async_test(
-                file_test_name,
+                file_test_name.clone(),
                 props,
                 Some(vec![dependency_name.clone()]),
                 move |deps| {
@@ -663,27 +688,45 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         .expect("FullPreparedComponent type mismatch");
                     let prepared = prepared.as_ref().as_ref().0.clone();
                     let path = path.clone();
+                    let case = file_test_name.clone();
                     Box::pin(async move {
-                        let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
-                        instance.set_epoch_deadline(test_timeout_secs);
-                        setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                        let mut evidence = common::measured::Attempt::start(&case)?;
+                        let result = async {
+                            let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
+                            instance.set_epoch_deadline(test_timeout_secs);
+                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                        let guest_path = format!("/home/node/test/{}", path);
-                        let test_future = async {
-                            let (result, stdout, stderr) = instance
-                                .invoke_and_capture_output_with_stderr(
-                                    None,
-                                    "run-test",
-                                    &[Val::String(guest_path)],
-                                )
-                                .await;
+                            evidence.phase("guest")?;
+                            let guest_path = format!("/home/node/test/{}", path);
+                            let test_future = async {
+                                let (result, stdout, stderr) = instance
+                                    .invoke_and_capture_output_with_stderr(
+                                        None,
+                                        "run-test",
+                                        &[Val::String(guest_path)],
+                                    )
+                                    .await;
 
-                            handle_test_result(result, &stdout, &stderr)
-                        };
-                        match timeout(Duration::from_secs(test_timeout_secs), test_future).await {
-                            Ok(result) => result,
-                            Err(_) => Err(timeout_error(&instance, test_timeout_secs)),
+                                evidence.logs(&stdout, &stderr)?;
+                                evidence.returned(&result);
+                                handle_test_result(result, &stdout, &stderr)
+                            };
+                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await
+                            {
+                                Ok(result) => result,
+                                Err(_) => {
+                                    evidence.timed_out();
+                                    evidence.logs(
+                                        &instance.read_stdout().unwrap_or_default(),
+                                        &instance.read_stderr().unwrap_or_default(),
+                                    )?;
+                                    Err(timeout_error(&instance, test_timeout_secs))
+                                }
+                            }
                         }
+                        .await;
+                        evidence.finish(&result)?;
+                        result
                     })
                 },
             );
@@ -720,6 +763,15 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
 
             for subtest in &entry.subtests {
                 let test_name = format!("{}__{}", file_test_name, subtest.name);
+                common::measured::register(
+                    &test_name,
+                    &path,
+                    concat!(module_path!(), "::gen_node_compat_tests"),
+                    subtest.category.label(),
+                    subtest.reason.as_deref(),
+                    test_timeout_secs,
+                    if subtest.flaky { 2 } else { 1 },
+                );
                 let is_ignored = subtest.category.should_ignore_in_runner();
                 let props = TestProperties {
                     is_ignored,
@@ -744,7 +796,7 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                     }
                 };
                 r.add_async_test(
-                    test_name,
+                    test_name.clone(),
                     props,
                     Some(vec![dependency_name.clone()]),
                     move |deps| {
@@ -757,56 +809,75 @@ fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
                         let path = path.clone();
                         let source = source.clone();
                         let discovery_clone = discovery_clone.clone();
+                        let case = test_name.clone();
                         Box::pin(async move {
-                            let mut instance = TestInstance::from_golem_prepared(&prepared).await?;
-                            instance.set_epoch_deadline(test_timeout_secs);
-                            setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
+                            let mut evidence = common::measured::Attempt::start(&case)?;
+                            let result = async {
+                                let mut instance =
+                                    TestInstance::from_golem_prepared(&prepared).await?;
+                                instance.set_epoch_deadline(test_timeout_secs);
+                                setup_node_compat_test_files(instance.temp_dir_path(), &path)?;
 
-                            // Rewrite the test file to isolate the target subtest
-                            let rewritten = match &discovery_clone {
-                                Some(DiscoveryData::Block(blocks)) => {
-                                    rewrite_for_block_with_options(
-                                        &source,
-                                        blocks,
-                                        subtest_index,
-                                        isolate_block_subtests,
-                                    )
+                                // Rewrite the test file to isolate the target subtest
+                                let rewritten = match &discovery_clone {
+                                    Some(DiscoveryData::Block(blocks)) => {
+                                        rewrite_for_block_with_options(
+                                            &source,
+                                            blocks,
+                                            subtest_index,
+                                            isolate_block_subtests,
+                                        )
+                                    }
+                                    Some(DiscoveryData::NodeTest(tests)) => {
+                                        rewrite_for_node_test(&source, tests, subtest_index)
+                                    }
+                                    None => source.clone(),
+                                };
+
+                                // Write the rewritten file to the temp dir
+                                let test_filename = path.rsplit('/').next().unwrap_or(&path);
+                                let suite = path.split('/').next().unwrap_or("parallel");
+                                let rewritten_path = instance
+                                    .temp_dir_path()
+                                    .join("home")
+                                    .join("node")
+                                    .join("test")
+                                    .join(suite)
+                                    .join(test_filename);
+                                fs::write(&rewritten_path, &rewritten)?;
+
+                                evidence.phase("guest")?;
+                                let guest_path = format!("/home/node/test/{}", path);
+                                let test_future = async {
+                                    let (result, stdout, stderr) = instance
+                                        .invoke_and_capture_output_with_stderr(
+                                            None,
+                                            "run-test",
+                                            &[Val::String(guest_path)],
+                                        )
+                                        .await;
+
+                                    evidence.logs(&stdout, &stderr)?;
+                                    evidence.returned(&result);
+                                    handle_test_result(result, &stdout, &stderr)
+                                };
+                                match timeout(Duration::from_secs(test_timeout_secs), test_future)
+                                    .await
+                                {
+                                    Ok(result) => result,
+                                    Err(_) => {
+                                        evidence.timed_out();
+                                        evidence.logs(
+                                            &instance.read_stdout().unwrap_or_default(),
+                                            &instance.read_stderr().unwrap_or_default(),
+                                        )?;
+                                        Err(timeout_error(&instance, test_timeout_secs))
+                                    }
                                 }
-                                Some(DiscoveryData::NodeTest(tests)) => {
-                                    rewrite_for_node_test(&source, tests, subtest_index)
-                                }
-                                None => source.clone(),
-                            };
-
-                            // Write the rewritten file to the temp dir
-                            let test_filename = path.rsplit('/').next().unwrap_or(&path);
-                            let suite = path.split('/').next().unwrap_or("parallel");
-                            let rewritten_path = instance
-                                .temp_dir_path()
-                                .join("home")
-                                .join("node")
-                                .join("test")
-                                .join(suite)
-                                .join(test_filename);
-                            fs::write(&rewritten_path, &rewritten)?;
-
-                            let guest_path = format!("/home/node/test/{}", path);
-                            let test_future = async {
-                                let (result, stdout, stderr) = instance
-                                    .invoke_and_capture_output_with_stderr(
-                                        None,
-                                        "run-test",
-                                        &[Val::String(guest_path)],
-                                    )
-                                    .await;
-
-                                handle_test_result(result, &stdout, &stderr)
-                            };
-                            match timeout(Duration::from_secs(test_timeout_secs), test_future).await
-                            {
-                                Ok(result) => result,
-                                Err(_) => Err(timeout_error(&instance, test_timeout_secs)),
                             }
+                            .await;
+                            evidence.finish(&result)?;
+                            result
                         })
                     },
                 );

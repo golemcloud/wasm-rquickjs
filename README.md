@@ -2056,6 +2056,66 @@ There are a few important things to keep in mind when working on the project:
   execution time, and total wall time separately: precompilation makes the execution phase much faster but adds
   preparation that is only recovered by a sufficiently large or repeated filter.
 
+### Local measured execution bundles
+
+`tools/measured-report.cjs` captures narrowly selected existing tests; it does not change the
+configuration classification report or run a compatibility campaign. Use the repository toolchain
+and Node 22.14.0 (strictly enforced for installed-package controls); the API suite's independent
+target version is recorded from the vendored `NODE_VERSION`, validated against its configuration
+by the existing harness. Run from the checkout with no concurrent source edits:
+
+```sh
+node tools/measured-report.cjs plan tmp/measured api-1 api parallel__test_path_basename_js
+node tools/measured-report.cjs run tmp/measured api-1
+node tools/measured-report.cjs plan tmp/measured installed-1 installed node_modules_app__popular_pure_js__test_01_cjs_utilities_cjs
+node tools/measured-report.cjs run tmp/measured installed-1
+node tools/measured-report.cjs plan tmp/measured bundled-1 bundled ajv/test-01-basic.js
+node tools/measured-report.cjs run tmp/measured bundled-1
+node tools/measured-report.cjs assemble tmp/measured
+node tools/measured-report.cjs verify tmp/measured
+node tools/measured-report.cjs render tmp/measured/report.json
+```
+
+`plan` discovers generated cases before shared guest setup; tag/static-test filters are unsupported.
+It retains fixture/configuration and lockfile inputs, including a superset of the API harness's
+vendored helpers, fixtures and ESM siblings. `run` refuses changed inputs or toolchain versions
+and records individual retries and prerequisite,
+Node-control and guest phases, along with raw CTRF and stdout/stderr. It never rewrites an execution;
+use a new execution ID for a rerun. Bundled runs use a fresh `tmp/measured-<execution-id>` directory
+and the root Cargo target cache; they build the current generator and execute the existing fixture's
+Rollup output with Node and Wasmtime. A build lock protects copying Cargo's mutable output into
+the execution-owned `component.wasm`; that copy is hashed, executed and retained. A competing
+bundled build is blocked, not allowed to use another fixture's component. After interruption,
+remove `tmp/measured-bundled-build.lock` only after checking that no producer owns it.
+Only use offline fixtures without credentials.
+
+The version-1 bundle's `plan.json` declares expected executions/cases; `selection.json` selects
+whole executions, independently of their observed outcomes. An optional final JSON metadata-file
+argument to `plan` sets `consumer`, `artifactRole`, `lane`, `workflowRun`, `workflowAttempt`, and
+`behaviorCases`. Coverage defaults to `unclassified`, which never qualifies as properly implemented.
+After inspecting the selected assertions, declare behavior case IDs explicitly, for example
+`{"behaviorCases":["ajv/test-01-basic.js"]}` for the bundled smoke. Unknown or import-only IDs are
+rejected; a declaration is reviewer-audited input, not automatic proof of assertion quality.
+Same-lane/profile reruns are retained but not selected automatically: explicitly select complete
+execution IDs with `select <bundle> <id>...`. A missing selected rerun remains incomplete; it never
+borrows earlier green cases. Existing CI artifact selection is unchanged.
+
+Each execution has an identity-bound `component.json`, immutable attempt `start.json`/`finish.json`
+records and numbered phase records/logs. Missing completion stays `not-run`; a failed prerequisite
+is `blocked`, not a guest failure. Configured or runtime skips retain their reason. Sealed execution
+`evidence.json` and bundle `checksums.json` detect missing/corrupted evidence; these are integrity
+checks, not signatures. Assembly rejects duplicate/conflicting identities and cross-artifact mixing.
+
+Normalized `report.json` is authoritative; Markdown uses only that JSON and never inserts fresh
+timestamps. Reports separate all six outcomes, non-flaky/flaky passes and attempt totals. Fail-then-pass
+is `pass` with `flaky: true`, excluded from every "properly implemented" numerator but kept in the
+selected denominator. Only explicitly declared non-flaky behavior assertions with sealed completed
+evidence qualify; import-only and unclassified checks do not. Incomplete selected evidence is explicit. These counts describe selected
+local assertions, not full Node support, Golem recovery/durability or shipped qualification.
+
+The bundle is portable local evidence, not an uploader or permanent archive. Keep raw bundles out
+of Git. Test the producer contract with `node --test tools/test_measured_report.cjs`.
+
 ## Acknowledgements
 
 The builtin JS modules are based on the work of several other projects:
