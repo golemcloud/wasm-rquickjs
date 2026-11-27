@@ -250,12 +250,9 @@ fn js_value_to_sqlite<'js>(
         return Ok(rusqlite::types::Value::Integer(if b { 1 } else { 0 }));
     }
     if let Some(i) = val.as_int() {
-        return Ok(rusqlite::types::Value::Integer(i as i64));
+        return Ok(rusqlite::types::Value::Real(i as f64));
     }
     if let Some(f) = val.as_float() {
-        if f.fract() == 0.0 && f >= i64::MIN as f64 && f <= i64::MAX as f64 {
-            return Ok(rusqlite::types::Value::Integer(f as i64));
-        }
         return Ok(rusqlite::types::Value::Real(f));
     }
     if val.is_big_int() {

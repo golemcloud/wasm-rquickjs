@@ -9,4 +9,7 @@ declare module 'sqlite' {
   export function testWalModeSnapshot(): boolean;
   export function testAutocommitTracking(): boolean;
   export function testTypeValidation(): boolean;
+  export function testPrepareOptions(): boolean;
+  export function testTransactionState(): boolean;
+  export function testNumberBinding(): boolean;
 }

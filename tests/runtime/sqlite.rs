@@ -196,3 +196,43 @@ async fn sqlite_test_memory_roundtrip_unoptimized(
     assert_eq!(r, Some(Val::Bool(true)));
     Ok(())
 }
+
+#[test]
+async fn sqlite_test_prepare_options(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test-prepare-options", &[])
+            .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn sqlite_test_transaction_state(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) = invoke_and_capture_output(
+        compiled_test.wasm_path(),
+        None,
+        "test-transaction-state",
+        &[],
+    )
+    .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}
+
+#[test]
+async fn sqlite_test_number_binding(
+    #[tagged_as("sqlite")] compiled_test: &CompiledTest,
+) -> anyhow::Result<()> {
+    let (r, output) =
+        invoke_and_capture_output(compiled_test.wasm_path(), None, "test-number-binding", &[])
+            .await;
+    println!("Output:\n{}", output);
+    assert_eq!(r?, Some(Val::Bool(true)));
+    Ok(())
+}

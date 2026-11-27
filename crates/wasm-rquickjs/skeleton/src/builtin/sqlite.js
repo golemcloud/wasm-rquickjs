@@ -124,12 +124,23 @@ class _DatabaseSyncImpl {
             err.code = 'ERR_INVALID_ARG_TYPE';
             throw err;
         }
-        const stmtOptions = {
-            readBigInts: options.readBigInts ?? this.#options.readBigInts,
-            returnArrays: options.returnArrays ?? this.#options.returnArrays,
-            allowBareNamedParameters: options.allowBareNamedParameters ?? this.#options.allowBareNamedParameters,
-            allowUnknownNamedParameters: options.allowUnknownNamedParameters ?? this.#options.allowUnknownNamedParameters,
-        };
+        if (options === null || (typeof options !== 'object' && typeof options !== 'function')) {
+            const err = new TypeError('The "options" argument must be an object.');
+            err.code = 'ERR_INVALID_ARG_TYPE';
+            throw err;
+        }
+        const stmtOptions = { __proto__: null };
+        for (const key of ['returnArrays', 'readBigInts', 'allowBareNamedParameters', 'allowUnknownNamedParameters']) {
+            const value = options[key];
+            if (value !== undefined && typeof value !== 'boolean') {
+                const err = new TypeError(`The "options.${key}" argument must be a boolean.`);
+                err.code = 'ERR_INVALID_ARG_TYPE';
+                throw err;
+            }
+            stmtOptions[key] = value === undefined ? this.#options[key] : value;
+        }
+        // An option getter can close the database while validation runs.
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         return new Statement(_stmtSecret, this.#connId, sql, stmtOptions);
     }
 
@@ -322,7 +333,7 @@ class _DatabaseSyncImpl {
     }
 
     get isTransaction() {
-        if (this.#connId === null) return false;
+        if (this.#connId === null) throwDbNotOpen('ERR_INVALID_STATE');
         return !is_autocommit(this.#connId);
     }
 }

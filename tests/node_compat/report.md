@@ -8,21 +8,21 @@ This report is generated from `config.jsonc` and the pinned vendored Node.js sou
 
 Primary compatibility is measured over the public API surface we can provide: CI-enforced passing (`runnable`) plus `known-gap`. WASI-impossible tests, engine differences, unevaluated tests, and Node.js-internals tests are acknowledged separately and excluded from the primary percentage.
 
-**Primary compatibility (CI-enforced):** 3195/4499 (71.0%)
+**Primary compatibility (CI-enforced):** 3200/4499 (71.1%)
 
 When comparing revisions, read the runnable count and secondary full-public percentage alongside the primary percentage. Reclassifying a test into an excluded category can increase the primary percentage without increasing runnable coverage.
 
 | Classification | Count | Primary % | Public inventory % | All listed % |
 |----------------|-------|-----------|--------------------|--------------|
-| ✅ passing (runnable) | 3195 | 71.0% | 33.1% | 29.6% |
-| 🧩 known gap | 1304 | 29.0% | 13.5% | 12.1% |
+| ✅ passing (runnable) | 3200 | 71.1% | 33.1% | 29.6% |
+| 🧩 known gap | 1299 | 28.9% | 13.5% | 12.0% |
 | 🚫 WASI-impossible (excluded) | 1148 | — | 11.9% | 10.6% |
 | ⚙️ engine difference (excluded) | 167 | — | 1.7% | 1.5% |
 | ❔ unevaluated (excluded) | 3840 | — | 39.8% | 35.6% |
 | 🔒 Node.js internals (excluded) | 1140 | — | — | 10.6% |
 | **Total** | **10794** |  |  | **100.0%** |
 
-Secondary full-public compatibility, including public tests that are currently excluded from primary: **3195/9654 (33.1%)**.
+Secondary full-public compatibility, including public tests that are currently excluded from primary: **3200/9654 (33.1%)**.
 
 ## Inventory by Module
 
@@ -71,7 +71,7 @@ Secondary full-public compatibility, including public tests that are currently e
 | shadow_realm | 11 | 0 | 0 | 0 | 11 | 0 | 0 | 0.0% | 0.0% |
 | signal | 5 | 1 | 0 | 3 | 0 | 0 | 1 | 100.0% | 25.0% |
 | snapshot | 61 | 0 | 0 | 0 | 57 | 4 | 0 | 0.0% | 0.0% |
-| sqlite | 117 | 27 | 32 | 0 | 0 | 58 | 0 | 45.8% | 23.1% |
+| sqlite | 117 | 32 | 27 | 0 | 0 | 58 | 0 | 54.2% | 27.4% |
 | stdio | 23 | 12 | 7 | 3 | 0 | 0 | 1 | 63.2% | 54.5% |
 | stream | 872 | 720 | 31 | 2 | 0 | 112 | 7 | 95.9% | 83.2% |
 | string_decoder | 5 | 3 | 0 | 0 | 0 | 2 | 0 | 100.0% | 60.0% |
@@ -730,12 +730,12 @@ Secondary full-public compatibility, including public tests that are currently e
 | `test-sqlite-authz.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-sqlite-backup.mjs` | 15 | 0 | 0 | 0 | 0 | 15 | 0 |
 | `test-sqlite-config.js` | 9 | 0 | 0 | 0 | 0 | 9 | 0 |
-| `test-sqlite-database.js` | 8 | 3 | 5 | 0 | 0 | 0 | 0 |
-| `test-sqlite-named-parameters.js` | 3 | 1 | 2 | 0 | 0 | 0 | 0 |
+| `test-sqlite-database.js` | 8 | 4 | 4 | 0 | 0 | 0 | 0 |
+| `test-sqlite-named-parameters.js` | 3 | 2 | 1 | 0 | 0 | 0 | 0 |
 | `test-sqlite-options-getter-reentry.js` | 3 | 0 | 0 | 0 | 0 | 3 | 0 |
 | `test-sqlite-serialize.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-sqlite-session.js` | 28 | 13 | 1 | 0 | 0 | 14 | 0 |
-| `test-sqlite-statement.js` | 22 | 4 | 18 | 0 | 0 | 0 | 0 |
+| `test-sqlite-statement.js` | 22 | 7 | 15 | 0 | 0 | 0 | 0 |
 | `test-sqlite-template-tag.js` | 18 | 0 | 0 | 0 | 0 | 18 | 0 |
 | `test-sqlite-timeout.js` | 2 | 0 | 0 | 0 | 0 | 2 | 0 |
 | `test-sqlite-typed-array-and-data-view.js` | 2 | 1 | 1 | 0 | 0 | 0 | 0 |
@@ -1090,14 +1090,14 @@ Secondary full-public compatibility, including public tests that are currently e
 
 ## Classified Non-Runnable Tests
 
-### known gap (1304)
+### known gap (1299)
 
 | Reason | Count | Example entries |
 |--------|-------|-----------------|
 | node:http2 public API is a stub in WebAssembly runtime | 106 | `parallel/test-http2-head-request.js`, `parallel/test-http2-info-headers.js`, `parallel/test-http2-invalidargtypes-errors.js`, ... (+103) |
-| Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet | 30 | `parallel/test-sqlite-custom-functions.js`, `parallel/test-sqlite-data-types.js`, `parallel/test-sqlite-database.js#test_00_database_constructor`, ... (+27) |
 | requires isolated process.execPath TypeScript entry execution and Node CLI flags; the direct process.features check requires a separate feature-disabled component | 30 | `es-module/test-typescript.mjs#test_00_expect_process_features_typescript_to_be_false_when_no_exper`, `es-module/test-typescript.mjs#test_01_execute_a_typescript_file`, `es-module/test-typescript.mjs#test_02_execute_a_typescript_file_with_imports`, ... (+27) |
 | requires simulated process.execPath / Node CLI mode support deferred to follow-up PR | 29 | `es-module/test-esm-cjs-load-error-note.mjs`, `es-module/test-esm-detect-ambiguous.mjs#test_00_module_syntax_detection`, `es-module/test-esm-detect-ambiguous.mjs#test_01_wrapping_a_require_of_an_es_module_while_using_abort_on_unca`, ... (+26) |
+| Node 26.13.1 node:sqlite API additions or changed expectations are not implemented yet | 25 | `parallel/test-sqlite-custom-functions.js`, `parallel/test-sqlite-data-types.js`, `parallel/test-sqlite-database.js#test_00_database_constructor`, ... (+22) |
 | requires isolated process.execPath --eval execution, TypeScript input-type flags, and child warning/output/exit capture | 24 | `es-module/test-typescript-eval.mjs#test_00_eval_typescript_esm_syntax`, `es-module/test-typescript-eval.mjs#test_01_eval_typescript_esm_syntax_with_input_type_module`, `es-module/test-typescript-eval.mjs#test_02_eval_typescript_commonjs_syntax`, ... (+21) |
 | requires isolated process.execPath TypeScript entry execution and Node CLI default-module / require-module flag handling | 24 | `es-module/test-typescript-commonjs.mjs#test_00_require_a_ts_file_with_explicit_extension_succeeds`, `es-module/test-typescript-commonjs.mjs#test_01_eval_require_a_ts_file_with_implicit_extension_fails`, `es-module/test-typescript-commonjs.mjs#test_02_eval_require_a_cts_file_with_implicit_extension_fails`, ... (+21) |
 | stream edge case not yet handled | 22 | `parallel/test-stream-compose.js#block_17_block_17`, `parallel/test-stream-drop-take.js#block_01_don_t_wait_for_next_item_in_the_original_stream_when_already`, `parallel/test-stream-duplex-from.js#block_17_block_17`, ... (+19) |
