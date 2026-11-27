@@ -1,0 +1,31 @@
+package test:import-abort;
+
+// Host calls that record when they start, finish and are cancelled, for the abort signal of
+// generated async imports (`wasm-rquickjs:import-abort`).
+interface host {
+  wait: async func(label: string, delay-ms: u32) -> string;
+  wait-result: async func(label: string, delay-ms: u32) -> result<string, string>;
+  consume: async func(label: string, data: stream<u8>, delay-ms: u32) -> u32;
+  // Keeps `data` without reading it; closes it when the call ends or is cancelled.
+  hold: async func(label: string, data: stream<u8>, delay-ms: u32) -> u32;
+  take-future: async func(label: string, value: future<option<u32>>, delay-ms: u32) -> u32;
+
+  resource timer {
+    constructor();
+    wait: async func(label: string, delay-ms: u32) -> string;
+    wait-static: static async func(label: string, delay-ms: u32) -> string;
+    // A keyword-named method keeps the escaped name of the TypeScript declarations.
+    %await: async func(label: string, delay-ms: u32) -> string;
+  }
+}
+
+world import-abort {
+  import host;
+
+  export run: async func() -> string;
+  // Calls `wait(label, delay-ms)` with a signal of its own and returns its outcome as JSON.
+  // Calls can overlap; `abort-overlapping` aborts the signal of one of them.
+  export overlapping: async func(label: string, delay-ms: u32) -> string;
+  // Aborts the signal of the pending `overlapping` call with `label`; false when there is none.
+  export abort-overlapping: async func(label: string) -> bool;
+}
