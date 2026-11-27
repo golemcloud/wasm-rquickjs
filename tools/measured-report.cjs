@@ -73,11 +73,12 @@ function commandVersion(command, args) {
   const result = spawnSync(command, args, { cwd: ROOT, encoding: 'utf8' });
   return result.status === 0 ? result.stdout.trim() : 'unavailable';
 }
-function toolchain() {
-  return { producerNode: process.version, nodeControl: commandVersion('node', ['--version']),
-    npm: commandVersion('npm', ['--version']), rustc: commandVersion('rustc', ['--version']),
-    cargo: commandVersion('cargo', ['--version']), wasmtime: commandVersion('wasmtime', ['--version']),
-    apiTarget: text(path.join(ROOT, 'tests/node_compat/suite/NODE_VERSION')).trim() };
+function toolchain(profile) {
+  return { producerNode: process.version, rustc: commandVersion('rustc', ['--version']),
+    cargo: commandVersion('cargo', ['--version']),
+    ...(profile === 'api' ? { apiTarget: text(path.join(ROOT, 'tests/node_compat/suite/NODE_VERSION')).trim() }
+      : { nodeControl: commandVersion('node', ['--version']), npm: commandVersion('npm', ['--version']) }),
+    ...(profile === 'bundled' ? { wasmtime: commandVersion('wasmtime', ['--version']) } : {}) };
 }
 function source() {
   const revision = commandVersion('git', ['rev-parse', 'HEAD']);
@@ -126,15 +127,13 @@ function execute(dir, name, command, cwd, env, timeoutSeconds = 0, binding = {},
   save(path.join(dir, `${name}-start.json`), { ...binding, command, startedAt, timeoutSeconds });
   const stdout = fs.openSync(path.join(dir, `${name}-stdout.txt`), 'wx');
   const stderr = fs.openSync(path.join(dir, `${name}-stderr.txt`), 'wx');
-  let result; let locked = false;
+  let result;
   try {
-    if (publication) { fs.mkdirSync(publication.lock); locked = true; }
     result = spawnSync(command[0], command.slice(1), { cwd, env, stdio: ['ignore', stdout, stderr],
       ...(timeoutSeconds ? { timeout: timeoutSeconds * 1000, killSignal: 'SIGKILL' } : {}) });
     if (publication && result.status === 0) fs.copyFileSync(publication.source, publication.destination, fs.constants.COPYFILE_EXCL);
   } catch (error) { result = { status: null, signal: null, error }; }
   finally {
-    if (locked) fs.rmdirSync(publication.lock);
     fs.closeSync(stdout); fs.closeSync(stderr);
   }
   const finish = { ...binding, command, startedAt, finishedAt: now(), exitCode: result.status,
@@ -163,7 +162,7 @@ function plan(bundle, executionId, profile, filter, metadata = {}) {
   fs.mkdirSync(dir, { recursive: true });
   const entry = { id: executionId, profile, filter, consumer: 'local-wasmtime', artifactRole: 'candidate',
     lane: profile, workflowRun: 'local', workflowAttempt: 1, behaviorCases: [], ...metadata, source: source(),
-    toolchain: toolchain(),
+    toolchain: toolchain(profile),
     runner: { host: 'stock', profile: 'fast-run', component: profile === 'api' ? 'full-no-logging-golem-typescript' : 'full-no-logging' } };
   assert(Object.values(entry.toolchain).every(value => value !== 'unavailable'), 'install the recorded toolchain before planning');
   if (profile === 'bundled') {
@@ -231,6 +230,7 @@ function runBundled(entry, dir) {
   }
   const attemptDir = path.join(dir, 'attempts', 'bundled', '0001'); fs.mkdirSync(attemptDir, { recursive: true });
   const identity = hash(json(entry));
+  const componentName = `measured_${identity}`;
   const binding = { identity, caseId: entry.filter, ordinal: 1 };
   save(path.join(attemptDir, 'start.json'), { ...binding, startedAt: now() });
   const bundle = path.join(app, 'dist', fixture.replace('.js', '.bundle.js'));
@@ -254,9 +254,13 @@ function runBundled(entry, dir) {
     const [phase, command, cwd] = phases[i];
     let publication = null;
     if (phase === 'component-build') {
-      const name = text(path.join(component, 'Cargo.toml')).match(/^name = "([^"]+)"/m)[1];
-      publication = { lock: path.join(ROOT, 'tmp', 'measured-bundled-build.lock'),
-        source: path.join(ROOT, 'target', 'wasm32-wasip2', 'debug', name.replaceAll('-', '_') + '.wasm'), destination: wasm };
+      // Cargo's lock ends before publication. Give each execution its own output name,
+      // so another fixture cannot overwrite it between build, copy, hash and invocation.
+      const manifest = path.join(component, 'Cargo.toml');
+      const generated = text(manifest);
+      assert(generated.includes('[lib]\n'), 'generated library manifest missing');
+      fs.writeFileSync(manifest, generated.replace('[lib]\n', `[lib]\nname = "${componentName}"\n`));
+      publication = { source: path.join(ROOT, 'target', 'wasm32-wasip2', 'debug', `${componentName}.wasm`), destination: wasm };
     }
     if (phase === 'guest') {
       save(path.join(dir, 'component.json'), { identity, algorithm: 'sha256', digest: hash(fs.readFileSync(wasm)), features: entry.runner.component });
@@ -276,7 +280,7 @@ function runBundled(entry, dir) {
 
 function checkLiveInputs(entry, dir) {
   assert.deepEqual(source(), entry.source, 'source changed since inventory; plan a new execution');
-  assert.deepEqual(toolchain(), entry.toolchain, 'toolchain changed since inventory; plan a new execution');
+  assert.deepEqual(toolchain(entry.profile), entry.toolchain, 'toolchain changed since inventory; plan a new execution');
   if (entry.profile === 'api') assert.deepEqual(apiInputs(entry.cases), entry.apiInputs, 'supporting fixture inventory changed');
   checkDigests(dir, entry.inputs);
   for (const [relative, digest] of Object.entries(entry.inputs)) {
@@ -290,7 +294,7 @@ function run(bundle, executionId) {
   const dir = path.join(bundle, 'executions', id(executionId));
   checkLiveInputs(entry, dir);
   assert.equal(text(path.join(dir, 'identity.txt')), hash(json(entry)));
-  save(path.join(dir, 'run-start.json'), { identity: hash(json(entry)), toolchain: toolchain(), startedAt: now() });
+  save(path.join(dir, 'run-start.json'), { identity: hash(json(entry)), toolchain: toolchain(entry.profile), startedAt: now() });
   let result;
   if (entry.profile === 'bundled') {
     result = runBundled(entry, dir);
@@ -497,11 +501,11 @@ function render(report) {
   rows.push('', `Selected total: ${t.selected}; non-flaky passes: ${t.nonFlakyPasses}; flaky passes: ${t.flakyPasses}; attempts: ${t.attempts}.`,
     `Outcomes: ${OUTCOMES.map(outcome => `${outcome}: ${t[outcome]}`).join('; ')}.`,
     `Properly implemented*: ${t.properlyImplemented}/${t.selected} (${t.properlyImplementedPercent}%).`, '',
-    '*Only non-flaky behavior assertions with sealed evidence qualify in this selected local inventory. Import-only checks and flaky passes never qualify. All selected cases remain in the denominator. This is not shipped qualification.', '');
+    '*Only explicitly declared (reviewer-audited), non-flaky behavior cases with sealed evidence qualify in this selected local inventory. Unclassified and import-only checks and flaky passes never qualify. All selected cases remain in the denominator. This is not shipped qualification.', '');
   for (const entry of report.executions) {
     rows.push(`## ${escape(entry.id)}`, '', `Source: ${entry.source.revision}; component: ${entry.component?.digest || 'not built'}; lane: ${escape(entry.lane)}; workflow: ${escape(entry.workflowRun)}/${entry.workflowAttempt}.`, '',
-      '| Case | Outcome | Flaky | Attempts | Reason |', '| --- | --- | --- | ---: | --- |');
-    for (const item of entry.cases) rows.push(`| ${escape(item.id)} | ${item.outcome} | ${item.flaky} | ${item.attempts.length} | ${escape(item.reason)} |`);
+      '| Case | Coverage | Qualified | Outcome | Flaky | Attempts | Reason |', '| --- | --- | --- | --- | --- | ---: | --- |');
+    for (const item of entry.cases) rows.push(`| ${escape(item.id)} | ${item.coverage} | ${item.qualified} | ${item.outcome} | ${item.flaky} | ${item.attempts.length} | ${escape(item.reason)} |`);
     rows.push('');
   }
   return rows.join('\n');

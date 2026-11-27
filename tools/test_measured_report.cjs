@@ -5,6 +5,7 @@ const fs = require('node:fs');
 const path = require('node:path');
 const os = require('node:os');
 const crypto = require('node:crypto');
+const { spawnSync } = require('node:child_process');
 const { assemble, verify, render } = require('./measured-report.cjs');
 
 const canonical = value => Array.isArray(value) ? value.map(canonical) : value && typeof value === 'object'
@@ -96,7 +97,7 @@ test('six outcomes, flaky denominator, import limits and profile identities surv
     report.executions[1].cases.find(item => item.id === 'same').key);
   const markdown = render(JSON.parse(fs.readFileSync(path.join(bundle, 'report.json'))));
   assert.match(markdown, /Properly implemented\*: 2\/10 \(20%\)/);
-  assert.match(markdown, /\| flaky \| pass \| true \| 2 \|/);
+  assert.match(markdown, /\| flaky \| behavior \| false \| pass \| true \| 2 \|/);
   assert.equal(fs.readFileSync(path.join(bundle, 'report.md'), 'utf8'), markdown);
   const first = fs.readFileSync(path.join(bundle, 'report.json'));
   const manifest = read(path.join(bundle, 'plan.json'));
@@ -187,4 +188,117 @@ test('corruption, duplicate attempts, contradictions and identity mixing are rej
     assert.throws(() => assemble(copy));
     assert.throws(() => verify(copy));
   });
+});
+
+// Exercise the public producer in a disposable checkout. External build/runtime commands
+// are controlled, but plan/run, manifests, publication, drift checks and rendering are real.
+function producer(t, api = false) {
+  const dir = root(t);
+  const write = (file, value) => {
+    const destination = path.join(dir, file); fs.mkdirSync(path.dirname(destination), { recursive: true });
+    fs.writeFileSync(destination, value);
+  };
+  for (const file of ['Cargo.toml', 'Cargo.lock', 'tools/dev-test.sh', 'tests/common/measured.rs',
+    'tests/common/mod.rs', 'tests/node_compat.rs', 'tests/runtime/node_modules_apps.rs',
+    'crates/wasm-rquickjs/skeleton/Cargo.toml_', 'crates/wasm-rquickjs/skeleton/Cargo.lock',
+    'tests/node_modules_apps/config.jsonc', 'tests/node_modules_apps/apps/demo/test.js',
+    'tests/libraries/ajv/test-01-basic.js', 'tests/libraries/ajv/package.json']) write(file, 'fixture');
+  write('tools/measured-report.cjs', fs.readFileSync(path.join(__dirname, 'measured-report.cjs')));
+  if (api) for (const [file, value] of Object.entries({ 'suite/NODE_VERSION': '26.13.1',
+    'suite/parallel/test.js': 'assertions', 'suite/common/helper.mjs': 'original helper',
+    'config.jsonc': '{}', 'vendor.sh': 'fixture' })) write(`tests/node_compat/${file}`, value);
+  const stub = `#!${process.execPath}
+const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
+const args = process.argv.slice(2), command = path.basename(process.argv[1]);
+const root = ${JSON.stringify(dir)};
+if (args.includes('--version')) { console.log(command + (process.env.STUB_VERSION || '-1')); process.exit(0); }
+if (command === 'git') {
+  if (args[0] === 'rev-parse') console.log('a'.repeat(40));
+  else if (args[0] === 'ls-files') {
+    const prefix = args.at(-1);
+    const walk = dir => fs.readdirSync(dir, {withFileTypes:true}).flatMap(item => item.isDirectory()
+      ? walk(path.join(dir,item.name)) : [path.join(dir,item.name)]);
+    process.stdout.write(walk(path.join(root,prefix)).map(file => path.relative(root,file)).join('\\0'));
+  }
+} else if (command === 'bash' && args.includes('--list')) {
+  const filter = process.env.WASM_RQUICKJS_MEASURE_FILTER, api = args.includes('node_compat');
+  const name = (api ? 'node_compat::gen_node_compat_tests::' : 'runtime::node_modules_apps::gen_node_modules_app_tests::') + filter;
+  const inventory = path.join(process.env.WASM_RQUICKJS_MEASURE_DIR,'inventory'); fs.mkdirSync(inventory,{recursive:true});
+  fs.writeFileSync(path.join(inventory,'case.json'),JSON.stringify({id:filter,runnerName:name,
+    fixture:api?'parallel/test.js':'demo/test.js',classification:'runnable',skipReason:null,
+    coverage:'unclassified',maxAttempts:1,timeoutSeconds:10}));
+  console.log(name); if (filter === 'unmeasured') console.log('node_compat::static_test');
+} else if (command === 'wasm-rquickjs') {
+  const output = args[args.indexOf('--output')+1]; fs.mkdirSync(output,{recursive:true});
+  fs.writeFileSync(path.join(output,'Cargo.toml'),'[package]\\nname = "lib-ajv"\\n[lib]\\n');
+} else if (command === 'cargo' && args.includes('--target')) {
+  const manifest = fs.readFileSync('Cargo.toml','utf8');
+  const name = manifest.match(/\\[lib\\]\\n(?:name = "([^"]+)"\\n)?/)[1] || 'lib_ajv';
+  const output = path.join(root,'target/wasm32-wasip2/debug'); fs.mkdirSync(output,{recursive:true});
+  fs.writeFileSync(path.join(output,name+'.wasm'),'component:'+name);
+  if (process.env.STUB_FAIL_BUILD) process.exit(17);
+} else if (command === 'wasmtime') {
+  // A subsequent fixture replaces the old shared-world output before invocation.
+  fs.writeFileSync(path.join(root,'target/wasm32-wasip2/debug/lib_ajv.wasm'),'another fixture');
+  const component = args.at(-1);
+  assert(!component.includes('/target/'), 'must execute retained component');
+  assert(fs.readFileSync(component,'utf8').startsWith('component:measured_'), 'must publish execution-specific output');
+  console.log(JSON.stringify('PASS: isolated component'));
+}
+`;
+  for (const command of ['git', 'bash', 'cargo', 'rustc', 'node', 'npm', 'wasmtime']) {
+    write(`bin/${command}`, stub); fs.chmodSync(path.join(dir, 'bin', command), 0o755);
+  }
+  write('target/debug/wasm-rquickjs', stub); fs.chmodSync(path.join(dir, 'target/debug/wasm-rquickjs'), 0o755);
+  const call = (args, env = {}) => spawnSync(process.execPath, [path.join(dir, 'tools/measured-report.cjs'), ...args],
+    { cwd: dir, encoding: 'utf8', env: { ...process.env, PATH: path.join(dir, 'bin'), ...env } });
+  return { dir, write, call, bundle: path.join(dir, 'bundle') };
+}
+
+test('public plan/run isolates bundled outputs, survives old locks, and does not require the API suite', t => {
+  const p = producer(t);
+  fs.mkdirSync(path.join(p.dir, 'tmp/measured-bundled-build.lock'), { recursive: true });
+  for (const id of ['first', 'second']) {
+    assert.equal(p.call(['plan', p.bundle, id, 'bundled', 'ajv/test-01-basic.js']).status, 0);
+    // API-suite changes cannot invalidate an unrelated package plan.
+    p.write('tests/node_compat/suite/NODE_VERSION', id);
+    const result = p.call(['run', p.bundle, id]); assert.equal(result.status, 0, result.stderr);
+  }
+  const first = fs.readFileSync(path.join(p.bundle, 'executions/first/component.wasm'));
+  const second = fs.readFileSync(path.join(p.bundle, 'executions/second/component.wasm'));
+  assert.notDeepEqual(first, second);
+  assert.equal(p.call(['assemble', p.bundle]).status, 0);
+  assert.equal(p.call(['verify', p.bundle]).status, 0);
+  const report = read(path.join(p.bundle, 'report.json'));
+  assert.equal(report.executions.length, 2); assert(report.executions.every(item => item.cases[0].outcome === 'pass'));
+  assert.equal(report.totals.properlyImplemented, 0, 'undeclared passes never qualify');
+  assert.match(fs.readFileSync(path.join(p.bundle, 'report.md'), 'utf8'), /unclassified \| false \| pass/);
+  assert.equal(p.call(['plan', p.bundle, 'failed', 'bundled', 'ajv/test-01-basic.js']).status, 0);
+  assert.equal(p.call(['run', p.bundle, 'failed'], { STUB_FAIL_BUILD: '1' }).status, 1);
+  assert(!fs.existsSync(path.join(p.bundle, 'executions/failed/component.wasm')), 'failed builds must not publish');
+  const finish = read(path.join(p.bundle, 'executions/failed/attempts/bundled/0001/finish.json'));
+  assert.equal(finish.outcome, 'blocked'); assert.equal(finish.failedPhase, 'component-build');
+});
+
+test('public plan/run requires only profile tools and rejects drift or unmeasured selection before invocation', t => {
+  const p = producer(t, true);
+  assert.equal(p.call(['plan', p.bundle, 'drift', 'api', 'case']).status, 0);
+  const drift = p.call(['run', p.bundle, 'drift'], { STUB_VERSION: '-changed' });
+  assert.equal(drift.status, 1); assert.match(drift.stderr, /toolchain changed/);
+  assert(!fs.existsSync(path.join(p.bundle, 'executions/drift/run-start.json')));
+  assert.equal(p.call(['plan', p.bundle, 'input', 'api', 'case']).status, 0);
+  p.write('tests/node_compat/suite/common/helper.mjs', 'changed helper');
+  const changed = p.call(['run', p.bundle, 'input']);
+  assert.equal(changed.status, 1); assert.match(changed.stderr, /fixture input changed/);
+  assert(!fs.existsSync(path.join(p.bundle, 'executions/input/run-start.json')));
+  assert.equal(p.call(['plan', p.bundle, 'bad', 'api', 'unmeasured']).status, 1);
+  assert.equal(p.call(['plan', p.bundle, 'tag', 'api', ':tag:shard0']).status, 1);
+  fs.rmSync(path.join(p.dir, 'bin/npm')); fs.rmSync(path.join(p.dir, 'bin/wasmtime'));
+  assert.equal(p.call(['plan', p.bundle, 'minimal', 'api', 'case']).status, 0, 'API needs neither npm nor CLI Wasmtime');
+  fs.rmSync(path.join(p.dir, 'tests/node_compat/suite'), { recursive: true });
+  // Restore npm only: installed execution needs neither vendored API files nor the Wasmtime CLI.
+  fs.copyFileSync(path.join(p.dir, 'bin/node'), path.join(p.dir, 'bin/npm'));
+  fs.chmodSync(path.join(p.dir, 'bin/npm'), 0o755);
+  assert.equal(p.call(['plan', p.bundle, 'installed', 'installed', 'case']).status, 0);
+  const installed = p.call(['run', p.bundle, 'installed']); assert.equal(installed.status, 0, installed.stderr);
 });

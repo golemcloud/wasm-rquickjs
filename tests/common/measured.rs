@@ -286,3 +286,58 @@ impl Attempt {
         })).context("finish measured attempt")
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test_r::test]
+    fn epoch_interrupt_retains_timeout() {
+        // Isolate measurement environment variables from concurrent harness tests.
+        if std::env::var_os("MEASURE_TRAP_CAPTURE_CHILD").is_none() {
+            let dir = camino_tempfile::Utf8TempDir::new().unwrap();
+            fs::write(dir.path().join("identity.txt"), "probe").unwrap();
+            let output = std::process::Command::new(std::env::current_exe().unwrap())
+                .args([
+                    "--exact",
+                    "common::measured::tests::epoch_interrupt_retains_timeout",
+                ])
+                .env("MEASURE_TRAP_CAPTURE_CHILD", "1")
+                .env("WASM_RQUICKJS_MEASURE_DIR", dir.path())
+                .env("WASM_RQUICKJS_MEASURE_FILTER", "no-measured-inventory")
+                .output()
+                .unwrap();
+            assert!(
+                output.status.success(),
+                "{}",
+                String::from_utf8_lossy(&output.stderr)
+            );
+            assert!(String::from_utf8_lossy(&output.stdout).contains("1 passed"));
+            return;
+        }
+        for (case, error, expected) in [
+            (
+                "interrupt",
+                anyhow::Error::new(wasmtime::Trap::Interrupt).context("guest invocation"),
+                "timeout",
+            ),
+            ("assertion", anyhow::anyhow!("assertion failed"), "fail"),
+        ] {
+            let mut attempt = Attempt::start(case).unwrap();
+            attempt.phase("guest").unwrap();
+            let formatted = format!("Invocation error: {error}");
+            let returned = Err(error);
+            attempt.returned(&returned);
+            attempt.logs("", "").unwrap();
+            // The API runner formats the invocation error, losing the original chain.
+            attempt.finish(&Err(anyhow::anyhow!(formatted))).unwrap();
+            let finish = directory()
+                .unwrap()
+                .join("attempts")
+                .join(blake3::hash(case.as_bytes()).to_hex().as_str())
+                .join("0001/finish.json");
+            let value: Value = serde_json::from_slice(&fs::read(finish).unwrap()).unwrap();
+            assert_eq!(value["outcome"], expected);
+        }
+    }
+}

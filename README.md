@@ -2083,10 +2083,10 @@ and records individual retries and prerequisite,
 Node-control and guest phases, along with raw CTRF and stdout/stderr. It never rewrites an execution;
 use a new execution ID for a rerun. Bundled runs use a fresh `tmp/measured-<execution-id>` directory
 and the root Cargo target cache; they build the current generator and execute the existing fixture's
-Rollup output with Node and Wasmtime. A build lock protects copying Cargo's mutable output into
-the execution-owned `component.wasm`; that copy is hashed, executed and retained. A competing
-bundled build is blocked, not allowed to use another fixture's component. After interruption,
-remove `tmp/measured-bundled-build.lock` only after checking that no producer owns it.
+Rollup output with Node and Wasmtime. Each execution uses a unique generated Cargo library name
+while sharing the dependency cache, so builds cannot overwrite another fixture's output before
+publication. The execution-owned `component.wasm` copy is hashed, executed and retained. No
+producer-owned build lock needs recovery after interruption.
 Only use offline fixtures without credentials.
 
 The version-1 bundle's `plan.json` declares expected executions/cases; `selection.json` selects
