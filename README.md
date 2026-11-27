@@ -2087,6 +2087,9 @@ Rollup output with Node and Wasmtime. Each execution uses a unique generated Car
 while sharing the dependency cache, so builds cannot overwrite another fixture's output before
 publication. The execution-owned `component.wasm` copy is hashed, executed and retained. No
 producer-owned build lock needs recovery after interruption.
+Execution-specific Cargo outputs accumulate in the shared target cache. When no builds are
+running, reclaim that regenerable WASM cache with `cargo clean --target wasm32-wasip2`;
+this does not remove the authoritative component copies retained in evidence bundles.
 Only use offline fixtures without credentials.
 
 The version-1 bundle's `plan.json` declares expected executions/cases; `selection.json` selects
@@ -2094,8 +2097,9 @@ whole executions, independently of their observed outcomes. An optional final JS
 argument to `plan` sets `consumer`, `artifactRole`, `lane`, `workflowRun`, `workflowAttempt`, and
 `behaviorCases`. Coverage defaults to `unclassified`, which never qualifies as properly implemented.
 After inspecting the selected assertions, declare behavior case IDs explicitly, for example
-`{"behaviorCases":["ajv/test-01-basic.js"]}` for the bundled smoke. Unknown or import-only IDs are
-rejected; a declaration is reviewer-audited input, not automatic proof of assertion quality.
+`{"behaviorCases":["ajv/test-01-basic.js"]}` for the bundled smoke. Unknown IDs are rejected.
+Discovery does not mechanically classify import-only checks: reviewers must exclude those from
+behavior declarations. A declaration is audited input, not automatic proof of assertion quality.
 Same-lane/profile reruns are retained but not selected automatically: explicitly select complete
 execution IDs with `select <bundle> <id>...`. A missing selected rerun remains incomplete; it never
 borrows earlier green cases. Existing CI artifact selection is unchanged.

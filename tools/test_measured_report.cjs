@@ -206,6 +206,7 @@ function producer(t, api = false) {
   write('tools/measured-report.cjs', fs.readFileSync(path.join(__dirname, 'measured-report.cjs')));
   if (api) for (const [file, value] of Object.entries({ 'suite/NODE_VERSION': '26.13.1',
     'suite/parallel/test.js': 'assertions', 'suite/common/helper.mjs': 'original helper',
+    'suite/trace_events/extra.js': 'additional setup input',
     'config.jsonc': '{}', 'vendor.sh': 'fixture' })) write(`tests/node_compat/${file}`, value);
   const stub = `#!${process.execPath}
 const fs = require('node:fs'), path = require('node:path'), assert = require('node:assert/strict');
@@ -224,6 +225,8 @@ if (command === 'git') {
   const filter = process.env.WASM_RQUICKJS_MEASURE_FILTER, api = args.includes('node_compat');
   const name = (api ? 'node_compat::gen_node_compat_tests::' : 'runtime::node_modules_apps::gen_node_modules_app_tests::') + filter;
   const inventory = path.join(process.env.WASM_RQUICKJS_MEASURE_DIR,'inventory'); fs.mkdirSync(inventory,{recursive:true});
+  if (api) fs.writeFileSync(path.join(process.env.WASM_RQUICKJS_MEASURE_DIR,'input-roots.json'),
+    JSON.stringify(['tests/node_compat/suite/common','tests/node_compat/suite/trace_events']));
   fs.writeFileSync(path.join(inventory,'case.json'),JSON.stringify({id:filter,runnerName:name,
     fixture:api?'parallel/test.js':'demo/test.js',classification:'runnable',skipReason:null,
     coverage:'unclassified',maxAttempts:1,timeoutSeconds:10}));
@@ -235,7 +238,7 @@ if (command === 'git') {
   const manifest = fs.readFileSync('Cargo.toml','utf8');
   const name = manifest.match(/\\[lib\\]\\n(?:name = "([^"]+)"\\n)?/)[1] || 'lib_ajv';
   const output = path.join(root,'target/wasm32-wasip2/debug'); fs.mkdirSync(output,{recursive:true});
-  fs.writeFileSync(path.join(output,name+'.wasm'),'component:'+name);
+  if (!process.env.STUB_MISSING_OUTPUT) fs.writeFileSync(path.join(output,name+'.wasm'),'component:'+name);
   if (process.env.STUB_FAIL_BUILD) process.exit(17);
 } else if (command === 'wasmtime') {
   // A subsequent fixture replaces the old shared-world output before invocation.
@@ -278,6 +281,20 @@ test('public plan/run isolates bundled outputs, survives old locks, and does not
   assert(!fs.existsSync(path.join(p.bundle, 'executions/failed/component.wasm')), 'failed builds must not publish');
   const finish = read(path.join(p.bundle, 'executions/failed/attempts/bundled/0001/finish.json'));
   assert.equal(finish.outcome, 'blocked'); assert.equal(finish.failedPhase, 'component-build');
+  const failedBuild = read(path.join(p.bundle, 'executions/failed/attempts/bundled/0001/phase-0006-finish.json'));
+  assert.equal(failedBuild.exitCode, 17); assert.equal(failedBuild.publicationError, null);
+
+  assert.equal(p.call(['plan', p.bundle, 'missing-output', 'bundled', 'ajv/test-01-basic.js']).status, 0);
+  assert.equal(p.call(['run', p.bundle, 'missing-output'], { STUB_MISSING_OUTPUT: '1' }).status, 1);
+  const publication = read(path.join(p.bundle, 'executions/missing-output/attempts/bundled/0001/phase-0006-finish.json'));
+  assert.equal(publication.exitCode, 0, 'publication errors must preserve the actual successful build exit');
+  assert.equal(publication.error, null); assert.match(publication.publicationError, /ENOENT/);
+  assert.equal(p.call(['select', p.bundle, 'missing-output']).status, 0);
+  assert.equal(p.call(['assemble', p.bundle]).status, 0);
+  assert.equal(p.call(['verify', p.bundle]).status, 0);
+  const missing = read(path.join(p.bundle, 'report.json'));
+  assert.equal(missing.totals.blocked, 1); assert.equal(missing.totals.pass, 0);
+  assert.match(missing.executions.find(item => item.id === 'missing-output').cases[0].reason, /ENOENT/);
 });
 
 test('public plan/run requires only profile tools and rejects drift or unmeasured selection before invocation', t => {
@@ -291,6 +308,11 @@ test('public plan/run requires only profile tools and rejects drift or unmeasure
   const changed = p.call(['run', p.bundle, 'input']);
   assert.equal(changed.status, 1); assert.match(changed.stderr, /fixture input changed/);
   assert(!fs.existsSync(path.join(p.bundle, 'executions/input/run-start.json')));
+  assert.equal(p.call(['plan', p.bundle, 'new-root', 'api', 'case']).status, 0);
+  p.write('tests/node_compat/suite/trace_events/extra.js', 'changed additional setup input');
+  const extra = p.call(['run', p.bundle, 'new-root']);
+  assert.equal(extra.status, 1); assert.match(extra.stderr, /fixture input changed/);
+  assert(!fs.existsSync(path.join(p.bundle, 'executions/new-root/run-start.json')));
   assert.equal(p.call(['plan', p.bundle, 'bad', 'api', 'unmeasured']).status, 1);
   assert.equal(p.call(['plan', p.bundle, 'tag', 'api', ':tag:shard0']).status, 1);
   fs.rmSync(path.join(p.dir, 'bin/npm')); fs.rmSync(path.join(p.dir, 'bin/wasmtime'));

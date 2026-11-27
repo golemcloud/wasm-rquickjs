@@ -643,6 +643,7 @@ fn shard_tag(name: &str) -> String {
 
 #[test_gen]
 fn gen_node_compat_tests(r: &mut DynamicTestRegistration) {
+    common::measured::node_compat_input_roots().expect("record guest setup input roots");
     let entries =
         load_node_compat_config("tests/node_compat/config.jsonc").expect("Failed to load config");
 

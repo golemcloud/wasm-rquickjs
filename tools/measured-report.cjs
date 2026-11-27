@@ -33,16 +33,13 @@ function files(dir, fixtureInputs = false) {
       return fs.statSync(file).isDirectory() ? files(file, fixtureInputs) : [file];
     });
 }
-function apiInputs(cases) {
-  // Retain a superset of setup_node_compat_test_files inputs, including ignored vendored files.
+function apiInputs(cases, roots) {
+  // Guest setup publishes its own input roots; retain their superset, including ignored files.
   const inputs = new Set(['tests/node_compat/suite/NODE_VERSION', ...cases.map(item => `tests/node_compat/suite/${item.fixture}`)]);
-  for (const directory of ['suite/common', 'suite/fixtures', 'suite/sqlite', 'common-shim', 'fixtures']) {
-    for (const file of files(path.join(ROOT, 'tests/node_compat', directory), true)) inputs.add(relative(ROOT, file));
-  }
-  if (cases.some(item => item.fixture.startsWith('es-module/'))) {
-    for (const file of fs.readdirSync(path.join(ROOT, 'tests/node_compat/suite/es-module'), { withFileTypes: true })) {
-      if (file.isFile()) inputs.add(`tests/node_compat/suite/es-module/${file.name}`);
-    }
+  assert(Array.isArray(roots) && roots.length, 'missing guest setup input roots');
+  for (const directory of roots) {
+    assert(typeof directory === 'string' && directory.startsWith('tests/node_compat/'), 'invalid guest setup input root');
+    for (const file of files(within(ROOT, directory), true)) inputs.add(relative(ROOT, file));
   }
   return [...inputs].sort();
 }
@@ -128,17 +125,21 @@ function execute(dir, name, command, cwd, env, timeoutSeconds = 0, binding = {},
   const stdout = fs.openSync(path.join(dir, `${name}-stdout.txt`), 'wx');
   const stderr = fs.openSync(path.join(dir, `${name}-stderr.txt`), 'wx');
   let result;
+  let publicationError = null;
   try {
     result = spawnSync(command[0], command.slice(1), { cwd, env, stdio: ['ignore', stdout, stderr],
       ...(timeoutSeconds ? { timeout: timeoutSeconds * 1000, killSignal: 'SIGKILL' } : {}) });
-    if (publication && result.status === 0) fs.copyFileSync(publication.source, publication.destination, fs.constants.COPYFILE_EXCL);
   } catch (error) { result = { status: null, signal: null, error }; }
   finally {
     fs.closeSync(stdout); fs.closeSync(stderr);
   }
+  if (publication && result.status === 0) {
+    try { fs.copyFileSync(publication.source, publication.destination, fs.constants.COPYFILE_EXCL); }
+    catch (error) { publicationError = error.message; }
+  }
   const finish = { ...binding, command, startedAt, finishedAt: now(), exitCode: result.status,
-    signal: result.signal, error: result.error?.message || null,
-    outcome: result.error?.code === 'ETIMEDOUT' ? 'timeout' : result.status === 0 ? 'pass' : 'fail' };
+    signal: result.signal, error: result.error?.message || null, publicationError,
+    outcome: result.error?.code === 'ETIMEDOUT' ? 'timeout' : result.status === 0 && !publicationError ? 'pass' : 'fail' };
   if (binding.phase === 'guest' && finish.outcome === 'pass') {
     const last = text(path.join(dir, `${name}-stdout.txt`)).trim().split(/\r?\n/).at(-1);
     try { finish.returned = JSON.parse(last); } catch { finish.returned = last; }
@@ -183,7 +184,8 @@ function plan(bundle, executionId, profile, filter, metadata = {}) {
     ...Object.keys(entry.source.producerInputs)]);
   if (profile === 'api') {
     inputs.add('tests/node_compat/config.jsonc'); inputs.add('tests/node_compat/vendor.sh');
-    entry.apiInputs = apiInputs(entry.cases);
+    entry.apiInputRoots = read(path.join(dir, 'input-roots.json'));
+    entry.apiInputs = apiInputs(entry.cases, entry.apiInputRoots);
     for (const file of entry.apiInputs) inputs.add(file);
   } else {
     if (profile === 'installed') inputs.add('tests/node_modules_apps/config.jsonc');
@@ -270,7 +272,7 @@ function runBundled(entry, dir) {
     const result = execute(attemptDir, prefix, command, cwd, { ...process.env, CARGO_INCREMENTAL: '0', CARGO_TARGET_DIR: path.join(ROOT, 'target') },
       phase === 'guest' ? entry.cases[0].timeoutSeconds : 1800, { ...binding, phase }, publication);
     if (result.outcome !== 'pass') {
-      final = { outcome: phase === 'guest' ? result.outcome : 'blocked', reason: `failed ${phase}: ${result.error || result.exitCode}`, failedPhase: phase };
+      final = { outcome: phase === 'guest' ? result.outcome : 'blocked', reason: `failed ${phase}: ${result.publicationError || result.error || result.exitCode}`, failedPhase: phase };
       break;
     }
   }
@@ -281,7 +283,7 @@ function runBundled(entry, dir) {
 function checkLiveInputs(entry, dir) {
   assert.deepEqual(source(), entry.source, 'source changed since inventory; plan a new execution');
   assert.deepEqual(toolchain(entry.profile), entry.toolchain, 'toolchain changed since inventory; plan a new execution');
-  if (entry.profile === 'api') assert.deepEqual(apiInputs(entry.cases), entry.apiInputs, 'supporting fixture inventory changed');
+  if (entry.profile === 'api') assert.deepEqual(apiInputs(entry.cases, entry.apiInputRoots), entry.apiInputs, 'supporting fixture inventory changed');
   checkDigests(dir, entry.inputs);
   for (const [relative, digest] of Object.entries(entry.inputs)) {
     // Input symlinks are dereferenced just as fs::copy does in guest setup; retained evidence has no symlinks.

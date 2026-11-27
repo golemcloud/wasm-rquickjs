@@ -30,6 +30,16 @@ fn write(path: &Path, value: &Value) -> anyhow::Result<()> {
     Ok(())
 }
 
+pub fn node_compat_input_roots() -> anyhow::Result<()> {
+    if let Some(dir) = directory() {
+        write(
+            &dir.join("input-roots.json"),
+            &json!(super::NODE_COMPAT_INPUT_ROOTS),
+        )?;
+    }
+    Ok(())
+}
+
 pub fn register(
     name: &str,
     fixture: &str,
