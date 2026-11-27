@@ -265,71 +265,69 @@ TestContext.prototype.test = function (name, optionsOrFn, maybeFn) {
     // its subtests: beforeEach from the outermost context in, afterEach from the innermost out.
     const beforeEachFns = collectContextHooks(parentTest, '_beforeEachFns').reverse().flat();
     const afterEachFns = collectContextHooks(parentTest, '_afterEachFns').flat();
-    const runHooks = function (hooks) {
-        for (let i = 0; i < hooks.length; i++) hooks[i].call(childCtx, childCtx);
+    const runHooks = function (hooks, start = 0) {
+        for (let i = start; i < hooks.length; i++) {
+            const result = hooks[i].call(childCtx, childCtx);
+            if (result && typeof result.then === 'function') {
+                return Promise.resolve(result).then(function () { return runHooks(hooks, i + 1); });
+            }
+        }
     };
     // Like Node 26's runOnce-wrapped afterEach, teardown runs at most once: a hook that throws
     // after the subtest succeeded must not run again when that error is handled as a failure.
     let tornDown = false;
-    const teardown = function (rethrow) {
+    const teardown = function () {
         if (tornDown) return;
         tornDown = true;
         try {
-            runHooks(afterEachFns);
+            const result = runHooks(afterEachFns);
+            if (result && typeof result.then === 'function') {
+                return Promise.resolve(result).finally(function () { childCtx.mock.restoreAll(); });
+            }
         } catch (e) {
-            if (rethrow) throw e;
-        } finally {
             childCtx.mock.restoreAll();
+            throw e;
+        }
+        childCtx.mock.restoreAll();
+    };
+    const fail = function (error) {
+        // A body/setup failure wins over a secondary teardown failure, but cleanup
+        // still finishes before the child settles. Preserve the existing skip contract.
+        const finish = function () { if (!(error instanceof SkipError)) throw error; };
+        try {
+            return Promise.resolve(teardown()).then(finish, finish);
+        } catch {
+            return Promise.resolve().then(finish);
         }
     };
-    const succeed = function () { teardown(true); };
-    const fail = function () { teardown(false); };
 
-    try {
-        runHooks(beforeEachFns);
+    const runBody = function () {
+        let result;
         if (fn.length >= 2) {
             // done callback pattern
-            return new Promise(function (resolve, reject) {
+            result = new Promise(function (resolve, reject) {
                 const done = function (err) {
-                    if (err) {
-                        fail();
-                        reject(err);
-                        return;
-                    }
-                    try {
-                        succeed();
-                    } catch (e) {
-                        reject(e);
-                        return;
-                    }
-                    resolve();
+                    if (err) reject(err);
+                    else resolve();
                 };
-                try {
-                    fn.call(childCtx, childCtx, done);
-                } catch (e) {
-                    fail();
-                    reject(e);
-                }
+                fn.call(childCtx, childCtx, done);
             });
+        } else {
+            result = fn.call(childCtx, childCtx);
         }
-
-        const result = fn.call(childCtx, childCtx);
         if (result && typeof result.then === 'function') {
-            return result.then(function () {
-                succeed();
-            }, function (e) {
-                fail();
-                throw e;
-            });
+            return Promise.resolve(result).then(teardown);
         }
-        succeed();
-        return Promise.resolve();
+        return teardown();
+    };
+    try {
+        const setup = runHooks(beforeEachFns);
+        // Keep synchronous hooks and bodies eager; only yield when a hook/body does.
+        const result = setup && typeof setup.then === 'function'
+            ? Promise.resolve(setup).then(runBody) : runBody();
+        return Promise.resolve(result).catch(fail);
     } catch (e) {
-        fail();
-        if (e instanceof SkipError) {
-            return Promise.resolve();
-        }
-        return Promise.reject(e);
+        return fail(e);
     }
 };
 

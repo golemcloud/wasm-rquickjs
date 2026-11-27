@@ -6798,8 +6798,35 @@ pub mod native_module {
         }
     }
 
-    /// Returns the 66-byte private scalar followed by the 133-byte uncompressed
-    /// public point, or nothing when this tier has no P-521 backend.
+    #[rquickjs::function]
+    pub fn p521_supported() -> bool {
+        cfg!(feature = "crypto-full")
+    }
+
+    /// Derives an uncompressed P-521 point from a fixed-width raw scalar modulo n.
+    /// The caller retains the original scalar encoding for raw key exports.
+    #[rquickjs::function]
+    pub fn p521_raw_public_key(private_key: TypedArray<'_, u8>) -> Option<Vec<u8>> {
+        #[cfg(feature = "crypto-full")]
+        {
+            use elliptic_curve::{Curve, field, sec1::ToSec1Point};
+
+            let bytes = p521::FieldBytes::from(super::typed_array_array::<66>(&private_key)?);
+            let scalar = field::bytes_to_uint::<p521::NistP521>(&bytes);
+            // Raw imports accept noncanonical scalars too. Use the existing fixed-width
+            // remainder, not Scalar::reduce (which only subtracts the order once).
+            let reduced = scalar.rem(p521::NistP521::ORDER.as_nz_ref());
+            let bytes = field::uint_to_bytes::<p521::NistP521>(&reduced);
+            let secret = p521::SecretKey::from_bytes(&bytes).ok()?;
+            Some(secret.public_key().to_sec1_point(false).as_bytes().to_vec())
+        }
+        #[cfg(not(feature = "crypto-full"))]
+        {
+            let _ = private_key;
+            None
+        }
+    }
+
     // ===== ECDH native functions =====
 
     #[rquickjs::function]

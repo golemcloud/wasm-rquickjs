@@ -755,6 +755,7 @@ impl OwnedJsRuntime {
             super::error_formatting::initialize(&ctx)?;
             super::promise_hook::initialize(&ctx);
             super::custom_invocation_context::initialize(&ctx)?;
+            super::import_abort::initialize(&ctx)?;
             // The invocation whose work runs now, for queues kept in JavaScript such as
             // `process.nextTick`.
             ctx.globals().set(
