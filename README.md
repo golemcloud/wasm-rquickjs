@@ -2081,7 +2081,9 @@ It retains fixture/configuration and lockfile inputs, including a superset of th
 vendored helpers, fixtures and ESM siblings. `run` refuses changed inputs or toolchain versions
 and records individual retries and prerequisite,
 Node-control and guest phases, along with raw CTRF and stdout/stderr. It never rewrites an execution;
-use a new execution ID for a rerun. Bundled runs use a fresh `tmp/measured-<execution-id>` directory
+use a new execution ID for a rerun. Installed planning and execution also refuse fixture files absent from retained inputs, including
+untracked/ignored helpers or a local `node_modules` tree, rather than copying them into evidence.
+Bundled runs use a fresh `tmp/measured-<execution-id>` directory
 and the root Cargo target cache; they build the current generator and execute the existing fixture's
 Rollup output with Node and Wasmtime. Each execution uses a unique generated Cargo library name
 while sharing the dependency cache, so builds cannot overwrite another fixture's output before
@@ -2102,7 +2104,9 @@ Discovery does not mechanically classify import-only checks: reviewers must excl
 behavior declarations. A declaration is audited input, not automatic proof of assertion quality.
 Same-lane/profile reruns are retained but not selected automatically: explicitly select complete
 execution IDs with `select <bundle> <id>...`. A missing selected rerun remains incomplete; it never
-borrows earlier green cases. Existing CI artifact selection is unchanged.
+borrows earlier green cases. Assembly and verification reject overlapping selected case keys across
+lanes instead of counting them twice or choosing a preferred outcome. Select whole non-overlapping
+executions; unselected evidence remains retained. Existing CI artifact selection is unchanged.
 
 Each execution has an identity-bound `component.json`, immutable attempt `start.json`/`finish.json`
 records and numbered phase records/logs. Missing completion stays `not-run`; a failed prerequisite

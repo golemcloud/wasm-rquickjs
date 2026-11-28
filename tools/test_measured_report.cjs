@@ -49,12 +49,12 @@ function setup(bundle, entries, selection = entries.map(item => item.id)) {
     if (item.profile !== 'bundled') for (let i = 0; i < item.cases.length; i++) put(path.join(dir, 'inventory', `${i}.json`), item.cases[i]);
   }
 }
-function capture(bundle, item, histories) {
+function capture(bundle, item, histories, componentBytes = item.id) {
   const dir = path.join(bundle, 'executions', item.id);
   const identity = digest(bytes(item));
   put(path.join(dir, 'run-start.json'), { identity, toolchain: item.toolchain, startedAt: startTime });
-  fs.writeFileSync(path.join(dir, 'component.wasm'), item.id);
-  put(path.join(dir, 'component.json'), { identity, algorithm: 'sha256', digest: digest(item.id), features: item.runner.component });
+  fs.writeFileSync(path.join(dir, 'component.wasm'), componentBytes);
+  put(path.join(dir, 'component.json'), { identity, algorithm: 'sha256', digest: digest(componentBytes), features: item.runner.component });
   for (const [caseId, history] of Object.entries(histories)) for (let index = 0; index < history.length; index++) {
     const outcome = history[index]; const binding = { identity, caseId, ordinal: index + 1 };
     const attempt = path.join(dir, 'attempts', caseId, String(index + 1));
@@ -111,6 +111,37 @@ test('six outcomes, flaky denominator, import limits and profile identities surv
   assemble(bundle);
   assert.deepEqual(fs.readFileSync(path.join(bundle, 'report.json')), first);
   assert.equal(fs.readFileSync(path.join(bundle, 'report.md'), 'utf8'), markdown);
+});
+
+test('selected lanes reject overlapping case keys without collapsing distinct profiles or artifacts', t => {
+  for (const variant of ['overlap', 'flaky-overlap', 'disjoint', 'profile', 'component']) {
+    const bundle = root(t);
+    const left = entry('left', 'bundled', ['shared', 'left-only']);
+    const right = entry('right', variant === 'profile' ? 'installed' : 'bundled',
+      variant === 'disjoint' ? ['right-only'] : ['shared']);
+    right.lane = 'another-lane';
+    setup(bundle, [left, right]);
+    capture(bundle, left, { shared: ['pass'], 'left-only': ['pass'] }, 'same component');
+    capture(bundle, right, { [right.cases[0].id]: variant === 'flaky-overlap' ? ['fail', 'pass'] : ['pass'] },
+      variant === 'component' ? 'different component' : 'same component');
+    if (variant.endsWith('overlap')) {
+      assert.throws(() => assemble(bundle), /overlapping selected case key/);
+      put(path.join(bundle, 'report.json'), {});
+      fs.writeFileSync(path.join(bundle, 'report.md'), '');
+      put(path.join(bundle, 'checksums.json'), sums(bundle));
+      assert.throws(() => verify(bundle), /overlapping selected case key/);
+      put(path.join(bundle, 'selection.json'), ['right']);
+      const selected = assemble(bundle); verify(bundle);
+      assert.equal(selected.totals.selected, 1);
+      assert.equal(selected.totals.properlyImplemented, variant === 'flaky-overlap' ? 0 : 1);
+      assert.equal(selected.executions.length, 2, 'unselected evidence stays retained');
+    } else {
+      const report = assemble(bundle); verify(bundle);
+      assert.equal(report.totals.selected, 3);
+      assert.equal(report.totals.properlyImplemented, 3);
+      assert.equal(report.complete, true);
+    }
+  }
 });
 
 test('a selected missing workflow rerun never borrows earlier green cases', t => {
@@ -194,14 +225,17 @@ test('corruption, duplicate attempts, contradictions and identity mixing are rej
 // are controlled, but plan/run, manifests, publication, drift checks and rendering are real.
 function producer(t, api = false) {
   const dir = root(t);
+  const trackedFiles = [];
   const write = (file, value) => {
     const destination = path.join(dir, file); fs.mkdirSync(path.dirname(destination), { recursive: true });
     fs.writeFileSync(destination, value);
+    trackedFiles.push(file);
   };
   for (const file of ['Cargo.toml', 'Cargo.lock', 'tools/dev-test.sh', 'tests/common/measured.rs',
     'tests/common/mod.rs', 'tests/node_compat.rs', 'tests/runtime/node_modules_apps.rs',
     'crates/wasm-rquickjs/skeleton/Cargo.toml_', 'crates/wasm-rquickjs/skeleton/Cargo.lock',
     'tests/node_modules_apps/config.jsonc', 'tests/node_modules_apps/apps/demo/test.js',
+    'tests/node_modules_apps/apps/demo/results.md',
     'tests/libraries/ajv/test-01-basic.js', 'tests/libraries/ajv/package.json']) write(file, 'fixture');
   write('tools/measured-report.cjs', fs.readFileSync(path.join(__dirname, 'measured-report.cjs')));
   if (api) for (const [file, value] of Object.entries({ 'suite/NODE_VERSION': '26.13.1',
@@ -217,9 +251,7 @@ if (command === 'git') {
   if (args[0] === 'rev-parse') console.log('a'.repeat(40));
   else if (args[0] === 'ls-files') {
     const prefix = args.at(-1);
-    const walk = dir => fs.readdirSync(dir, {withFileTypes:true}).flatMap(item => item.isDirectory()
-      ? walk(path.join(dir,item.name)) : [path.join(dir,item.name)]);
-    process.stdout.write(walk(path.join(root,prefix)).map(file => path.relative(root,file)).join('\\0'));
+    process.stdout.write(${JSON.stringify(trackedFiles)}.filter(file => file.startsWith(prefix)).join('\\0'));
   }
 } else if (command === 'bash' && args.includes('--list')) {
   const filter = process.env.WASM_RQUICKJS_MEASURE_FILTER, api = args.includes('node_compat');
@@ -295,6 +327,22 @@ test('public plan/run isolates bundled outputs, survives old locks, and does not
   const missing = read(path.join(p.bundle, 'report.json'));
   assert.equal(missing.totals.blocked, 1); assert.equal(missing.totals.pass, 0);
   assert.match(missing.executions.find(item => item.id === 'missing-output').cases[0].reason, /ENOENT/);
+});
+
+test('installed public plan/run refuses copied inputs absent from its retained inventory', t => {
+  const p = producer(t);
+  assert.equal(p.call(['plan', p.bundle, 'clean', 'installed', 'case']).status, 0);
+  assert.equal(fs.readFileSync(path.join(p.bundle, 'executions/clean/inputs/tests/node_modules_apps/apps/demo/results.md'), 'utf8'), 'fixture');
+  assert.equal(p.call(['run', p.bundle, 'clean']).status, 0, 'tracked fixture still runs');
+  assert.equal(p.call(['plan', p.bundle, 'before-extra', 'installed', 'case']).status, 0);
+  p.write('tests/node_modules_apps/apps/demo/helpers/extra.js', 'exports.answer = 1;');
+  const plan = p.call(['plan', p.bundle, 'extra-at-plan', 'installed', 'case']);
+  assert.equal(plan.status, 1); assert.match(plan.stderr, /uncaptured installed fixture input/);
+  p.write('tests/node_modules_apps/apps/demo/helpers/extra.js', 'exports.answer = 999;');
+  const run = p.call(['run', p.bundle, 'before-extra']);
+  assert.equal(run.status, 1); assert.match(run.stderr, /uncaptured installed fixture input/);
+  assert(!fs.existsSync(path.join(p.bundle, 'executions/before-extra/run-start.json')));
+  assert(!read(path.join(p.bundle, 'plan.json')).executions.some(item => item.id === 'extra-at-plan'));
 });
 
 test('public plan/run requires only profile tools and rejects drift or unmeasured selection before invocation', t => {

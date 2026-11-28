@@ -43,6 +43,15 @@ function apiInputs(cases, roots) {
   }
   return [...inputs].sort();
 }
+function checkInstalledInputs(entry) {
+  for (const fixture of new Set(entry.cases.map(item => item.fixture.split('/')[0]))) {
+    const root = within(ROOT, `tests/node_modules_apps/apps/${fixture}`);
+    for (const file of files(root)) {
+      const input = `inputs/${relative(ROOT, file)}`;
+      assert(Object.hasOwn(entry.inputs, input), `uncaptured installed fixture input: ${input}`);
+    }
+  }
+}
 function within(root, relative) {
   assert(typeof relative === 'string' && relative && !relative.includes('\\') && !path.isAbsolute(relative));
   assert(!relative.split('/').some(part => !part || part === '.' || part === '..'), 'unsafe evidence path');
@@ -194,7 +203,7 @@ function plan(bundle, executionId, profile, filter, metadata = {}) {
       const prefix = `tests/${profile === 'installed' ? 'node_modules_apps/apps' : 'libraries'}/${fixture}/`;
       const result = spawnSync('git', ['ls-files', '-z', '--', prefix], { cwd: ROOT, encoding: 'utf8' });
       assert.equal(result.status, 0);
-      for (const file of result.stdout.split('\0').filter(Boolean)) if (!file.endsWith('results.md')) inputs.add(file);
+      for (const file of result.stdout.split('\0').filter(Boolean)) if (profile === 'installed' || !file.endsWith('results.md')) inputs.add(file);
     }
   }
   entry.inputs = {};
@@ -204,6 +213,7 @@ function plan(bundle, executionId, profile, filter, metadata = {}) {
     fs.copyFileSync(path.join(ROOT, relative), destination, fs.constants.COPYFILE_EXCL);
     entry.inputs[`inputs/${relative}`] = hash(fs.readFileSync(destination));
   }
+  if (profile === 'installed') checkInstalledInputs(entry);
   existing.executions.push(entry);
   validatePlan(existing);
   save(planFile, existing, 'w');
@@ -284,6 +294,7 @@ function checkLiveInputs(entry, dir) {
   assert.deepEqual(source(), entry.source, 'source changed since inventory; plan a new execution');
   assert.deepEqual(toolchain(entry.profile), entry.toolchain, 'toolchain changed since inventory; plan a new execution');
   if (entry.profile === 'api') assert.deepEqual(apiInputs(entry.cases, entry.apiInputRoots), entry.apiInputs, 'supporting fixture inventory changed');
+  if (entry.profile === 'installed') checkInstalledInputs(entry);
   checkDigests(dir, entry.inputs);
   for (const [relative, digest] of Object.entries(entry.inputs)) {
     // Input symlinks are dereferenced just as fs::copy does in guest setup; retained evidence has no symlinks.
@@ -482,6 +493,12 @@ function normalize(bundle) {
     return { ...entry, identity, selected, component, prerequisites, complete, raw, cases, totals: totals(cases) };
   });
   const selected = executions.filter(entry => entry.selected);
+  const selectedKeys = new Set();
+  for (const item of selected.flatMap(entry => entry.cases)) {
+    const key = json(item.key);
+    assert(!selectedKeys.has(key), 'overlapping selected case key');
+    selectedKeys.add(key);
+  }
   return { schemaVersion: 1, claim: 'Selected local assertions only; not full API support, host durability or shipped qualification.',
     complete: selected.length > 0 && selected.every(entry => entry.complete), executions,
     totals: totals(selected.flatMap(entry => entry.cases)) };
