@@ -42,7 +42,7 @@ jobs:
         with:
           submodules: true
       - name: CI reporting contracts
-        run: node --test .github/scripts/test_prepare_test_reports.cjs
+        run: node --test .github/scripts/test_prepare_test_reports.cjs tools/test_measured_report.cjs
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt

@@ -1,4 +1,5 @@
 pub mod js_subtest_parser;
+pub mod measured;
 pub mod test_server;
 
 use crate::common::WasmSource::Precompiled;
@@ -3214,6 +3215,16 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
     Ok(())
 }
 
+// Guest setup owns these roots; measured discovery publishes the same superset.
+const NODE_COMPAT_INPUT_ROOTS: [&str; 6] = [
+    "tests/node_compat/common-shim",
+    "tests/node_compat/suite/common",
+    "tests/node_compat/suite/fixtures",
+    "tests/node_compat/fixtures",
+    "tests/node_compat/suite/sqlite",
+    "tests/node_compat/suite/es-module",
+];
+
 /// Copy a vendored Node.js test file and common shims into a temp directory.
 ///
 /// Sets up the directory layout expected by the node-compat-runner:
@@ -3223,6 +3234,14 @@ pub fn copy_dir_recursive(src: &std::path::Path, dst: &std::path::Path) -> anyho
 /// - `/home/node/test/fixtures/` — fixture data files (recursively copied)
 /// - `/home/node/test/sqlite/` — vendored sqlite test helpers, when present
 pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> anyhow::Result<()> {
+    let [
+        shim_root,
+        vendored_common_root,
+        vendored_fixtures_root,
+        fixtures_root,
+        sqlite_root,
+        esm_root,
+    ] = NODE_COMPAT_INPUT_ROOTS;
     // Parse the suite name from the relative path (e.g., "parallel/test-foo.js" → "parallel")
     let suite = test_rel_path.split('/').next().unwrap_or("parallel");
 
@@ -3243,9 +3262,9 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     // Some vendored ESM tests import sibling test files with relative specifiers.
     // The split runner still executes one configured test at a time, but those
     // relative imports need the original suite directory shape.
-    let src_suite_dir = std::path::Path::new("tests/node_compat/suite").join(suite);
+    let src_suite_dir = std::path::Path::new(esm_root);
     if suite == "es-module" && src_suite_dir.exists() {
-        for entry in fs::read_dir(&src_suite_dir)? {
+        for entry in fs::read_dir(src_suite_dir)? {
             let entry = entry?;
             if entry.file_type()?.is_file() {
                 let file_name = entry.file_name();
@@ -3259,18 +3278,18 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     }
 
     // Copy the common shim
-    let src_shim = "tests/node_compat/common-shim/index.js";
+    let src_shim = format!("{shim_root}/index.js");
     let dst_shim = common_dir.join("index.js");
     fs::copy(src_shim, &dst_shim)?;
 
     // Copy the common ESM shim if it exists
-    let src_shim_mjs = "tests/node_compat/common-shim/index.mjs";
-    if std::path::Path::new(src_shim_mjs).exists() {
+    let src_shim_mjs = format!("{shim_root}/index.mjs");
+    if std::path::Path::new(&src_shim_mjs).exists() {
         fs::copy(src_shim_mjs, common_dir.join("index.mjs"))?;
     }
 
     // Copy all additional common shims from common-shim directory
-    let shim_dir = std::path::Path::new("tests/node_compat/common-shim");
+    let shim_dir = std::path::Path::new(shim_root);
     if shim_dir.exists() {
         for entry in fs::read_dir(shim_dir)? {
             let entry = entry?;
@@ -3288,7 +3307,7 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
 
     // Copy vendored ESM common helpers and the trace_events helper that are not replaced by
     // local shims.
-    let vendored_common_dir = std::path::Path::new("tests/node_compat/suite/common");
+    let vendored_common_dir = std::path::Path::new(vendored_common_root);
     if vendored_common_dir.exists() {
         for entry in fs::read_dir(vendored_common_dir)? {
             let entry = entry?;
@@ -3311,13 +3330,13 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     let fixtures_dst = test_root.join("fixtures");
 
     // First copy vendored suite fixtures
-    let vendored_fixtures_src = std::path::Path::new("tests/node_compat/suite/fixtures");
+    let vendored_fixtures_src = std::path::Path::new(vendored_fixtures_root);
     if vendored_fixtures_src.exists() {
         copy_dir_recursive(vendored_fixtures_src, fixtures_dst.as_std_path())?;
     }
 
     // Then overlay with our custom fixtures (take priority over vendored ones)
-    let fixtures_src = std::path::Path::new("tests/node_compat/fixtures");
+    let fixtures_src = std::path::Path::new(fixtures_root);
     if fixtures_src.exists() {
         copy_dir_recursive(fixtures_src, fixtures_dst.as_std_path())?;
     }
@@ -3327,7 +3346,7 @@ pub fn setup_node_compat_test_files(temp: &Utf8Path, test_rel_path: &str) -> any
     }
 
     // Shared sqlite test helpers, such as `require('../sqlite/next-db.js')`
-    let vendored_sqlite_src = std::path::Path::new("tests/node_compat/suite/sqlite");
+    let vendored_sqlite_src = std::path::Path::new(sqlite_root);
     if vendored_sqlite_src.exists() {
         copy_dir_recursive(vendored_sqlite_src, test_root.join("sqlite").as_std_path())?;
     }
